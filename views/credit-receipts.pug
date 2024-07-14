@@ -1,0 +1,74 @@
+extends layout
+include mixins/mixins
+
+block content
+    form(method='GET' action='/creditreceipts')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#receipts_fromDate.form-control(type='date', name='receipts_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                td &nbsp;
+                td To Date:
+                td
+                    input#receipts_toDate.form-control(type='date', name='receipts_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                td &nbsp;
+                td
+                    button.btn.btn-primary(type='submit') Go
+    br
+    form(method='POST' action='/creditreceipts')
+        input(type='hidden' id='receipts_fromDate_hiddenValue' name='receipts_fromDate_hiddenValue' value=fromDate)
+        input(type='hidden' id='receipts_toDate_hiddenValue' name='receipts_toDate_hiddenValue' value=toDate)
+        table(class="table" id="creditReceipts-table")
+            thead(class="thead-light")
+                tr
+                    th(scope="col") #
+                    th(scope="col") Receipt Date
+                    th(scope="col") ReceiptNo
+                    th(scope="col") Receipt Type
+                    th(scope="col") Credit Type
+                    th(scope="col") Credit Party
+                    th(scope="col") Amount
+                    th(scope="col") Notes
+                    th(scope="col") Modify
+                tbody
+                    - var prefix = 'cr_';
+                    each val, index in cashReceipts
+                        tr(id="creditReceipts_row_"+index)
+                            td(scope="row")= index + 1
+                            td(scope="row" class="row flex-nowrap")= val.receipt_date
+                            td(scope="row")
+                                input.form-control(type="text" id="creditreceiptno_"+index value=val.receipt_no readonly)
+                            td(scope="row")
+                                select.form-control(name=prefix + 'receiptType_' + index, id=prefix + 'receiptType_' + index disabled)
+                                    if config.receiptTypes
+                                        each type in config.receiptTypes
+                                            option(value=`${type.label}` selected= val.receipt_type === type.label)= type.label
+                            td(scope="row")
+                                select.form-control(name=prefix+'type-' + index, id=prefix+'type-' + index, disabled)
+                                    if config.creditTypes
+                                        each type in config.creditTypes
+                                            option(value=`${type}` selected= val.creditType === type)= type
+                                creditType
+                            td(scope="row")
+                                input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
+                            td(scope="row")
+                                input.form-control(type="number" id="cramount_"+index value=val.amount readonly)
+                            td(scope="row")
+                                input.form-control(type="text" id="crnotes_"+index value=val.notes readonly)
+                            if(val.showEditOrDelete)
+                                td(scope="row")
+                                    div(class="row flex-nowrap")
+                                        a.btn.btn-info(id="receipt-edit-"+index onclick="editReceipt('"+index+"','"+ val.id +"')")
+                                            span.oi.oi-pencil
+                                        a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')") Save
+                                        div &nbsp;&nbsp;
+                                        a.btn.btn-danger(id="receipt-delete-" + index onclick="deleteReceipt('creditReceipts_row_"+ index+"','" + val.id + "')")
+                                            span.oi.oi-trash
+                    - var rowCnt = 0
+                    while rowCnt < 1
+                        +addTxnReceipt(rowCnt++)
+        div(align="center")
+            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.") Add New
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-primary(type="submit", id="creditReceipts-save" disabled=true, title="Enabled on 'Add New'") Save

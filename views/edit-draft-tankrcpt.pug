@@ -1,0 +1,207 @@
+extends layout1
+include mixins/mixins
+include mixins/summary-mixins
+
+
+block content
+    
+    //- Freeze closing record
+    - var freezedRecord = false;
+    - var divDisableClass = '';
+    - var defaultFirstSaveFn = 'saveDecantHeader';
+    - var headerTabActiveStatus = 'tab-pane active', summaryTabActiveStatus = 'tab-pane fade';
+    - var maxCreditsRowCnt = config.maxCreditsRowCnt;
+    - var cashSalesTabActiveStatus = 'tab-pane fade';
+   
+    if(receiptsData.closingStatus === 'CLOSED')
+        - freezedRecord = true;
+        - divDisableClass = ' disabledInputs';
+        - defaultFirstSaveFn = 'NoSaveClick';
+        - summaryTabActiveStatus = 'tab-pane active ';
+        - headerTabActiveStatus = 'tab-pane fade ' +  divDisableClass;
+        input(type='hidden' id='freezedRecord_hiddenValue' value="true")
+
+    input(type='hidden' id='currentTabForSave' value=defaultFirstSaveFn)
+
+    input(type='hidden' name='location' id='location_id' value= receiptsData.location_id)
+    input(type='hidden' id='user' name='user' value= user)
+    input(type='hidden' id='closing_hiddenId' value= receiptsData.ttank_id)
+    
+    form
+        div
+            if(!freezedRecord)
+                ul.nav.nav-tabs
+                    li.nav-item.col-md.active
+                        a.nav-link.active#decantheader_tab(data-toggle="tab" href="#new_decantheader" onclick=`trackMenu(this)`) Decant Header
+                    li.nav-item.col-md
+                        a.nav-link#decantlines_tab(data-toggle="tab" href="#new_decantlines" onclick=`trackMenu(this)`) Decant Lines
+                    li.nav-item.col-md
+                        a.nav-link#summary_tab(data-toggle="tab" href="#summary" onclick="populateReceiptSummary(this)") Summary
+            else
+                ul.nav.nav-tabs
+                    li.nav-item.col-md
+                        a.nav-link#decantheader_tab(data-toggle="tab" href="#new_decantheader") Decant Header
+                    li.nav-item.col-md
+                        a.nav-link#decantlines_tab(data-toggle="tab" href="#new_decantlines") Decant Lines
+                    li.nav-item.col-md.active
+                        a.nav-link.active#summary_tab(data-toggle="tab" href="#summary" onclick="populateReceiptSummary(this)") Summary
+            div.tab-content
+                // ----------------------- New Decant Header details ----------------------------
+                div.row &nbsp;
+                //div#new_decantheader(class= headerTabActiveStatus)
+                div.container-fluid#new_decantheader(class= headerTabActiveStatus)
+                    div
+                        div.col-12
+                            div.table-responsive
+                                table.table#tankheader-table
+                                    tbody.w-100
+                                        thead(class="thead-light")
+                                            tr
+                                                th(scope="col") Invoice Date
+                                                th(scope="col") Invoice Number
+                                                th(scope="col") Decant Date
+                                                th(scope="col") Decant Time
+                                                th(scope="col") Decant Incharge
+                                                th(scope="col") TT Number
+                                                th(scope="col") Driver
+                                                th(scope="col") Helper
+                                                th(scope="col") Odometer Reading
+                                                th(scope="col") Truck Halt
+                                            tr 
+                                                td
+                                                    input(type='hidden' id='h_invoiceDate' value= receiptsData.h_invoiceDate)
+                                                    input#invoiceDate.form-control(type='date', name='invoiceDate', value=receiptsData.invoice_date max=currentDate required)
+                                                td  
+                                                    input#invoiceno.form-control(type="text" name="invoice_no" value=receiptsData.invoice_number required)
+                                                td 
+                                                    input(type='hidden' id='h_decantDate' value= receiptsData.h_decantDate)
+                                                    input#decantDate.form-control(type='date', name='decantDate', value=receiptsData.decant_date max=currentDate required)
+                                                td
+                                                    select#decanttime.form-control(name='decant_time' required)
+                                                        if config.decantTimelists
+                                                            each val in config.decantTimelists
+                                                                option(value=`${val}` selected= (receiptsData.decant_time === val))= val
+                                                
+                                                td
+                                                    select#inchargeid.form-control(name='Decant_Inchargeid' required)
+                                                        if inchargers
+                                                            each val in inchargers
+                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.decant_incharge))= val.personName
+                                                td 
+                                                    select#ttnumber.form-control(name='Decant_ttnumber' required)
+                                                        if trucks
+                                                            each val in trucks
+                                                                option(value=`${val.truck_id}` selected=(val.truck_id === receiptsData.truck_id))= val.truck_number
+                                                                          
+                                                td 
+                                                    select#driverid.form-control(name='Driverid' required)
+                                                        if drivers
+                                                            each val in drivers
+                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.driver_id))= val.personName
+                                                td 
+                                                    select#helperid.form-control(name='helperid' required)
+                                                        if drivers
+                                                            each val in drivers
+                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.helper_id))= val.personName
+                                                td
+                                                    input#odometer.form-control(type="text" name="odometer" value=receiptsData.odometer_reading required)
+                                                td  
+                                                    input#halt_chk.form-control(type="checkbox" name="decant_halt_chk"  value=receiptsData.truck_halt_flag, onClick="changeHaltflag()", checked=('Y'===receiptsData.truck_halt_flag))
+                        div.row
+                            div.col &nbsp;
+                        div.row(align="center")
+                            div.col
+                                button.btn.btn-primary(type="button", onClick="trackMenuWithName('decantlines_tab')") Next &raquo;                      
+                
+                // ----------------------- New Decant Lines ----------------------------
+                div.tab-pane.fade#new_decantlines(class= divDisableClass)
+                    div
+                        div.col-16
+                            div.table-responsive
+                                table.table#tankReceipts-table
+                                    tbody.w-100
+                                        thead.thead-light
+                                            tr
+                                                th(scope="col") Tank
+                                                th(scope="col") Quantity-KL
+                                                th(scope="col") EB
+                                                th(scope="col") Opening Dip
+                                                th(scope="col") Closing Dip
+                                                th(scope="col") Notes
+                                                th(scope="col") Amount
+                                           
+                                            - var rowCnt = 0
+                                            while rowCnt < 3
+                                                +addDecantLines(rowCnt, decantLines[rowCnt++])
+                        div.row
+                            div.col &nbsp;
+                        div(align="center")
+                            button.btn.btn-info(type="button", id="tankReceipts-add-new" onClick="showAddedRow('tankReceipts')" title="Only one can be added at a time.") Add New
+                            span &nbsp;&nbsp;&nbsp;&nbsp;
+                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('summary_tab')") Next &raquo;
+                            // ----------------------- Summary ----------------------------
+                div#summary(class= summaryTabActiveStatus)
+                    div
+                        div#summary-div
+                            div
+                                div.col-12#v-decant-header
+                                    h6.sub-header Decant Header
+                                        div.table-responsive#vis-tankheader-table
+                                            table.table.table-sm
+                                                thead.thead-light
+                                                    tr
+                                                       th(scope="col") Invoice Date
+                                                        th(scope="col") Invoice Number
+                                                        th(scope="col") Decant Date
+                                                        th(scope="col") Decant Time
+                                                        th(scope="col") Decant Incharge
+                                                        th(scope="col") TT Number
+                                                        th(scope="col") Driver
+                                                        th(scope="col") Helper
+                                                        th(scope="col") Odometer
+                                                        th(scope="col") Truck Halt
+                                                    tr
+                                                        td
+                                                            span(id='valDate-invoiceDate')
+                                                        td 
+                                                            span(id='val-invoiceno')
+                                                        td 
+                                                            span(id='valDate-decantDate')
+                                                        td  
+                                                            span(id='valText-decanttime')
+                                                        td 
+                                                            span(id='valText-inchargeid')
+                                                        td 
+                                                            span(id='valText-ttnumber')
+                                                        td 
+                                                            span(id='valText-driverid')
+                                                        td  
+                                                            span(id='valText-helperid')
+                                                        td
+                                                            span(id='val-odometer')          
+                                                        td
+                                                            span(id='val-halt_chk')
+
+                                    //Summary: Decant Lines
+                                div.col-10#v-decant_lines
+                                    h6.sub-header Decant Lines
+                                        div.table-responsive#vis-tankReceipts-table
+                                            table.table.table-sm
+                                                thead.thead-light
+                                                    tr
+                                                        th(scope="col") Tank
+                                                        th(scope="col") Quantity-KL
+                                                        th(scope="col") EB
+                                                        th(scope="col") Opening Dip
+                                                        th(scope="col") Closing Dip
+                                                        th(scope="col") Notes
+                                                        th(scope="col") Amount
+                                                - var rowCnt = 0
+                                                while rowCnt < 3                 
+                                                    +summaryDecantLinesData(rowCnt++)
+                    if(!freezedRecord)            
+                        div.row
+                            div.col &nbsp;
+                        div(align="center")
+                            span
+                                button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-receipt\', \'tankReceipt_tab\')') CLOSE &raquo;
