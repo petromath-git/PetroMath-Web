@@ -78,8 +78,7 @@ const flash = require('express-flash');
 const bodyParser = require('body-parser');
 
 // app configurations - start
-// const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
-const deploymentConfig = "./config/app-localhost";
+const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
 
@@ -105,7 +104,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 
 // Routes - start
 app.get('/', isLoginEnsured, function (req, res) {
-    res.redirect('/charts');
+    res.redirect('/home');
 });
 
 app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
@@ -329,7 +328,7 @@ app.get('/login', function (req, res) {
 
 app.post('/login', function (req, res, next) {
     passport.authenticate('local', {
-        successRedirect: '/charts',
+        successRedirect: '/home',
         failureRedirect: '/login',
         failureFlash: true
     })(req, res, req.body.username, req.body.password, next);
@@ -358,9 +357,11 @@ app.post('/changepwd', isLoginEnsured, function (req, res) {
     });
 });
 
-app.get('/logout', function (req, res) {
-    req.logout();
-    res.redirect('/login');
+app.get('/logout', function (req, res) {    
+    req.logout(function(err) {
+     	if (err) { return next(err); }
+   	 res.redirect('/login');
+    });
 });
 
 app.get('/cashflow', isLoginEnsured, function (req, res, next) {

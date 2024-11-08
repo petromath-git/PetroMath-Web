@@ -1,7 +1,7 @@
 doctype html
 html
     head
-        title Muthu Enterprises:#{title}
+        title PetroMath:#{title}
         //- meta(name="viewport" content="width=device-width, initial-scale=1.0")
         link(rel='stylesheet', href='/stylesheets/style.css')
         script(src='/javascripts/app-scripts.js')
@@ -32,9 +32,9 @@ html
                     span(style='float:right;color:green;')
                         b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'
                     span
-                        a(href="/charts" required="false") Dashboard
+                        //a(href="/charts" required="false") Dashboard
                         if(user.isAdmin)
-                            span &nbsp; | &nbsp;
+                            //span &nbsp; | &nbsp;
                             if (title === 'Shift Closing')
                                 span#home_tab Shift Closing
                             else

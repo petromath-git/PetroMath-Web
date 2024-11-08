@@ -29,7 +29,7 @@ const PRODUCT_2T = [POUCH_DESC, LOOSE_DESC];
 const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 
 // config related to sales
-const MAX_CREDITS_ROW_CNT = 25;
+const MAX_CREDITS_ROW_CNT = 300;
 const MAX_CASH_SALES_ROW_CNT = 25;
 const MAX_EXPENSES_ROW_CNT = 25;
 const MAX_CASHFLOWS_ROW_CNT = 30;
