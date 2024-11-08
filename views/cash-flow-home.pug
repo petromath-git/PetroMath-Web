@@ -1,0 +1,67 @@
+extends layout
+
+block content
+    div.row
+        div.col-6
+            form(method='GET' action='/cashflowhome' id='cashflowhome')
+                table.center
+                    tr
+                        td From Date:
+                        td
+                            input#cashflow_fromDate.form-control(type='date', name='cashflow_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                        td &nbsp;
+                        td To Date:
+                        td
+                            input#cashflow_toDate.form-control(type='date', name='cashflow_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                        td &nbsp;
+                        td
+                            button.btn.btn-primary(type='submit') Go
+        div.col-6
+            form(method='POST' action='/cashflow' id='cashflow')
+                input(type='hidden' id='cashflow_fromDate_hiddenValue' name='cashflow_fromDate_hiddenValue' value=fromDate)
+                input(type='hidden' id='cashflow_toDate_hiddenValue' name='cashflow_toDate_hiddenValue' value=toDate)
+                div(style="text-align:right;")
+                    table
+                        tr
+                            td
+                                button.btn.btn-primary(type='submit') Generate cash flow
+                            td
+                                span &nbsp;
+                            td
+                                span for date :
+                            td
+                                span &nbsp;
+                            td
+                                input#generateDate.form-control(type='date', name='generateDate' value=generateDate, max=generateDate format="dd/mm/yyyy" required)
+
+    div &nbsp;
+    div
+        if cashflowValues && cashflowValues.length > 0
+            table(class="table")
+                thead(class="thead-light")
+                    tr
+                        th Date
+                        th Manager
+                        th Status
+                        th Actions
+                    tbody
+                        each val in cashflowValues
+                            tr(id=`cashflow-record-${val.cashflowId}`)
+                                td
+                                    span= val.date
+                                td
+                                    span= val.managers
+                                td
+                                    span= val.status
+                                if (val.status === 'DRAFT')
+                                    td
+                                        a.btn.btn-info(href='/cashflow?id=' + val.cashflowId)
+                                            span.oi.oi-pencil
+                                        if(user.isAdmin)
+                                            span &nbsp;
+                                            a.btn.btn-danger(onClick=`deleteCashflow(${val.cashflowId})`)
+                                                span.oi.oi-trash
+                                if (val.status === 'CLOSED')
+                                    td
+                                        a.btn.btn-info(href='/cashflow?id=' + val.cashflowId)
+                                            span.oi.oi-envelope-open

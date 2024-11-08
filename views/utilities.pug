@@ -1,0 +1,44 @@
+extends layout
+
+block content
+    div.row
+        div.col-4
+            div.card
+                div.card-header.text-white.bg-dark Density @ 15C
+                div.card-body
+                    form(method='GET' action='/density' id='form-density')
+                        label(for='temperature') Temperature:
+                        input#temperature.form-control(type='number' name='temperature', required step=0.5 min=0)
+                        label(for='density') Density:
+                        input#density.form-control(type='number' name='density', required)
+                        label(for='densityAt15') Density@15:
+                        input#densityAt15.form-control(name='densityAt15', readonly=true)
+                        br
+                        div.text-center
+                            button.btn.btn-primary(type="button" onclick="getDensity()") Go
+        div.col-4
+            div.card
+                div.card-header.text-white.bg-dark Dip Chart
+                div.card-body
+                    label(for='chart_name') Chart Name:
+                    select#chart_name.form-control(name='chart_name')
+                        if chartNames
+                            each val in chartNames
+                                option(value=`${val.chartName}`)= val.chartName
+                    label(for='dip_reading') Dip(cms):
+                    input#dip_reading.form-control(type="number" name='dip_reading', required)
+                    label(for='volume') Volume:
+                    input#volume.form-control(name='volume', readonly=true)
+                    br
+                    div.text-center
+                        button.btn.btn-primary(type="button" onclick="getDipChart()") Go
+        div.col-4
+            div.card
+                div.card-header.text-white.bg-dark Tally Export
+                div.card-body
+                    form(method='POST' action='/tally-export' id='form-tally-export')
+                        label(for='exportDate') Export Date:
+                        input#exportDate.form-control(type='date' name='exportDate', value=currentDate max=currentDate format="dd/mm/yyyy" required)
+                        br
+                        div.text-center
+                            button.btn.btn-primary(type='submit') Download
