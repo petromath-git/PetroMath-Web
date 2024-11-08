@@ -1,1 +1,0 @@
-USER CREATE,,/users,,POST,,FORM DATA,,m_user_name_0=mc_manager&m_user_username_0=mc_manager&m_user_role_0=Cashier,,
