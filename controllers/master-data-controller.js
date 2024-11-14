@@ -1,4 +1,5 @@
 const PersonDao = require("../dao/person-dao");
+var dateFormat = require('dateformat');
 
 module.exports = {
     findUsers: (locationCode) => {
@@ -11,7 +12,8 @@ module.exports = {
                             id: user.Person_id,
                             name: user.Person_Name,
                             username: user.User_Name,
-                            role: user.Role
+                            role: user.Role,
+                            effective_start_date: dateFormat(user.effective_start_date, "dd-mm-yyyy"),
                         });
                     });
                     resolve(users);

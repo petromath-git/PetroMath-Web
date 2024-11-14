@@ -194,6 +194,17 @@ app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res
     });
 });
 
+app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const userId = req.params.id;
+    PersonDao.disableUser(userId).then(data => {
+        if (data == 1) {
+            res.status(200).send({ message: 'User disabled successfully.' });
+        } else {
+            res.status(500).send({ error: 'Error disabling user.' });
+        }
+    })
+});
+
 app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
     CreditDao.create(dbMapping.newCredit(req));
     res.redirect('/credits');

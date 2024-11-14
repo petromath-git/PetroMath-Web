@@ -1019,6 +1019,17 @@ function hideAndDeleteTestingRow(trId) {
 }
 
 
+function disableUser(index, userId) {
+    const r = confirm("Please confirm if you want to disable the user?");
+    if (r == true) {
+        putAjax('disable-user/' + userId, {}).then(success => {
+            if (success) {
+                document.getElementById('user-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
 function editProduct(id, productId) {
     document.getElementById("product-price-" + id).readOnly = false;
     document.getElementById("product-unit-" + id).disabled = false;
