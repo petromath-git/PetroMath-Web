@@ -3,13 +3,14 @@ const Person = db.person;
 const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
+const dateFormat = require("dateformat");
 
 module.exports = {
     findUsers: (locationCode) => {
         if (locationCode) {
             return Person.findAll({
                 where: { [Op.and]: [
-                { 'location_code': locationCode }, {'effective_end_date': {[Op.gte] : utils.getPreviousDay()}}
+                { 'location_code': locationCode }, {'effective_end_date': {[Op.gte] : utils.currentDate() } }
             ] }
             });
         } else {
@@ -75,4 +76,15 @@ module.exports = {
     //         return Person.findAll();
     //     }
     // },
+
+    disableUser: (personId) => {
+        let now = new Date();
+        const formattedDate = dateFormat(now, "yyyy-mm-dd");
+        console.log(formattedDate);
+        return Person.update({
+            effective_end_date: formattedDate
+        }, {
+            where: { 'Person_id': personId }
+        });
+    }
 };
