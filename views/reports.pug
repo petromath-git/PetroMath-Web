@@ -1,0 +1,59 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;
+                td Company Name: 
+                td
+                    select#company_name.form-control(name='company_name')
+                      if credits
+                        option(value=`all`) All
+                          each val in credits
+                            option(value=`${val.name}`)= val.name
+                td &nbsp;
+                td
+                    button.btn.btn-primary(type='submit') Go
+    div &nbsp;
+    div
+        if creditstmt && creditstmt.length > 0
+            table(class="table")
+                thead(class="thead-light")
+                    tr
+                        th TranDate
+                        th Location
+                        th BillNo
+                        th CompanyName
+                        th ProductName
+                        th Price
+                        th PriceDiscount
+                        th Quantity
+                        th Amount
+                        th Notes
+                tbody
+                        each val in creditstmt
+                            tr
+                            td(scope="row")= val.tranDate
+                            td(scope="row")= val.locationCode
+                            td(scope="row")= val.billno
+                            td(scope="row")= val.companyName
+                            td(scope="row")= val.productName
+                            td(scope="row")= val.price
+                            td(scope="row")= val.price_discount
+                            td(scope="row")= val.quantity
+                            td(scope="row")= val.amount
+                            td(scope="row")= val.notes
+        else
+            div.row &nbsp;
+            div.row.bg-light No records to display.                   
+                            
+
+    

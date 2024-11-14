@@ -1,0 +1,108 @@
+extends layout
+
+block content
+    form(method='GET' action='/home' id='closing-by-date')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;
+                td
+                    button.btn.btn-primary(type='submit') Go
+    div &nbsp;
+    div
+        if closingValues && closingValues.length > 0
+            table(class="table")
+                thead(class="thead-light")
+                    tr
+                        th Date&Time
+                        th Cashier
+                        th Morning/Evening
+                        th MS Sales
+                        th HSD Sales
+                        th XMS Sales
+                        th 2T Loose
+                        th 2T Pouch
+                        th Shortage/Excess
+                        th Status
+                        th Edit/View
+                        th Delete
+                    tbody
+                        each val in closingValues
+                            tr(id=`closing-record-${val.closingId}`)
+                                td
+                                    span= val.closingDate
+                                td
+                                    span= val.cashierName
+                                td
+                                    span= val.period
+                                td
+                                    span= val.msData
+                                td
+                                    span= val.hsdData
+                                td
+                                    span= val.xmsData
+                                td
+                                    span= val.l2tData
+                                td
+                                    span= val.p2tData
+                                td
+                                    span= val.expenseData
+                                td
+                                    span= val.closingStatus
+                                if (val.closingStatus === 'DRAFT')
+                                    td
+                                        div.row
+                                        a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
+                                            span.oi.oi-pencil
+                                    if(user.isAdmin)
+                                        td
+                                            div.row
+                                            a.btn.btn-danger(onClick=`deleteClosing(${val.closingId})`)
+                                                span.oi.oi-trash
+                                if (val.closingStatus === 'CLOSED')
+                                    td
+                                        div.row
+                                        a.btn.btn-info(href='/edit-draft-closing?closingId=' + val.closingId)
+                                            span.oi.oi-book
+                                    td &nbsp;
+        else
+            div.row &nbsp;
+            div.row.bg-light No records to display.
+
+        div.row
+        if(user.isAdmin)
+            if(draftsCnt < config.maxAllowedDrafts && draftDaysCnt <= 0)
+                div.col &nbsp;
+                form(method='GET' action='/new-closing' id='get-new-closing')
+                    div.row
+                        div.col
+                            button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
+            else
+                if (draftDaysCnt > 0)
+                    div.col.bg-warning
+                        pre.text-danger= `Note: Drafts are open for long. please close them to add new closing.`
+                else
+                    div.col.bg-warning
+                        pre.text-danger= `Note: Cannot allow to add new closings, max ${config.maxAllowedDrafts} allowed drafts are met.`
+        div.row &nbsp;
+        if(deadlineMessage && deadlineMessage.length > 0)
+            div.row
+                h6.sub-header.bg-primary Important Deadlines
+                table(class="table" id="deadlineWarning-table")
+                    thead(class="thead-light")
+                        tr
+                            th Deadline Date
+                            th Message
+                        tbody
+                            each val, index in deadlineMessage
+                                tr(id="deadlineWarning_row_"+index)
+                                    td(scope="row")
+                                        span= val.deadlineDate
+                                    td(scope="row")
+                                        span= val.message

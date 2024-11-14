@@ -1,0 +1,181 @@
+
+//- Add new page: Summary on pump instances and their sale
+mixin summaryPumpInstancesData(val, tableColor, pumpInstance)
+    - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;
+    div.sub-header.col-3(id='vis-'+pumpUniqueName+'_sub_header')= val.pumpCode
+        span &nbsp;&nbsp;&nbsp;&nbsp;
+        span(id='valText-' + pumpUniqueName + '_sub_header_price')
+        div.table-responsive
+            table.table.table-sm(class=tableColor)
+                tbody
+                    tr
+                        td
+                            span Closing
+                        td
+                            span(id='val-' + pumpUniqueName + 'pump_closing')
+                    tr
+                        td
+                            span Opening
+                        td
+                            span(id='val-'+pumpUniqueName+'pump_opening')
+                    tr
+                        td
+                            span Testing
+                        td
+                            span(id='val-' + pumpUniqueName + 'pump_testing')
+                    tr
+                        td
+                            span Sale
+                        td
+                            span(id='val-'+pumpUniqueName+'pump_sale')
+                    tr
+                        td
+                            span
+                                b Amount
+                        td
+                            span
+                                b(id='val-' + pumpUniqueName + 'pump_amount')
+//- Add new page: Summary on 2T sales
+mixin summary2TSalesData(product2TName)
+    div.table-responsive
+        table.table.table-sm.table-secondary
+            tbody
+                tr
+                    td
+                        span Given
+                    td
+                        span(id='val-'+ product2TName + '_given')
+                tr
+                    td
+                        span Remain
+                    td
+                        span(id='val-'+ product2TName + '_remain')
+                tr
+                    td
+                        span Sale
+                    td
+                        span(id='val-'+ product2TName + '_sale')
+                tr
+                    td
+                        span
+                            b Amount
+                    td
+                        span
+                            b(id='val-' + product2TName + '_amount')
+
+//- Add new page: Summary on testing
+mixin summaryTestingData(productAlias)
+    td(scope="row")
+        span= `${productAlias}`
+    td(scope="row")
+        span(id='valText-' + productAlias + '-test-pump')
+    td(scope="row")
+        span(id='val-' + productAlias + '-test-lts')
+    td(scope="row")
+        span(id='val-' + productAlias + '-test-amount')
+
+
+//- Add new page: Summary on cash sales' details
+mixin summaryCashSalesData(cashSaleRowNo)
+    - var prefix = 'cash-sale-';
+    - var trClass = 'd-md-none';
+    if(cashSaleRowNo == 0)
+        - trClass = '';
+    tr(class=trClass id='vis-' + prefix + 'table-row-'+cashSaleRowNo)
+        td
+            span(id='valText-' + prefix + 'product-' + cashSaleRowNo)
+        td
+            span(id='val-' + prefix + 'billno-' + cashSaleRowNo)
+        td
+            span(id='val-' + prefix + 'price-' + cashSaleRowNo)
+        td
+            span(id='val-' + prefix + 'discount-' + cashSaleRowNo)
+        td
+            span(id='val-' + prefix + 'qty-' + cashSaleRowNo)
+        td
+            span(id='val-' + prefix + 'amt-' + cashSaleRowNo)
+
+//- Add new page: Summary on credit details
+mixin summaryCreditsData(creditRowNo)
+    - var prefix = 'credit-';
+    - var trClass = 'd-md-none';
+    tr(class=trClass id='vis-' + prefix + 'table-row-' + creditRowNo)
+        td
+            label(id='valText-' + prefix + 'product-' + creditRowNo)
+        td
+            label(id='val-' + prefix + 'billno-' + creditRowNo)
+        td
+            label(id='valText-' + prefix + 'type-' + creditRowNo)
+        td
+            label(id='val-' + prefix + 'companyName_' + creditRowNo)
+        td
+            label(id='val-' + prefix + 'price-' + creditRowNo)
+        td
+            span(id='val-' + prefix + 'discount-' + creditRowNo)
+        td
+            label(id='val-' + prefix + 'qty-' + creditRowNo)
+        td
+            label(id='val-' + prefix + 'amt-' + creditRowNo)
+
+//- Add new page: Summary on expenses data
+mixin showExpensesData(rowNo, val)
+    - var trClass = 'd-md-none';
+    tr(class=trClass id='vis-exp-table-row-' + rowNo)
+        td
+            span(id='valText-exp-expense-'+rowNo)
+        td
+            span(id='val-exp-amt-'+rowNo)
+        td
+            span(id='val-exp-notes-'+rowNo)
+
+//- Add new page: Show rows for each denomination
+mixin showDenominationsData(denominationValues)
+    each val in denominationValues
+        tr
+            td
+                span= val.label
+            td
+                span(id='val-denom-' + val.id + '-cnt')
+
+//- Gas sales total
+mixin gasSalesTotal()
+    span.sub-header Total Sales Amount
+        span(id='total-sales')
+        div.table-responsive
+            table.table.table-sm.table-secondary
+                tbody
+                    tr.bg-success
+                        td
+                            span MS Sales
+                        td.font-weight-bold
+                            span(id='MS_pump_amount')
+                    tr.bg-primary
+                        td
+                            span HSD Sales
+                        td.font-weight-bold
+                            span(id='HSD_pump_amount')
+                    tr.table-warning
+                        td
+                            span XMS Sales
+                        td.font-weight-bold
+                            span(id='XMS_pump_amount')
+
+//- Add new page: Summary on Decant Lines details
+mixin summaryDecantLinesData(decantRowNo)
+    - var prefix = 'tankReceipts-';
+    - var trClass = 'd-md-none';
+    tr(class=trClass id='vis-' + prefix + 'table-row-' + decantRowNo)
+        td
+            label(id='valText-' + prefix + 'tank_' + decantRowNo)
+        td
+            label(id='valText-' + prefix + 'tankqty_' + decantRowNo)
+        td
+            label(id='val-' + prefix + 'eb_' + decantRowNo)
+        td
+            label(id='val-' + prefix + 'opening_dip_' + decantRowNo)
+        td
+            label(id='val-' + prefix + 'closing_dip_' + decantRowNo)
+        td
+            span(id='valText-' + prefix + 'notes_' + decantRowNo)
+        td
+            label(id='val-' + prefix + 'amt_' + decantRowNo)

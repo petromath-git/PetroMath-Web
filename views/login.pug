@@ -1,0 +1,16 @@
+extends layout
+
+block content
+    div(class="bgImage")
+        if message
+            div(class='alert alert-danger' required="false") #{message}
+        div.container(style="max-width:300px")
+            form(method='POST' action='/login')
+                div &nbsp;
+                div.form-group
+                    input#username.form-control(type='text' placeholder="User Name", required, name='username')
+                div.form-group
+                    input#pw.form-control(type='password', required, name='password', placeholder="Password")
+                //- div &nbsp;
+                div(style="text-align:center")
+                    button.btn.btn-secondary(type='submit') Login
