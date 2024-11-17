@@ -1,14 +1,11 @@
 module.exports = {
-  // DB config
-  //HOST: "ec2-35-174-200-24.compute-1.amazonaws.com",
-  //HOST: "localhost",
+  // Database config
+
   HOST: "3.233.160.101",
   PORT: "3306",
   USER: "root",
-  //PASSWORD: "localdbSQL1",
   PASSWORD: "welcome123",
   DB: "petrolpumpv1",
-  //DB: "petrolpump_dev",
   DIALECT: "mysql",
   pool: {
     max: 1,
@@ -18,7 +15,8 @@ module.exports = {
   },
 
   // Server config
+
    SERVER_PORT: 3000,
-//    SERVER_PORT: 80,
+  //  SERVER_PORT: 80,
 
 };
