@@ -1,9 +1,8 @@
 // HOST IP: "35.174.200.24",
 const Sequelize = require("sequelize");
 const appConfig = require("../config/app-config");
-//const deploymentConfig = "../config/app-deployment-" + process.env.ENVIRONMENT;
-const deploymentConfig = "../config/app-deployment-prod";
-//const deploymentConfig = "../config/app-deployment-" + process.env.ENVIRONMENT;
+require('dotenv').config();
+const deploymentConfig = "../config/app-deployment-" + process.env.ENVIRONMENT;
 const dbConfig = require(deploymentConfig);
 
 const sequelize = new Sequelize(dbConfig.DB, dbConfig.USER, dbConfig.PASSWORD, {
