@@ -7,6 +7,7 @@ const security = require("./utils/app-security");
 const UserData = require("./value/UserData");
 const msg = require("./config/app-messages");
 const config = require("./config/app-config");
+require('dotenv').config();
 
 // Passport - configuration - start....
 const passport = require('passport');
@@ -535,10 +536,9 @@ app.use(function (err, req, res, next) {
 // error handler - end.
 
 // port - start
-app.set('port', process.env.PORT || serverConfig.SERVER_PORT);
 
-app.listen(app.get('port'), function () {
-    console.log('Express server listening on port ' + app.get('port'));
+app.listen(process.env.SERVER_PORT, function () {
+    console.log('Express server listening on port ' + process.env.SERVER_PORT);
 });
 
 // port - end
