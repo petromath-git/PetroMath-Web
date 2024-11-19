@@ -10,19 +10,26 @@ block content
                     th(scope="col") Name
                     th(scope="col") UserName
                     th(scope="col") Role
-                    th(scope="col") &nbsp;
-                tbody
-                    each val, index in users
-                        tr
-                            th(scope="row")= index + 1
-                            td(scope="row")= val.name
-                            td(scope="row")= val.username
-                            td(scope="row")= val.role
-                            td(scope="row")
-                    - var rowCnt = 0
-                    while rowCnt < 1
-                        +addNewUser(rowCnt++)
+                    th(scope="col") Effective Start Date
+                    th(scope="col") Disable User  
+            tbody
+                each val, index in users
+                    tr(id='user-' + index)
+                        th(scope="row")= index + 1
+                        td= val.name
+                        td= val.username
+                        td= val.role
+                        td= val.effective_start_date
+                        td
+                            div.align-items-start
+                                button.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
+                                    span.oi.oi-delete
+                - var rowCnt = 0
+                while rowCnt < 1
+                    +addNewUser(rowCnt++)
         div(align="center")
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'users')", id='users-add-new' title="Only one can be added at a time.") Add New
+            button.btn.btn-primary(type="button", onClick="window.location.href='/enable_user'", id="enable-user", title="Enable User") Enable User
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'users')", id='users-add-new', title="Only one can be added at a time.") Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='users-save') Save

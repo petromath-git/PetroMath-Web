@@ -3,6 +3,7 @@ const db = require("../db/db-connection");
 const TxnClosing = db.txn_closing;
 var txnWriteDao = require("../dao/txn-write-dao");
 const config = require("../config/app-config");
+var dateFormat = require('dateformat');
 
 
 module.exports = {
@@ -57,6 +58,8 @@ module.exports = {
             Role: req.body.m_user_role_0,
             location_code: req.user.location_code,
             Password: 'welcome123',
+            effective_start_date: dateFormat(new Date()),
+            effective_end_date: '2400-01-01',
             created_by: req.user.Person_id,
             updated_by: req.user.Person_id
         };

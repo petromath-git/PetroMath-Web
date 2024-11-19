@@ -3,14 +3,20 @@ const Person = db.person;
 const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
+const dateFormat = require("dateformat");
 
 module.exports = {
     findUsers: (locationCode) => {
         if (locationCode) {
             return Person.findAll({
-                where: { [Op.and]: [
-                { 'location_code': locationCode }, {'effective_end_date': {[Op.gte] : utils.getPreviousDay()}}
-            ] }
+                where: {
+                    [Op.and]: [
+                        { 'location_code': locationCode }, { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+
+                    ]
+                }, order: [
+                    ['effective_start_date', 'ASC']
+                ]
             });
         } else {
             return Person.findAll();
@@ -64,7 +70,7 @@ module.exports = {
                 'location_code': locationCode,
                 [Op.or]: [{'Role': 'Driver'}, {'Role': 'Helper'}]
             }
-        });    
+        });
     },
     // findAllUsers: (locationCode) => {
     //     if (locationCode) {
@@ -75,4 +81,39 @@ module.exports = {
     //         return Person.findAll();
     //     }
     // },
+
+    disableUser: (personId) => {
+        let now = new Date();
+        const formattedDate = dateFormat(now, "yyyy-mm-dd");
+        console.log(formattedDate);
+        return Person.update({
+            effective_end_date: formattedDate
+        }, {
+            where: { 'Person_id': personId }
+        });
+    },
+
+    findDisableUsers: (locationCode) => {
+        const now = new Date(); // Current date
+        return Person.findAll({
+            where: {
+                [Op.and]: [
+                    { location_code: locationCode }, // Match location code
+                    { effective_end_date: { [Op.lt]: now } } // effective_start_date < current date
+                ]    
+            },order: [
+                ['effective_end_date', 'DESC']
+            ]
+        });
+    },
+
+    enableUser: (personId) => {
+        const UpdateDate = "2400-01-01"; // Use this fixed date
+        return Person.update(
+            { effective_end_date: UpdateDate },
+            { where: { Person_id: personId } }
+        );
+    },
+
+
 };
