@@ -65,7 +65,7 @@ module.exports = {
                 'location_code': locationCode,
                 [Op.or]: [{'Role': 'Driver'}, {'Role': 'Helper'}]
             }
-        });    
+        });
     },
     // findAllUsers: (locationCode) => {
     //     if (locationCode) {
@@ -86,5 +86,27 @@ module.exports = {
         }, {
             where: { 'Person_id': personId }
         });
-    }
+    },
+
+    findDisableUsers: (locationCode) => {
+        const now = new Date(); // Current date
+        return Person.findAll({
+            where: {
+                [Op.and]: [
+                    { location_code: locationCode }, // Match location code
+                    { effective_end_date: { [Op.lt]: now } } // effective_start_date < current date
+                ]
+            }
+        });
+    },
+
+    enableUser: (personId) => {
+        const UpdateDate = "2400-01-01"; // Use this fixed date
+        return Person.update(
+            { effective_end_date: UpdateDate },
+            { where: { Person_id: personId } }
+        );
+    },
+
+
 };

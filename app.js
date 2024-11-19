@@ -8,24 +8,31 @@ const UserData = require("./value/UserData");
 const msg = require("./config/app-messages");
 const config = require("./config/app-config");
 require('dotenv').config();
+const dateFormat = require("dateformat");
 
 // Passport - configuration - start....
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 passport.use(new LocalStrategy(
     function (username, password, done) {
-        Person.findOne({where: {'User_name': username}})
+        Person.findOne({ where: { 'User_name': username } })
             .then(data => {
                 if (data && password === (data.Password)) {
-                    var userInfo = new UserData(data, security.isAdminChk(data));
-                    done(null, userInfo);
+                    let now = new Date();
+                    const today_date = dateFormat(now, "yyyy-mm-dd");
+                    if (data.effective_end_date > today_date) {
+                        var userInfo = new UserData(data, security.isAdminChk(data));
+                        done(null, userInfo);
+                    } else {
+                        done(null, false, { message: 'User account is disabled' });
+                    }
                 } else {
-                    done(null, false, {message: 'User name or password is incorrect'});
+                    done(null, false, { message: 'User name or password is incorrect' });
                 }
             })
             .catch(err => {
                 console.warn("err in app :::: " + err + err.toString());
-                done(null, false, {message: err.toString()});
+                done(null, false, { message: err.toString() });
             });
     }));
 
@@ -206,6 +213,34 @@ app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req
     })
 });
 
+app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    masterController.findDisableUsers(req.user.location_code)
+        .then(data => {
+            res.render('enable_user', {
+                title: 'Enable Users',
+                user: req.user,
+                users: data
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching users:", err);
+            res.status(500).send("An error occurred.");
+        });
+});
+
+app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const userId = req.params.id;
+    PersonDao.enableUser(userId)
+        .then(data => {
+            if (data == 1) {
+                res.status(200).send({ success: true, message: 'User enabled successfully.' });
+            } else {
+                res.status(400).send({ success: false, error: 'Error enabling user.' });
+            }
+        })
+},
+);
+
 app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
     CreditDao.create(dbMapping.newCredit(req));
     res.redirect('/credits');
@@ -254,9 +289,9 @@ app.get('/reports', isLoginEnsured,function (req, res, next) {
                     name: credit.Company_Name
                 });
             });
-            
+
         res.render('reports', {title: 'Reports', user: req.user, credits: credits});
-            
+
         });
 });
 app.post('/reports', isLoginEnsured,function (req, res, next) {
@@ -307,7 +342,7 @@ app.delete('/remove-credit-sale', isLoginEnsured, function (req, res, next) {
 });
 
 app.post('/new-expenses', isLoginEnsured, function(req, res, next) {
-   HomeController.saveExpensesData(req, res, next);
+    HomeController.saveExpensesData(req, res, next);
 });
 
 app.delete('/remove-expense', isLoginEnsured, function (req, res, next) {
@@ -369,10 +404,10 @@ app.post('/changepwd', isLoginEnsured, function (req, res) {
     });
 });
 
-app.get('/logout', function (req, res) {    
+app.get('/logout', function (req, res) {
     req.logout(function(err) {
-     	if (err) { return next(err); }
-   	 res.redirect('/login');
+        if (err) { return next(err); }
+        res.redirect('/login');
     });
 });
 
@@ -423,7 +458,7 @@ app.post('/close-receipt', isLoginEnsured, function (req, res, next) {
 });
 
 app.get('/new-decant', isLoginEnsured, function (req, res) {
-    tankReceiptController.getNewData(req, res);    
+    tankReceiptController.getNewData(req, res);
 });
 
 app.post('/new-decant', isLoginEnsured, function (req, res, next) {
