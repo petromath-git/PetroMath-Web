@@ -24,7 +24,7 @@ passport.use(new LocalStrategy(
                         var userInfo = new UserData(data, security.isAdminChk(data));
                         done(null, userInfo);
                     } else {
-                        done(null, false, { message: 'User account is disabled' });
+                        done(null, false, { message: `${data.User_Name} Your User Account is Disabled` });
                     }
                 } else {
                     done(null, false, { message: 'User name or password is incorrect' });
@@ -217,7 +217,7 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
     masterController.findDisableUsers(req.user.location_code)
         .then(data => {
             res.render('enable_user', {
-                title: 'Enable Users',
+                title: 'Disable Users',
                 user: req.user,
                 users: data
             });
@@ -257,7 +257,7 @@ app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     const newUser = dbMapping.newUser(req);
     PersonDao.findUserByName(newUser.Person_Name, newUser.User_Name, newUser.location_code).then(
         (data) => {
-            if(data && data.length > 0) {
+            if (data && data.length > 0) {
                 masterController.findUsers(newUser.location_code).then((data) => {
                     res.status(400).render('users', {
                         title: 'Users',

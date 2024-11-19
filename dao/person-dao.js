@@ -9,9 +9,14 @@ module.exports = {
     findUsers: (locationCode) => {
         if (locationCode) {
             return Person.findAll({
-                where: { [Op.and]: [
-                { 'location_code': locationCode }, {'effective_end_date': {[Op.gte] : utils.currentDate() } }
-            ] }
+                where: {
+                    [Op.and]: [
+                        { 'location_code': locationCode }, { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+
+                    ]
+                }, order: [
+                    ['effective_start_date', 'ASC']
+                ]
             });
         } else {
             return Person.findAll();
@@ -95,8 +100,10 @@ module.exports = {
                 [Op.and]: [
                     { location_code: locationCode }, // Match location code
                     { effective_end_date: { [Op.lt]: now } } // effective_start_date < current date
-                ]
-            }
+                ]    
+            },order: [
+                ['effective_end_date', 'DESC']
+            ]
         });
     },
 
