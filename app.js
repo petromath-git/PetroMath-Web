@@ -217,7 +217,7 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
     masterController.findDisableUsers(req.user.location_code)
         .then(data => {
             res.render('enable_user', {
-                title: 'Disable Users',
+                title: 'Disabled Users',
                 user: req.user,
                 users: data
             });
