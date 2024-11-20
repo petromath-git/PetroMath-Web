@@ -1,0 +1,25 @@
+extends layout
+include mixins/mixins
+
+block content
+    table(class="table" id="users-table")
+        thead(class="thead-light")
+            tr
+                th(scope="col") #
+                th(scope="col") Name
+                th(scope="col") UserName
+                th(scope="col") Role
+                th(scope="col") Effective End Date
+                th(scope="col") Enable User
+        tbody
+            each val, index in users
+                tr(id='user-' + index)
+                    th(scope="row")= index + 1
+                    td= val.name
+                    td= val.username
+                    td= val.role
+                    td= val.effective_end_date
+                    td
+                        div.align-items-start
+                            button.btn.btn-info(id="enable-user-"+index, onclick="enableUser('"+index+"', '"+ val.id +"')")
+                                span.oi.oi-check

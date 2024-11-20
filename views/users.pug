@@ -11,7 +11,7 @@ block content
                     th(scope="col") UserName
                     th(scope="col") Role
                     th(scope="col") Effective Start Date
-                    th(scope="col") &nbsp;
+                    th(scope="col") Disable User  
             tbody
                 each val, index in users
                     tr(id='user-' + index)
@@ -21,13 +21,15 @@ block content
                         td= val.role
                         td= val.effective_start_date
                         td
-                            div.row
-                                a.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
+                            div.align-items-start
+                                button.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
                                     span.oi.oi-delete
                 - var rowCnt = 0
                 while rowCnt < 1
                     +addNewUser(rowCnt++)
         div(align="center")
+            button.btn.btn-primary(type="button", onClick="window.location.href='/enable_user'", id="enable-user", title="Enable User") Enable User
+            span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'users')", id='users-add-new', title="Only one can be added at a time.") Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='users-save') Save

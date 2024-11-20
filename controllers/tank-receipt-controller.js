@@ -12,11 +12,11 @@ const TruckDao = require("../dao/truck-dao");
 
 module.exports = {
 
-        // Getting home data
+    // Getting home data
     getTankReceipts: (req, res, next) => {
         getHomeData(req, res, next);
     },
-    
+
 
     // Create Tank receipt - one at a time
     saveTankReceipts: (req, res, next) => {
@@ -31,16 +31,16 @@ module.exports = {
             });
     },
 
-   //function to load the decant header
+    //function to load the decant header
     getNewData: (req, res, next) => {
         const locationCode = req.user.location_code;
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
-                    getDriverHelper(locationCode),
-                    tankCodePromise(locationCode),
-                    truckDataPromise(locationCode),
-                    getLocationId(locationCode)])                        
+                getDriverHelper(locationCode),
+                tankCodePromise(locationCode),
+                truckDataPromise(locationCode),
+                getLocationId(locationCode)])
                     .then((values) => {
                         res.render('new-decant', {
                             user: req.user,
@@ -53,8 +53,8 @@ module.exports = {
                             location: values[4].value.location_id
                         });
                     }).catch((err) => {
-                    console.warn("Error while getting data using promises " + err.toString());
-                    Promise.reject(err);
+                        console.warn("Error while getting data using promises " + err.toString());
+                        Promise.reject(err);
                     });
             } else {
                 getTankReceipts(req, res, next);
@@ -70,7 +70,7 @@ module.exports = {
         }).error((err) => {
             res.status(500).send({error: 'Error while deleting the Tank Receipt.'});
         });
-      
+
     },
 
     // Delete Decant Line
@@ -90,7 +90,7 @@ module.exports = {
             res.status(302).send();
         }
     },
-//save decant lines
+    //save decant lines
     saveDecantLines: (req, res, next) => {
         const decantLineData=req.body;
         txnWriteDecantLinesPromise(decantLineData)
@@ -106,11 +106,11 @@ module.exports = {
     closeData: (req, res, next) => {
         TxnTankRcptDao.finishClosing(req.query.id).then(() => {
                 res.status(200).send({message: 'The decant record is made final.'});
-                }).error((err) => {
+        }).error((err) => {
                     res.status(500).send({error: 'Error while closing the Tank Receipt.'});
-                });
+        });
     }
-    
+
 }
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
@@ -127,26 +127,34 @@ const personDataPromise = (locationCode) => {
         let inchargers = [];
         PersonDao.findUsers(locationCode)
             .then(data => {
+                const now = new Date();
+                const nowDate = dateFormat(now, "yyyy-mm-dd");
                 data.forEach((person) => {
-                    inchargers.push({personName: person.Person_Name, personId: person.Person_id});
+                    if (person.effective_end_date > nowDate && person.effective_end_date != nowDate) {
+                        inchargers.push({ personName: person.Person_Name, personId: person.Person_id });
+                    }
                 });
-                resolve({inchargers: inchargers});
+                resolve({ inchargers: inchargers });
             });
     });
 }
 
-const getDriverHelper =(locationCode) => {
+const getDriverHelper = (locationCode) => {
     return new Promise((resolve, reject) => {
         let drivers = [];
         PersonDao.findDrivers(locationCode)
             .then(data => {
+                const now = new Date();
+                const nowDate = dateFormat(now, "yyyy-mm-dd");
                 data.forEach((person) => {
-                    drivers.push({personName: person.Person_Name, personId: person.Person_id});
+                    if (person.effective_end_date > nowDate && person.effective_end_date != nowDate) {
+                        drivers.push({ personName: person.Person_Name, personId: person.Person_id });
+                    }
                 });
-                resolve({drivers: drivers});
+                resolve({ drivers: drivers });
             });
     });
-}
+};
 
 const getDraftsCountBeforeDays = (locationCode, noOfDays) => {
     return new Promise((resolve, reject) => {
@@ -164,9 +172,9 @@ const txnWriteReceiptPromise = (receiptData) => {
             .then(data => {
                 resolve(data);
             }).catch((err) => {
-            console.error("Error while saving Decant Header " + err.toString());
+                console.error("Error while saving Decant Header " + err.toString());
             resolve({error: err.toString()});
-        });
+            });
     });
 }
 
@@ -184,35 +192,35 @@ const tankCodePromise = (locationCode) => {
                 });
                 resolve({tanks: tanks});
             });
-            
+
     });
 }
 
 const txnWriteDecantLinesPromise = (decantLineData) => {
     return new Promise((resolve, reject) => {
         TxnStkRcptDtlDao.saveDecantLineData(decantLineData)
-        .then(data => {
-            resolve(data);
-        }).catch((err) => {
-        console.error("Error while saving Decant Lines " + err.toString());
+            .then(data => {
+                resolve(data);
+            }).catch((err) => {
+                console.error("Error while saving Decant Lines " + err.toString());
         resolve({error: err.toString()});
-    });
+            });
     });
 }
 
 const txnDeleteDecantLinePromise = (decantLineId) => {
     return new Promise((resolve, reject) => {
         TxnStkRcptDtlDao.deleteDecantLineById(decantLineId)
-        .then(status => {
-            if (status > 0) {
+            .then(status => {
+                if (status > 0) {
                 resolve({message: 'Data deletion success.'});
-            } else {
+                } else {
                 resolve({error: 'Data deletion failed.'});
-            }
-        }).catch((err) => {
-        console.error("Error while deleting readings " + err.toString());
+                }
+            }).catch((err) => {
+                console.error("Error while deleting readings " + err.toString());
         resolve({error: err.toString()});
-    });
+            });
     });
 }
 
@@ -239,8 +247,8 @@ const getHomeData = (req, res, next) => {
             });
 
             console.log("inside tank");
-        });      
-    
+        });
+
 }
 
 const getTankRcptByDate = (locationCode, fromDate, toDate) => {
@@ -268,7 +276,7 @@ const getTankRcptByDate = (locationCode, fromDate, toDate) => {
                 });
                 resolve(receipts);
             });
-            
+
     });
 }
 const truckDataPromise = (locationCode) => {
@@ -290,7 +298,7 @@ const getLocationId = (locationCode) => {
         let location_id;
         TxnTankRcptDao.getLocationId(locationCode)
             .then(data => {
-               location_id = data.location_id;
+                location_id = data.location_id;
                 resolve({location_id:location_id});
             });
 
