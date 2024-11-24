@@ -295,7 +295,7 @@ app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
 });
 
 app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.create(dbMapping.newCredit(req));
+    CreditDao.create(dbMapping.newCredit(req));
     res.redirect('/credits');
 });
 
