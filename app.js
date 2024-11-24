@@ -75,12 +75,13 @@ const tankReceiptController = require("./controllers/tank-receipt-controller");
 const masterController = require("./controllers/master-data-controller");
 const cashflowController = require("./controllers/cash-flow-controller");
 const utilitiesController = require("./controllers/utilities-controller");
-const reportsController=require("./controllers/reports-controller");
+const reportsController = require("./controllers/reports-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
 const dashBoardController = require("./controllers/dashboard-controller");
 const deadlineController = require("./controllers/deadline-master-controller");
+const creditController = require("./controllers/credit-controller");
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
@@ -96,15 +97,15 @@ app.set('view engine', 'pug');
 app.use(flash());
 app.use(express.static('public'));
 app.use(require('cookie-parser')('keyboard cat'));
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(require('express-session')({secret: 'keyboard cat', resave: false, saveUninitialized: false}));
+app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
 
 app.use(logger('dev'));
 app.use(express.json());
-app.use(express.urlencoded({extended: false}));
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const isLoginEnsured = login.ensureLoggedIn({});
@@ -115,30 +116,9 @@ app.get('/', isLoginEnsured, function (req, res) {
     res.redirect('/home');
 });
 
-app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    let locationCode = req.user.location_code;
-    let credits = [];
-    CreditDao.findAll(locationCode)
-        .then(data => {
-            data.forEach((credit) => {
-                credits.push({
-                    id: credit.creditlist_id,
-                    name: credit.Company_Name,
-                    type: credit.type,
-                    address: credit.address,
-                    phoneno: credit.phoneno,
-                    gst: credit.gst,
-                    short_name: credit.short_name,
-                    balance: credit.Opening_Balance
-                });
-            });
-            res.render('credits', {title: 'Credits', user: req.user, credits: credits});
-        });
-});
-
 app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     masterController.findUsers(req.user.location_code).then(data => {
-        res.render('users', {title: 'Users', user: req.user, users: data});
+        res.render('users', { title: 'Users', user: req.user, users: data });
     });
 });
 
@@ -170,12 +150,12 @@ app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
                     unit: product.unit,
                     qty: product.qty,
                     price: product.price,
-                    ledger_name:product.ledger_name,
-                    cgst_percent:product.cgst_percent,
+                    ledger_name: product.ledger_name,
+                    cgst_percent: product.cgst_percent,
                     sgst_percent: product.sgst_percent
                 });
             });
-            res.render('products', {title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS,});
+            res.render('products', { title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS, });
         });
 });
 
@@ -185,19 +165,20 @@ app.post('/products', [isLoginEnsured, security.isAdmin()], function (req, res) 
     res.redirect('/products');
 });
 
+
 app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     ProductDao.update({
         product_id: req.params.id,
         price: req.body.m_product_price,
         unit: req.body.m_product_unit,
-        ledger_name:req.body.m_product_ledger_name,
-        cgst_percent:req.body.m_product_cgst,
-        sgst_percent:req.body.m_product_sgst
+        ledger_name: req.body.m_product_ledger_name,
+        cgst_percent: req.body.m_product_cgst,
+        sgst_percent: req.body.m_product_sgst
     }).then(data => {
-        if(data == 1 || data == 0) {
-            res.status(200).send({message: 'Saved product data successfully.'});
+        if (data == 1 || data == 0) {
+            res.status(200).send({ message: 'Saved product data successfully.' });
         } else {
-            res.status(500).send({error: 'Error while saving data.'});
+            res.status(500).send({ error: 'Error while saving data.' });
         }
     });
 });
@@ -228,6 +209,33 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
         });
 });
 
+app.get('/enable_credit', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findDisableCredits(req.user.location_code)
+        .then(data => {
+            res.render('enable_credit', {
+                title: 'Disabled Credits',
+                user: req.user,
+                users: data
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching users:", err);
+            res.status(500).send("An error occurred.");
+        });
+});
+
+app.put('/enable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const creditID = req.params.id;
+    CreditDao.enableCredit(creditID)
+        .then(data => {
+            if (data == 1) {
+                res.status(200).send({ success: true, message: 'Credit enabled successfully.' });
+            } else {
+                res.status(400).send({ success: false, error: 'Error enabling user.' });
+            }
+        })
+});
+
 app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     const userId = req.params.id;
     PersonDao.enableUser(userId)
@@ -238,18 +246,24 @@ app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req,
                 res.status(400).send({ success: false, error: 'Error enabling user.' });
             }
         })
-},
-);
-
-app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    CreditDao.create(dbMapping.newCredit(req));
-    res.redirect('/credits');
 });
 
+// Disable Credit
+app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const creditID = req.params.id;
+    console.log("creditID", creditID);
+    CreditDao.disableCredit(creditID).then(data => {
+        if (data == 1) {
+            res.status(200).send({ message: 'Credit disabled successfully.' });
+        } else {
+            res.status(500).send({ error: 'Error disabling user.' });
+        }
+    })
+});
 
 app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     masterController.findUsers(req.user.location_code).then(data => {
-        res.render('users', {title: 'Users', user: req.user, users: data});
+        res.render('users', { title: 'Users', user: req.user, users: data });
     });
 });
 
@@ -263,7 +277,7 @@ app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
                         title: 'Users',
                         user: req.user,
                         users: data,
-                        messages: {warning: msg.WARN_USER_DUPLICATE}
+                        messages: { warning: msg.WARN_USER_DUPLICATE }
                     });
                 });
             } else {
@@ -274,11 +288,23 @@ app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     )
 });
 
+app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findCredits(req.user.location_code).then(data => {
+        res.render('credits', { title: 'Credits', user: req.user, credits: data });
+    });
+});
+
+app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.create(dbMapping.newCredit(req));
+    res.redirect('/credits');
+});
+
+
 app.get('/home', isLoginEnsured, function (req, res, next) {
     HomeController.getHomeDataFn(req, res, next); // response returned inside controller
 });
 
-app.get('/reports', isLoginEnsured,function (req, res, next) {
+app.get('/reports', isLoginEnsured, function (req, res, next) {
     let locationCode = req.user.location_code;
     let credits = [];
     CreditDao.findAll(locationCode)
@@ -290,12 +316,13 @@ app.get('/reports', isLoginEnsured,function (req, res, next) {
                 });
             });
 
-        res.render('reports', {title: 'Reports', user: req.user, credits: credits});
+            res.render('reports', { title: 'Reports', user: req.user, credits: credits });
 
         });
 });
-app.post('/reports', isLoginEnsured,function (req, res, next) {
-    reportsController.getCreditReport(req,res,next);
+
+app.post('/reports', isLoginEnsured, function (req, res, next) {
+    reportsController.getCreditReport(req, res, next);
 });
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
     HomeController.getNewData(req, res, next);  // response returned inside controller
@@ -341,7 +368,7 @@ app.delete('/remove-credit-sale', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnCreditSale(req, res, next);  // response returned inside controller
 });
 
-app.post('/new-expenses', isLoginEnsured, function(req, res, next) {
+app.post('/new-expenses', isLoginEnsured, function (req, res, next) {
     HomeController.saveExpensesData(req, res, next);
 });
 
@@ -365,12 +392,12 @@ app.delete('/delete-closing', [isLoginEnsured, security.isAdmin()], function (re
     ClosingDeleteController.deleteClosingRecord(req, res, next);  // response returned inside controller
 });
 
-app.get('/get-excess-shortage', isLoginEnsured, function(req, res, next) {
+app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
 app.get('/login', function (req, res) {
-    res.render('login', {title: 'Login'});
+    res.render('login', { title: 'Login' });
 });
 
 app.post('/login', function (req, res, next) {
@@ -382,7 +409,7 @@ app.post('/login', function (req, res, next) {
 });
 
 app.get('/changepwd', isLoginEnsured, function (req, res) {
-    res.render('change-pwd', {title: 'Change Password', user: req.user});
+    res.render('change-pwd', { title: 'Change Password', user: req.user });
 });
 
 app.post('/changepwd', isLoginEnsured, function (req, res) {
@@ -392,20 +419,20 @@ app.post('/changepwd', isLoginEnsured, function (req, res) {
             res.render('change-pwd', {
                 title: 'Change Password',
                 user: req.user,
-                messages: {success: "Password changed successfully"}
+                messages: { success: "Password changed successfully" }
             });
         } else {
             res.render('change-pwd', {
                 title: 'Change Password',
                 user: req.user,
-                messages: {error: "Error while changing password."}
+                messages: { error: "Error while changing password." }
             });
         }
     });
 });
 
 app.get('/logout', function (req, res) {
-    req.logout(function(err) {
+    req.logout(function (err) {
         if (err) { return next(err); }
         res.redirect('/login');
     });
@@ -427,11 +454,11 @@ app.delete('/remove-cashflow-txn', isLoginEnsured, function (req, res, next) {
     cashflowController.deleteCashFlow(req, res, next);
 });
 
-app.post('/save-cashflow-txns', isLoginEnsured, function(req, res, next) {
+app.post('/save-cashflow-txns', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowTxnData(req, res, next);
 });
 
-app.post('/save-cashflow-denoms', isLoginEnsured, function(req, res, next) {
+app.post('/save-cashflow-denoms', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowDenomsData(req, res, next);
 });
 
@@ -443,7 +470,7 @@ app.post('/close-cashflow', [isLoginEnsured, security.isAdmin()], function (req,
     cashflowController.closeData(req, res, next);  // response returned inside controller
 });
 
-app.get('/tankreceipts', [isLoginEnsured, security.isAdmin()],  function (req, res, next) {
+app.get('/tankreceipts', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     tankReceiptController.getTankReceipts(req, res, next);    // response returned inside controller
 });
 
@@ -469,7 +496,7 @@ app.post('/new-decant-lines', isLoginEnsured, function (req, res, next) {
     tankReceiptController.saveDecantLines(req, res, next);  // response returned inside controller
 });
 
-app.delete('/remove-decant-line', isLoginEnsured,  function (req, res, next) {
+app.delete('/remove-decant-line', isLoginEnsured, function (req, res, next) {
     tankReceiptController.deleteDecantLines(req, res, next);
 });
 
@@ -478,11 +505,11 @@ app.delete('/delete-tankReceipt', [isLoginEnsured, security.isAdmin()], function
 });
 
 app.get('/truck-load', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    truckLoadController.getTruckData(req,res,next);  // response returned inside controller
+    truckLoadController.getTruckData(req, res, next);  // response returned inside controller
 });
 
 app.post('/truck-load', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    truckLoadController.saveTruckData(req,res,next);  // response returned inside controller
+    truckLoadController.saveTruckData(req, res, next);  // response returned inside controller
 });
 
 app.delete('/delete-truckload', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
@@ -490,11 +517,11 @@ app.delete('/delete-truckload', [isLoginEnsured, security.isAdmin()], function (
 });
 
 app.get('/truck-expense', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    truckLoadController.getTruckExpenseData(req,res,next);  // response returned inside controller
+    truckLoadController.getTruckExpenseData(req, res, next);  // response returned inside controller
 });
 
 app.post('/truck-expense', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    truckLoadController.saveTruckExpenseData(req,res,next);  // response returned inside controller
+    truckLoadController.saveTruckExpenseData(req, res, next);  // response returned inside controller
 });
 
 app.delete('/delete-truckexpense', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
@@ -518,11 +545,11 @@ app.post('/tally-export', isLoginEnsured, function (req, res) {
 });
 
 app.get('/bank-transaction', isLoginEnsured, function (req, res) {
-    bankAccountController.getAccountData(req,res);   // response returned inside controller
+    bankAccountController.getAccountData(req, res);   // response returned inside controller
 });
 
 app.post('/bank-transaction', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    bankAccountController.saveTransactionData(req,res,next);  // response returned inside controller
+    bankAccountController.saveTransactionData(req, res, next);  // response returned inside controller
 });
 
 app.delete('/delete-banktransaction', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
@@ -533,7 +560,7 @@ app.get('/account-type', isLoginEnsured, function (req, res) {
     bankAccountController.getAccountingType(req, res);    // response returned inside controller
 });
 app.get('/charts', isLoginEnsured, function (req, res) {
-    res.render('charts', {user: req.user, location: req.user.location_code});    // response returned inside controller
+    res.render('charts', { user: req.user, location: req.user.location_code });    // response returned inside controller
 });
 
 // app.get('/charts/:id', isLoginEnsured, function (req, res) {

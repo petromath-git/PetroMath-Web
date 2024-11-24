@@ -33,7 +33,9 @@ module.exports = {
             Opening_Balance : 0,
             location_code: req.user.location_code,
             created_by: req.user.Person_id,
-            updated_by: req.user.Person_id
+            updated_by: req.user.Person_id,
+            effective_start_date: dateFormat(new Date()),
+            effective_end_date: '2400-01-01',
         };
         return data;
     },

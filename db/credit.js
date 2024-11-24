@@ -18,7 +18,9 @@ module.exports = function(sequelize, DataTypes) {
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,
-        updation_date: DataTypes.DATE
+        updation_date: DataTypes.DATE,
+        effective_start_date: DataTypes.DATE,
+        effective_end_date: DataTypes.DATE
     }, {
         timestamps: false,
         freezeTableName: true
