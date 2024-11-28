@@ -116,12 +116,6 @@ app.get('/', isLoginEnsured, function (req, res) {
     res.redirect('/home');
 });
 
-app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    masterController.findUsers(req.user.location_code).then(data => {
-        res.render('users', { title: 'Users', user: req.user, users: data });
-    });
-});
-
 app.post('/creditreceipts', [isLoginEnsured, security.isAdmin()], function (req, res) {
     receiptController.saveReceipts(req, res);   // response returned inside controller
 });
