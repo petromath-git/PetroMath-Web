@@ -54,6 +54,7 @@ function showMasterEntryRow(obj, prefix) {
 function hideMasterEntryRow(prefix, rowId) {
     document.getElementById(prefix + '-add-new').disabled = false;
     document.getElementById(prefix + '-save').disabled = true;
+    reloadPage(rowId);
     hideRow(rowId);
 }
 
