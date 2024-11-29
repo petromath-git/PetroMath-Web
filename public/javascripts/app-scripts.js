@@ -285,6 +285,18 @@ function hideRow(trId, uri, funToRecalculateTotal) {
     }
 }
 
+function reloadPage(trId) {
+    let row = document.getElementById(trId);
+    if (row) {
+        row.style.display = 'none';
+        console.log('Row hidden successfully:', trId);
+        // Reload the page after hiding the row
+        window.location.reload();
+    } else {
+        console.warn('Row not found:', trId);
+    }
+}
+
 //- Add new page: Dom elements to add users dynamically on button click
 function showAddedRow(prefix, funToRecalculateTotal) {
     const userRowsCnt = document.getElementById(prefix + '-table').rows.length;
