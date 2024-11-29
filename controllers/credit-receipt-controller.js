@@ -4,14 +4,56 @@ const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const txnController = require("../controllers/txn-common-controller");
+const cashFlowController = require("../controllers/cash-flow-controller");
 
 module.exports = {
 
+    // saveReceipts: (req, res) => {
+    //     CreditReceiptsDao.create(dbMapping.newReceipt(req));
+    //     res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+    //         '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+    // },
     // Create credit receipt - one at a time
     saveReceipts: (req, res) => {
-        CreditReceiptsDao.create(dbMapping.newReceipt(req));
-        res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
-            '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+        const txnReceiptDate = req.body.txn_receipt_date_0;
+        let locationCode = req.user.location_code;
+        
+        cashFlowController.checkCashFlowClosingStatus(locationCode, txnReceiptDate)
+            .then(cashFlowClosing => {
+                console.log('Cash flow closing status:', cashFlowClosing);
+                console.log('Cash flow closing status:', cashFlowClosing[0].dataValues.closing_status);
+                if (cashFlowClosing[0].dataValues.closing_status === 'CLOSED') {
+                    req.flash('error', 'Cannot Create Receipt For ' + dateFormat(txnReceiptDate, 'dd-mm-yyyy') + ': Cash flow for the date is closed.');
+                    res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                        '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                } else if (cashFlowClosing == null || cashFlowClosing[0].dataValues.closing_status === 'DRAFT') {
+                    CreditReceiptsDao.create(dbMapping.newReceipt(req))
+                        .then(data => {
+                            if (data == 1 || data == 0) {
+                                req.flash('success', 'Saved receipt data successfully or no update needed.');
+                                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                            } 
+                            else {
+                                // req.flash('error', 'Saved receipt data failed.');
+                                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error saving credit receipt:', err);
+                            // req.flash('error', 'Failed to create credit receipt.');
+                            res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                                '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                        });
+                }
+            })
+            .catch(err => {
+                console.error('Error checking cash flow closing status:', err);
+                // req.flash('error', 'Failed to create credit receipt.');
+                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+            });
     },
 
     // Get credit receipts - from and to date provided
@@ -27,15 +69,15 @@ module.exports = {
         }
         let receipts = [];
         Promise.allSettled([CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
-            txnController.creditCompanyDataPromise(locationCode),
-            txnController.suspenseDataPromise(locationCode)])
+        txnController.creditCompanyDataPromise(locationCode),
+        txnController.suspenseDataPromise(locationCode)])
             .then(values => {
                 values[0].value.forEach((receipt) => {
                     let creditlist = receipt.m_credit_list;
                     let isEditOrDeleteAllowed = false;
                     if(creditlist) {
                         isEditOrDeleteAllowed = utils.noOfDaysDifference(receipt.receipt_date, utils.currentDate())
-                        < config.APP_CONFIGS.receiptEditOrDeleteAllowedDays ? true : false;
+                            < config.APP_CONFIGS.receiptEditOrDeleteAllowedDays ? true : false;
                         receipts.push({
                             id: receipt.treceipt_id, company_name: creditlist.Company_Name,
                             receipt_type: receipt.receipt_type,

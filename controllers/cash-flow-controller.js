@@ -54,6 +54,10 @@ module.exports = {
             }
         });
     },
+    checkCashFlowClosingStatus: (locationCode, txnReceiptDate) => {
+        // console.log('Checking cash flow closing status for date:', txnReceiptDate);
+        return cashflowDao.findOne(locationCode, txnReceiptDate);
+    },
     cashFlowTxnDenominationPromise: (closingId) => {
         return cashFlowTxnDenominationPromise(closingId);
     },

@@ -8,6 +8,21 @@ const config = require("../config/app-config");
 const { Sequelize, Op } = require("sequelize");
 
 module.exports = {
+    findOne: (locationCode, cashflowDate) => {
+        console.log('locationCode:', locationCode, 'cashflowDate:', cashflowDate);
+        return CashFlowClosing.findAll({
+            attributes: ['closing_status'],
+            where: {
+                [Op.and]: [
+                    { location_code: locationCode },
+                    {
+                        cashflow_date: Sequelize.where(
+                            Sequelize.fn("date_format", Sequelize.col("cashflow_date"), '%Y-%m-%d'), "=", cashflowDate)
+                    }
+                ]
+            }
+        });
+    },
     findCashflow: (locationCode, cashflowId) => {
         return CashFlowClosing.findByPk(cashflowId);
     },
@@ -31,9 +46,9 @@ module.exports = {
     findCashflowClosingsWithSpecificDate: (locationCode, cashflowDate) => {
         return CashFlowClosing.findAll({
                 where: { [Op.and]: [
-                        { location_code: locationCode },
-                        {
-                            cashflow_date: Sequelize.where(
+                    { location_code: locationCode },
+                    {
+                        cashflow_date: Sequelize.where(
                                 Sequelize.fn("date_format", Sequelize.col("cashflow_date"), '%Y-%m-%d'), "=",  cashflowDate)
                     }
                     ] }
