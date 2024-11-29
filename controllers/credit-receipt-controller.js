@@ -15,8 +15,7 @@ module.exports = {
 
         cashFlowController.checkCashFlowClosingStatus(locationCode, txnReceiptDate)
             .then(cashFlowClosing => {
-                if (cashFlowClosing && cashFlowClosing.length > 0 && cashFlowClosing[0].dataValues.closing_status === 'CLOSED') {
-                    console.log('Cannot create receipt: Cash flow for the date is closed.');
+                if (cashFlowClosing.length == 1 && cashFlowClosing[0].status === 'CLOSED') {
                     req.flash('error', 'Access denied: Cash flow for ' + dateFormat(txnReceiptDate, 'dd-mm-yyyy') + ' is already closed');
                     res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
                         '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
