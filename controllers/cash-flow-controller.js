@@ -32,7 +32,7 @@ module.exports = {
         const generateDate = new Date(req.body.generateDate);
         const previousDate = new Date(generateDate);
         previousDate.setDate(generateDate.getDate() - 1);
-        const previousDateString = previousDate.toISOString().split('T')[0]; 
+        const previousDateString = previousDate.toISOString().split('T')[0];
 
         cashflowDao.findCashflowClosingsWithSpecificDate(locationCode, previousDateString).then(previousData => {
             if (previousData.length == 1 && previousData[0].status === 'CLOSED') {
@@ -64,14 +64,10 @@ module.exports = {
                         });
                     }
                 })
-            } else if (previousData && previousData.length == 1 && previousData[0].status === 'DRAFT') {
-                gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
-                    req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                    { error: "The previous day's cash flow is in DRAFT status." });
             } else {
                 gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
                     req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                    { error: "No data is available for the previous day."});
+                    { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + previousDateString });
             }
         })
     },

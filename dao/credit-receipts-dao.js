@@ -17,7 +17,8 @@ module.exports = {
                 'notes',
                 'receipt_date',
                 [Sequelize.fn('date_format', Sequelize.col('receipt_date'), '%d-%m-%Y'), 'receipt_date_fmt'],
-                'location_code'
+                'location_code',
+                'cashflow_date',
             ],
           where: { [Op.and]: [
                   { location_code: locationCode },
