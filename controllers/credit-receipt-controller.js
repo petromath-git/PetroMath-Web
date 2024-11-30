@@ -16,7 +16,7 @@ module.exports = {
         cashFlowController.checkCashFlowClosingStatus(locationCode, txnReceiptDate)
             .then(cashFlowClosing => {
                 if (cashFlowClosing.length == 1 && cashFlowClosing[0].status === 'CLOSED') {
-                    req.flash('error', 'Access denied: Cash flow for ' + dateFormat(txnReceiptDate, 'dd-mm-yyyy') + ' is already closed');
+                    req.flash('error', "Receipt Cannot be Saved. Cash flow for " + dateFormat(txnReceiptDate, 'dd-mm-yyyy') + " is already Closed.");
                     res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
                         '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
                 } else {
@@ -57,10 +57,13 @@ module.exports = {
                     let creditlist = receipt.m_credit_list;
                     let isEditOrDeleteAllowed = false;
                     if (creditlist) {
-                        isEditOrDeleteAllowed = utils.noOfDaysDifference(receipt.receipt_date, utils.currentDate())
-                            < config.APP_CONFIGS.receiptEditOrDeleteAllowedDays ? true : false;
+                        // isEditOrDeleteAllowed = utils.noOfDaysDifference(receipt.receipt_date, utils.currentDate())
+                        //     < config.APP_CONFIGS.receiptEditOrDeleteAllowedDays ? true : false;
+
+                        isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null ? true : false;
                         receipts.push({
-                            id: receipt.treceipt_id, company_name: creditlist.Company_Name,
+                            id: receipt.treceipt_id,
+                            company_name: creditlist.Company_Name,
                             receipt_type: receipt.receipt_type,
                             receipt_no: receipt.receipt_no, amount: receipt.amount, notes: receipt.notes,
                             receipt_date: receipt.receipt_date_fmt,
