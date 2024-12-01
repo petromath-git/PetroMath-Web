@@ -27,32 +27,53 @@ module.exports = {
             }
         });
     },
-    triggerCashSalesByDate : (req, res, next) => {
-        cashflowDao.findCashflowClosingsWithSpecificDate(req.user.location_code, req.body.generateDate).then(data => {
-            if(data && data.length == 1) {
-                if (data[0].status === 'CLOSED'){
-                    // Do nothing if the date has a closed record.
-                    gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
-                        req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                        {warning: "The record is already closed."});
-                } else {
-                    // Trigger procedure and get the next page cashflow details.
-                    triggerAndGetCashflowData(data[0].cashflowId, req, res, next);
-                }
+    triggerCashSalesByDate: (req, res, next) => {
+        let locationCode = req.user.location_code;
+        const generateDate = new Date(req.body.generateDate);
+        const previousDate = new Date(generateDate);
+        previousDate.setDate(generateDate.getDate() - 1);
+        const previousDateString = previousDate.toISOString().split('T')[0];
+
+        cashflowDao.findCashflowClosingsWithSpecificDate(locationCode, previousDateString).then(previousData => {
+            if (previousData.length == 1 && previousData[0].status === 'CLOSED') {
+                cashflowDao.findCashflowClosingsWithSpecificDate(locationCode, req.body.generateDate).then(data => {
+                    if (data && data.length == 1) {
+                        if (data[0].status === 'CLOSED') {
+                            // Do nothing if the date has a closed record.
+                            gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
+                                req.body.cashflow_toDate_hiddenValue, req.user, res, next,
+                                { warning: "The record is already closed." });
+                        } else {
+                            // Trigger procedure and get the next page cashflow details.
+                            triggerAndGetCashflowData(data[0].cashflowId, req, res, next);
+                        }
+                    } else {
+                        // Create cashflow closing, pass the id to procedure, then get the next page cashflow details.
+                        cashflowDao.addNew({
+                            'location': req.user.location_code,
+                            'status': 'DRAFT',
+                            'cashflow_date': req.body.generateDate,
+                            'created_by': req.user.Person_id,
+                        }).then((newData) => {
+                            if (newData) {
+                                triggerAndGetCashflowData(newData.cashflowId, req, res, next);
+                            }
+                        }).catch(err => {
+                            console.error('Error creating new cashflow:', err);
+                            next(err);
+                        });
+                    }
+                })
             } else {
-                // Create cashflow closing, pass the id to procedure, then get the next page cashflow details.
-                cashflowDao.addNew({
-                    'location': req.user.location_code,
-                    'status': 'DRAFT',
-                    'cashflow_date': req.body.generateDate,
-                    'created_by': req.user.Person_id,
-                }).then((data) => {
-                   if(data) {
-                       triggerAndGetCashflowData(data.cashflowId, req, res, next);
-                   }
-                });
+                gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
+                    req.body.cashflow_toDate_hiddenValue, req.user, res, next,
+                    { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + previousDateString });
             }
-        });
+        })
+    },
+    checkCashFlowClosingStatus: (locationCode, txnReceiptDate) => {
+        // console.log('Checking cash flow closing status for date:', txnReceiptDate);
+        return cashflowDao.findCashflowClosingsWithSpecificDate(locationCode, txnReceiptDate);
     },
     cashFlowTxnDenominationPromise: (closingId) => {
         return cashFlowTxnDenominationPromise(closingId);
@@ -184,7 +205,7 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
     if(fromDate === undefined) fromDate = dateFormat(new Date(), "yyyy-mm-dd");
     if(toDate === undefined) toDate = dateFormat(new Date(), "yyyy-mm-dd");
     Promise.allSettled([cashflowDao.findCashflowClosings(user.location_code, fromDate, toDate),
-        TxnReadDao.getClosingDetailsByDateFormat(user.location_code, fromDate, toDate)]).then(values => {
+    TxnReadDao.getClosingDetailsByDateFormat(user.location_code, fromDate, toDate)]).then(values => {
         let cashflowValues = [];
         if(values[0].value) {
             const personData = appCache.getPersonCache();
@@ -224,9 +245,9 @@ const txnCashflowSavePromise = (txnsArr) => {
             .then(data => {
                 resolve(data);
             }).catch((err) => {
-            console.error("Error while saving cash flow transaction " + err.toString() + err.error);
+                console.error("Error while saving cash flow transaction " + err.toString() + err.error);
             resolve({error: err.toString()});
-        });
+            });
     });
 }
 
@@ -236,9 +257,9 @@ const txnCashflowDenomsSavePromise = (txnsArr) => {
             .then(data => {
                 resolve(data);
             }).catch((err) => {
-            console.error("Error while saving cash flow denoms" + err.toString() + err.error);
+                console.error("Error while saving cash flow denoms" + err.toString() + err.error);
             resolve({error: err.toString()});
-        });
+            });
     });
 }
 
