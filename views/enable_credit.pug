@@ -1,0 +1,32 @@
+extends layout
+include mixins/mixins
+
+block content
+    table(class="table" id="users-table")
+        thead(class="thead-light")
+            tr
+               th(scope="col") #
+               th(scope="col") Company Name
+               th(scope="col") Type
+               th(scope="col") Short Name
+               th(scope="col") Address
+               th(scope="col") Phone Number
+               th(scope="col") GST Number
+               th(scope="col") Balance
+               th(scope="col") Enable Credit
+        tbody
+            each val, index in users
+                tr(id='user-' + index)
+                    th(scope="row")= index + 1
+                    td(scope="row")= val.name
+                    td(scope="row")= val.type
+                    td(scope="row")= val.short_name
+                    td(scope="row")= val.address
+                    td(scope="row")= val.phoneno
+                    td(scope="row")= val.gst
+                    - var balance = val.balance.toLocaleString('en', {minimumFractionDigits: minFixedValue});
+                    td(scope="row") Rs. #{balance}
+                    td
+                        div.align-items-start
+                            button.btn.btn-info(id="enable-user-"+index, onclick="enableCredit('"+index+"', '"+ val.id +"')")
+                                span.oi.oi-check

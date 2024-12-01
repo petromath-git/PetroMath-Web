@@ -1,3 +1,5 @@
+const { config } = require("chai");
+
 var showClassName = 'd-md-block';
 var hideClassName = 'd-md-none';
 var toFixedValue = 2
@@ -283,6 +285,18 @@ function hideRow(trId, uri, funToRecalculateTotal) {
     }
 }
 
+function reloadPage(trId) {
+    let row = document.getElementById(trId);
+    if (row) {
+        row.style.display = 'none';
+        console.log('Row hidden successfully:', trId);
+        // Reload the page after hiding the row
+        window.location.reload();
+    } else {
+        console.warn('Row not found:', trId);
+    }
+}
+
 //- Add new page: Dom elements to add users dynamically on button click
 function showAddedRow(prefix, funToRecalculateTotal) {
     const userRowsCnt = document.getElementById(prefix + '-table').rows.length;
@@ -420,7 +434,7 @@ function defaultInputValues(inputDiv) {
     for (let i = 0; i < elements.length; i++) {
         if (elements[i].value && isIncludedToDefaultValue(elements[i].id)) {
             elements[i].value = elements[i].defaultValue;
-            console.log(elements[i]+"value"+elements[i].defaultValue);
+            console.log(elements[i] + "value" + elements[i].defaultValue);
         } else {
             elements[i].value = '';
         }
@@ -466,7 +480,7 @@ function defaultInputValues(inputDiv) {
     // query all required elements
     elements = document.getElementById(inputDiv).querySelectorAll('[required]');
     for (let i = 0; i < elements.length; i++) {
-        if(elements[i].id.includes("tankReceipts-amt") || elements[i].id.includes("tankReceipts-opening_dip") || elements[i].id.includes("tankReceipts-closing_dip")){
+        if (elements[i].id.includes("tankReceipts-amt") || elements[i].id.includes("tankReceipts-opening_dip") || elements[i].id.includes("tankReceipts-closing_dip")) {
             if (elements[i].value) {
                 elements[i].value = 0;
             }
@@ -1042,6 +1056,31 @@ function enableUser(index, userId) {
     }
 }
 
+function disableCredit(index, creditID) {
+    const r = confirm("Please confirm if you want to disable the Credit?");
+    if (r == true) {
+        putAjax('disable-credit/' + creditID, {}).then(success => {
+            if (success) {
+                document.getElementById('credit-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+function enableCredit(index, creditID) {
+    console.log("Enable Credit" + creditID);
+    const r = confirm("Please confirm if you want to enable the user?");
+    if (r == true) {
+        putAjax('enable-credit/' + creditID, {}).then(success => {
+            if (success) {
+                document.getElementById('user-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+
+
 function editProduct(id, productId) {
     document.getElementById("product-price-" + id).readOnly = false;
     document.getElementById("product-unit-" + id).disabled = false;
@@ -1156,9 +1195,9 @@ function deleteClosing(closingId) {
 function deleteTankReceipt(ttank_Id) {
     const r = confirm("Please confirm if you want to delete the tank receipt?");
     if (r == true) {
-        if (deleteAjax('delete-tankReceipt', ttank_Id, 'tank-receipt-' + ttank_Id, 'd-md-none')) {        
-           document.getElementById('tankReceipt_tab').click();
-           
+        if (deleteAjax('delete-tankReceipt', ttank_Id, 'tank-receipt-' + ttank_Id, 'd-md-none')) {
+            document.getElementById('tankReceipt_tab').click();
+
         }
     }
 }
@@ -1213,7 +1252,7 @@ function promiseTimeout(time) {
 };
 
 function formatCurrencies(data, minFixedValue) {
-    return data.toLocaleString('en', {minimumFractionDigits: minFixedValue});
+    return data.toLocaleString('en', { minimumFractionDigits: minFixedValue });
 }
 
 function currenciesAsFloat(data) {
@@ -1235,7 +1274,7 @@ function getDensity() {
     if (temperature && density) {
         getAjax('density', 'temperature=' + temperature + '&density=' + density, 'densityAt15', updateDensity);
     } else {
-        showToastMessage({error:"Mandatory details missing..."});
+        showToastMessage({ error: "Mandatory details missing..." });
     }
 }
 
@@ -1254,7 +1293,7 @@ function getDipChart() {
     if (dipReading) {
         getAjax('dip-chart', 'chart_name=' + chartName + '&dip_reading=' + dipReading, 'volume', updateDipChart);
     } else {
-        showToastMessage({error:"Mandatory details missing..."});
+        showToastMessage({ error: "Mandatory details missing..." });
     }
 }
 
@@ -1294,7 +1333,7 @@ function saveDecantHeader() {
                     }
                     console.log('New closing data ' + JSON.stringify(newDecantData));
                     console.log('Update closing data ' + JSON.stringify(updateDecantData));
-                    console.log("tabToActivate"+tabToActivate,"currentDiv"+currentDiv,"newHiddenFieldsArr"+newHiddenFieldsArr);
+                    console.log("tabToActivate" + tabToActivate, "currentDiv" + currentDiv, "newHiddenFieldsArr" + newHiddenFieldsArr);
                     postAjaxNew('new-decant', newDecantData, updateDecantData, tabToActivate, currentDiv, newHiddenFieldsArr, 'ttank_id').then(data => {
                         resolve(data);
                     });
@@ -1316,10 +1355,10 @@ function formDecant(ttank_id, user) {
         'truck_id': document.getElementById('ttnumber').value,
         'location_code': user.location_code,
         'location_id': document.getElementById('location_id').value,
-        'driver_id':document.getElementById('driverid').value,
+        'driver_id': document.getElementById('driverid').value,
         'helper_id': document.getElementById('helperid').value,
-        'odometer_reading':document.getElementById('odometer').value,
-        'truck_halt_flag':document.getElementById('halt_chk').value,
+        'odometer_reading': document.getElementById('odometer').value,
+        'truck_halt_flag': document.getElementById('halt_chk').value,
         'decant_time': document.getElementById('decanttime').value,
         'created_by': user.User_Name,
         'updated_by': user.User_Name,
@@ -1341,18 +1380,18 @@ function saveDecantLines() {
                 const linesObjRowNum = linesObj.id.replace(decantRow, '');
                 //const hiddenTag = 'closing';
                 //const hiddenField = document.getElementById(creditSaleTag + saleObjRowNum + '_hiddenId');
-                const hiddenIdObj = document.getElementById(decantLineTag +linesObjRowNum+ '_hiddenId');
+                const hiddenIdObj = document.getElementById(decantLineTag + linesObjRowNum + '_hiddenId');
                 console.log(hiddenIdObj);
                 console.log(hiddenIdObj.value);
                 if (hiddenIdObj && parseInt(hiddenIdObj.value) > 0) {
-                    updateLines.push(formDecantLines(hiddenIdObj.value,decantLineTag, linesObjRowNum, user));
+                    updateLines.push(formDecantLines(hiddenIdObj.value, decantLineTag, linesObjRowNum, user));
                 } else {
                     newLines.push(formDecantLines(undefined, decantLineTag, linesObjRowNum, user));
-                    newHiddenFieldsArr.push(decantLineTag+linesObjRowNum);
+                    newHiddenFieldsArr.push(decantLineTag + linesObjRowNum);
                 }
-                
+
             }
-            
+
         });
         console.log("New Decant Lines data " + JSON.stringify(newLines));
         console.log("Update Decant Lines data " + JSON.stringify(updateLines));
@@ -1366,17 +1405,17 @@ function saveDecantLines() {
     });
 }
 
-function formDecantLines(tdtank_Id,decantLineTag, decantRow, user) {
+function formDecantLines(tdtank_Id, decantLineTag, decantRow, user) {
     return {
         'tdtank_id': tdtank_Id,
         'ttank_id': document.getElementById('closing_hiddenId').value,
-        'tank_id': document.getElementById(decantLineTag+'tank_'+decantRow).value,
-        'quantity': parseInt(document.getElementById(decantLineTag+'tankqty_'+decantRow).value),
-        'opening_dip': document.getElementById(decantLineTag+'opening_dip_'+decantRow).value,
-        'closing_dip': document.getElementById(decantLineTag+'closing_dip_'+decantRow).value,
-        'EB_MS_FLAG': document.getElementById(decantLineTag+'eb_'+decantRow).value,
-        'notes': document.getElementById(decantLineTag+'notes_'+decantRow).value,
-        'amount':document.getElementById(decantLineTag+'amt_'+decantRow).value,
+        'tank_id': document.getElementById(decantLineTag + 'tank_' + decantRow).value,
+        'quantity': parseInt(document.getElementById(decantLineTag + 'tankqty_' + decantRow).value),
+        'opening_dip': document.getElementById(decantLineTag + 'opening_dip_' + decantRow).value,
+        'closing_dip': document.getElementById(decantLineTag + 'closing_dip_' + decantRow).value,
+        'EB_MS_FLAG': document.getElementById(decantLineTag + 'eb_' + decantRow).value,
+        'notes': document.getElementById(decantLineTag + 'notes_' + decantRow).value,
+        'amount': document.getElementById(decantLineTag + 'amt_' + decantRow).value,
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
@@ -1386,13 +1425,13 @@ function formDecantLines(tdtank_Id,decantLineTag, decantRow, user) {
 //- then iterate for elements with 'val-' prefix to populate value
 //- some of the elements require text values instead of value of the element e.g. cashier (requires name instead of id)
 //- iterate through elements having 'vis-' prefix to check for visibility in summary page
-function populateReceiptSummary(obj) {    
+function populateReceiptSummary(obj) {
     if (obj) {
         trackMenu(obj);
     }
     const elements = document.getElementById("summary-div").querySelectorAll('[id^=v-]');
     for (let i = 0; i < elements.length; i++) {
-        const labels = elements[i].querySelectorAll('[id^=val-]');  
+        const labels = elements[i].querySelectorAll('[id^=val-]');
         for (let j = 0; j < labels.length; j++) {
             const getValueFromLabelId = labels[j].id.replace("val-", "");
             labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
@@ -1405,52 +1444,52 @@ function populateReceiptSummary(obj) {
 
         const texts = elements[i].querySelectorAll('[id^=valText-]');
         for (let j = 0; j < texts.length; j++) {
-                const getTextValueFromLabelId = texts[j].id.replace("valText-", "");
-                const getElement = document.getElementById(getTextValueFromLabelId);
-                if (getElement) {
-                    if (getElement.tagName === 'SELECT') {
-                        if (getElement.selectedIndex > -1) {
-                            texts[j].textContent = getElement.options[getElement.selectedIndex].text;
-                        }
-                    } else {
-                        texts[j].textContent = document.getElementById(getTextValueFromLabelId).value;
+            const getTextValueFromLabelId = texts[j].id.replace("valText-", "");
+            const getElement = document.getElementById(getTextValueFromLabelId);
+            if (getElement) {
+                if (getElement.tagName === 'SELECT') {
+                    if (getElement.selectedIndex > -1) {
+                        texts[j].textContent = getElement.options[getElement.selectedIndex].text;
                     }
-                }
-            }
-
-            const divsToHideOrShow = elements[i].querySelectorAll('[id^=vis-]');
-            for (let j = 0; j < divsToHideOrShow.length; j++) {
-                const getDivFromLabelId = divsToHideOrShow[j].id.replace("vis-", "");
-                if (document.getElementById(getDivFromLabelId)) {
-                    if (getDivFromLabelId.endsWith("_sub_header")) {
-                        divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className + " col-3";
-                    } else {
-                        divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className;
-                    }
+                } else {
+                    texts[j].textContent = document.getElementById(getTextValueFromLabelId).value;
                 }
             }
         }
-        
+
+        const divsToHideOrShow = elements[i].querySelectorAll('[id^=vis-]');
+        for (let j = 0; j < divsToHideOrShow.length; j++) {
+            const getDivFromLabelId = divsToHideOrShow[j].id.replace("vis-", "");
+            if (document.getElementById(getDivFromLabelId)) {
+                if (getDivFromLabelId.endsWith("_sub_header")) {
+                    divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className + " col-3";
+                } else {
+                    divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className;
+                }
+            }
+        }
+    }
+
 }
 
-function populatesummaryreceiptFn(){
+function populatesummaryreceiptFn() {
     return populateReceiptSummary();
 }
 
-function deleteTruckLoad(rowId,tload_id) {
+function deleteTruckLoad(rowId, tload_id) {
     deleteAjax('delete-truckload', tload_id, rowId, 'd-md-none');
 }
 
-function deleteTruckExpense(rowId,truckexp_id) {
+function deleteTruckExpense(rowId, truckexp_id) {
     deleteAjax('delete-truckexpense', truckexp_id, rowId, 'd-md-none');
 }
 
-function deleteTransaction(rowId,t_bank_id) {
+function deleteTransaction(rowId, t_bank_id) {
     deleteAjax('delete-banktransaction', t_bank_id, rowId, 'd-md-none');
 }
 
 function populateAccountType(rowNum) {
-    let transType = document.getElementById('trans_type_'+rowNum).value;
+    let transType = document.getElementById('trans_type_' + rowNum).value;
     // if(AccntTransMap) {
     //     var temp =${ AccntTransMap.get(transType)};
     //     var mySelect = document.getElementById('accnt_type_0');
@@ -1463,19 +1502,19 @@ function populateAccountType(rowNum) {
     //     }
     // }
     if (transType) {
-        getAjax('account-type', 'trans_type=' + transType , 'accnt_type_0', updateAccountingtype);
+        getAjax('account-type', 'trans_type=' + transType, 'accnt_type_0', updateAccountingtype);
     }
-    
+
 }
-    
+
 function updateAccountingtype(elementId, result) {
-    let val= result.rowsData.attribute1;
-    $(document).ready(()=>{
+    let val = result.rowsData.attribute1;
+    $(document).ready(() => {
         $("#accnt_type_0 option").removeAttr("selected")
-        $('#accnt_type_0 option[value="'+val+'"]').attr('selected', "true");
+        $('#accnt_type_0 option[value="' + val + '"]').attr('selected', "true");
     });
-         
-}  
+
+}
 
 function saveAttendance() {
     return new Promise((resolve, reject) => {
@@ -1489,17 +1528,17 @@ function saveAttendance() {
         linesObj.forEach((linesObj) => {
             if (!linesObj.className.includes('-none')) {
                 const linesObjRowNum = linesObj.id.replace(attendanceRow, '');
-                const hiddenIdObj = document.getElementById(attendanceTag +linesObjRowNum+ '_hiddenId');
+                const hiddenIdObj = document.getElementById(attendanceTag + linesObjRowNum + '_hiddenId');
 
                 if (hiddenIdObj && parseInt(hiddenIdObj.value) > 0) {
-                    updateLines.push(formAttendanceLines(hiddenIdObj.value,attendanceTag, linesObjRowNum, user));
+                    updateLines.push(formAttendanceLines(hiddenIdObj.value, attendanceTag, linesObjRowNum, user));
                 } else {
                     newLines.push(formAttendanceLines(undefined, attendanceTag, linesObjRowNum, user));
-                    newHiddenFieldsArr.push(attendanceTag+linesObjRowNum);
+                    newHiddenFieldsArr.push(attendanceTag + linesObjRowNum);
                 }
-                
+
             }
-            
+
         });
         console.log("New Attendance data " + JSON.stringify(newLines));
         console.log("Updated Attendance data " + JSON.stringify(updateLines));
@@ -1513,31 +1552,31 @@ function saveAttendance() {
     });
 }
 
-function formAttendanceLines(tAttendanceId,attendanceTag, rowNo, user) {
+function formAttendanceLines(tAttendanceId, attendanceTag, rowNo, user) {
     var today = new Date();
-    var date = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+    var date = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
     var time = today.getHours() + ":" + today.getMinutes();
-    var dateTime = date+'T'+time;
-    let inDateTimeArr,outDateTimeArr;
-    let in_datetime = document.getElementById(attendanceTag+'INtime-'+rowNo).value;
+    var dateTime = date + 'T' + time;
+    let inDateTimeArr, outDateTimeArr;
+    let in_datetime = document.getElementById(attendanceTag + 'INtime-' + rowNo).value;
     if (in_datetime === '')
-        in_datetime=dateTime
-    inDateTimeArr= in_datetime.split("T");
-    let out_datetime = document.getElementById(attendanceTag+'OUTtime-'+rowNo).value;
+        in_datetime = dateTime
+    inDateTimeArr = in_datetime.split("T");
+    let out_datetime = document.getElementById(attendanceTag + 'OUTtime-' + rowNo).value;
     if (out_datetime === '')
-        out_datetime=dateTime
-    outDateTimeArr= out_datetime.split("T");
+        out_datetime = dateTime
+    outDateTimeArr = out_datetime.split("T");
     //console.log("inDateTimeArr"+inDateTimeArr+"outDateTimeArr"+outDateTimeArr);
     return {
         'tattendance_id': tAttendanceId,
         'closing_id': document.getElementById('closing_hiddenId').value,
-        'person_id': document.getElementById(attendanceTag+'personId-'+rowNo).value,
-        'shift_type': document.getElementById(attendanceTag+'shift-'+rowNo).value,
+        'person_id': document.getElementById(attendanceTag + 'personId-' + rowNo).value,
+        'shift_type': document.getElementById(attendanceTag + 'shift-' + rowNo).value,
         'in_date': inDateTimeArr[0],
         'in_time': inDateTimeArr[1],
         'out_date': outDateTimeArr[0],
         'out_time': outDateTimeArr[1],
-        'notes': document.getElementById(attendanceTag+'notes-'+rowNo).value,
+        'notes': document.getElementById(attendanceTag + 'notes-' + rowNo).value,
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
@@ -1560,18 +1599,18 @@ function saveDeadline(id, deadlineId) {
     const warningDay = document.getElementById("warning-day-" + id);
     const hardStop = document.getElementById("hard-stop-" + id);
     const closed = document.getElementById("closed-" + id);
-    const comment =  document.getElementById("comments-" + id);
+    const comment = document.getElementById("comments-" + id);
     //if (productPrice.value && parseInt(productPrice.value) > 0) {
-        if (putAjax('deadline/' + deadlineId, {
-            deadlineDate: deadlineDate.value,
-            purpose: purpose.value,
-            warningDay: warningDay.value,
-            hardStop: hardStop.value,
-            closed: closed.value,
-            comment: comment.value
-        })) {
-            postDeadlineEdit(id);
-        }
+    if (putAjax('deadline/' + deadlineId, {
+        deadlineDate: deadlineDate.value,
+        purpose: purpose.value,
+        warningDay: warningDay.value,
+        hardStop: hardStop.value,
+        closed: closed.value,
+        comment: comment.value
+    })) {
+        postDeadlineEdit(id);
+    }
     //}
 }
 

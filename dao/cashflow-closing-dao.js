@@ -31,9 +31,9 @@ module.exports = {
     findCashflowClosingsWithSpecificDate: (locationCode, cashflowDate) => {
         return CashFlowClosing.findAll({
                 where: { [Op.and]: [
-                        { location_code: locationCode },
-                        {
-                            cashflow_date: Sequelize.where(
+                    { location_code: locationCode },
+                    {
+                        cashflow_date: Sequelize.where(
                                 Sequelize.fn("date_format", Sequelize.col("cashflow_date"), '%Y-%m-%d'), "=",  cashflowDate)
                     }
                     ] }
