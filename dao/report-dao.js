@@ -6,8 +6,14 @@ const Sequelize = require("sequelize");
 
 
 module.exports = {
-    getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate,companyname) => {
-        if(companyname=='all'){               
+    getBalance: (creditId, closingQueryFromDate,closingQueryToDate) => {     
+        return db.sequelize.query(
+            "select get_opening_credit_balance("+ creditId + ",'"+ closingQueryFromDate+ "') as OpeningData,get_closing_credit_balance("+ creditId + ",'"+ closingQueryToDate+ "') as ClosingData",
+            { type: Sequelize.QueryTypes.SELECT }
+        );
+    },
+    getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate,creditId) => {
+        if(creditId==-1){               
             return TxnCreditStmtViews.findAll({
                 where: { [Op.and]: [
                     { location_code: locationCode },
@@ -26,7 +32,7 @@ module.exports = {
             return TxnCreditStmtViews.findAll({
                 where: { [Op.and]: [
                     { location_code: locationCode },
-                    { Company_Name: companyname},
+                    { creditlist_id: creditId},
                     {
                         tran_date: Sequelize.where(
                             Sequelize.fn("date_format", Sequelize.col("tran_date"), '%Y-%m-%d'), ">=",  closingQueryFromDate)
