@@ -1,7 +1,8 @@
 extends layout
 
 block content
-    form(method='POST' action='/reports')
+    
+    form(method='POST' action='/reports')                
         table.center
             tr
                 td From Date:
@@ -14,11 +15,11 @@ block content
                 td &nbsp;
                 td Company Name: 
                 td
-                    select#company_name.form-control(name='company_name')
+                    select#company_id.form-control(name='company_id')
                       if credits
-                        option(value=`all`) All
+                        option(value=-1, selected=company_id === -1 ? true : undefined) All
                           each val in credits
-                            option(value=`${val.name}`)= val.name
+                            option(value=`${val.id}`, selected=company_id === val.id ? true : undefined)= val.name
                 td &nbsp;
                 td
                     button.btn.btn-primary(type='submit') Go
@@ -39,7 +40,14 @@ block content
                         th Amount
                         th Notes
                 tbody
-                        each val in creditstmt
+                    tr  
+                        - for (let i = 0; i < 7; ++i) {
+                          td
+                        - }                        
+                        td.text-center Opening Balance                           
+                        td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
+                        
+                    each val in creditstmt
                             tr
                             td(scope="row")= val.tranDate
                             td(scope="row")= val.locationCode
@@ -51,6 +59,13 @@ block content
                             td(scope="row")= val.quantity
                             td(scope="row")= val.amount
                             td(scope="row")= val.notes
+                    tr  
+                        - for (let i = 0; i < 7; ++i) {
+                          td
+                        - }
+                        td.text-center Closing Balance                                                   
+                        td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
+                             
         else
             div.row &nbsp;
             div.row.bg-light No records to display.                   

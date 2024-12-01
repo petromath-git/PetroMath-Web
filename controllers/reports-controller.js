@@ -11,7 +11,8 @@ module.exports = {
         let locationCode = req.user.location_code;
         let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
-        let cname = req.body.company_name;
+       // let cname = req.body.company_name;
+        let cid = req.body.company_id;
         
         if(req.body.fromClosingDate) {
           fromDate =req.body.fromClosingDate;
@@ -21,6 +22,9 @@ module.exports = {
         }
         let Creditstmtlist=[];
         let credits = [];
+        let OpeningBal;
+        let closingBal;
+
         CreditDao.findAll(locationCode)
             .then(data => {
                 data.forEach((credit) => {
@@ -31,8 +35,14 @@ module.exports = {
                 });
               });
                 
+
+            ReportDao.getBalance(cid, fromDate,toDate)
+              .then((data) => {OpeningBal = data[0].OpeningData;
+                               closingBal = data[0].ClosingData;                              
+              });      
+
         //console.log(fromDate,toDate,cname);
-        ReportDao.getCreditStmt(locationCode, fromDate,toDate,cname)
+            ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid)
                     .then(data => {
                         data.forEach((creditstmtData) => {
                                 Creditstmtlist.push({
@@ -48,7 +58,7 @@ module.exports = {
                                 notes: creditstmtData.notes
                             });
                         });
-                    res.render('reports', {title: 'Reports', user: req.user, fromClosingDate: fromDate,toClosingDate: toDate, credits: credits, company_name: cname,creditstmt: Creditstmtlist });
+                    res.render('reports', {title: 'Reports', user: req.user, fromClosingDate: fromDate,toClosingDate: toDate, credits: credits, company_id: cid,creditstmt: Creditstmtlist,openingbalance: OpeningBal,closingbalance: closingBal });
                     });
     }
 }
