@@ -3,7 +3,7 @@
 
 function saveReceipt(id, receiptId) {
     const receiptTypeObj = document.getElementById("cr_receiptType_" + id);
-    const receiptNoObj = document.getElementById("cashreceiptno_" + id);
+    const receiptNoObj = document.getElementById("creditreceiptno_" + id);
     const amountObj = document.getElementById("cramount_" + id);
     const notesObj = document.getElementById("crnotes_" + id);
     if(amountObj.value && parseInt(amountObj.value) > 0) {
@@ -24,8 +24,9 @@ function deleteReceipt(rowId, receiptId) {
 
 // master table receipt row edit
 function editReceipt(id) {
-    document.getElementById("cashreceiptno_" + id).readOnly = false;
+    document.getElementById("creditreceiptno_" + id).readOnly = false;
     document.getElementById("cr_receiptType_" + id).disabled = false;
+    document.getElementById("crcompanyname_" + id).disabled = false;
     document.getElementById("cramount_" + id).readOnly = false;
     document.getElementById("crnotes_" + id).readOnly = false;
     document.getElementById("receipt-edit-" + id).className = hideClassName;
@@ -33,12 +34,12 @@ function editReceipt(id) {
 }
 
 function postReceiptEdit(id) {
-    document.getElementById("cashreceiptno_" + id).readOnly = true;
+    document.getElementById("creditreceiptno_" + id).readOnly = true;
     document.getElementById("cr_receiptType_" + id).disabled = true;
     document.getElementById("cramount_" + id).readOnly = true;
     document.getElementById("crnotes_" + id).readOnly = true;
     document.getElementById("receipt-edit-" + id).className = "btn btn-info";
-    document.getElementById("receipt-save-" + id).className = "btn-info " + hideClassName;
+    document.getElementById("receipt-save-" + id).className = "btn-info" + hideClassName;
 }
 
 // Receipts - scripts - end
