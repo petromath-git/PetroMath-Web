@@ -21,8 +21,8 @@ module.exports = {
                     }).catch((err) => {
                         gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
                             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                            {error: "Error while triggering procedure."});
-                    });;
+                            { error: "Error while triggering procedure." });
+                    });
                 }
             }
         });
@@ -65,9 +65,27 @@ module.exports = {
                     }
                 })
             } else {
-                gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
-                    req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                    { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + previousDateString });
+                cashflowDao.NewBunk(locationCode).then(data => {
+                    if (data[0] != null) {
+                        gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
+                            req.body.cashflow_toDate_hiddenValue, req.user, res, next,
+                            { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + previousDateString });
+                    } else if (data[0] == null) {
+                        cashflowDao.addNew({
+                            'location': req.user.location_code,
+                            'status': 'DRAFT',
+                            'cashflow_date': req.body.generateDate,
+                            'created_by': req.user.Person_id,
+                        }).then((newData) => {
+                            if (newData) {
+                                triggerAndGetCashflowData(newData.cashflowId, req, res, next);
+                            }
+                        }).catch(err => {
+                            console.error('Error creating new cashflow:', err);
+                            next(err);
+                        });
+                    }
+                });
             }
         })
     },
@@ -139,7 +157,7 @@ module.exports = {
 
 function getManagerNames(closingValues, cashflowDate, personData) {
     let managers = '', managerName = '';
-    if(closingValues) {
+    if (closingValues) {
         closingValues.forEach((closing) => {
             if (cashflowDate == closing.closing_date_fmt1) {
                 managerName = utils.getPersonName(closing.closer_id, personData);

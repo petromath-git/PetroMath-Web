@@ -98,7 +98,7 @@ module.exports = {
             notes: req.body.notes
         }).then(data => {
             if (data == 1 || data == 0) {
-                res.status(200).send({ message: 'Saved receipt data successfully or no update needed.' });
+                res.status(200).send({ message: 'Saved receipt data successfully.' });
             } else {
                 res.status(500).send({ error: 'Saved receipt data failed.' });
             }

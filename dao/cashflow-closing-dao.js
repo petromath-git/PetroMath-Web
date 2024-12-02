@@ -118,4 +118,10 @@ module.exports = {
             updateOnDuplicate: ["denomcount", "updated_by", "updation_date"]});
         return denomTxn;
     },
+
+    NewBunk: (locationCode) => {
+        return CashFlowClosing.findAll({
+            where: { location_code: locationCode }
+        });
+    },
 };
