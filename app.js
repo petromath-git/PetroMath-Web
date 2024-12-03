@@ -324,6 +324,21 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
 app.post('/reports', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditReport(req, res, next);
 });
+
+
+app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
+    //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
+    req.body.toClosingDate = new Date(Date.now());
+    reportsController.getCreditSummaryReport(req, res, next);
+
+});
+
+app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
+reportsController.getCreditSummaryReport(req, res, next);
+});
+
+
+
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
     HomeController.getNewData(req, res, next);  // response returned inside controller
 });
