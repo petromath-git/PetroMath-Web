@@ -51,7 +51,11 @@ block content
                                             option(value=`${type}` selected= val.creditType === type)= type
                                 creditType
                             td(scope="row")
-                                input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
+                                select.form-control(name=prefix+'crcompanyname_' + index, id=prefix+'crcompanyname_' + index, disabled)
+                                    if creditCompanyValues
+                                        each company in creditCompanyValues
+                                            option(value=`${company.creditorId}` selected= val.company_name === company.creditorName)= company.creditorName
+                                //- input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
                             td(scope="row")
                                 input.form-control(type="number" id="cramount_"+index value=val.amount readonly)
                             td(scope="row")

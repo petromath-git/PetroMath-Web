@@ -2,14 +2,18 @@
 // Receipts - scripts - start
 
 function saveReceipt(id, receiptId) {
-    const receiptTypeObj = document.getElementById("cr_receiptType_" + id);
     const receiptNoObj = document.getElementById("creditreceiptno_" + id);
+    const receiptTypeObj = document.getElementById("cr_receiptType_" + id);
+    const creditTypeObj = document.getElementById("cr_type-" + id);
+    const CompanyIdObj = document.getElementById("cr_crcompanyname_" + id);
     const amountObj = document.getElementById("cramount_" + id);
     const notesObj = document.getElementById("crnotes_" + id);
     if(amountObj.value && parseInt(amountObj.value) > 0) {
         if(putAjax('receipt/' + receiptId, {
-            receipt_type: receiptTypeObj.value,
             receipt_no: receiptNoObj.value,
+            receipt_type: receiptTypeObj.value,
+            credit_type: creditTypeObj.value,
+            company_id: CompanyIdObj.value,
             amount: amountObj.value,
             notes: notesObj.value
         })) {
@@ -26,7 +30,8 @@ function deleteReceipt(rowId, receiptId) {
 function editReceipt(id) {
     document.getElementById("creditreceiptno_" + id).readOnly = false;
     document.getElementById("cr_receiptType_" + id).disabled = false;
-    document.getElementById("crcompanyname_" + id).disabled = false;
+    document.getElementById("cr_type-" + id).disabled = false;
+    document.getElementById("cr_crcompanyname_" + id).disabled = false;
     document.getElementById("cramount_" + id).readOnly = false;
     document.getElementById("crnotes_" + id).readOnly = false;
     document.getElementById("receipt-edit-" + id).className = hideClassName;
@@ -36,6 +41,8 @@ function editReceipt(id) {
 function postReceiptEdit(id) {
     document.getElementById("creditreceiptno_" + id).readOnly = true;
     document.getElementById("cr_receiptType_" + id).disabled = true;
+    document.getElementById("cr_type-" + id).disabled = true;
+    document.getElementById("cr_crcompanyname_" + id).disabled = true;
     document.getElementById("cramount_" + id).readOnly = true;
     document.getElementById("crnotes_" + id).readOnly = true;
     document.getElementById("receipt-edit-" + id).className = "btn btn-info";
