@@ -1,0 +1,50 @@
+extends layout
+
+block content
+    
+    form(method='POST' action='/reports-creditsummary')                
+        table.center
+            tr              
+                td To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;              
+                td
+                    button.btn.btn-primary(type='submit') Go
+    div &nbsp;
+    div
+        if creditsummary && creditsummary.length > 0
+            table(class="table")
+                thead(class="thead-light")
+                    tr
+                        th.text-right S.No
+                        th &nbsp;
+                        th.text-left Credit Party
+                        th &nbsp;
+                        th.text-right Outstanding                                               
+                tbody                  
+                    - var totaloutstanding = 0
+                    - let serialNumber = 0; // Initialize serial number tracker    
+                    each val in creditsummary
+                            tr
+                                if(val.Outstanding!=0)
+                                    - serialNumber++; // Increment serial number only for valid rows
+                                    td(scope="row").text-right #{serialNumber}
+                                    td &nbsp;
+                                    td(scope="row").text-left= val.CreditParty
+                                    td &nbsp;
+                                    td(scope="row").text-right= val.Outstanding
+                                    - totaloutstanding += Number(val.Outstanding)
+                    tr
+                        td &nbsp;
+                        td &nbsp;
+                        th.text-right Total Outstanding
+                        td &nbsp;
+                        th.text-right.text-danger #{totaloutstanding.toFixed(2)}          
+
+        else
+            div.row &nbsp;
+            div.row.bg-light No records to display.                   
+                            
+
+    
