@@ -8,8 +8,8 @@ function saveReceipt(id, receiptId) {
     const CompanyIdObj = document.getElementById("cr_crcompanyname_" + id);
     const amountObj = document.getElementById("cramount_" + id);
     const notesObj = document.getElementById("crnotes_" + id);
-    if(amountObj.value && parseInt(amountObj.value) > 0) {
-        if(putAjax('receipt/' + receiptId, {
+    if (amountObj.value && parseInt(amountObj.value) > 0) {
+        if (putAjax('receipt/' + receiptId, {
             receipt_no: receiptNoObj.value,
             receipt_type: receiptTypeObj.value,
             credit_type: creditTypeObj.value,
@@ -23,7 +23,10 @@ function saveReceipt(id, receiptId) {
 }
 
 function deleteReceipt(rowId, receiptId) {
-    deleteAjax('delete-receipt', receiptId, rowId, 'd-md-none');
+    deleteAjax('delete-receipt', receiptId, rowId, 'd-md-none').then(() => {
+        window.location.reload();
+    });
+
 }
 
 // master table receipt row edit
@@ -72,14 +75,14 @@ function hideMasterEntryRow(prefix, rowId) {
 
 // Cash flow - scripts - start
 function saveCashFlowTxnsAndDenoms() {
-    document.getElementById('cashflow-close').disabled=false;
+    document.getElementById('cashflow-close').disabled = false;
     return new Promise((resolve, reject) => {
         const divId = 'cashflow-txn-data';
         validateDivTabPromise(divId)
             .then((data) => {
-                if(data) {
+                if (data) {
                     Promise.all([saveCashFlowTxns('cashflow-debit-', 'cashflow-credit-'), saveCashFlowDenoms()]).then((values) => {
-                        if(values[0] && values[1]) {
+                        if (values[0] && values[1]) {
                             resolve(true);
                         } else {
                             resolve(false);
@@ -120,7 +123,7 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
         if (!txnObj.className.includes('-none')) {
             const rowNum = txnObj.id.replace(txnRow, '');
             const amtField = document.getElementById(debitOrCreditPrefix + 'amt-' + rowNum);
-            if(amtField.readOnly) {
+            if (amtField.readOnly) {
                 ; // Do nothing for system generated txns
             } else {
                 const hiddenField = document.getElementById(debitOrCreditPrefix + rowNum + '_hiddenId');
@@ -136,9 +139,9 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
             }
         }
     });
-    console.log("New cash flow txn("+debitOrCreditPrefix+") data " + JSON.stringify(newTxns));
-    console.log("Update cash flow txn("+debitOrCreditPrefix+") data " + JSON.stringify(updateTxns));
-    return { "newTxns" :newTxns, "updateTxns" :updateTxns, "newHiddenFieldsArr" : newHiddenFieldsArr };
+    console.log("New cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(newTxns));
+    console.log("Update cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(updateTxns));
+    return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr };
 }
 
 function formCashFlowTxn(txnId, prefix, rowNum, user) {
@@ -209,7 +212,7 @@ function formCashFlowDenoms(denomId, denomKey, denom, user) {
 function deleteCashflow(cashflowId) {
     const r = confirm("Please confirm if you want to delete the record?");
     if (r == true) {
-        if(deleteAjax('cashflow', cashflowId, 'cashflow-record-'+cashflowId, 'd-md-none')) {
+        if (deleteAjax('cashflow', cashflowId, 'cashflow-record-' + cashflowId, 'd-md-none')) {
 
         }
     }
