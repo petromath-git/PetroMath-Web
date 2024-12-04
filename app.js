@@ -181,7 +181,7 @@ app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req
     let loginUserId = req.user.Person_id;
     const userId = req.params.id;
     if (userId == loginUserId) {
-        res.status(400).send({ error: 'Cannot disable ' + req.user.Person_Name + ' as you are logged in as' + req.user.Person_Name });
+        res.status(400).send({ error: 'Cannot disable ' + req.user.Person_Name + ' as you are logged in as ' + req.user.Person_Name });
     } else {
         PersonDao.disableUser(userId).then(data => {
             if (data == 1) {
