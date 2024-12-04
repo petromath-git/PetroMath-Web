@@ -34,6 +34,7 @@ function editReceipt(id) {
     document.getElementById("cr_crcompanyname_" + id).disabled = false;
     document.getElementById("cramount_" + id).readOnly = false;
     document.getElementById("crnotes_" + id).readOnly = false;
+    document.getElementById('creditReceipts-add-new').disabled = true;
     document.getElementById("receipt-edit-" + id).className = hideClassName;
     document.getElementById("receipt-save-" + id).className = "btn btn-info " + showClassName;
 }
@@ -45,6 +46,7 @@ function postReceiptEdit(id) {
     document.getElementById("cr_crcompanyname_" + id).disabled = true;
     document.getElementById("cramount_" + id).readOnly = true;
     document.getElementById("crnotes_" + id).readOnly = true;
+    document.getElementById('creditReceipts-add-new').disabled = false;
     document.getElementById("receipt-edit-" + id).className = "btn btn-info";
     document.getElementById("receipt-save-" + id).className = "btn-info" + hideClassName;
 }

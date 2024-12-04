@@ -74,6 +74,6 @@ block content
                     while rowCnt < 1
                         +addTxnReceipt(rowCnt++)
         div(align="center")
-            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.") Add New
+            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.", disabled=false) Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", id="creditReceipts-save" disabled=true, title="Enabled on 'Add New'") Save
