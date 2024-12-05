@@ -92,13 +92,15 @@ module.exports = {
     updateReceipts: (req, res) => {
         CreditReceiptsDao.update({
             treceipt_id: req.params.id,
-            receipt_type: req.body.receipt_type,
             receipt_no: req.body.receipt_no,
+            receipt_type: req.body.receipt_type,
+            credit_type: req.body.credit_type,
+            creditlist_id: req.body.company_id,
             amount: req.body.amount,
             notes: req.body.notes
         }).then(data => {
             if (data == 1 || data == 0) {
-                res.status(200).send({ message: 'Saved receipt data successfully or no update needed.' });
+                res.status(200).send({ message: 'Saved receipt data successfully.' });
             } else {
                 res.status(500).send({ error: 'Saved receipt data failed.' });
             }

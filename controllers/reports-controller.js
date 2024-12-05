@@ -39,7 +39,9 @@ module.exports = {
             ReportDao.getBalance(cid, fromDate,toDate)
               .then((data) => {OpeningBal = data[0].OpeningData;
                                closingBal = data[0].ClosingData;                              
-              });      
+                             //  console.log(closingBal); 
+              
+                              });      
 
         //console.log(fromDate,toDate,cname);
             ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid)
@@ -60,6 +62,37 @@ module.exports = {
                         });
                     res.render('reports', {title: 'Reports', user: req.user, fromClosingDate: fromDate,toClosingDate: toDate, credits: credits, company_id: cid,creditstmt: Creditstmtlist,openingbalance: OpeningBal,closingbalance: closingBal });
                     });
-    }
+    },
+    getCreditSummaryReport: (req, res) => {
+      //console.log(req);
+       let locationCode = req.user.location_code;      
+       let toDate = dateFormat(new Date(), "yyyy-mm-dd");   
+       const closingDate = new Date(req.body.toClosingDate); // Convert to a Date object   
+      
+       if(req.body.toClosingDate) {
+         toDate = closingDate.toISOString().slice(0, 10); // remove the timestamp.
+       }
+
+      // console.log(req.body.toClosingDate);
+      // console.log(closingDate);
+      // console.log(toDate);
+
+       let Creditsummarylist=[];
+               
+
+       //console.log(fromDate,toDate,cname);
+           ReportDao.getDayBalance(locationCode,toDate)
+                   .then(data => {
+                       data.forEach((creditSummaryData) => {
+                           Creditsummarylist.push({
+                               'CreditParty':creditSummaryData.company_name,
+                               'Outstanding':creditSummaryData.ClosingData
+                           });
+                         //console.log(creditSummaryData.ClosingData)
+
+                       });
+                   res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate, creditsummary: Creditsummarylist});
+                   });
+   } 
 }
         

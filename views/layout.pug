@@ -18,6 +18,13 @@ html
         link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
         link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
         link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpeg" src="/images/mc_logo.jpeg")
+        //- script.
+        //-     function formatIndianCurrency(number) {
+        //-         const [integer, decimal] = number.toFixed(2).split('.');
+        //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+        //-         return formattedInteger + '.' + decimal;
+        //-     }
+
         
     - var isFreezedRecord = false;
     if(closingData && closingData.closingStatus === 'CLOSED')
@@ -25,95 +32,63 @@ html
     body(onload='populateSummaryFn(' + isFreezedRecord +');')
         h1.text-center PetroMath
         if (user)
-            div#ajax-loading(class='d-md-none')
+            div#ajax-loading(class='d-sm-none')
                 img#loading-image(src="images/ajax-loader.gif" alt="Loading..." width="300px" height="300px")
             div
                 div
-                    span(style='float:right;color:green;')
-                        b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'
-                    span
-                        //a(href="/charts" required="false") Dashboard
-                        if(user.isAdmin)
-                            //span &nbsp; | &nbsp;
-                            if (title === 'Shift Closing')
-                                span#home_tab Shift Closing
-                            else
-                                a#home_tab(href="/home" required="false") Shift Closing
-                            span &nbsp; | &nbsp;
-                            if (title === 'Credit Receipts')
-                                span Credit Receipts
-                            else
-                                a(href="/creditreceipts" required="false") Credit Receipts
-                            span &nbsp; | &nbsp;
-                            if (title === 'Tank Receipts')
-                                span#tankReceipt_tab Tank Receipts
-                            else
-                                a#tankReceipt_tab(href="/tankreceipts" required="false") Tank Receipts
-                            span &nbsp; | &nbsp;
-                            if (title === 'CashFlow:Home' || title === 'CashFlow')
-                                span#cashflow_tab Cash Flow
-                            else
-                                a#cashflow_tab(href="/cashflowhome" required="false") Cash Flow
-                            span &nbsp; | &nbsp;
-                            if (title === 'Credits')
-                                span Credits
-                            else
-                                a(href="/credits" required="false") Credits
-                            span &nbsp; | &nbsp;
-                            if (title === 'Products')
-                                span Products
-                            else
-                                a(href="/products" required="false") Products
-                            span &nbsp; | &nbsp;
-                            if (title === 'Deadline Manager')
-                                span Deadline Manager
-                            else
-                                a(href="/deadline" required="false") Deadline Manager
-                            span &nbsp; | &nbsp;
-                            if (title === 'Users')
-                                span Users
-                            else
-                                a(href="/users" required="false") Users
-                        span &nbsp; | &nbsp;
-                        if (title === 'Utilities')
-                            span Utilities
-                        else
-                           a(href="/utilities" required="false") Utilities
-                        span &nbsp; | &nbsp;
-                        if (title === 'Reports')
-                            span Reports
-                        else 
-                            a(href="/reports" required="false") Reports
-                        span &nbsp; | &nbsp;
-                        //- if (title === 'Truck Management')
-                        //-     span Truck Management
-                        //- else 
-                        //-     a(href="/truck-load" required="false") Truck Management
-                        .dropdown.d-inline-block
-                            a(href="#", data-toggle="dropdown").dropdown-toggle Truck Management
-                            ul.dropdown-menu(role='menu', aria-labelledby='dropdownMenu')
-                                li.divider
-                                    a(href='/truck-load') Truck Load
-                                li.divider
-                                    a(href='/truck-expense') Truck Expense
-                        span &nbsp; | &nbsp;
-                        if (title === 'Bank Transaction')
-                            span Bank Transaction
-                        else 
-                            a(href="/bank-transaction" required="false") Bank Transaction
-                        span &nbsp; | &nbsp;
-                        if (title === 'Change Password')
-                            span Change Password
-                        else
-                            a(href="/changepwd" required="false") Change Password
-                        span &nbsp; | &nbsp;
-                        a(href="/logout" required="false") Logout
+                    nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top                        
+                        button.navbar-toggler(type='button', data-toggle='collapse', data-target='#navbarNav', aria-controls='navbarNav', aria-expanded='false', aria-label='Toggle navigation')
+                            span.navbar-toggler-icon
+                        .collapse.navbar-collapse#navbarNav
+                            ul.navbar-nav.mr-auto
+                                // Admin-specific links
+                                if user.isAdmin
+                                    li.nav-item(class=(title === 'Shift Closing' ? 'active' : ''))
+                                        a.nav-link(href='/home') Shift Closing
+                                    li.nav-item(class=(title === 'Credit Receipts' ? 'active' : ''))
+                                        a.nav-link(href='/creditreceipts') Credit Receipts
+                                    li.nav-item(class=(title === 'Tank Receipts' ? 'active' : ''))
+                                        a.nav-link(href='/tankreceipts') Tank Receipts
+                                    li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
+                                        a.nav-link(href='/cashflowhome') Cash Flow
+                                    li.nav-item(class=(title === 'Credits' ? 'active' : ''))
+                                        a.nav-link(href='/credits') Credits
+                                    li.nav-item(class=(title === 'Products' ? 'active' : ''))
+                                        a.nav-link(href='/products') Products
+                                    li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
+                                        a.nav-link(href='/deadline') Deadline Manager
+                                    li.nav-item(class=(title === 'Users' ? 'active' : ''))
+                                        a.nav-link(href='/users') Users
+                                    li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
+                                        a.nav-link(href='/utilities') Utilities
+                                    li.nav-item.dropdown
+                                        a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
+                                        .dropdown-menu(aria-labelledby='reportsDropdown')
+                                            a.dropdown-item(href='/reports') Credit Report
+                                            a.dropdown-item(href='/reports-creditsummary') Credit Summary Report
+                                        //    a.dropdown-item(href='/reports-dsr') DSR Report
+                                        //    a.dropdown-item(href='/reports-cashflow') Cashflow Report
+                                    li.nav-item.dropdown
+                                        a.nav-link.dropdown-toggle(href='#', id='truckDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Truck Management
+                                        .dropdown-menu(aria-labelledby='truckDropdown')
+                                            a.dropdown-item(href='/truck-load') Truck Load
+                                            a.dropdown-item(href='/truck-expense') Truck Expense
+                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
+                                        a.nav-link(href='/bank-transaction') Bank Transaction
+                            // Right-aligned user details and logout
+                            ul.navbar-nav.ml-auto                                
+                                li.nav-item
+                                    a.nav-link(href='/changepwd') Change Password
+                                li.nav-item
+                                    a.nav-link(href='/logout') Logout
+                                li.nav-item.navbar-text.text-white
+                                    b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'    
 
-                    span
-                        if (title)
-                            h5.text-center #{title}
-                        else
-                            h5.text-center &nbsp;
+                        // Centered title
+                        //- if title
+                        //-     h5.text-center.text-light.mt-2 #{title}
+                        //- else
+                        //-     h5.text-center.text-light.mt-2 &nbsp;
         if messages.error
             div &nbsp;
             div(class='alert alert-danger' required="false") #{messages.error}

@@ -51,7 +51,11 @@ block content
                                             option(value=`${type}` selected= val.creditType === type)= type
                                 creditType
                             td(scope="row")
-                                input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
+                                select.form-control(name=prefix+'crcompanyname_' + index, id=prefix+'crcompanyname_' + index, disabled)
+                                    if creditCompanyValues
+                                        each company in creditCompanyValues
+                                            option(value=`${company.creditorId}` selected= val.company_name === company.creditorName)= company.creditorName
+                                //- input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
                             td(scope="row")
                                 input.form-control(type="number" id="cramount_"+index value=val.amount readonly)
                             td(scope="row")
@@ -60,15 +64,16 @@ block content
                                 td(scope="row")
                                     div(class="row flex-nowrap")
                                         a.btn.btn-info(id="receipt-edit-"+index onclick="editReceipt('"+index+"','"+ val.id +"')")
-                                            span.oi.oi-pencil
-                                        a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')") Save
+                                           span.oi.oi-pencil(style="color: white;")
                                         div &nbsp;&nbsp;
                                         a.btn.btn-danger(id="receipt-delete-" + index onclick="deleteReceipt('creditReceipts_row_"+ index+"','" + val.id + "')")
-                                            span.oi.oi-trash
+                                            span.oi.oi-trash(style="color: white;")
+                                        div &nbsp;&nbsp;
+                                        a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')" style="color: white;") Save
                     - var rowCnt = 0
                     while rowCnt < 1
                         +addTxnReceipt(rowCnt++)
         div(align="center")
-            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.") Add New
+            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.", disabled=false) Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", id="creditReceipts-save" disabled=true, title="Enabled on 'Add New'") Save

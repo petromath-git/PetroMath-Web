@@ -13,26 +13,26 @@ block content
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
                 td &nbsp;
-                td Company Name: 
+                td Company Name:
                 td
                     select#company_id.form-control(name='company_id')
                       if credits
                         option(value=-1, selected=company_id === -1 ? true : undefined) All
                           each val in credits
-                            option(value=`${val.id}`, selected=company_id === val.id ? true : undefined)= val.name
+                            option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 td &nbsp;
                 td
                     button.btn.btn-primary(type='submit') Go
     div &nbsp;
     div
+        console.log(creditstmt)
         if creditstmt && creditstmt.length > 0
+            h4.font-weight-bold.text-success.text-center
             table(class="table")
                 thead(class="thead-light")
                     tr
-                        th TranDate
-                        th Location
-                        th BillNo
-                        th CompanyName
+                        th Date                        
+                        th BillNo                      
                         th ProductName
                         th Price
                         th PriceDiscount
@@ -41,18 +41,16 @@ block content
                         th Notes
                 tbody
                     tr  
-                        - for (let i = 0; i < 7; ++i) {
+                        - for (let i = 0; i < 5; ++i) {
                           td
                         - }                        
                         td.text-center Opening Balance                           
                         td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
                         
                     each val in creditstmt
-                            tr
-                            td(scope="row")= val.tranDate
-                            td(scope="row")= val.locationCode
-                            td(scope="row")= val.billno
-                            td(scope="row")= val.companyName
+                        tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
+                            td(scope="row")= val.tranDate                            
+                            td(scope="row")= val.billno                            
                             td(scope="row")= val.productName
                             td(scope="row")= val.price
                             td(scope="row")= val.price_discount
@@ -60,7 +58,7 @@ block content
                             td(scope="row")= val.amount
                             td(scope="row")= val.notes
                     tr  
-                        - for (let i = 0; i < 7; ++i) {
+                        - for (let i = 0; i < 5; ++i) {
                           td
                         - }
                         td.text-center Closing Balance                                                   

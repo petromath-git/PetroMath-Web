@@ -178,14 +178,19 @@ app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res
 });
 
 app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    let loginUserId = req.user.Person_id;
     const userId = req.params.id;
-    PersonDao.disableUser(userId).then(data => {
-        if (data == 1) {
-            res.status(200).send({ message: 'User disabled successfully.' });
-        } else {
-            res.status(500).send({ error: 'Error disabling user.' });
-        }
-    })
+    if (userId == loginUserId) {
+        res.status(400).send({ error: 'Cannot disable ' + req.user.Person_Name + ' as you are logged in as ' + req.user.Person_Name });
+    } else {
+        PersonDao.disableUser(userId).then(data => {
+            if (data == 1) {
+                res.status(200).send({ message: 'User disabled successfully.' });
+            } else {
+                res.status(500).send({ error: 'Error disabling user.' });
+            }
+        })
+    }
 });
 
 app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res) {
@@ -245,7 +250,6 @@ app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req,
 // Disable Credit
 app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     const creditID = req.params.id;
-    console.log("creditID", creditID);
     CreditDao.disableCredit(creditID).then(data => {
         if (data == 1) {
             res.status(200).send({ message: 'Credit disabled successfully.' });
@@ -318,6 +322,21 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
 app.post('/reports', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditReport(req, res, next);
 });
+
+
+app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
+    //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
+    req.body.toClosingDate = new Date(Date.now());
+    reportsController.getCreditSummaryReport(req, res, next);
+
+});
+
+app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
+    reportsController.getCreditSummaryReport(req, res, next);
+});
+
+
+
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
     HomeController.getNewData(req, res, next);  // response returned inside controller
 });

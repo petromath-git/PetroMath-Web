@@ -7,11 +7,25 @@ const Sequelize = require("sequelize");
 
 module.exports = {
     getBalance: (creditId, closingQueryFromDate,closingQueryToDate) => {     
+        //console.log('in GetBalance')
+        //console.log(closingQueryFromDate); 
+        //console.log(closingQueryToDate); 
         return db.sequelize.query(
             "select get_opening_credit_balance("+ creditId + ",'"+ closingQueryFromDate+ "') as OpeningData,get_closing_credit_balance("+ creditId + ",'"+ closingQueryToDate+ "') as ClosingData",
-            { type: Sequelize.QueryTypes.SELECT }
+            { type: Sequelize.QueryTypes.SELECT }           
         );
+        
     },
+    getDayBalance: (locationCode,closingQueryToDate) => {             
+        return db.sequelize.query(
+            `select mcl.company_name,get_closing_credit_balance(mcl.creditlist_id,:closing_date) as ClosingData
+             from m_credit_list mcl where location_code = :locationCode
+             and  COALESCE(mcl.card_flag,'N') <> 'Y' order by 2 desc `,
+            {   replacements: { locationCode: locationCode,closing_date: closingQueryToDate}, 
+                 type: Sequelize.QueryTypes.SELECT }           
+        );
+        
+    }    ,
     getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate,creditId) => {
         if(creditId==-1){               
             return TxnCreditStmtViews.findAll({
