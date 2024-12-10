@@ -92,8 +92,10 @@ module.exports = {
     updateReceipts: (req, res) => {
         CreditReceiptsDao.update({
             treceipt_id: req.params.id,
-            receipt_type: req.body.receipt_type,
             receipt_no: req.body.receipt_no,
+            receipt_type: req.body.receipt_type,
+            credit_type: req.body.credit_type,
+            creditlist_id: req.body.company_id,
             amount: req.body.amount,
             notes: req.body.notes
         }).then(data => {

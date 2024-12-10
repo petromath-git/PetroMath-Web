@@ -185,10 +185,9 @@ app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res
 
 app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     let loginUserId = req.user.Person_id;
-    console.log("locationCode", loginUserId);
     const userId = req.params.id;
     if (userId == loginUserId) {
-        res.status(400).send({ error: 'Login User and Disabled User are the Same. Please use a Different Login.' });
+        res.status(400).send({ error: 'Cannot disable ' + req.user.Person_Name + ' as you are logged in as ' + req.user.Person_Name });
     } else {
         PersonDao.disableUser(userId).then(data => {
             if (data == 1) {
@@ -257,7 +256,6 @@ app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req,
 // Disable Credit
 app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     const creditID = req.params.id;
-    console.log("creditID", creditID);
     CreditDao.disableCredit(creditID).then(data => {
         if (data == 1) {
             res.status(200).send({ message: 'Credit disabled successfully.' });
@@ -341,7 +339,7 @@ app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
 });
 
 app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
-reportsController.getCreditSummaryReport(req, res, next);
+    reportsController.getCreditSummaryReport(req, res, next);
 });
 
 app.post('/generate-pdf', isLoginEnsured,getPDF);
