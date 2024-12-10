@@ -2,15 +2,25 @@ extends layout
 
 block content
     
-    form(method='POST' action='/reports-creditsummary')                
+    form(method='POST' action='/reports-creditsummary')      
         table.center
             tr              
-                td To Date:
+                td Date:
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;              
+                td &nbsp; 
+                td 
+                    input(type="hidden" name="caller" value="notpdf")             
                 td
                     button.btn.btn-primary(type='submit') Go
+                td &nbsp;   
+                td                    
+                    button.btn.btn-primary(
+                        type='button', 
+                        onClick='generatePDF(window.location.href)', 
+                        id='enable-user', 
+                        title='Report - DSR'                        
+                    ) Print as PDF    
     div &nbsp;
     div
         if creditsummary && creditsummary.length > 0

@@ -9,6 +9,11 @@ const msg = require("./config/app-messages");
 const config = require("./config/app-config");
 require('dotenv').config();
 const dateFormat = require("dateformat");
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const utils = require("./utils/app-utils");
+const { getPDF } = require('./utils/app-pdf-generator');
+
 
 // Passport - configuration - start....
 const passport = require('passport');
@@ -85,6 +90,7 @@ const creditController = require("./controllers/credit-controller");
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
+const { log } = require('console');
 
 // app configurations - start
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
@@ -327,6 +333,7 @@ app.post('/reports', isLoginEnsured, function (req, res, next) {
 app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
     req.body.toClosingDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
     reportsController.getCreditSummaryReport(req, res, next);
 
 });
@@ -335,6 +342,7 @@ app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditSummaryReport(req, res, next);
 });
 
+app.post('/generate-pdf', isLoginEnsured,getPDF);
 
 
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
@@ -572,6 +580,7 @@ app.delete('/delete-banktransaction', [isLoginEnsured, security.isAdmin()], func
 app.get('/account-type', isLoginEnsured, function (req, res) {
     bankAccountController.getAccountingType(req, res);    // response returned inside controller
 });
+
 app.get('/charts', isLoginEnsured, function (req, res) {
     res.render('charts', { user: req.user, location: req.user.location_code });    // response returned inside controller
 });
