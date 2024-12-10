@@ -8,6 +8,7 @@ html
         script(src='/javascripts/app-master-page-scripts.js')
         script(src='/javascripts/draft-edit-scripts.js')
         script(src='/javascripts/app-validator.js')
+        script(src='/javascripts/app-generate-pdf.js',defer)
         link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
         script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
         script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
@@ -30,7 +31,7 @@ html
     if(closingData && closingData.closingStatus === 'CLOSED')
         - isFreezedRecord = true;
     body(onload='populateSummaryFn(' + isFreezedRecord +');')
-        h1.text-center PetroMath
+        h1.text-center(id='petromath-heading')  PetroMath
         if (user)
             div#ajax-loading(class='d-sm-none')
                 img#loading-image(src="images/ajax-loader.gif" alt="Loading..." width="300px" height="300px")

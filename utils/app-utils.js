@@ -137,6 +137,7 @@ module.exports = {
         return (d.getMonth() - 3);
     
     }
+
 };
 
 const formDateFormat = (date) => {
@@ -150,4 +151,12 @@ const formDateFormat = (date) => {
     }
     return date.getFullYear() + "-" + monthValue + "-" + dateValue;
 };
+
+
+function convertImageToBase64(imagePath){
+    const image = fs.readFileSync(imagePath);
+    return `data:image/jpeg;base64,${image.toString('base64')}`;  // Assuming the image is JPEG
+  }
+
+ 
 
