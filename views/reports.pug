@@ -20,9 +20,22 @@ block content
                         option(value=-1, selected=company_id === -1 ? true : undefined) All
                           each val in credits
                             option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
-                include report-print-download.pug
+                td &nbsp;
+                td 
+                    input(type="hidden" name="caller" value="notpdf")             
+                td
+                td
+                    button.btn.btn-primary(type='submit') Go
+                td                    
+                    button.btn.btn-primary(
+                        type='button', 
+                        onClick='generatePDF(window.location.href)', 
+                        id='enable-user', 
+                        title='Report - DSR'                        
+                    ) Print as PDF       
     div &nbsp;
     div
+        
         if creditstmt && creditstmt.length > 0
             - var companyName = creditstmt[0].companyName
             - var cidparam = creditstmt[0].cidparam
@@ -32,9 +45,9 @@ block content
                 h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
             else
                 h5.font-weight-bold.text-center.text-uppercase= companyName                 
-            h6.text-center.text-muted #{fromclosingDate} to #{formattedToDate}        
+            h6.text-center.text-muted #{fromClosingDate} to #{toClosingDate}        
             h4.font-weight-bold.text-success.text-center
-            table.table.table-bordered.border.table-sm
+            table(class="table")
                 thead(class="thead-light")
                     tr
                         th Date                        
@@ -89,10 +102,7 @@ block content
             //-                 td.text-center Balance                           
             //-                 td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
             div.row &nbsp;
-            div.row.bg-light No Transactions.  
-
-        // Include the overlay
-        include overlay.pug
+            div.row.bg-light No Transactions.                   
                             
 
     

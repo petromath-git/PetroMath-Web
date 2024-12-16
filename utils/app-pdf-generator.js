@@ -4,8 +4,6 @@ const fs = require('fs');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const reportsController = require("../controllers/reports-controller");
-const cashflowReportsController = require("../controllers/reports-cashflow-controller");
-const dsrReportsController = require("../controllers/reports-dsr-controller");
 
 module.exports = {   
 
@@ -20,49 +18,7 @@ module.exports = {
         } else if (req.body.reportType == 'CreditDetails')
         {
         htmlContent = await reportsController.getCreditReport(req, res, next);
-        } else if (req.body.reportType == 'CashFlow')
-        {
-          htmlContent = await cashflowReportsController.getCashFlowReport(req, res, next);
-        }else if (req.body.reportType == 'DSR')
-        {
-            htmlContent = await dsrReportsController.getdsrReport(req, res, next);
         }
-
-
-                // Apply page break styles to the HTML content
-                const pageBreakStyles = `
-                                                  <style>
-                                      /* General table styling */
-                                      table {
-                                          width: 100%;
-                                          border-collapse: collapse;
-                                          border: 1px solid #ddd;
-                                          page-break-inside: avoid; /* Prevent table from breaking across pages */
-                                          margin-bottom: 20px; /* Optional: Adds space below tables */
-                                      }
-                                      th, td {
-                                          border: 1px solid #ddd;
-                                          padding: 8px;
-                                          text-align: left;
-                                      }
-                                      tr {
-                                          page-break-inside: avoid; /* Prevent rows from breaking across pages */
-                                      }
-                                      thead {
-                                          display: table-header-group; /* Ensure headers are on the same page as the content */
-                                      }
-                                      tfoot {
-                                          display: table-footer-group; /* Ensure footers are on the same page as the content */
-                                      }
-
-                                      /* Prevent breaking cards (if using cards around tables) */
-                                      .card {
-                                          page-break-inside: avoid;
-                                      }
-                                  </style>
-                                  `;
-
-                htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
 
 
         const browser = await puppeteer.launch();
