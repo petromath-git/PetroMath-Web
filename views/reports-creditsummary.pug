@@ -39,11 +39,11 @@ block content
                             tr
                                 if(val.Outstanding!=0)
                                     - serialNumber++; // Increment serial number only for valid rows
-                                    td(scope="row").text-right #{serialNumber}
+                                    td.text-right #{serialNumber}
                                     td &nbsp;
-                                    td(scope="row").text-left= val.CreditParty
+                                    td.text-left= val.CreditParty
                                     td &nbsp;
-                                    td(scope="row").text-right= val.Outstanding
+                                    td.text-right= val.Outstanding
                                     - totaloutstanding += Number(val.Outstanding)
                     tr
                         td &nbsp;

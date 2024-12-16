@@ -4,6 +4,12 @@ const fs = require('fs');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const reportsController = require("../controllers/reports-controller");
+const fonts = require('puppeteer-extra-plugin-fonts')();
+
+puppeteer.use(fonts());
+
+
+
 
 module.exports = {   
 
@@ -20,11 +26,111 @@ module.exports = {
         htmlContent = await reportsController.getCreditReport(req, res, next);
         }
 
+                                   // Apply page break styles to the HTML content
+                const pageBreakStyles = `
+                                                  <style>
+                                                   /* Include your updated styles here */
+                                                    body {
+                                                        font-family: "Segoe UI", "Arial", "Times New Roman", serif;
+                                                        font-size: 16px;
+                                                    }
+                                      /* General table styling */
+                                      table {
+                                          width: 100%;
+                                          border-collapse: collapse;
+                                          border: 1px solid #ddd;
+                                          page-break-inside: avoid; /* Prevent table from breaking across pages */
+                                          margin-bottom: 20px; /* Optional: Adds space below tables */
+                                      }
+                                      th, td {
+                                          border: 1px solid #ddd;
+                                          padding: 8px;
+                                          text-align: left;
+                                      }
+                                      tr {
+                                          page-break-inside: avoid; /* Prevent rows from breaking across pages */
+                                      }
+                                      thead {
+                                          display: table-header-group; /* Ensure headers are on the same page as the content */
+                                      }
+                                      tfoot {
+                                          display: table-footer-group; /* Ensure footers are on the same page as the content */
+                                      }
 
-        const browser = await puppeteer.launch();
+                                      /* Prevent breaking cards (if using cards around tables) */
+                                      .card {
+                                          page-break-inside: avoid;
+                                     }                                     
+                                  </style>
+                                  `;
+                                  
+                htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
+              console.log(htmlContent); 
+
+        // const browser = await puppeteer.launch({executablePath: '/usr/bin/chromium-browser',ignoreDefaultArgs: ['--disable-extensions']});
+              const browser = await puppeteer.launch({
+						    executablePath: '/usr/bin/chromium-browser', // Path to your custom Chromium binary
+						    ignoreDefaultArgs: ['--disable-extensions'], // Ignore disabling extensions
+						    headless: true, // Run in headless mode
+						    args: [
+							      '--no-sandbox', // Disable sandbox for certain environments (optional)
+							      '--disable-setuid-sandbox', // For environments where sandboxing is not allowed (optional)
+							      '--font-render-hinting=none', // Disable font hinting for better font rendering
+								'--disable-gpu',  // Optional: Might help in some cases
+							      '--fontconfig',  // Ensure fontconfig is used
+							      '--enable-font-antialiasing'  // Enable anti-aliasing for fonts
+							    ]
+				  });
+
+
+
         const page = await browser.newPage();
         await page.setContent(htmlContent);
         await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
+
+
+const fonts = await page.evaluate(() => {
+  const fontList = [];
+  const testString = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  
+  // Test a font family by creating a temporary element with that font
+  const testFont = (fontFamily) => {
+    const div = document.createElement('div');
+    div.style.fontFamily = fontFamily;
+    div.textContent = testString;
+    document.body.appendChild(div);
+    const computedStyle = window.getComputedStyle(div);
+    fontList.push(computedStyle.fontFamily);
+    document.body.removeChild(div);
+  };
+
+  testFont('Segoe UI');
+  testFont('Arial');
+  testFont('Times New Roman');
+  // Add other font families as needed
+  
+  return fontList;
+});
+
+console.log(fonts); // Check which fonts are available
+
+			await page.addStyleTag({
+						      content: `
+						      @font-face {
+						      font-family: 'Roboto';
+						      font-style: normal;
+						      font-weight: 400;
+						      src: local('Roboto'), local('Roboto-Regular'), url(https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu7GxKOzY.woff2) format('woff2');
+						      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+						    }
+							  `
+						});
+
+
+
+
+
+
        
 
         await page.evaluate(() => {
@@ -38,7 +144,7 @@ module.exports = {
             // Hide all elements inside the form
             if (form) {
                 const children = form.querySelectorAll('*'); // Select all child elements
-                children.forEach(child => child.style.display = 'none');
+	                children.forEach(child => child.style.display = 'none');
             }
           
             // Hide all text boxes
@@ -73,7 +179,7 @@ module.exports = {
         
         const currentYear = new Date().getFullYear();
         const currentDateTime = new Date().toLocaleString();
-        const imageBase64 = convertImageToBase64('MME_Header.jpg');
+//        const imageBase64 = convertImageToBase64('MME_Header.jpg');
         
   
 
@@ -82,8 +188,7 @@ module.exports = {
             printBackground: true,     // Include background styles
             displayHeaderFooter: true,
             headerTemplate: `<div style="text-align: center; width: 100%; padding: 10px 0;">
-                                <img src="${imageBase64}" alt="Banner" style="width: 100%; height: auto; max-height: 70px; object-fit: contain;">
-                            </div>
+                           </div>
                             `, // Image header
             footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
                                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
