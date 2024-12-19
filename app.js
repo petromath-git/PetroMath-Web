@@ -81,8 +81,6 @@ const masterController = require("./controllers/master-data-controller");
 const cashflowController = require("./controllers/cash-flow-controller");
 const utilitiesController = require("./controllers/utilities-controller");
 const reportsController = require("./controllers/reports-controller");
-const cashflowReportsController = require("./controllers/reports-cashflow-controller");
-const dsrReportsController = require("./controllers/reports-dsr-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
@@ -342,26 +340,6 @@ app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
 
 app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditSummaryReport(req, res, next);
-});
-
-app.get('/reports-cashflow', isLoginEnsured, function (req, res, next) {
-    req.body.cfclosingDate = new Date(Date.now());
-    req.body.caller = 'notpdf';
-    cashflowReportsController.getCashFlowReport(req, res, next);
-});
-
-app.post('/reports-cashflow', isLoginEnsured, function (req, res, next) {
-    cashflowReportsController.getCashFlowReport(req, res, next);
-});
-
-app.get('/reports-dsr', isLoginEnsured, function (req, res, next) {
-    req.body.fromClosingDate = new Date(Date.now());
-    req.body.caller = 'notpdf';
-    dsrReportsController.getdsrReport(req, res, next);
-});
-
-app.post('/reports-dsr', isLoginEnsured, function (req, res, next) {
-    dsrReportsController.getdsrReport(req, res, next);
 });
 
 app.post('/generate-pdf', isLoginEnsured,getPDF);
