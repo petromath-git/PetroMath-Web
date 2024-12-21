@@ -2,9 +2,9 @@ const fs = require('fs');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const reportsController = require("../controllers/reports-controller");
-
-
-
+const cashflowReportsController = require("../controllers/reports-cashflow-controller");
+const dsrReportsController = require("../controllers/reports-dsr-controller");
+require('dotenv').config();
 
 
 
@@ -26,6 +26,11 @@ module.exports = {
                                    // Apply page break styles to the HTML content
                 const pageBreakStyles = `
                                                   <style>
+                                                   /* Include your updated styles here */
+                                                    body {
+                                                        font-family: "Segoe UI", "Arial", "Times New Roman", serif;
+                                                        font-size: 16px;
+                                                    }
                                                    /* Include your updated styles here */
                                                     body {
                                                         font-family: "Segoe UI", "Arial", "Times New Roman", serif;
@@ -62,25 +67,12 @@ module.exports = {
                                   `;
                                   
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
-              console.log(htmlContent); 
 
-         const browser = await puppeteer.launch({executablePath: '/usr/bin/chromium-browser',ignoreDefaultArgs: ['--disable-extensions']});
-              // const browser = await puppeteer.launch({
-		 //				    executablePath: '/usr/bin/chromium-browser', // Path to your custom Chromium binary
-		 //				    ignoreDefaultArgs: ['--disable-extensions'], // Ignore disabling extensions
-		 //				    headless: true, // Run in headless mode
-		 //				    args: [
-		 //					      '--no-sandbox', // Disable sandbox for certain environments (optional)
-		 //					      '--disable-setuid-sandbox', // For environments where sandboxing is not allowed (optional)
-		 //					      '--font-render-hinting=none', // Disable font hinting for better font rendering
-		 //						'--disable-gpu',  // Optional: Might help in some cases
-		 //					      '--fontconfig',  // Ensure fontconfig is used
-		 //					      '--enable-font-antialiasing'  // Enable anti-aliasing for fonts
-		 //					    ]
-		 //		  });
+             
 
 
-
+        //const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({executablePath: process.env.CHROMIUM_PATH,ignoreDefaultArgs: ['--disable-extensions']});
         const page = await browser.newPage();
         await page.setContent(htmlContent);
         await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
