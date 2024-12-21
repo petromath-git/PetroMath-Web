@@ -9,18 +9,7 @@ block content
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
                 td &nbsp; 
-                td 
-                    input(type="hidden" name="caller" value="notpdf")             
-                td
-                    button.btn.btn-primary(type='submit') Go
-                td &nbsp;   
-                td                    
-                    button.btn.btn-primary(
-                        type='button', 
-                        onClick='generatePDF(window.location.href)', 
-                        id='enable-user', 
-                        title='Report - DSR'                        
-                    ) Print as PDF    
+                include report-print-download.pug
     div &nbsp;
     div
         if creditsummary && creditsummary.length > 0
@@ -54,7 +43,10 @@ block content
 
         else
             div.row &nbsp;
-            div.row.bg-light No records to display.                   
+            div.row.bg-light No records to display.
+
+    // Include the overlay
+    include overlay.pug                           
                             
 
     

@@ -19,6 +19,7 @@ html
         link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
         link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
         link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpeg" src="/images/mc_logo.jpeg")
+        link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
         //- script.
         //-     function formatIndianCurrency(number) {
         //-         const [integer, decimal] = number.toFixed(2).split('.');
@@ -27,7 +28,7 @@ html
         //-     }
 
         
-    - var isFreezedRecord = false;
+    - var isFreezedRecord = false;    
     if(closingData && closingData.closingStatus === 'CLOSED')
         - isFreezedRecord = true;
     body(onload='populateSummaryFn(' + isFreezedRecord +');')
@@ -52,21 +53,29 @@ html
                                         a.nav-link(href='/tankreceipts') Tank Receipts
                                     li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
                                         a.nav-link(href='/cashflowhome') Cash Flow
-                                    li.nav-item(class=(title === 'Credits' ? 'active' : ''))
-                                        a.nav-link(href='/credits') Credits
-                                    li.nav-item(class=(title === 'Products' ? 'active' : ''))
-                                        a.nav-link(href='/products') Products
+                                    //- li.nav-item(class=(title === 'Credits' ? 'active' : ''))
+                                    //-     a.nav-link(href='/credits') Credits
+                                    //- li.nav-item(class=(title === 'Products' ? 'active' : ''))
+                                    //-     a.nav-link(href='/products') Products
                                     li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
                                         a.nav-link(href='/deadline') Deadline Manager
-                                    li.nav-item(class=(title === 'Users' ? 'active' : ''))
-                                        a.nav-link(href='/users') Users
+                                    //- li.nav-item(class=(title === 'Users' ? 'active' : ''))
+                                    //-     a.nav-link(href='/users') Users
                                     li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
                                         a.nav-link(href='/utilities') Utilities
                                     li.nav-item.dropdown
+                                        a.nav-link.dropdown-toggle(href='#', id='mastersDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Masters
+                                        .dropdown-menu(aria-labelledby='mastersDropdown')
+                                            a.dropdown-item(href='/users') Create Users
+                                            a.dropdown-item(href='/products') Create Products
+                                            a.dropdown-item(href='/credits') Create Credit Party                                          
+                                    li.nav-item.dropdown
                                         a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
                                         .dropdown-menu(aria-labelledby='reportsDropdown')
-                                            a.dropdown-item(href='/reports') Credit Report
-                                            a.dropdown-item(href='/reports-creditsummary') Credit Summary Report
+                                            a.dropdown-item(href='/reports-dsr') Day-Close Report
+                                            a.dropdown-item(href='/reports-cashflow') CashFlow Report
+                                            a.dropdown-item(href='/reports') Credit Customer Report
+                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report
                                         //    a.dropdown-item(href='/reports-dsr') DSR Report
                                         //    a.dropdown-item(href='/reports-cashflow') Cashflow Report
                                     li.nav-item.dropdown
