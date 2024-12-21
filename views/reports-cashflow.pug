@@ -1,0 +1,88 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-cashflow')
+        table.center
+            tr
+                td Cashflow Date:
+                td
+                    input#cfclosingDate.form-control(type='date', name='cfclosingDate', value=cfclosingDate max=currentDate format="dd/mm/yyyy" required)                    
+                td &nbsp;                
+                include report-print-download.pug    
+    div &nbsp;
+    div
+        if cashflowstmt && cashflowstmt.length > 0
+            div.row &nbsp;
+            h4.font-weight-bold.text-center= "CashFlow Report"                             
+            h4.text-center.text-muted #{cfclosingDate}        
+            h4.font-weight-bold.text-success.text-center
+    div
+        if cashflowstmt && cashflowstmt.length > 0
+            table.table.table-bordered.border.table-sm
+                thead(class="thead-light")
+                    tr
+                        th.text-right(style="border: 1px solid black;") Transaction Type
+                        th.text-right(style="border: 1px solid black;") Description
+                        th.text-right(style="border: 1px solid black;") Debit
+                        th.text-right(style="border: 1px solid black;") Credit
+                       
+                tbody
+                        - var totalcredits = 0;
+                        - var totaldedits = 0;
+                        - var totalcash = 0;
+                        - var difference = 0;
+                        each val in cashflowstmt
+                            tr
+                            td.text-right(scope="row",style="border: 1px solid black;")= val.tranType
+                            td.text-right(scope="row",style="border: 1px solid black;")= val.description
+                            td.text-right(scope="row",style="border: 1px solid black;")= val.debit
+                            td.text-right(scope="row",style="border: 1px solid black;")= val.credit 
+                            - totalcredits += Number(val.credit)
+                            - totaldedits  += Number(val.debit) 
+                        tr
+                            td &nbsp;                        
+                            th.text-right Total
+                            th.text-right.text-danger #{totaldedits.toFixed(2)}
+                            th.text-right.text-danger #{totalcredits.toFixed(2)}
+                        -totalcash = totalcredits-totaldedits
+                        -difference = (TotalDenom || 0) - totalcash  // Ensure TotalDenom is defined before using it  
+
+             
+            table.table-sm(class="table table-bordered text-center", style="width: 50%; margin: 20px auto;") 
+                tbody                
+                    tr
+                        th(style="border: 1px solid black;") Denomination Total
+                        th.text-right(style="border: 1px solid black;")= TotalDenom.toFixed(2)
+                    tr
+                        th(style="border: 1px solid black;") CashFlow Excess/Shortage
+                        th.text-right(style="border: 1px solid black;")= difference.toFixed(2) 
+
+            each account in bankTransactions
+                h4.text-left.mt-4.mb-3 #{account.accountNickname}
+                table.table.table-bordered.table-sm
+                    thead
+                        tr
+                            th Transaction Date
+                            th Description
+                            th.text-right Credit Amount
+                            th.text-right Debit Amount
+                            th Remarks
+                    tbody
+                        each transaction in account.transactions
+                            tr
+                                td= transaction.trans_date
+                                td= transaction.description
+                                td.text-right= transaction.cr
+                                td.text-right= transaction.dr
+                                td= transaction.remarks
+
+
+                                                            
+        else
+            div.row &nbsp;
+            div.row.bg-light No records to display.
+
+    // Include the overlay
+    include overlay.pug                         
+
+    

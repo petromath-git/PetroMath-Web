@@ -11,6 +11,9 @@ function getNewClosingPage() {
     document.getElementById('get-new-closing').submit();
 }
 
+
+
+
 // Add new flow: Enable pump reading entries based on selected pumps in first tab.
 function enableReadingPumps(currentObject) {
     const pumpCode = currentObject.value;
@@ -38,7 +41,8 @@ function updateReadingPumps(obj) {
 // Add new flow: Update price(from first tab) to each pump instance reading.
 function updateProductPrices(obj) {
     trackMenu(obj);
-    updatePriceOnReadingTab();
+    //updatePriceOnReadingTab();
+    updatePriceOnReadingTabv1();
 }
 
 // Add new/edit flow: Update default expense amount on select.
@@ -101,11 +105,34 @@ function updatePriceOnReadingTab(isOnLoad) {
     }
 }
 
+
+
+//Price change based on selection version 1..
+function updatePriceOnReadingTabv1(isOnLoad) {
+    
+    
+    const selectElement = document.getElementById("reading-pump-name");
+    const pumpSelectedOption = selectElement.selectedOptions[0];
+    const pumpSelectedOptionId = pumpSelectedOption.id;
+    const elementId = pumpSelectedOptionId.replace("pump-", "rate_");; // Construct the full ID
+    document.getElementById("reading-price").value = document.getElementById(elementId).value;
+    console.log(elementId);
+    console.log('elementId'+ document.getElementById(elementId).value);
+    console.log('rate_HSD' +document.getElementById('rate_HSD').value);
+    if (isOnLoad) {
+        pumpName.selectedIndex = "0";
+    }
+}
+
 // Add new flow: Re-add pump reading to UI
 function showReadingPump() {
     const pumpName = document.getElementById("reading-pump-name").value;
     const currency = document.getElementById('currency_hiddenValue').value;
-    if (document.getElementById("f_" + pumpName + "_sub_header").className == 'col-3 d-md-none') {
+    if (!document.getElementById("reading-price").value || document.getElementById("reading-price").value<=0)
+    {
+     alert(`Product Price cannot be less than 0 for ${pumpName}`);   
+    }
+    else if (document.getElementById("f_" + pumpName + "_sub_header").className == 'col-3 d-md-none') {
         document.getElementById("f_" + pumpName + "_sub_header").className = 'col-3 d-md-block';
         document.getElementById("f_" + pumpName + "_sub_header_price").innerHTML = currency + document.getElementById("reading-price").value;
         document.getElementById("f_" + pumpName + "_price").value = document.getElementById("reading-price").value;
@@ -1625,3 +1652,7 @@ function postDeadlineEdit(id) {
     document.getElementById("deadline-edit-" + id).className = "btn btn-info";
     document.getElementById("deadline-save-" + id).className = "btn-info " + hideClassName;
 }
+
+function getcurrencyformatter (plainnumber) {
+ return new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(plainnumber)
+};
