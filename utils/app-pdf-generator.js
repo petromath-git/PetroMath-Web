@@ -1,12 +1,9 @@
-
-
 const fs = require('fs');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const reportsController = require("../controllers/reports-controller");
-const fonts = require('puppeteer-extra-plugin-fonts')();
 
-puppeteer.use(fonts());
+
 
 
 
@@ -67,20 +64,20 @@ module.exports = {
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
               console.log(htmlContent); 
 
-        // const browser = await puppeteer.launch({executablePath: '/usr/bin/chromium-browser',ignoreDefaultArgs: ['--disable-extensions']});
-              const browser = await puppeteer.launch({
-						    executablePath: '/usr/bin/chromium-browser', // Path to your custom Chromium binary
-						    ignoreDefaultArgs: ['--disable-extensions'], // Ignore disabling extensions
-						    headless: true, // Run in headless mode
-						    args: [
-							      '--no-sandbox', // Disable sandbox for certain environments (optional)
-							      '--disable-setuid-sandbox', // For environments where sandboxing is not allowed (optional)
-							      '--font-render-hinting=none', // Disable font hinting for better font rendering
-								'--disable-gpu',  // Optional: Might help in some cases
-							      '--fontconfig',  // Ensure fontconfig is used
-							      '--enable-font-antialiasing'  // Enable anti-aliasing for fonts
-							    ]
-				  });
+         const browser = await puppeteer.launch({executablePath: '/usr/bin/chromium-browser',ignoreDefaultArgs: ['--disable-extensions']});
+              // const browser = await puppeteer.launch({
+		 //				    executablePath: '/usr/bin/chromium-browser', // Path to your custom Chromium binary
+		 //				    ignoreDefaultArgs: ['--disable-extensions'], // Ignore disabling extensions
+		 //				    headless: true, // Run in headless mode
+		 //				    args: [
+		 //					      '--no-sandbox', // Disable sandbox for certain environments (optional)
+		 //					      '--disable-setuid-sandbox', // For environments where sandboxing is not allowed (optional)
+		 //					      '--font-render-hinting=none', // Disable font hinting for better font rendering
+		 //						'--disable-gpu',  // Optional: Might help in some cases
+		 //					      '--fontconfig',  // Ensure fontconfig is used
+		 //					      '--enable-font-antialiasing'  // Enable anti-aliasing for fonts
+		 //					    ]
+		 //		  });
 
 
 
@@ -88,43 +85,17 @@ module.exports = {
         await page.setContent(htmlContent);
         await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
 
-
-const fonts = await page.evaluate(() => {
-  const fontList = [];
-  const testString = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  
-  // Test a font family by creating a temporary element with that font
-  const testFont = (fontFamily) => {
-    const div = document.createElement('div');
-    div.style.fontFamily = fontFamily;
-    div.textContent = testString;
-    document.body.appendChild(div);
-    const computedStyle = window.getComputedStyle(div);
-    fontList.push(computedStyle.fontFamily);
-    document.body.removeChild(div);
-  };
-
-  testFont('Segoe UI');
-  testFont('Arial');
-  testFont('Times New Roman');
-  // Add other font families as needed
-  
-  return fontList;
-});
-
-console.log(fonts); // Check which fonts are available
-
-			await page.addStyleTag({
-						      content: `
-						      @font-face {
-						      font-family: 'Roboto';
-						      font-style: normal;
-						      font-weight: 400;
-						      src: local('Roboto'), local('Roboto-Regular'), url(https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu7GxKOzY.woff2) format('woff2');
-						      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
-						    }
-							  `
-						});
+		//	await page.addStyleTag({
+		//				      content: `
+		//				      @font-face {
+		//				      font-family: 'Roboto';
+		//				      font-style: normal;
+		//				      font-weight: 400;
+		//				      src: local('Roboto'), local('Roboto-Regular'), url(https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu7GxKOzY.woff2) format('woff2');
+		//				      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+		//				    }
+		//					  `
+		//				});
 
 
 
@@ -260,3 +231,4 @@ function convertImageToBase64(imagePath){
   }
 
  
+

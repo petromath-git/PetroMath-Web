@@ -1,3 +1,5 @@
+process.env.FONTCONFIG_FILE = '/var/task/fonts.conf';
+
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
