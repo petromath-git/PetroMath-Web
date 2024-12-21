@@ -1,5 +1,3 @@
-
-
 const fs = require('fs');
 const puppeteer = require('puppeteer');
 const path = require('path');
@@ -23,18 +21,16 @@ module.exports = {
         } else if (req.body.reportType == 'CreditDetails')
         {
         htmlContent = await reportsController.getCreditReport(req, res, next);
-        } else if (req.body.reportType == 'CashFlow')
-        {
-          htmlContent = await cashflowReportsController.getCashFlowReport(req, res, next);
-        }else if (req.body.reportType == 'DSR')
-        {
-            htmlContent = await dsrReportsController.getdsrReport(req, res, next);
         }
 
-
-                // Apply page break styles to the HTML content
+                                   // Apply page break styles to the HTML content
                 const pageBreakStyles = `
                                                   <style>
+                                                   /* Include your updated styles here */
+                                                    body {
+                                                        font-family: "Segoe UI", "Arial", "Times New Roman", serif;
+                                                        font-size: 16px;
+                                                    }
                                                    /* Include your updated styles here */
                                                     body {
                                                         font-family: "Segoe UI", "Arial", "Times New Roman", serif;
@@ -69,7 +65,7 @@ module.exports = {
                                      }                                     
                                   </style>
                                   `;
-
+                                  
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
 
              
@@ -80,6 +76,24 @@ module.exports = {
         const page = await browser.newPage();
         await page.setContent(htmlContent);
         await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
+
+		//	await page.addStyleTag({
+		//				      content: `
+		//				      @font-face {
+		//				      font-family: 'Roboto';
+		//				      font-style: normal;
+		//				      font-weight: 400;
+		//				      src: local('Roboto'), local('Roboto-Regular'), url(https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu7GxKOzY.woff2) format('woff2');
+		//				      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+		//				    }
+		//					  `
+		//				});
+
+
+
+
+
+
        
 
         await page.evaluate(() => {
@@ -93,7 +107,7 @@ module.exports = {
             // Hide all elements inside the form
             if (form) {
                 const children = form.querySelectorAll('*'); // Select all child elements
-                children.forEach(child => child.style.display = 'none');
+	                children.forEach(child => child.style.display = 'none');
             }
           
             // Hide all text boxes
@@ -128,7 +142,7 @@ module.exports = {
         
         const currentYear = new Date().getFullYear();
         const currentDateTime = new Date().toLocaleString();
-        const imageBase64 = convertImageToBase64('MME_Header.jpg');
+//        const imageBase64 = convertImageToBase64('MME_Header.jpg');
         
   
 
@@ -137,8 +151,7 @@ module.exports = {
             printBackground: true,     // Include background styles
             displayHeaderFooter: true,
             headerTemplate: `<div style="text-align: center; width: 100%; padding: 10px 0;">
-                                <img src="${imageBase64}" alt="Banner" style="width: 100%; height: auto; max-height: 70px; object-fit: contain;">
-                            </div>
+                           </div>
                             `, // Image header
             footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
                                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
