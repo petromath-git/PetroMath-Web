@@ -30,6 +30,8 @@ module.exports = {
       let Collectionlist = [];
       let CreditSalelist = [];
       let CardSalelist = [];
+      let CardSaleSummarylist = [];
+      let CashSaleslist = [];
       let expenseList = [];
       let stockReceiptList = [];
       let creditReceiptList = [];
@@ -54,6 +56,8 @@ module.exports = {
       const oilCollectionPromise =  DsrReportDao.getOilcollection(locationCode, fromDate);
       const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);
       const cardSalesPromise = DsrReportDao.getcardsales(locationCode, fromDate);
+      const cardSalesSummaryPromise = DsrReportDao.getcardsalesSummary(locationCode, fromDate);
+      const cashSalesSummaryPromise = DsrReportDao.getCashsales(locationCode, fromDate);
       const expensesPromise = DsrReportDao.getexpenses(locationCode, fromDate);
       const stockReceiptPromise = DsrReportDao.getstockreceipt(locationCode, fromDate);
       const creditReceiptPromise = DsrReportDao.getcreditreceipt(locationCode, fromDate);
@@ -67,13 +71,15 @@ module.exports = {
 
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
-             cardSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
+             cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
              cashflowData,denomData,bankTranData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 oilCollectionPromise,
                                                                                                 creditSalesPromise,
                                                                                                 cardSalesPromise,
+                                                                                                cardSalesSummaryPromise,
+                                                                                                cashSalesSummaryPromise,
                                                                                                 expensesPromise,
                                                                                                 stockReceiptPromise,
                                                                                                 creditReceiptPromise,
@@ -115,15 +121,20 @@ module.exports = {
 
       let totalCash = 0;
       let totalCredit = 0;
+      let totalCard = 0;
        // Process sales Collection data
        collectionData.forEach((salesCollection) => {
 
-        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc);
+        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc)-parseFloat(salesCollection.cardsales);
         const creditAmount = parseFloat(salesCollection.crsaleamt);       
+        const cardAmount = parseFloat(salesCollection.cardsales);
+
+        
 
         // Accumulate totals
         totalCash += cashAmount;
         totalCredit += creditAmount;
+        totalCard += cardAmount;
         
       });
 
@@ -140,13 +151,15 @@ module.exports = {
         
       });
 
-      console.log('totalOilCash'+ totalCash.toFixed(2)+totalOilCash)
+      console.log('totalOilCash'+totalOilCash);
+      console.log('totalOilCredit'+totalOilCredit);
 
               // Add totals to the collection list
         Collectionlist.push({
          // Product: "Total",
           Cash: (totalCash+totalOilCash).toFixed(2), 
           Credit: (totalCredit+totalOilCredit).toFixed(2),
+          Card: totalCard.toFixed(2)
         });
 
         let totalCreditSales = 0;
@@ -204,8 +217,50 @@ module.exports = {
         Quantity: '-',
         Amount: totalCardSales 
       });
+    
+      let totalCardSummarySales = 0;
 
+     cardSalesSummaryData.forEach((cardSummarySales) => {
+
+        totalCardSummarySales += parseFloat(cardSummarySales.amt);
+
+        CardSaleSummarylist.push({          
+          'Card': cardSummarySales.name,           
+           Amount: cardSummarySales.amt
+        });
+      });
+      
+       // Push the total amount after the loop
+       CardSaleSummarylist.push({        
+        'Credit Party': 'Total',        
+        Amount: totalCardSummarySales 
+      });
      
+      let totalCashSales = 0;   
+
+      
+
+      cashSalesData.forEach((cashSales) => {
+
+        totalCashSales += parseFloat(cashSales.amt);
+
+        CashSaleslist.push({
+           Product: cashSales.product_name,
+           Quantity: cashSales.qty,
+           Price: cashSales.price,
+           Discount: cashSales.discount,
+           Amount: cashSales.amt,
+        });
+      });
+
+        // Push the total amount after the loop
+        CashSaleslist.push({
+          Product: 'Total',
+          Quantity: '-',
+          Price: '-',
+          Discount: '-',
+          Amount: totalCashSales,
+        }); 
 
 
       let totalExpenses = 0; 
@@ -267,10 +322,11 @@ module.exports = {
         // Handle unknown columns dynamically (for product sales data)
         Object.keys(shiftsummary).forEach((key) => {
           // Skip already handled known columns
-          if (!['person_name', 'closing_date_formatted', 'ex_short'].includes(key)) {
+          if (!['person_name', 'closing_date_formatted','loose','ex_short'].includes(key)) {
             keyValue[key] = shiftsummary[key];
           }
         });
+        keyValue['2T Loose'] = shiftsummary.loose;
         keyValue['Excess/Shortage'] = shiftsummary.ex_short;
       
         // Push the created key-value pair object to shiftSummaryList
@@ -360,6 +416,8 @@ module.exports = {
         collectionlist: Collectionlist,
         creditsaleslist: CreditSalelist,
         cardsalelist: CardSalelist,
+        CardSaleSummarylist: CardSaleSummarylist,
+        CashSaleslist: CashSaleslist,
         expenselist: expenseList,
         stockreceiptlist: stockReceiptList,
         creditReceiptList: creditReceiptList,

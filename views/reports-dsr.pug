@@ -10,6 +10,8 @@ block content
             var salesCollectionFromServer = !{JSON.stringify(collectionlist)}
             var creditSalesFromServer = !{JSON.stringify(creditsaleslist)}
             var cardSalesFromServer = !{JSON.stringify(cardsalelist)}
+            var cardSalesSummaryFromServer = !{JSON.stringify(CardSaleSummarylist)}
+            var cashSalesFromServer = !{JSON.stringify(CashSaleslist)}
             var expenseFromServer = !{JSON.stringify(expenselist)}
             var stockReceiptFromServer = !{JSON.stringify(stockreceiptlist)}
             var creditReceiptFromServer = !{JSON.stringify(creditReceiptList)}
@@ -180,9 +182,10 @@ block content
                 
                
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)');
-                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit'],"col-sm-8 mx-auto");
+                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Amount']);
-                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesFromServer,'Card Sales',['Amount']);
+                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Card Sales',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
@@ -238,8 +241,12 @@ block content
             div.col-md-6
                 div.row &nbsp;                
                 div(id="creditsale-table-container")
-        div.row        
-            div.col-md-6                
+        div.row    
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="cashsale-table-container")    
+            div.col-md-6  
+                div.row &nbsp;                
                 div(id="expense-table-container")
         div.row
             div.col-md-12

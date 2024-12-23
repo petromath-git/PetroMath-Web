@@ -59,5 +59,22 @@ module.exports = {
             });
 
         }
+    },
+    getLocationDetails: (location_code) => {
+        return db.sequelize.query(
+            `SELECT location_name, address,location_id,location_code
+             FROM m_location 
+             WHERE location_code = :location_code`,
+            {
+                replacements: { location_code: location_code },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        ).then(results => {
+            if (results.length > 0) {
+                return results[0];
+            } else {
+                throw new Error("Location not found");
+            }
+        });
     }
 }

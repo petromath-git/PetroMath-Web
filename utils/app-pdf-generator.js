@@ -4,6 +4,7 @@ const path = require('path');
 const reportsController = require("../controllers/reports-controller");
 const cashflowReportsController = require("../controllers/reports-cashflow-controller");
 const dsrReportsController = require("../controllers/reports-dsr-controller");
+var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 
 
@@ -14,6 +15,9 @@ module.exports = {
       try {
         
         let htmlContent = '';
+        console.log('req.user.location_code'+req.user.location_code);
+
+        const locationDetails = await locationdao.getLocationDetails(req.user.location_code);
 
         if(req.body.reportType == 'CreditSummary')
         {
@@ -21,7 +25,14 @@ module.exports = {
         } else if (req.body.reportType == 'CreditDetails')
         {
         htmlContent = await reportsController.getCreditReport(req, res, next);
+        }else if (req.body.reportType == 'DSR')
+        {
+            htmlContent = await dsrReportsController.getdsrReport(req, res, next);
+        }else if (req.body.reportType == 'CashFlow')
+        {
+            htmlContent = await cashflowReportsController.getCashFlowReport(req, res, next);
         }
+
 
                                    // Apply page break styles to the HTML content
                 const pageBreakStyles = `
@@ -150,9 +161,11 @@ module.exports = {
             format: 'A4',              // Set paper format
             printBackground: true,     // Include background styles
             displayHeaderFooter: true,
-            headerTemplate: `<div style="text-align: center; width: 100%; padding: 10px 0;">
-                           </div>
-                            `, // Image header
+            headerTemplate: `<div style="font-size: 12px; text-align: center; width: 100%;">
+                                <strong>${locationDetails.location_name}</strong><br>
+                                ${locationDetails.address}
+                                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
+                            </div>`,
             footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
                                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
                                 <span>This is a computer-generated document. Generated on: ${currentDateTime}</span>                              
@@ -168,7 +181,7 @@ module.exports = {
             //     right: '10mm',                
             // }
              margin: {
-                top: '150px',
+                top: '100px',
                 bottom: '60px', // Space for the footer
                 left: '10mm',
                 right: '10mm',

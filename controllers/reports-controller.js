@@ -4,6 +4,7 @@ var ReportDao = require("../dao/report-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 var CreditDao = require("../dao/credits-dao");
+const moment = require('moment');
 
 module.exports = {
      getCreditReport: async(req, res) => {
@@ -25,6 +26,7 @@ module.exports = {
         let credits = [];
         let OpeningBal;
         let closingBal;
+        let renderData = {};
 
         CreditDao.findAll(locationCode)
             .then(data => {
@@ -59,13 +61,32 @@ module.exports = {
                             });
                         });
 
+                        const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
+                        const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
+                        
+                          // Prepare the render data
+                      renderData ={
+                        title: 'Reports', 
+                        user: req.user, 
+                        fromClosingDate: fromDate,
+                        toClosingDate: toDate, 
+                        formattedFromDate: formattedFromDate,
+                        formattedToDate: formattedToDate,
+                        credits: credits, 
+                        company_id: cid,
+                        creditstmt: Creditstmtlist,
+                        openingbalance: OpeningBal,
+                        closingbalance: closingBal,
+                        cidparam: cid, 
+                      }
+
                     if(caller=='notpdf') {
-                    res.render('reports', {title: 'Reports', user: req.user, fromClosingDate: fromDate,toClosingDate: toDate, credits: credits, company_id: cid,creditstmt: Creditstmtlist,openingbalance: OpeningBal,closingbalance: closingBal,cidparam: cid, });
+                    res.render('reports',renderData);
                     }else
                     {                
                 
                       return new Promise((resolve, reject) => {
-                        res.render('reports', {title: 'Reports', user: req.user, fromClosingDate: fromDate,toClosingDate: toDate, credits: credits, company_id: cid,creditstmt: Creditstmtlist,openingbalance: OpeningBal,closingbalance: closingBal,cidparam: cid, },
+                        res.render('reports',renderData,
                            (err, html) => {
                             if (err) {
                               console.error('getCreditSummaryReport: Error in res.render:', err);
