@@ -1,25 +1,33 @@
 extends layout
 
 block content
-    
-    form(method='POST' action='/reports') 
+    form(method='POST' action='/reports')
         table.center
             tr
-                td From Date:
+                td Date Range:
                 td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;
-                td To Date:
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
                 td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;
                 td Company Name:
                 td
                     select#company_id.form-control(name='company_id')
-                      if credits
-                        option(value=-1, selected=company_id === -1 ? true : undefined) All
-                          each val in credits
-                            option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+                        if credits
+                            option(value=-1, selected=company_id === -1 ? true : undefined) All
+                            each val in credits
+                                option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 include report-print-download.pug
     div &nbsp;
     div
@@ -32,7 +40,7 @@ block content
                 h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
             else
                 h5.font-weight-bold.text-center.text-uppercase= companyName                 
-            h6.text-center.text-muted #{fromclosingDate} to #{formattedToDate}        
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
             h4.font-weight-bold.text-success.text-center
             table.table.table-bordered.border.table-sm
                 thead(class="thead-light")
@@ -46,15 +54,13 @@ block content
                         th.text-right Amount
                         th Notes
                 tbody
-                    
-                    if(cidparam != -1) 
+                    if(cidparam != -1)
                         tr  
                             - for (let i = 0; i < 5; ++i) {
                             td &nbsp;
                             - }                        
                             td.text-center Opening Balance                           
                             td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
-                        
                     each val in creditstmt
                         tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
                             td(scope="row")= val.tranDate                            
@@ -72,27 +78,10 @@ block content
                             - }
                             td.text-center Closing Balance                                                   
                             td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
-                             
         else
-            //- if(cidparam != -1) 
-            //-     div.row &nbsp;
-            //-     h6.font-weight-bold.text-center= "Credit Detail Report"
-            //-     h5.font-weight-bold.text-center.text-uppercase #{company_id}                 
-            //-     h6.text-center.text-muted #{fromClosingDate} to #{toClosingDate}        
-            //-     h4.font-weight-bold.text-success.text-center
-            //-     table(class="table")
-            //-         tbody   
-            //-             tr  
-            //-                 - for (let i = 0; i < 5; ++i) {
-            //-                 td &nbsp;
-            //-                 - }                        
-            //-                 td.text-center Balance                           
-            //-                 td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
             div.row &nbsp;
             div.row.bg-light No Transactions.  
 
         // Include the overlay
         include overlay.pug
-                            
 
-    

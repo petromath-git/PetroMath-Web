@@ -108,18 +108,32 @@ module.exports = {
                                                     SELECT SUM(ROUND(amount, 2)) 
                                                     FROM t_credits tcr
                                                     JOIN m_product mp ON tcr.product_id = mp.product_id
+                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
                                                     WHERE tcr.closing_id IN (:closing_id)
                                                     AND mp.product_name = a.product_code
+                                                    AND COALESCE(mcl.card_flag,'N') != 'Y'
                                                     GROUP BY mp.product_name
                                                 ), 0) AS crsaleamt,
                                                 COALESCE((
                                                     SELECT SUM(ROUND(tcr.qty * tcr.price, 2)) 
                                                     FROM t_credits tcr
                                                     JOIN m_product mp ON tcr.product_id = mp.product_id
+                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
                                                     WHERE tcr.closing_id IN (:closing_id)
                                                     AND mp.product_name = a.product_code
+                                                    AND COALESCE(mcl.card_flag,'N') != 'Y'
                                                     GROUP BY mp.product_name
-                                                ), 0) AS crsaleamtwithoutdisc
+                                                ), 0) AS crsaleamtwithoutdisc,
+                                                 COALESCE((
+                                                    SELECT SUM(ROUND(tcr.qty * tcr.price, 2)) 
+                                                    FROM t_credits tcr
+                                                    JOIN m_product mp ON tcr.product_id = mp.product_id
+                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
+                                                    WHERE tcr.closing_id IN (:closing_id)
+                                                    AND mp.product_name = a.product_code
+                                                    AND COALESCE(mcl.card_flag,'N') = 'Y'
+                                                    GROUP BY mp.product_name
+                                                ), 0) AS cardsales
                                          from
                                           (select mp.pump_code,
                                                 mp.product_code ,
@@ -151,19 +165,15 @@ module.exports = {
                         ROUND(SUM(a.cash_amt), 2) AS oil_cash,
                         ROUND(SUM(a.credit_amt), 2) AS oil_credit
                         FROM
-                        (
-                            -- Subquery 1: Calculate cash_amt for 'DSR - OIL'
+                        (                            -- Subquery 1: Calculate cash_amt for 'DSR - OIL'
                             SELECT 
-                                (tc.given_qty - tc.returned_qty) * mp.price AS cash_amt,
+                                (tc.given_qty - tc.returned_qty) * (select price from m_product where product_name = 'DSR - OIL' and location_code = mp.location_code)                                
+                                AS cash_amt,
                                 0 AS credit_amt
-                            FROM
-                                t_2toil tc
-                            JOIN
-                                m_product mp ON mp.product_name = 'DSR - OIL' 
-                                AND mp.location_code = 'MC2'
-                            WHERE
-                                tc.closing_id in (:closing_id)
-
+                            FROM  t_2toil tc,m_product mp 
+                            WHERE tc.closing_id in (:closing_id)
+                            AND mp.product_id = tc.product_id
+                            AND UPPER(mp.product_name) = '2T LOOSE'
                             UNION ALL
                             -- Subquery 2: Calculate cash_amt for '2T POUCH'
                             SELECT 
@@ -258,7 +268,7 @@ module.exports = {
                                               from t_credits tc,m_credit_list mcl,m_product mp 
                                               where tc.creditlist_id = mcl.creditlist_id
                                               and   tc.product_id = mp.product_id
-											  and   mcl.card_flag = 'Y'
+											                        and   COALESCE(mcl.card_flag,'N') = 'Y'
                                               and   tc.closing_id in (:closing_id)
                                               order by tc.bill_no`,
         {
@@ -273,6 +283,68 @@ module.exports = {
     return result;
 
     },
+    getcardsalesSummary: async (locationCode, reportDate) => {
+      const data =  await module.exports.getclosingid(locationCode,reportDate);
+      const closing_id = data.map(item => item.closing_id);
+      
+  const result = await db.sequelize.query(
+      `select tc.creditlist_id,COALESCE (mcl.short_name,mcl.company_name) name,round(sum(tc.amount),2) amt
+                                            from t_credits tc,m_credit_list mcl 
+                                            where tc.creditlist_id = mcl.creditlist_id                                           
+                                            and   mcl.card_flag = 'Y'
+                                            and   tc.closing_id in (:closing_id)
+                                            group by tc.creditlist_id,COALESCE (mcl.short_name,mcl.company_name)`,
+      {
+      replacements: { closing_id: closing_id}, 
+      type: Sequelize.QueryTypes.SELECT
+      }
+
+
+  );
+  
+  
+  return result;
+
+  },
+  getCashsales: async (locationCode, reportDate) => {
+    const data =  await module.exports.getclosingid(locationCode,reportDate);
+    const closing_id = data.map(item => item.closing_id);
+    
+const result = await db.sequelize.query(
+    `select mp.product_name,sum(tc.qty) qty,tc.price,tc.qty*tc.price_discount discount,sum(amount) amt
+                                              from t_cashsales tc,m_product mp 
+                                              where 1=1
+                                              and   tc.product_id = mp.product_id
+                                              and   tc.closing_id in (:closing_id)
+                                              group by mp.product_name,tc.price,discount
+                                              union all
+                                              select mp.product_name product_name,sum((given_qty-returned_qty)) qty,(select price from m_product where product_name = 'DSR - OIL' and location_code = mp.location_code ) price,0,sum((given_qty-returned_qty)*(select price from m_product where product_name = 'DSR - OIL' and location_code = mp.location_code )) amt 
+                                             from t_2toil tc,
+                                                  m_product mp
+                                            where tc.product_id = mp.product_id
+                                            and upper(mp.product_name) = '2T LOOSE'
+                                            and tc.closing_id in (:closing_id)
+                                            group by mp.product_name,price
+                                            union all
+                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,mp.price,0,sum((given_qty-returned_qty)*mp.price) amt 
+                                               from t_2toil tc,
+                                                    m_product mp
+                                              where tc.product_id = mp.product_id
+                                              and upper(mp.product_name) = '2T POUCH'
+                                              and tc.closing_id in (:closing_id)
+                                              group by mp.product_name,mp.price`,
+    {
+    replacements: { closing_id: closing_id}, 
+    type: Sequelize.QueryTypes.SELECT
+    }
+
+
+);
+
+
+return result;
+
+},
     getexpenses: async (locationCode, reportDate) => {
         const data =  await module.exports.getclosingid(locationCode,reportDate);
         const closing_id = data.map(item => item.closing_id);
@@ -374,6 +446,8 @@ module.exports = {
           mper.Person_Name AS person_name,        
           DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date_formatted,
           CALCULATE_EXSHORTAGE(tc.closing_id) AS ex_short,
+          (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id =tc.closing_id and toil.product_id = mp.product_id
+          and upper(mp.product_name) = '2T LOOSE' ) loose,
           ${caseStatements}
         FROM 
           t_closing tc
