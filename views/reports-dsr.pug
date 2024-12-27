@@ -18,28 +18,28 @@ block content
             var shiftSummaryFromServer = !{JSON.stringify(shiftSummaryList)}
             var cashFlowFromServer = !{JSON.stringify(Cashflowstmtlist)}
             var denomResultFromServer = !{JSON.stringify(DenomResult)}
-            var bankTransactionFromServer = !{JSON.stringify(bankTransactionlist)}
+            var bankTransactionFromServer = !{JSON.stringify(bankTransactionlist)}       
+            
+            
 
-        
-            
-            
-            
-            function isNumeric(value) {
-                return !isNaN(parseFloat(value)) && isFinite(value);
-                }
-           
             
             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
+
+                   // Check if the array is empty
+                    if (array.length === 0) {
+                        return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";  // Just return a simple message if no data
+                    }
+
                 var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
-                        result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>"; // Card header
+                        result += "<div class='card-header text-center font-weight-bold' >"+tabletitle+"</div>"; // Card header
                         result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
-                        result += "<table class='table table-bordered table-sm' style='width: 100%;'>";                                       
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table                                       
                 
                  // If the array is not empty, add headers from the keys of the first object
                 if (array.length > 0 && typeof array[0] === 'object') {
                     result += "<thead class='thead-light text-center'><tr>";
                     Object.keys(array[0]).forEach(key => {                       
-                        result += "<th>" + key + "</th>";
+                        result += "<th style='border: 1px solid #000;'>" + key + "</th>"; // Darker border for headers
                     });
                     result += "</tr></thead>";
                 }
@@ -82,10 +82,10 @@ block content
                                                                 maximumFractionDigits:2	
                                                             }).format(dataValue); 
 
-                            result += "<td class='" + rowClass + " text-right'>" +printedValue + "</td>";                                                        
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>"; // Darker border for cells                                                    
                         }
                         else
-                            result += "<td class='" + rowClass + " text-left'>" +dataValue + "</td>";
+                            result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
                      });
                     result += "</tr>";
                 }
@@ -101,7 +101,7 @@ block content
                  var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
                         result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>"; // Card header
                         result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
-                        result += "<table class='table table-bordered table-sm' style='width: 100%;'>"; 
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table
                         result += "<tbody>"; 
 
                 
@@ -110,7 +110,7 @@ block content
                 
                 Object.keys(array[0]).forEach(key => {
                    
-                                result += "<tr><td class='font-weight-bold' style='background-color: #f7f7f7;'>" + key + "</td>"; // First column with bold text and grey background
+                                result += "<td class='font-weight-bold' style='background-color: #f7f7f7; border: 1px solid #000;'>" + key + "</td>"; // Bold first column with grey background
 
                                 array.forEach((item, index) => {
                                     let rowClass = ''; // Default row class (no styling)
@@ -143,7 +143,7 @@ block content
 
 
                             // Add the value to the table cell with the appropriate class
-                            result += "<td class='" + rowClass + " text-right'>" + itemValue + "</td>"; // Data for each column
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + (itemValue || '') + "</td>";
                         });
 
                         result += "</tr>";
@@ -181,9 +181,9 @@ block content
                 });
                 
                
-                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)');
+                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");
-                document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Amount']);
+                document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Card Sales',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
@@ -223,7 +223,8 @@ block content
                 include report-print-download.pug
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center= "Day Close Report"                             
+        h4.font-weight-bold.text-center= "Day Close Report "                             
+        h6.font-weight-bold.text-center= "நாள் முடிவு அறிக்கை"                             
         h4.text-center.text-muted= formattedFromClosingDate
         h4.font-weight-bold.text-success.text-center                           
     if(closingData == 'Available')                
@@ -237,14 +238,14 @@ block content
         div.row
             div.col-md-6
                 div.row &nbsp;                
-                div(id="cardsale-table-container")        
+                div(id="cashsale-table-container")     
             div.col-md-6
                 div.row &nbsp;                
-                div(id="creditsale-table-container")
+                div(id="cardsale-table-container")       
         div.row    
             div.col-md-6
                 div.row &nbsp;                
-                div(id="cashsale-table-container")    
+                div(id="creditsale-table-container")    
             div.col-md-6  
                 div.row &nbsp;                
                 div(id="expense-table-container")

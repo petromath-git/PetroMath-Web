@@ -1,13 +1,11 @@
 extends layout
 
 block content
-    
-    form(method='POST' action='/reports-creditsummary')  
-
+    form(method='POST' action='/reports-credit-ledger')
         script.
             
             // Javascript that gets table data
-            var creditstmtFromServer = !{JSON.stringify(creditsummary)} 
+            var creditstmtFromServer = !{JSON.stringify(creditstmt)} 
 
              function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
                 var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
@@ -80,34 +78,61 @@ block content
 
             document.addEventListener('DOMContentLoaded', function() {
                
-                document.getElementById('creditsummary-table-container').innerHTML = renderTable(creditstmtFromServer,'',['Balance']);                               
+                document.getElementById('creditstmt-table-container').innerHTML = renderTable(creditstmtFromServer,'Credit Statement',['Debit','Credit']);                               
                  
             });
 
         table.center
-            tr              
-                td Date:
+            tr
+                td Date Range:
                 td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp; 
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td Company Name:
+                td
+                    select#company_id.form-control(name='company_id')
+                        if credits                           
+                            each val in credits
+                                option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 include report-print-download.pug
     div &nbsp;
     div
-        div.row &nbsp;
-        h4.font-weight-bold.text-center= "Credit Summary Report"                             
-        h4.text-center.text-muted= formattedtoDate
-        h4.font-weight-bold.text-success.text-center    
-        if creditsummary && creditsummary.length > 0                                      
+        if creditstmt && creditstmt.length > 0
+            - var companyName = creditstmt[0].companyName
+            - var cidparam = creditstmt[0].cidparam
+            div.row &nbsp;
+            h6.font-weight-bold.text-center= "Credit Ledger Account"  
+            h6.font-weight-bold.text-center.text-uppercase= companyName                 
+            h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
             div.row
+            div.col.text-right
+                h6.font-weight-bold Opening Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+            div.row &nbsp;    
+            div.row        
             div.col-md-12
                 div.row &nbsp;                
-                div(id="creditsummary-table-container") 
+                div(id="creditstmt-table-container")        
+            if(cidparam != -1)                
+                div.row
+                div.col.text-right
+                    h6.font-weight-bold Closing Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                
         else
             div.row &nbsp;
-            div.row.bg-light No records to display.
+            div.row.bg-light No Transactions.  
 
-    // Include the overlay
-    include overlay.pug                           
-                            
+        // Include the overlay
+        include overlay.pug
 
-    

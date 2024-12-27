@@ -10,6 +10,7 @@ html
         script(src='/javascripts/app-validator.js')
         script(src='/javascripts/app-generate-pdf.js',defer)
         script(src='/javascripts/app-report-date.js',defer)
+        script(src='/javascripts/app-report-table-generator.js')
         link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
         script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
         script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
@@ -52,40 +53,33 @@ html
                                         a.nav-link(href='/creditreceipts') Credit Receipts
                                     li.nav-item(class=(title === 'Tank Receipts' ? 'active' : ''))
                                         a.nav-link(href='/tankreceipts') Tank Receipts
-                                    li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
-                                        a.nav-link(href='/cashflowhome') Cash Flow
-                                    //- li.nav-item(class=(title === 'Credits' ? 'active' : ''))
-                                    //-     a.nav-link(href='/credits') Credits
-                                    //- li.nav-item(class=(title === 'Products' ? 'active' : ''))
-                                    //-     a.nav-link(href='/products') Products
-                                    li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
-                                        a.nav-link(href='/deadline') Deadline Manager
-                                    //- li.nav-item(class=(title === 'Users' ? 'active' : ''))
-                                    //-     a.nav-link(href='/users') Users
-                                    li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
-                                        a.nav-link(href='/utilities') Utilities
-                                    li.nav-item.dropdown
-                                        a.nav-link.dropdown-toggle(href='#', id='mastersDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Masters
-                                        .dropdown-menu(aria-labelledby='mastersDropdown')
-                                            a.dropdown-item(href='/users') Create Users
-                                            a.dropdown-item(href='/products') Create Products
-                                            a.dropdown-item(href='/credits') Create Credit Party                                          
+                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
+                                        a.nav-link(href='/bank-transaction') Bank Transaction    
+                                    li.nav-item(class=(title === 'Day Close:Home' || title === 'Day Close' ? 'active' : ''))
+                                        a.nav-link(href='/cashflowhome') Day Close
                                     li.nav-item.dropdown
                                         a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
                                         .dropdown-menu(aria-labelledby='reportsDropdown')
                                             a.dropdown-item(href='/reports-dsr') Day-Close Report
                                             a.dropdown-item(href='/reports-cashflow') CashFlow Report
+                                            a.dropdown-item(href='/reports-credit-ledger') Credit Ledger Account
                                             a.dropdown-item(href='/reports') Credit Customer Report
-                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report
-                                        //    a.dropdown-item(href='/reports-dsr') DSR Report
-                                        //    a.dropdown-item(href='/reports-cashflow') Cashflow Report
+                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report                                   
+                                    li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
+                                        a.nav-link(href='/deadline') Deadline Manager
                                     li.nav-item.dropdown
                                         a.nav-link.dropdown-toggle(href='#', id='truckDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Truck Management
                                         .dropdown-menu(aria-labelledby='truckDropdown')
                                             a.dropdown-item(href='/truck-load') Truck Load
-                                            a.dropdown-item(href='/truck-expense') Truck Expense
-                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
-                                        a.nav-link(href='/bank-transaction') Bank Transaction
+                                            a.dropdown-item(href='/truck-expense') Truck Expense                                    
+                                    li.nav-item.dropdown
+                                        a.nav-link.dropdown-toggle(href='#', id='mastersDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Masters
+                                        .dropdown-menu(aria-labelledby='mastersDropdown')
+                                            a.dropdown-item(href='/users') Create Users
+                                            a.dropdown-item(href='/products') Create Products
+                                            a.dropdown-item(href='/credits') Create Credit Party
+                                    li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
+                                        a.nav-link(href='/utilities') Utilities
                             // Right-aligned user details and logout
                             ul.navbar-nav.ml-auto                                
                                 li.nav-item

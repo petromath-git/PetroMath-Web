@@ -8,7 +8,22 @@ const Sequelize = require("sequelize");
 module.exports = {
 
 
-   
+    getDayClose: async (locationCode, reportDate) =>{
+        const result = await db.sequelize.query(`SELECT cashflow_id
+                                                    FROM   t_cashflow_closing tc
+                                                    WHERE  tc.location_code = :locationCode
+                                                        AND Date(tc.cashflow_date) = :reportDate
+                                                        AND closing_status = 'CLOSED' `,                                                   
+                                                        {
+                                                            replacements: { locationCode: locationCode, reportDate: reportDate },
+                                                            type: Sequelize.QueryTypes.SELECT
+                                                          }
+    
+           );
+           return result;
+    
+       },
+
     getclosingid: async (locationCode, reportDate) =>{
     const result = await db.sequelize.query(`SELECT closing_id
                                                 FROM   t_closing tc
@@ -371,15 +386,45 @@ return result;
     getstockreceipt: async (locationCode, reportDate) => {
         
         const result = await db.sequelize.query(
-            `select tr.fomratted_decant_date decant_date,tr.decant_time,
-                                                tr.truck_number,tr.odometer_reading,tr.driver,tr.helper,tr.decant_incharge,
-                                                CONCAT(coalesce(tr.MS,0),'+',coalesce(tr.HSD,0),'+',coalesce(tr.XMS,0),'+',coalesce(tr.GD,0),'+',coalesce(tr.E20,0)) product
-                                                ,tr.invoice_number,tr.amount invoice_amount
-                                                from t_tank_receipt_v tr,t_tank_stk_rcpt tts 
-                                                where 1=1
-                                                and tr.location_code = :location_code
-                                                and tr.ttank_id = tts.ttank_id
-                                                and  DATE(tts.cashflow_date) = :cashflow_date`,
+            
+              ` SELECT 
+                                  DATE_FORMAT(tts.invoice_date, '%d-%m-%Y') invoice_date,
+                                  tts.invoice_number,
+                                  (SELECT 
+                                          SUM(amount)
+                                      FROM
+                                          t_tank_stk_rcpt_dtl
+                                      WHERE
+                                          ttank_id = tts.ttank_id) invoice_amount,
+                                  DATE_FORMAT(tts.decant_date, '%d-%m-%Y') decant_date,
+                                  tts.decant_time,
+                                  tts.truck_number,
+                                  tts.location_code,
+                                  tts.odometer_reading,
+                                  (SELECT 
+                                          person_name
+                                      FROM
+                                          m_persons
+                                      WHERE
+                                          person_id = driver_id) driver,
+                                  (SELECT 
+                                          person_name
+                                      FROM
+                                          m_persons
+                                      WHERE
+                                          person_id = helper_id) helper,
+                                  (SELECT 
+                                          person_name
+                                      FROM
+                                          m_persons
+                                      WHERE
+                                          person_id = decant_incharge) decant_incharge,
+                                          0 product
+                              FROM
+                                  t_tank_stk_rcpt tts
+                              WHERE
+                                  tts.cashflow_date = :cashflow_date
+                              AND tts.location_code = :location_code`    ,                              
             {
             replacements: {location_code:locationCode,cashflow_date: reportDate}, 
             type: Sequelize.QueryTypes.SELECT

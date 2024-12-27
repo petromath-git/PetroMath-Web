@@ -24,13 +24,16 @@ module.exports = {
         htmlContent = await reportsController.getCreditSummaryReport(req, res, next);
         } else if (req.body.reportType == 'CreditDetails')
         {
-        htmlContent = await reportsController.getCreditReport(req, res, next);
+           htmlContent = await reportsController.getCreditReport(req, res, next);
         }else if (req.body.reportType == 'DSR')
         {
             htmlContent = await dsrReportsController.getdsrReport(req, res, next);
         }else if (req.body.reportType == 'CashFlow')
         {
             htmlContent = await cashflowReportsController.getCashFlowReport(req, res, next);
+        }else if (req.body.reportType == 'Creditledger')
+        {
+             htmlContent = await reportsController.getCreditReport(req, res, next);
         }
 
 
@@ -41,22 +44,17 @@ module.exports = {
                                                     body {
                                                         font-family: "Segoe UI", "Arial", "Times New Roman", serif;
                                                         font-size: 16px;
-                                                    }
-                                                   /* Include your updated styles here */
-                                                    body {
-                                                        font-family: "Segoe UI", "Arial", "Times New Roman", serif;
-                                                        font-size: 16px;
-                                                    }
+                                                    }                                                   
                                       /* General table styling */
                                       table {
                                           width: 100%;
                                           border-collapse: collapse;
-                                          border: 1px solid #ddd;
+                                          border: 2px solid #000;
                                           page-break-inside: avoid; /* Prevent table from breaking across pages */
-                                          margin-bottom: 20px; /* Optional: Adds space below tables */
+                                          margin-bottom: 10px; /* Optional: Adds space below tables */
                                       }
                                       th, td {
-                                          border: 1px solid #ddd;
+                                          border: 2px solid #000;
                                           padding: 8px;
                                           text-align: left;
                                       }
@@ -79,6 +77,8 @@ module.exports = {
                                   
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
 
+                console.log(htmlContent);
+
              
 
 
@@ -87,24 +87,7 @@ module.exports = {
         const page = await browser.newPage();
         await page.setContent(htmlContent);
         await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
-
-		//	await page.addStyleTag({
-		//				      content: `
-		//				      @font-face {
-		//				      font-family: 'Roboto';
-		//				      font-style: normal;
-		//				      font-weight: 400;
-		//				      src: local('Roboto'), local('Roboto-Regular'), url(https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu7GxKOzY.woff2) format('woff2');
-		//				      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
-		//				    }
-		//					  `
-		//				});
-
-
-
-
-
-
+       
        
 
         await page.evaluate(() => {
@@ -128,7 +111,7 @@ module.exports = {
             const tds = document.querySelectorAll('td');
             
             tds.forEach(td => {
-                if (td.textContent.trim() === 'Date:') {  // Replace 'Specific Text' with the text you're looking for
+                if (td.textContent.trim() === 'Date:') {  
                 td.remove();
                 }
              });
@@ -161,7 +144,7 @@ module.exports = {
             format: 'A4',              // Set paper format
             printBackground: true,     // Include background styles
             displayHeaderFooter: true,
-            headerTemplate: `<div style="font-size: 12px; text-align: center; width: 100%;">
+            headerTemplate: `<div style="font-size: 16px; text-align: center; width: 100%;">
                                 <strong>${locationDetails.location_name}</strong><br>
                                 ${locationDetails.address}
                                 <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>

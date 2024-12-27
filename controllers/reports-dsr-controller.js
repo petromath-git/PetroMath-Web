@@ -40,12 +40,14 @@ module.exports = {
       let bankTransactionlist = [];     
       let renderData = {};
 
-      // First check if there is any closing records for the dat 
+      // First check if there is any closing records for the date 
       const closingPromise= await DsrReportDao.getclosingid(locationCode, fromDate);
+
+      const dayClosePromise= await DsrReportDao.getDayClose(locationCode, fromDate);
 
       
 
-      if(closingPromise && closingPromise.length > 0)
+      if(dayClosePromise && dayClosePromise.length>0 && closingPromise && closingPromise.length > 0)
       {
 
       // Fetch readings and sales summary concurrently
@@ -151,15 +153,19 @@ module.exports = {
         
       });
 
-      console.log('totalOilCash'+totalOilCash);
-      console.log('totalOilCredit'+totalOilCredit);
+      const formatter = new Intl.NumberFormat('en-IN', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+        });
+
+        const grandTotal = totalCash + totalOilCash + totalCard + totalCredit + totalOilCredit;
 
               // Add totals to the collection list
-        Collectionlist.push({
-         // Product: "Total",
-          Cash: (totalCash+totalOilCash).toFixed(2), 
-          Credit: (totalCredit+totalOilCredit).toFixed(2),
-          Card: totalCard.toFixed(2)
+        Collectionlist.push({         
+          Cash: `${formatter.format(totalCash + totalOilCash)} (${((totalCash + totalOilCash) / grandTotal * 100).toFixed(2)}%)`,
+          Card: `${formatter.format(totalCard)} (${(totalCard / grandTotal * 100).toFixed(2)}%)`,
+          Credit: `${formatter.format(totalCredit + totalOilCredit)} (${((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2)}%)`
         });
 
         let totalCreditSales = 0;
