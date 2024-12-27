@@ -334,6 +334,32 @@ app.post('/reports', isLoginEnsured, function (req, res, next) {
 });
 
 
+app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
+    let locationCode = req.user.location_code;
+    let credits = [];
+    req.body.caller = 'notpdf';
+    req.body.reportType = 'Creditledger';
+
+    CreditDao.findAll(locationCode)
+        .then(data => {
+            data.forEach((credit) => {
+                credits.push({
+                    id: credit.creditlist_id,
+                    name: credit.Company_Name
+                });
+            });
+
+            res.render('reports-credit-ledger', { title: 'Reports', user: req.user, credits: credits });
+
+        });
+});
+
+app.post('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'Creditledger';
+    reportsController.getCreditReport(req, res, next);
+});
+
+
 app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
     req.body.toClosingDate = new Date(Date.now());

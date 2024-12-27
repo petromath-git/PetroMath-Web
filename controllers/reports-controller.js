@@ -14,7 +14,14 @@ module.exports = {
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
        // let cname = req.body.company_name;
         let cid = req.body.company_id;
-        let caller = req.body.caller;   
+        let caller = req.body.caller;
+        let reportType = req.body.reportType;
+        let route = 'reports';
+
+        if (reportType == 'Creditledger'){
+          route = 'reports-credit-ledger';
+        }
+
         
         if(req.body.fromClosingDate) {
           fromDate =req.body.fromClosingDate;
@@ -45,22 +52,33 @@ module.exports = {
 
               const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
 
-              
+            if(reportType == 'Creditledger'){
+              data1.forEach((creditstmtData) => {
+                Creditstmtlist.push({
+                Date: dateFormat(creditstmtData.tran_date,"dd-mm-yyyy"),                                
+                "Bill No/Receipt No.": creditstmtData.bill_no,
+                companyName: creditstmtData.company_name,                
+                Debit:creditstmtData.product_name !== null ? creditstmtData.amount : null,
+                Credit:creditstmtData.product_name === null ? creditstmtData.amount : null,           
+                Narration: creditstmtData.notes
+                });
+              });  
+            }
+            else {  
               data1.forEach((creditstmtData) => {
                                 Creditstmtlist.push({
-                                tranDate: dateFormat(creditstmtData.tran_date,"dd-mm-yyyy"),
-                                locationCode: creditstmtData.location_code,
-                                billno: creditstmtData.bill_no,
+                                Date: dateFormat(creditstmtData.tran_date,"dd-mm-yyyy"),                                
+                                "Bill No/Receipt No.": creditstmtData.bill_no,
                                 companyName: creditstmtData.company_name,
-                                productName: creditstmtData.product_name,
-                                price: creditstmtData.price,
-                                price_discount: creditstmtData.price_discount,
-                                quantity: creditstmtData.qty,
-                                amount: creditstmtData.amount,
-                                notes: creditstmtData.notes                                
+                                Product: creditstmtData.product_name,
+                                Price: creditstmtData.price,
+                                "Price Discount": creditstmtData.price_discount,
+                                Qty: creditstmtData.qty,
+                                Amount: creditstmtData.amount,
+                                Narration: creditstmtData.notes                                
                             });
                         });
-
+            }
                         const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
                         const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
                         
@@ -81,12 +99,12 @@ module.exports = {
                       }
 
                     if(caller=='notpdf') {
-                    res.render('reports',renderData);
+                    res.render(route,renderData);
                     }else
                     {                
                 
                       return new Promise((resolve, reject) => {
-                        res.render('reports',renderData,
+                        res.render(route,renderData,
                            (err, html) => {
                             if (err) {
                               console.error('getCreditSummaryReport: Error in res.render:', err);
@@ -117,26 +135,35 @@ module.exports = {
          toDate = closingDate.toISOString().slice(0, 10); // remove the timestamp.
        }   
 
-       let Creditsummarylist=[];
+       const Creditsummarylist = [];
+          let serialNumber = 1;  // Initialize serial number counter
 
-       const data = await ReportDao.getDayBalance(locationCode, toDate);
-       data.forEach((creditSummaryData) => {
-        Creditsummarylist.push({
-          'CreditParty': creditSummaryData.company_name,
-          'Outstanding': creditSummaryData.ClosingData
-        });
-      });        
+          const data = await ReportDao.getDayBalance(locationCode, toDate);
+
+          data.forEach((creditSummaryData) => {
+            // Check if ClosingData is not between -10 and 10
+            if (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) {
+              Creditsummarylist.push({
+                'S.no': serialNumber++,  // Increment serial number
+                'Credit Customer': creditSummaryData.company_name,
+                'Balance': creditSummaryData.ClosingData
+              });
+            }
+          });
+
+          const formattedtoDate = moment(toDate).format('DD/MM/YYYY');
+                        
 
        if(caller=='notpdf') {          
                       
-                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate, creditsummary: Creditsummarylist});
+                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate,formattedtoDate:formattedtoDate, creditsummary: Creditsummarylist});
                  
                   
           } else
           {                
                 
                 return new Promise((resolve, reject) => {
-                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate, creditsummary: Creditsummarylist},
+                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate,formattedtoDate:formattedtoDate, creditsummary: Creditsummarylist},
                      (err, html) => {
                       if (err) {
                         console.error('getCreditSummaryReport: Error in res.render:', err);

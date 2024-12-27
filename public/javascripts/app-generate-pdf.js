@@ -20,6 +20,11 @@ function generatePDF(currentPage,isPrint = 'N') {
     } else if (currentPage.includes('reports-dsr')){
         requestBody.reportType = 'DSR';
         requestBody.fromClosingDate = document.getElementById('fromClosingDate').value;       
+    } else if (currentPage.includes('reports-credit-ledger')) {
+        requestBody.reportType = 'Creditledger';
+        requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
+        requestBody.toClosingDate = document.getElementById('toclosingDate').value;
+        requestBody.company_id = document.getElementById('company_id').value;
     } else if (currentPage.includes('reports')) {
         requestBody.reportType = 'CreditDetails';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
