@@ -25,6 +25,10 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;
         requestBody.company_id = document.getElementById('company_id').value;
+    }  else if (currentPage.includes('reports-gst-summary')) {
+        requestBody.reportType = 'GstSummary';
+        requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
+        requestBody.toClosingDate = document.getElementById('toclosingDate').value;        
     } else if (currentPage.includes('reports')) {
         requestBody.reportType = 'CreditDetails';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;

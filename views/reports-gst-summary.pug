@@ -1,0 +1,145 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-gst-summary')
+        script.
+            
+            // Javascript that gets table data
+            var purchaseSummaryFromServer = !{JSON.stringify(purchaseTransactionlist)}   
+
+            function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
+
+                   // Check if the array is empty
+                    if (array.length === 0) {
+                        return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";  // Just return a simple message if no data
+                    }
+
+                var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
+                        result += "<div class='card-header text-center font-weight-bold' >"+tabletitle+"</div>"; // Card header
+                        result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table                                       
+                
+                 // If the array is not empty, add headers from the keys of the first object
+                if (array.length > 0 && typeof array[0] === 'object') {
+                    result += "<thead class='thead-light text-center'><tr>";
+                    Object.keys(array[0]).forEach(key => {                       
+                        result += "<th style='border: 1px solid #000;'>" + key + "</th>"; // Darker border for headers
+                    });
+                    result += "</tr></thead>";
+                }
+            
+                // Loop through the array to build table rows
+                result += "<tbody>";
+                
+                for (var i = 0; i < array.length; i++) {
+
+
+
+                    let rowClass = '';  // Default row class (no styling)
+
+                    // Check if it's the last row and contains "Total"
+                    if (i === array.length - 1) {
+                        // Check if it's the last row and contains "Total" or "Excess"
+                        let isTotalRow = Object.values(array[i]).some(value => value && 
+                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                         );
+
+                        if (isTotalRow) {
+                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
+                        }
+                    }
+
+
+                    result += "<tr>";                   
+                     Object.keys(array[i]).forEach(key => {
+                        let dataValue = array[i][key];   
+
+                     
+                     
+                       // Check if the current column should be formatted as a number
+                        if (numberColumns.includes(key) && dataValue !== "" &&!isNaN(dataValue))
+                        {
+                         
+                            printedValue = new Intl.NumberFormat('en-IN', {
+                                                                style: 'decimal',                                                                
+                                                                minimumFractionDigits:2,
+                                                                maximumFractionDigits:2	
+                                                            }).format(dataValue); 
+
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>"; // Darker border for cells                                                    
+                        }
+                        else
+                            result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
+                     });
+                    result += "</tr>";
+                }
+                result += "</tbody>";
+                result += "</table>";
+                result += "</div>"; // Close card body
+                result += "</div>"; // Close card container
+                return result;
+            }
+
+   
+
+            document.addEventListener('DOMContentLoaded', function() {             
+               
+            
+                    let resultHtml = ""; // Variable to store the generated HTML
+
+                    // Loop through each bank account group
+                    Object.keys(purchaseSummaryFromServer).forEach(Product => {
+                        const transactions = purchaseSummaryFromServer[Product];
+
+                        // Use the existing renderTable function
+                        resultHtml += renderTable(
+                            transactions, 
+                            `${Product}`, // Title for each account
+                            ["Amount"] ,// Columns to format as number
+                            "col-sm-8 mx-auto"
+                        );
+                    });
+
+                
+                document.getElementById('PurchaseSummary-table-container').innerHTML = resultHtml
+            });
+
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month',selected=true) This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom') Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                include report-print-download.pug
+    div 
+        div.row &nbsp;
+        h4.font-weight-bold.text-center= "GST Fuel Purchase Summary "                                                                
+        h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
+        h4.font-weight-bold.text-success.text-center                           
+    if(purchaseTransactionlist)                
+        div.row        
+            div.col-md-12
+                div.row &nbsp;                                             
+                div(id="PurchaseSummary-table-container")        
+            div.col-md-12
+                div.row &nbsp;               
+                div(id="SalesSummary-table-container")       
+    else
+        div.row &nbsp;
+        div.row.bg-light No Transactions.
+
+    // Include the overlay
+    include overlay.pug                         

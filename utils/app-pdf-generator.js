@@ -4,6 +4,7 @@ const path = require('path');
 const reportsController = require("../controllers/reports-controller");
 const cashflowReportsController = require("../controllers/reports-cashflow-controller");
 const dsrReportsController = require("../controllers/reports-dsr-controller");
+const gstReportsController = require("../controllers/reports-gst-summary-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 
@@ -34,6 +35,9 @@ module.exports = {
         }else if (req.body.reportType == 'Creditledger')
         {
              htmlContent = await reportsController.getCreditReport(req, res, next);
+        }else if (req.body.reportType == 'GstSummary')
+        {
+            htmlContent = await gstReportsController.getgstsummaryReport(req, res, next);
         }
 
 
