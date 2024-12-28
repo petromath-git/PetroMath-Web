@@ -46,7 +46,7 @@ block content
                 thead(class="thead-light")
                     tr
                         th Date                        
-                        th BillNo                      
+                        th Bill No/Receipt No.                      
                         th ProductName
                         th.text-right Price
                         th.text-right PriceDiscount
@@ -63,14 +63,14 @@ block content
                             td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
                     each val in creditstmt
                         tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                            td(scope="row")= val.tranDate                            
-                            td(scope="row")= val.billno                            
-                            td(scope="row")= val.productName
-                            td.text-right(scope="row")= val.price
-                            td.text-right(scope="row")= val.price_discount
-                            td.text-right(scope="row")= val.quantity
-                            td.text-right(scope="row") #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.amount)}
-                            td(scope="row")= val.notes
+                            td(scope="row")= val.Date                            
+                            td(scope="row")= val['Bill No/Receipt No.']                            
+                            td(scope="row")= val.Product
+                            td.text-right(scope="row")= val.Price
+                            td.text-right(scope="row")= val['Price Discount']
+                            td.text-right(scope="row")= val.Qty
+                            td.text-right(scope="row") #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Amount)}
+                            td(scope="row")= val.Narration
                     if(cidparam != -1)
                         tr  
                             - for (let i = 0; i < 5; ++i) {

@@ -85,6 +85,7 @@ const utilitiesController = require("./controllers/utilities-controller");
 const reportsController = require("./controllers/reports-controller");
 const cashflowReportsController = require("./controllers/reports-cashflow-controller");
 const dsrReportsController = require("./controllers/reports-dsr-controller");
+const gstsummaryreportsController = require("./controllers/reports-gst-summary-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
@@ -314,6 +315,7 @@ app.get('/home', isLoginEnsured, function (req, res, next) {
 
 app.get('/reports', isLoginEnsured, function (req, res, next) {
     let locationCode = req.user.location_code;
+    req.body.reportType = 'CreditDetails';
     let credits = [];
     CreditDao.findAll(locationCode)
         .then(data => {
@@ -330,6 +332,7 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
 });
 
 app.post('/reports', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'CreditDetails';
     reportsController.getCreditReport(req, res, next);
 });
 
@@ -357,6 +360,15 @@ app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
 app.post('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
     req.body.reportType = 'Creditledger';
     reportsController.getCreditReport(req, res, next);
+});
+
+app.get('/reports-gst-summary', isLoginEnsured, function (req, res, next) {   
+    req.body.caller = 'notpdf';
+    gstsummaryreportsController.getgstsummaryReport(req, res, next);
+});
+
+app.post('/reports-gst-summary', isLoginEnsured, function (req, res, next) {    
+    gstsummaryreportsController.getgstsummaryReport(req, res, next);
 });
 
 

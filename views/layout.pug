@@ -28,8 +28,14 @@ html
         //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
         //-         return formattedInteger + '.' + decimal;
         //-     }
-
-        
+         // Add custom styles here
+        style.
+            .nav-item.active .nav-link {
+                color: #fff;
+                background-color: #004085;
+                font-weight: bold;
+            }            
+                    
     - var isFreezedRecord = false;    
     if(closingData && closingData.closingStatus === 'CLOSED')
         - isFreezedRecord = true;
@@ -55,16 +61,16 @@ html
                                         a.nav-link(href='/tankreceipts') Tank Receipts
                                     li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
                                         a.nav-link(href='/bank-transaction') Bank Transaction    
-                                    li.nav-item(class=(title === 'Day Close:Home' || title === 'Day Close' ? 'active' : ''))
+                                    li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
                                         a.nav-link(href='/cashflowhome') Day Close
                                     li.nav-item.dropdown
                                         a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
                                         .dropdown-menu(aria-labelledby='reportsDropdown')
-                                            a.dropdown-item(href='/reports-dsr') Day-Close Report
-                                            a.dropdown-item(href='/reports-cashflow') CashFlow Report
+                                            a.dropdown-item(href='/reports-dsr') Day-Close Report                                            
                                             a.dropdown-item(href='/reports-credit-ledger') Credit Ledger Account
-                                            a.dropdown-item(href='/reports') Credit Customer Report
-                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report                                   
+                                            a.dropdown-item(href='/reports') Credit Customer Detail Report
+                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report 
+                                            a.dropdown-item(href='/reports-gst-summary') GST Summary Report                                                                               
                                     li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
                                         a.nav-link(href='/deadline') Deadline Manager
                                     li.nav-item.dropdown
