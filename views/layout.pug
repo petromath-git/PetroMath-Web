@@ -28,14 +28,8 @@ html
         //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
         //-         return formattedInteger + '.' + decimal;
         //-     }
-         // Add custom styles here
-        style.
-            .nav-item.active .nav-link {
-                color: #fff;
-                background-color: #004085;
-                font-weight: bold;
-            }            
-                    
+
+        
     - var isFreezedRecord = false;    
     if(closingData && closingData.closingStatus === 'CLOSED')
         - isFreezedRecord = true;
@@ -69,6 +63,7 @@ html
                                             a.dropdown-item(href='/reports-dsr') Day-Close Report                                            
                                             a.dropdown-item(href='/reports-credit-ledger') Credit Ledger Account
                                             a.dropdown-item(href='/reports') Credit Customer Detail Report
+                                            a.dropdown-item(href='/reports-digital-recon') Digital Reconciliation Report
                                             a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report 
                                             a.dropdown-item(href='/reports-gst-summary') GST Summary Report                                                                               
                                     li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
