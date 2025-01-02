@@ -18,7 +18,8 @@ block content
             var shiftSummaryFromServer = !{JSON.stringify(shiftSummaryList)}
             var cashFlowFromServer = !{JSON.stringify(Cashflowstmtlist)}
             var denomResultFromServer = !{JSON.stringify(DenomResult)}
-            var bankTransactionFromServer = !{JSON.stringify(bankTransactionlist)}       
+            var bankTransactionFromServer = !{JSON.stringify(bankTransactionlist)}   
+            var fuelTankStocklistFromServer = !{JSON.stringify(FuelTankStocklist)}    
             
             
 
@@ -182,7 +183,7 @@ block content
                 
                
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Cash Sales']);
-                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");
+                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Card Sales',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
@@ -190,6 +191,7 @@ block content
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
                 document.getElementById('creditreceipt-table-container').innerHTML = renderTable(creditReceiptFromServer,'Customer Receipt',['Amount']);
+                document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
                 document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
                 document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Denomination Amount','Excess/Shortage'],"col-sm-8 mx-auto");
@@ -259,7 +261,11 @@ block content
         div.row
             div.col-md-12
                 div.row &nbsp;                
-                div(id="creditreceipt-table-container")          
+                div(id="creditreceipt-table-container") 
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="fuelstock-table-container")                  
         div.row
             div.col-md-12
                 div.row &nbsp;                
