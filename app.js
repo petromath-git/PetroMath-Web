@@ -86,6 +86,7 @@ const reportsController = require("./controllers/reports-controller");
 const cashflowReportsController = require("./controllers/reports-cashflow-controller");
 const dsrReportsController = require("./controllers/reports-dsr-controller");
 const gstsummaryreportsController = require("./controllers/reports-gst-summary-controller");
+const digitalReconreportsController = require("./controllers/reports-digital-recon-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
@@ -320,10 +321,12 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
     CreditDao.findAll(locationCode)
         .then(data => {
             data.forEach((credit) => {
-                credits.push({
-                    id: credit.creditlist_id,
-                    name: credit.Company_Name
-                });
+                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
             });
 
             res.render('reports', { title: 'Reports', user: req.user, credits: credits });
@@ -346,10 +349,12 @@ app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
     CreditDao.findAll(locationCode)
         .then(data => {
             data.forEach((credit) => {
-                credits.push({
-                    id: credit.creditlist_id,
-                    name: credit.Company_Name
-                });
+                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
             });
 
             res.render('reports-credit-ledger', { title: 'Reports', user: req.user, credits: credits });
@@ -360,6 +365,44 @@ app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
 app.post('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
     req.body.reportType = 'Creditledger';
     reportsController.getCreditReport(req, res, next);
+});
+
+
+app.get('/reports-digital-recon', isLoginEnsured, function (req, res, next) {
+    let locationCode = req.user.location_code;
+    let credits = [];
+    req.body.caller = 'notpdf';
+
+    // Fetch data asynchronously
+    CreditDao.findAll(locationCode)
+        .then(data => {
+            data.forEach(credit => {
+                console.log(`${credit.Company_Name}  ${credit.card_flag}`);
+                if (credit.card_flag === 'Y') {
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
+            });
+
+            // Render the response after processing the credits
+            console.log('Processed credits:', credits);
+            res.render('reports-digital-recon', {
+                title: 'Digital Reconciliation Report',
+                user: req.user,
+                credits: credits
+            });
+        })
+        .catch(error => {
+            // Handle errors gracefully
+            console.error('Error fetching credits:', error);
+            res.status(500).send('Internal Server Error');
+        });
+});
+
+app.post('/reports-digital-recon', isLoginEnsured, function (req, res, next) {   
+    digitalReconreportsController.getDigitalReconReport(req, res, next);
 });
 
 app.get('/reports-gst-summary', isLoginEnsured, function (req, res, next) {   
