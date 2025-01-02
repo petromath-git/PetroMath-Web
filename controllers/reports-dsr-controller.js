@@ -37,8 +37,10 @@ module.exports = {
       let creditReceiptList = [];
       let shiftSummaryList = [];            
       let Denomlist = [];  
-      let bankTransactionlist = [];     
+      let bankTransactionlist = [];  
+      let FuelTankStocklist= [];   
       let renderData = {};
+      
 
       // First check if there is any closing records for the date 
       const closingPromise= await DsrReportDao.getclosingid(locationCode, fromDate);
@@ -67,6 +69,7 @@ module.exports = {
       const cashFlowTransPromise =  CashFlowReportDao.getCashflowTrans(locationCode, fromDate);
       const bankTransPromise =  CashFlowReportDao.getBankTransaction(locationCode, fromDate);
       const cashFlowDenomPromise =  CashFlowReportDao.getCashfowDenomination(locationCode, fromDate);
+      const fuelTankStockPromise =  DsrReportDao.getfuelstock(locationCode, fromDate);
       
       
 
@@ -74,7 +77,7 @@ module.exports = {
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
              cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
-             cashflowData,denomData,bankTranData] = await Promise.all([readingsPromise, 
+             cashflowData,denomData,bankTranData,fuelTankStockData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 oilCollectionPromise,
@@ -88,7 +91,8 @@ module.exports = {
                                                                                                 shiftSummaryPromise,
                                                                                                 cashFlowTransPromise,                                                                                                
                                                                                                 cashFlowDenomPromise,
-                                                                                                bankTransPromise
+                                                                                                bankTransPromise,
+                                                                                                fuelTankStockPromise
                                                                                               ]);
 
       // Process readings data
@@ -406,6 +410,27 @@ module.exports = {
           acc[transaction.bank_account].push(transaction);
           return acc;
         }, {});
+
+
+        fuelTankStockData.forEach((tankStock) => {        
+          FuelTankStocklist.push({
+             Tank: tankStock.tank,
+             'Opening Stock': tankStock.opening,
+             Receipts: tankStock.offtake,
+             'Nozzle Flow': tankStock.sales,
+             Testing: tankStock.testing,
+             'Sales': tankStock.sales - tankStock.testing,
+             'Closing Stock': tankStock.closing,
+          });
+        });
+
+     
+        // Debug statements
+          console.log('Debug: Original data length:', fuelTankStockData.length);
+          console.log('Debug: Processed list length:', FuelTankStocklist.length);
+          console.log('Debug: First item in original data:', fuelTankStockData[0]);
+          console.log('Debug: First item in processed list:', FuelTankStocklist[0]);
+          console.log('Debug: Full processed list:', JSON.stringify(FuelTankStocklist, null, 2));
  
       
         const formattedFromClosingDate = moment(fromDate).format('DD/MM/YYYY (dddd)');
@@ -431,6 +456,7 @@ module.exports = {
         Cashflowstmtlist: Cashflowstmtlist,
         DenomResult: resultList,
         bankTransactionlist: groupedTransactions,
+        FuelTankStocklist: FuelTankStocklist,
       }
     }else
     {

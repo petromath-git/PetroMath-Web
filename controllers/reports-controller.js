@@ -35,13 +35,15 @@ module.exports = {
         let closingBal;
         let renderData = {};
 
-        CreditDao.findAll(locationCode)
-            .then(data => {
+         CreditDao.findAll(locationCode)
+              .then(data => {
                 data.forEach((credit) => {
+                  if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
                     credits.push({
-                        id: credit.creditlist_id,
-                        name: credit.Company_Name
+                      id: credit.creditlist_id,
+                      name: credit.Company_Name
                     });
+                  }
                 });
               });
                 

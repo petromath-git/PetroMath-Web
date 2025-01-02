@@ -5,6 +5,7 @@ const reportsController = require("../controllers/reports-controller");
 const cashflowReportsController = require("../controllers/reports-cashflow-controller");
 const dsrReportsController = require("../controllers/reports-dsr-controller");
 const gstReportsController = require("../controllers/reports-gst-summary-controller");
+const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 
@@ -39,44 +40,63 @@ module.exports = {
         {
             htmlContent = await gstReportsController.getgstsummaryReport(req, res, next);
         }
+        else if (req.body.reportType == 'DigitalRecon')
+        {
+                htmlContent = await digitalReconreportsController.getDigitalReconReport(req, res, next);
+        }
 
 
                                    // Apply page break styles to the HTML content
                 const pageBreakStyles = `
-                                                  <style>
-                                                   /* Include your updated styles here */
-                                                    body {
-                                                        font-family: "Segoe UI", "Arial", "Times New Roman", serif;
-                                                        font-size: 16px;
-                                                    }                                                   
-                                      /* General table styling */
-                                      table {
-                                          width: 100%;
-                                          border-collapse: collapse;
-                                          border: 2px solid #000;
-                                          page-break-inside: avoid; /* Prevent table from breaking across pages */
-                                          margin-bottom: 10px; /* Optional: Adds space below tables */
-                                      }
-                                      th, td {
-                                          border: 2px solid #000;
-                                          padding: 8px;
-                                          text-align: left;
-                                      }
-                                      tr {
-                                          page-break-inside: avoid; /* Prevent rows from breaking across pages */
-                                      }
-                                      thead {
-                                          display: table-header-group; /* Ensure headers are on the same page as the content */
-                                      }
-                                      tfoot {
-                                          display: table-footer-group; /* Ensure footers are on the same page as the content */
-                                      }
+                                           <style>
+                                        body {
+                                            font-family: "Segoe UI", "Arial", "Times New Roman", serif;
+                                            font-size: 16px;
+                                            margin: 0;
+                                            padding: 0;
+                                        }
 
-                                      /* Prevent breaking cards (if using cards around tables) */
-                                      .card {
-                                          page-break-inside: avoid;
-                                     }                                     
-                                  </style>
+                                        /* Card styling */
+                                        .card {
+                                            page-break-inside: avoid;
+                                            margin-bottom: 10px;
+                                            border: 1px solid rgba(0,0,0,.125);
+                                        }
+
+                                        .card-header {
+                                            padding: 0.75rem 1.25rem;
+                                            background-color: rgba(0,0,0,.03);
+                                            border-bottom: 1px solid rgba(0,0,0,.125);
+                                        }
+
+                                        .card-body {
+                                            padding: 1.25rem;
+                                        }
+
+                                        /* Table styling */
+                                        table {
+                                            width: 100%;
+                                            border-collapse: collapse;
+                                            border: 2px solid #000;
+                                            margin-bottom: 0; /* Remove bottom margin from table */
+                                        }
+
+                                        th, td {
+                                            border: 2px solid #000;
+                                            padding: 8px;
+                                            text-align: left;
+                                        }
+
+                                        thead {
+                                            display: table-header-group;
+                                        }
+
+                                        tbody {
+                                            display: table-row-group;
+                                        }
+                                       
+                                       
+                                    </style>
                                   `;
                                   
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
@@ -145,34 +165,28 @@ module.exports = {
   
 
         const pdfBuffer = await page.pdf({
-            format: 'A4',              // Set paper format
-            printBackground: true,     // Include background styles
+            format: 'A4',
+            printBackground: true,
             displayHeaderFooter: true,
-            headerTemplate: `<div style="font-size: 16px; text-align: center; width: 100%;">
-                                <strong>${locationDetails.location_name}</strong><br>
-                                ${locationDetails.address}
-                                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
-                            </div>`,
+            headerTemplate: `<div style="font-size: 16px; text-align: center; width: 100%; margin-bottom: 20px;">
+                <strong>${locationDetails.location_name}</strong><br>
+                ${locationDetails.address}
+                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
+            </div>`,
             footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
-                                <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
-                                <span>This is a computer-generated document. Generated on: ${currentDateTime}</span>                              
-                                <br>
-                                <span style="font-size: 9px;">© ${currentYear} petromath.co.in</span>
-                                <br>
-                                <span style="font-size: 9px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-                            </div>`,
-            // margin: {                  // Add margins
-            //     top: '20mm',
-            //     bottom: '20mm',
-            //     left: '10mm',
-            //     right: '10mm',                
-            // }
-             margin: {
-                top: '100px',
-                bottom: '60px', // Space for the footer
-                left: '10mm',
-                right: '10mm',
-              },
+                <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
+                <span>This is a computer-generated document. Generated on: ${currentDateTime}</span>                              
+                <br>
+                <span style="font-size: 9px;">© ${currentYear} petromath.co.in</span>
+                <br>
+                <span style="font-size: 9px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+            </div>`,
+            margin: {
+                top: '120px',    // Increased from 80px to give more space for header
+                bottom: '90px',  // Increased from 60px to give more space for footer
+                left: '20px',
+                right: '20px'
+            }
         });
 
       

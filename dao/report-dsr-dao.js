@@ -517,6 +517,78 @@ return result;
             
             return result;
         
+    },
+    getfuelstock: async (locationCode, reportDate) => {
+        console.log('ibsdie getfuelstock ')
+        
+        const result = await db.sequelize.query(            
+              ` SELECT 
+                            (SELECT 
+                                    tank_code
+                                FROM
+                                    m_tank
+                                WHERE
+                                    tank_id = a.tank_id) tank,
+                            GET_TANK_OPENING_STOCK(a.tank_id, a.closing_date) opening,
+                            (SELECT 
+                                    COALESCE(SUM(ttd.quantity * 1000), 0)
+                                FROM
+                                    t_tank_stk_rcpt_dtl ttd,
+                                    t_tank_stk_rcpt ttsr
+                                WHERE
+                                    ttd.tank_id = a.tank_id
+                                        AND ttsr.ttank_id = ttd.ttank_id
+                                        AND ttsr.decant_date >= a.closing_date
+                                        AND ttsr.decant_date <= a.closing_date) offtake,
+                            (SELECT 
+                                    SUM(tr.closing_reading - tr.opening_reading)
+                                FROM
+                                    t_reading tr,
+                                    t_closing tc,
+                                    m_pump_tank mpt
+                                WHERE
+                                    tc.location_code = mpt.location_code
+                                        AND tc.closing_date = a.closing_date
+                                        AND tc.closing_id = tr.closing_id
+                                        AND tr.pump_id = mpt.pump_id
+                                        AND mpt.tank_id = a.tank_id) sales,
+                            (SELECT 
+                                    SUM(tr.testing)
+                                FROM
+                                    t_reading tr,
+                                    t_closing tc,
+                                    m_pump_tank mpt
+                                WHERE
+                                    tc.location_code = mpt.location_code
+                                        AND tc.closing_date = a.closing_date
+                                        AND tc.closing_id = tr.closing_id
+                                        AND tr.pump_id = mpt.pump_id
+                                        AND mpt.tank_id = a.tank_id) testing,
+                            GET_TANK_CLOSING_STOCK(a.tank_id, a.closing_date) closing
+                        FROM
+                            (SELECT 
+                                mpt.tank_id, tc.closing_date, mpt.location_code
+                            FROM
+                                t_reading tr
+                            JOIN t_closing tc ON tr.closing_id = tc.closing_id
+                            JOIN m_pump_tank mpt ON tr.pump_id = mpt.pump_id
+                            WHERE
+                                DATE(tc.closing_date) = :stock_date
+                                    AND mpt.location_code = :location_code
+                            GROUP BY mpt.tank_id , tc.closing_date , mpt.location_code) a`    ,                              
+            {
+            replacements: {location_code:locationCode,stock_date: reportDate}, 
+            type: Sequelize.QueryTypes.SELECT }
+         );
+         // Proper debugging of results
+        //  console.log('Debug: Query completed');
+        //  console.log('Debug: Result type:', typeof result);
+        //  console.log('Debug: Is array?', Array.isArray(result));
+        //  console.log('Debug: Result length:', result ? result.length : 'null/undefined');
+        //  console.log('Debug: Full result:', JSON.stringify(result, null, 2));
+
+        return result;
+
     }      
 
 
