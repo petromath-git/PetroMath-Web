@@ -9,6 +9,7 @@ module.exports = function(sequelize, DataTypes) {
         },
         location_code: DataTypes.STRING,
         Company_Name: DataTypes.STRING,
+        card_flag: DataTypes.STRING,
         type: DataTypes.STRING,
         address: DataTypes.STRING,
         phoneno: DataTypes.STRING,
