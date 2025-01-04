@@ -93,6 +93,8 @@ const bankAccountController = require("./controllers/bankaccount-mgmt-controller
 const dashBoardController = require("./controllers/dashboard-controller");
 const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
+const tankDipController = require("./controllers/tank-dip-controller");
+
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
@@ -706,6 +708,27 @@ app.post('/deadline', [isLoginEnsured, security.isAdmin()], function (req, res, 
 app.put('/deadline/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     deadlineController.updateDeadlineData(req, res);
 
+});
+
+// Add these routes with your other route definitions
+app.get('/tank-dip', isLoginEnsured, function(req, res, next) {
+    tankDipController.getTankDipEntry(req, res, next);
+});
+
+app.post('/tank-dip', isLoginEnsured, function(req, res, next) {
+    tankDipController.saveTankDipData(req, res, next);
+});
+
+app.delete('/tank-dip', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    tankDipController.deleteTankDip(req, res, next);
+});
+
+app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
+    tankDipController.searchDips(req, res, next);
+});
+
+app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
+    tankDipController.validateDip(req, res);
 });
 
 // error handler - start.

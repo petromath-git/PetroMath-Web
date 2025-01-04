@@ -187,6 +187,7 @@ module.exports = {
            Product: creditSales.product_name,
            Rate: creditSales.price,
            Quantity: creditSales.qty,
+           Discount: creditSales.discount,
            Amount: creditSales.amt
         });
       });
@@ -198,6 +199,7 @@ module.exports = {
         Product: '-',
         Rate: '-',
         Quantity: '-',
+        Discount: '-',
         Amount: totalCreditSales 
       });
 
@@ -217,7 +219,7 @@ module.exports = {
            Amount: cardSales.amt
         });
       });
-      
+
        // Push the total amount after the loop
        CardSalelist.push({
         'Bill No': 'Total',
