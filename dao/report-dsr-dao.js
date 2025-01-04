@@ -255,7 +255,7 @@ module.exports = {
         const closing_id = data.map(item => item.closing_id);
         
     const result = await db.sequelize.query(
-        `select tc.bill_no,COALESCE (mcl.short_name,mcl.company_name) name,mp.product_name,tc.price,tc.qty,round(tc.amount,2) amt
+        `select tc.bill_no,COALESCE (mcl.short_name,mcl.company_name) name,mp.product_name,tc.price,tc.qty,round((tc.price_discount*tc.qty),2) discount,round(tc.amount,2) amt
                                                 from t_credits tc,m_credit_list mcl,m_product mp 
                                                 where tc.creditlist_id = mcl.creditlist_id
                                                 and   tc.product_id = mp.product_id

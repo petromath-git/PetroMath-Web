@@ -109,6 +109,11 @@ module.exports = {
   TXN_ATTENDANCE_TABLE: "t_attendance",
   TXN_DEADLINE: "t_deadline",
   TXN_DEADLINE_VIEWS: "t_deadline_v",
+  PUMP_TANK_TABLE: "m_pump_tank",
+  TXN_TANK_DIP: "t_tank_dip",
+  TXN_TANK_READING: "t_tank_reading",
+
+
 
   // App timezone
   //TIMEZONE: '-07:00', // PST timezone - for writing to database

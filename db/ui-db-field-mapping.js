@@ -142,4 +142,15 @@ module.exports = {
         };
         return data;
     },
+    newTankDip : function(req) {
+        return {
+            tank_id: req.body.tank_id,
+            dip_date: req.body.dip_date,
+            dip_time: req.body.dip_time,
+            dip_reading: req.body.dip_reading,
+            location_code: req.user.location_code,
+            created_by: req.user.User_Name,
+            creation_date: new Date()
+        };
+    },
 }

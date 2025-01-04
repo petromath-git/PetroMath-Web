@@ -1,5 +1,6 @@
 const db = require("../db/db-connection");
 const Tank = db.tank;
+const PumpTank = db.pump_tank;
 const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
@@ -23,7 +24,7 @@ module.exports = {
     findActiveTanks: (locationCode) => {
 		if (locationCode) {
             return Tank.findAll({
-                attributes: ['tank_id','tank_code','product_code'],
+                attributes: ['tank_id','tank_code','product_code','tank_orig_capacity','dead_stock'],
                 where: { [Op.and]: [
                     {'location_code': locationCode},
                     {'effective_start_date': {[Op.lte] : utils.currentDate()}},

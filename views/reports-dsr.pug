@@ -184,7 +184,7 @@ block content
                
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
-                document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Amount']);
+                document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Card Sales',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");

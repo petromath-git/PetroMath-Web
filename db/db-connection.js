@@ -99,4 +99,10 @@ db.txn_deadline.belongsTo(db.location, {foreignKey: 'location_id'});
 db.location.hasMany(db.txn_deadline_views, {foreignKey: 'location_id'});
 db.txn_deadline_views.belongsTo(db.location, {foreignKey: 'location_id'});
 
+// Add these with your other model imports
+db.pump_tank = require("./pump-tank")(sequelize, Sequelize);
+db.tank_dip = require("./txn-tank-dip")(sequelize, Sequelize);
+db.tank_reading = require("./txn-tank-reading")(sequelize, Sequelize);
+
+
 module.exports = db;
