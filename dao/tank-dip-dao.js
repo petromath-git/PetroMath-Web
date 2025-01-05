@@ -132,6 +132,33 @@ function TankDipDao() {
         
     };
 
+    this.getLatestPumpReadings = async function(tank_id) {
+        try {
+            const result = await db.sequelize.query(
+                `SELECT tr.pump_id, tr.reading, p.pump_code, p.pump_make  
+                 FROM t_tank_reading tr
+                 JOIN t_tank_dip td ON tr.tdip_id = td.tdip_id
+                 JOIN m_pump p ON tr.pump_id = p.pump_id
+                 WHERE td.tank_id = :tank_id
+                 AND td.tdip_id = (
+                     SELECT tdip_id 
+                     FROM t_tank_dip 
+                     WHERE tank_id = :tank_id 
+                     ORDER BY dip_date DESC, dip_time DESC 
+                     LIMIT 1
+                 )`,
+                {
+                    replacements: { tank_id: tank_id },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return result;
+        } catch (error) {
+            console.error("Error getting latest pump readings:", error);
+            throw error;
+        }
+    };
+
     this.delete = async function(tdip_id) {
         return await db.sequelize.transaction(async (t) => {
             // Delete tank readings first
