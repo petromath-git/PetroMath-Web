@@ -104,5 +104,14 @@ db.pump_tank = require("./pump-tank")(sequelize, Sequelize);
 db.tank_dip = require("./txn-tank-dip")(sequelize, Sequelize);
 db.tank_reading = require("./txn-tank-reading")(sequelize, Sequelize);
 
+db.tank_dipchart_header = require("./tank-dipchart-header")(sequelize, Sequelize);
+db.tank_dipchart_lines = require("./tank-dipchart-lines")(sequelize, Sequelize);
+
+// Add these relationships
+db.tank_dipchart_header.hasMany(db.tank_dipchart_lines, {foreignKey: 'dipchartid'});
+db.tank_dipchart_lines.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
+
+db.tank_dipchart_header.hasMany(db.tank, {foreignKey: 'dipchartid'});
+db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
 
 module.exports = db;

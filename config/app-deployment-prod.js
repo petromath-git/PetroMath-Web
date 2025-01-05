@@ -9,7 +9,7 @@ module.exports = {
   DB: process.env.DB_NAME || "petrolpumpv1",
   DIALECT: process.env.DB_DIALECT || "mysql",
   pool: {
-    max: 1,
+    max: 10,
     min: 0,
     acquire: 30000,
     idle: 10000,

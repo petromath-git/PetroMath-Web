@@ -18,6 +18,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'company_name',
             type: DataTypes.STRING,
         },
+        creditlist_id: {
+            field: 'creditlist_id',
+            type: DataTypes.INTEGER
+        },
         product_name: {
             field: 'product_name',
             type: DataTypes.STRING,

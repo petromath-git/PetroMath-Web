@@ -18,7 +18,8 @@ module.exports = function(sequelize, DataTypes) {
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,
         updation_date: DataTypes.DATE,
-        dead_stock: DataTypes.DECIMAL
+        dead_stock: DataTypes.DECIMAL,
+        dipchartid: DataTypes.INTEGER,
     }, {
         timestamps: false,
         freezeTableName: true

@@ -14,6 +14,23 @@ exports.getTankDipEntry = async function (req, res, next) {
         // Get active tanks
         const tanks = await TankDao.findActiveTanks(locationCode);
         
+       // Process each tank to include expanded dip chart       
+       const tanksWithExpandedCharts = tanks.map(tank => {
+        if (tank.m_tank_dipchart_header && tank.m_tank_dipchart_header.m_tank_dipchart_lines) {
+            const expandedLines = calculateIntermediateDipCm(tank.m_tank_dipchart_header.m_tank_dipchart_lines);
+            
+            // Create a new tank object with the expanded dip chart
+            return {
+                ...tank,  // Spread the existing tank properties
+                m_tank_dipchart_header: {
+                    ...tank.m_tank_dipchart_header,
+                    m_tank_dipchart_lines: expandedLines
+                }
+            };
+        }
+        return tank;
+    });
+        
         // Get active pumps
         const pumps = await PumpDao.findPumps(locationCode);
         
@@ -45,16 +62,22 @@ exports.getTankDipEntry = async function (req, res, next) {
         // Convert the groupedDips object to an array
         const dipsWithReadings = Object.values(groupedDips);
 
-        
+        // Get the last readings for each tank's pumps
+        const lastReadings = {};
+        for (const tank of tanks) {
+            const readings = await TankDipDao.getLatestPumpReadings(tank.tank_id);
+            lastReadings[tank.tank_id] = readings;
+        }        
 
         
         res.render('tank-dip', {
             title: 'Tank Dip Entry',
             user: req.user,
-            tanks: tanks,
+            tanks: tanksWithExpandedCharts,
             pumps: pumps,
             pumpTankMappings: pumpTankMappings,
             existingDips: dipsWithReadings,
+            lastReadings: lastReadings,
             searchDate: today
         });
     } catch (error) {
@@ -242,3 +265,49 @@ exports.validateDip = async function (req, res) {
         });
     }
 };
+
+function calculateIntermediateDipCm(dipChartLines) {
+    let result = [];
+    
+    const sortedLines = [...dipChartLines].sort((a, b) => 
+        parseFloat(a.dip_cm) - parseFloat(b.dip_cm)
+    );
+
+    for (let i = 0; i < sortedLines.length - 1; i++) {
+        const currentLine = sortedLines[i];
+        const nextLine = sortedLines[i + 1];
+        
+        // Add the base reading (e.g., 1.0 cm = 11.97 liters)
+        let lastVolume = parseFloat(currentLine.volume_liters);
+        const diffPerMm = parseFloat(currentLine.diff_liters_mm);
+        const baseDipCm = parseFloat(currentLine.dip_cm);
+
+        result.push({
+            dip_cm: baseDipCm.toFixed(1),
+            volume_liters: lastVolume.toFixed(2),
+            diff_liters_mm: diffPerMm.toFixed(2)
+        });
+
+        // Generate intermediate values
+        for (let j = 1; j <= 9; j++) {
+            const newDipCm = baseDipCm + (j * 0.1);
+            lastVolume = lastVolume + diffPerMm;  // Add diff_liters_mm for each 0.1 cm
+
+            result.push({
+                dip_cm: newDipCm.toFixed(1),
+                volume_liters: lastVolume.toFixed(2),
+                diff_liters_mm: diffPerMm.toFixed(2)
+            });
+        }
+    }
+
+    // Add the last line
+    const lastLine = sortedLines[sortedLines.length - 1];
+    result.push({
+        dip_cm: parseFloat(lastLine.dip_cm).toFixed(1),
+        volume_liters: parseFloat(lastLine.volume_liters).toFixed(2),
+        diff_liters_mm: parseFloat(lastLine.diff_liters_mm).toFixed(2)
+    });
+    
+    return result;
+}

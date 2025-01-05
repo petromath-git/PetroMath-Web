@@ -56,6 +56,7 @@ $(document).ready(function() {
     });
 });
 
+
 function updateTankInfo(tankId) {
     if (!tankId) {
         $('#tankInfo, #connectedPumpsSection, #noPumpsMessage').hide();
@@ -71,9 +72,40 @@ function updateTankInfo(tankId) {
         $('#deadStock').text(`${tank.dead_stock} liters`);
         $('#tankInfo').show();
 
+        // Update dip reading dropdown
+        const dipSelect = $('#dip_reading');
+        dipSelect.empty();
+        dipSelect.append('<option value="">-- Select Dip Value --</option>');
+
+        if (tank.m_tank_dipchart_header && tank.m_tank_dipchart_header.m_tank_dipchart_lines) {
+            tank.m_tank_dipchart_header.m_tank_dipchart_lines.forEach(line => {
+                dipSelect.append(`
+                    <option value="${line.dip_cm}" 
+                            data-volume="${line.volume_liters}">
+                        <strong>${line.dip_cm}</strong> cm (${line.volume_liters} liters)
+                    </option>
+                `);
+            });
+        }
+
+        // Handle dip selection change
+        dipSelect.off('change').on('change', function() {
+            const selectedOption = $(this).find('option:selected');
+            const volume = selectedOption.data('volume');
+            if (volume) {
+                // You could display volume information if needed
+                console.log(`Selected dip corresponds to ${volume} liters`);
+            }
+        });
+
         updatePumpReadings(tankId);
     }
 }
+
+
+
+
+
 
 function updatePumpReadings(tankId) {
     console.log('tankId'+tankId)
@@ -86,21 +118,26 @@ function updatePumpReadings(tankId) {
     }
 
     $('#pumpReadingsContainer').empty();
-    console.log(connectedPumps)
+
     connectedPumps.forEach(pump => {  
-       
+        const lastReading = lastReadings[tankId]?.find(r => r.pump_id === pump.pump_id);
         const pumpHtml = `
             <div class="col-md-4 mb-3">
                 <div class="form-group">
-                    <label>${pump.pump_code} (${pump.pump_make})</label>
+                    <label>${pump.pump_code} (${pump.pump_make})
+                      ${lastReading ? 
+                            `<span class="text-muted ml-2">Last: ${lastReading.reading}</span>` : 
+                            ''}
+                    </label>
                     <input
                         type="number"
                         name="pump_reading_${pump.pump_id}"
-                        class="form-control"
+                        class="form-control form-control-sm pump-reading-input"
                         step="0.001"
                         min="0"
+                        ${lastReading?.reading ? `data-last="${lastReading.reading}"` : ''}
                         value="${pump.reading || ''}"  // Ensure the value is set correctly
-                        required
+                        required                        
                     >
                 </div>
             </div>
@@ -109,16 +146,55 @@ function updatePumpReadings(tankId) {
         $('#pumpReadingsContainer').append(pumpHtml);
     });
 
+
+      // Handle immediate validation on pump reading change
+    $(document).off('change', '.pump-reading-input').on('change', '.pump-reading-input', function() {
+        validatePumpReading(this);
+    });
+
     $('#connectedPumpsSection').show();
     $('#noPumpsMessage').hide();
 }
 
-async function validateAndSubmit() {
-    const tankId = $('#tank_id').val();
-    const dipDate = $('#dip_date').val();
-    const dipTime = $('#dip_time').val();
 
+function validatePumpReading(input) {
+    const lastReading = parseFloat($(input).attr('data-last')) || 0;
+    const currentReading = parseFloat($(input).val()) || 0;
+    
+    console.log('Validating pump reading:', {
+        lastReading,
+        currentReading,
+        inputName: $(input).attr('name')
+    });
+
+    if (lastReading > 0 && currentReading < lastReading) {
+        alert(`New reading (${currentReading}) must be greater than the last reading (${lastReading})`);
+        $(input).val('');
+        $(input).focus();
+        return false;
+    }
+    return true;
+}
+
+
+
+
+
+// Consolidated validation and submit function
+async function validateAndSubmit() {
     try {
+        // Basic field validation
+        const tankId = $('#tank_id').val();
+        const dipDate = $('#dip_date').val();
+        const dipTime = $('#dip_time').val();
+        const dipReading = $('#dip_reading').val();
+
+        if (!tankId || !dipDate || !dipTime || !dipReading) {
+            alert('Please fill all required fields');
+            return;
+        }
+
+        // Duplicate check
         const response = await $.get('/tank-dip/validate', {
             tank_id: tankId,
             dip_date: dipDate,
@@ -126,13 +202,47 @@ async function validateAndSubmit() {
         });
 
         if (response.exists) {
-            showSnackbar(response.message, 'danger');
-        } else {
-            $('#tankDipForm')[0].submit();
+            showError(response.message || 'Dip reading already exists for this time');
+            return;
         }
+
+        // Validate all pump readings
+        let pumpReadingsValid = true;
+        $('.pump-reading-input').each(function() {
+            if (!validatePumpReading(this)) {
+                pumpReadingsValid = false;
+                return false; // break the loop
+            }
+        });
+
+        if (!pumpReadingsValid) {
+            return;
+        }
+
+        // If all validations pass, submit the form
+        $('#tankDipForm')[0].submit();
+
     } catch (error) {
-        showSnackbar('Error validating dip data', 'danger');
+        console.error('Validation error:', error);
+        showError('Error validating data. Please try again.');
     }
+}
+
+// Bind the consolidated validation to form submit
+$('#tankDipForm').off('submit').on('submit', function(e) {
+    e.preventDefault();
+    validateAndSubmit();
+});
+
+function showError(message) {
+    $('#snackbar')
+        .text(message)
+        .addClass('alert alert-danger')
+        .show();
+    
+    setTimeout(() => {
+        $('#snackbar').hide();
+    }, 3000);
 }
 
 async function deleteDipReading(dipId) {
