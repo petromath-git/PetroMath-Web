@@ -17,9 +17,12 @@ module.exports = {
       try {
         
         let htmlContent = '';
-        console.log('req.user.location_code'+req.user.location_code);
+        // for reports with multilocation select first check the locationcode.
+        // if empty then select the default location
+        let location = req.body.locationCode||req.user.location_code;
+        console.log('Location '+location);
 
-        const locationDetails = await locationdao.getLocationDetails(req.user.location_code);
+        const locationDetails = await locationdao.getLocationDetails(location);
 
         if(req.body.reportType == 'CreditSummary')
         {
@@ -29,6 +32,7 @@ module.exports = {
            htmlContent = await reportsController.getCreditReport(req, res, next);
         }else if (req.body.reportType == 'DSR')
         {
+            console.log( req.body.locationCode); 
             htmlContent = await dsrReportsController.getdsrReport(req, res, next);
         }else if (req.body.reportType == 'CashFlow')
         {
@@ -101,7 +105,7 @@ module.exports = {
                                   
                 htmlContent = pageBreakStyles + htmlContent; // Add the styles before the content
 
-                console.log(htmlContent);
+               
 
              
 
@@ -168,11 +172,11 @@ module.exports = {
             format: 'A4',
             printBackground: true,
             displayHeaderFooter: true,
-            headerTemplate: `<div style="font-size: 16px; text-align: center; width: 100%; margin-bottom: 20px;">
-                <strong>${locationDetails.location_name}</strong><br>
-                ${locationDetails.address}
-                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
-            </div>`,
+            headerTemplate:`<div style="font-size: 16px; text-align: center; width: 100%; margin-bottom: 20px;">
+                                <strong>${locationDetails.location_name}</strong><br>
+                                <span style="font-size: 14px;">${locationDetails.address}</span>
+                                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
+                            </div>`,
             footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
                 <span>This is a computer-generated document. Generated on: ${currentDateTime}</span>                              
