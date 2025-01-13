@@ -1,17 +1,26 @@
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 var DsrReportDao = require("../dao/report-dsr-dao");
+var personDao = require("../dao/person-dao");
 var CashFlowReportDao = require("../dao/report-cashflow-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 const moment = require('moment');
+var locationdao = require("../dao/report-dao");
 
 
 module.exports = {
   getdsrReport: async (req, res) => {
     try {
-      let locationCode = req.user.location_code;      
+      let locationCode = req.body.locationCode||req.user.location_code;      // get from selected location.
       const caller = req.body.caller;
+      const personId = req.user.Person_id;
+
+      const locationDetails = await locationdao.getLocationDetails(locationCode);
+
+      
+
+      console.log('getdsrReport: personId:', personId);
 
 
       let fromDate = dateFormat(new Date(), "yyyy-mm-dd");   
@@ -19,11 +28,7 @@ module.exports = {
      
       if(req.body.fromClosingDate) {
         fromDate = closingDate.toISOString().slice(0, 10); // remove the timestamp.
-      }   
-
-     
-
-     
+      }        
 
       let Readingstmtlist = [];
       let SalesSummarylist = [];
@@ -39,14 +44,24 @@ module.exports = {
       let Denomlist = [];  
       let bankTransactionlist = [];  
       let FuelTankStocklist= [];   
+      let personLocations= [];
       let renderData = {};
+
+
+      const personLocationPromise =  await personDao.findUserLocations(personId);
+
+      // Process Person Location Data
+     personLocationPromise.forEach((locations) => {
+       personLocations.push({
+           'LocationCodes': locations.location_code,           
+       });
+     });
       
 
       // First check if there is any closing records for the date 
       const closingPromise= await DsrReportDao.getclosingid(locationCode, fromDate);
-
       const dayClosePromise= await DsrReportDao.getDayClose(locationCode, fromDate);
-
+     
       
 
       if(dayClosePromise && dayClosePromise.length>0 && closingPromise && closingPromise.length > 0)
@@ -92,7 +107,7 @@ module.exports = {
                                                                                                 cashFlowTransPromise,                                                                                                
                                                                                                 cashFlowDenomPromise,
                                                                                                 bankTransPromise,
-                                                                                                fuelTankStockPromise
+                                                                                                fuelTankStockPromise                                                                                                
                                                                                               ]);
 
       // Process readings data
@@ -427,12 +442,7 @@ module.exports = {
         });
 
      
-        // Debug statements
-          console.log('Debug: Original data length:', fuelTankStockData.length);
-          console.log('Debug: Processed list length:', FuelTankStocklist.length);
-          console.log('Debug: First item in original data:', fuelTankStockData[0]);
-          console.log('Debug: First item in processed list:', FuelTankStocklist[0]);
-          console.log('Debug: Full processed list:', JSON.stringify(FuelTankStocklist, null, 2));
+      
  
       
         const formattedFromClosingDate = moment(fromDate).format('DD/MM/YYYY (dddd)');
@@ -444,6 +454,9 @@ module.exports = {
         fromClosingDate: fromDate,
         formattedFromClosingDate: formattedFromClosingDate,
         closingData: 'Available', 
+        personLocations: personLocations,
+        locationName: locationDetails.location_name,
+        locationCode: locationCode,
         readinglist: Readingstmtlist,
         salessummarylist: SalesSummarylist,
         collectionlist: Collectionlist,
@@ -466,7 +479,10 @@ module.exports = {
         title: 'DSR Report',
         user: req.user,
         fromClosingDate: fromDate,
-        closingData: 'Not Available'        
+        closingData: 'Not Available',
+        personLocations: personLocations,
+        locationName: locationDetails.location_name,
+        locationCode: locationCode,        
       }
 
     }

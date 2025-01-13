@@ -160,6 +160,12 @@ block content
 
             document.addEventListener('DOMContentLoaded', function() {
 
+                   document.addEventListener('DOMContentLoaded', function() {
+                   if (personLocations.length === 1) {
+                        document.getElementById('locationCode').value = personLocations[0].LocationCodes;
+                    }
+                }); 
+
 
                 const goButton = document.getElementById('goButton');
                 const overlay = document.getElementById('loadingOverlay');
@@ -222,12 +228,20 @@ block content
                 td
                     input#fromClosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
                 td &nbsp;
+                if personLocations.length > 1
+                    td Location:
+                    td
+                        select#locationCode.form-control(name='locationCode', required)
+                            option(value='') Select Location
+                            each location in personLocations
+                                option(value=location.LocationCodes selected=(location.LocationCodes === locationCode))= location.LocationCodes                        
+                    td &nbsp;
                 include report-print-download.pug
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center= "Day Close Report "                             
-        h6.font-weight-bold.text-center= "நாள் முடிவு அறிக்கை"                             
-        h4.text-center.text-muted= formattedFromClosingDate
+        h5.text-center.text-muted= locationName
+        h4.font-weight-bold.text-center= "Day Close Report "                                                                 
+        h4.text-center.text-muted= formattedFromClosingDate                
         h4.font-weight-bold.text-success.text-center                           
     if(closingData == 'Available')                
         div.row        

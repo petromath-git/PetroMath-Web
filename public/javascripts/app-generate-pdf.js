@@ -1,3 +1,4 @@
+const { request } = require("express");
 
 function generatePDF(currentPage,isPrint = 'N') { 
 
@@ -19,7 +20,10 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.cfclosingDate = document.getElementById('cfclosingDate').value;       
     } else if (currentPage.includes('reports-dsr')){
         requestBody.reportType = 'DSR';
-        requestBody.fromClosingDate = document.getElementById('fromClosingDate').value;       
+        requestBody.fromClosingDate = document.getElementById('fromClosingDate').value; 
+        const locationCodeElement = document.getElementById('locationCode');
+        requestBody.locationCode = locationCodeElement ? locationCodeElement.value:'';  // if no location code obtained
+                                                                                        // subsequent code will use req.user.location_code
     } else if (currentPage.includes('reports-credit-ledger')) {
         requestBody.reportType = 'Creditledger';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
