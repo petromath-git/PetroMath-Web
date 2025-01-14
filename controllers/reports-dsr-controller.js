@@ -45,6 +45,8 @@ module.exports = {
       let bankTransactionlist = [];  
       let FuelTankStocklist= [];   
       let personLocations= [];
+      let productPriceList= [];
+      let monthlyOfftakeList= [];
       let renderData = {};
 
 
@@ -85,6 +87,8 @@ module.exports = {
       const bankTransPromise =  CashFlowReportDao.getBankTransaction(locationCode, fromDate);
       const cashFlowDenomPromise =  CashFlowReportDao.getCashfowDenomination(locationCode, fromDate);
       const fuelTankStockPromise =  DsrReportDao.getfuelstock(locationCode, fromDate);
+      const productPricePromise   =  DsrReportDao.getPumpPrice(locationCode, fromDate);
+      const monthlyOfftakePromise = DsrReportDao.getMonthlyOfftake(locationCode, fromDate);
       
       
 
@@ -92,7 +96,7 @@ module.exports = {
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
              cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
-             cashflowData,denomData,bankTranData,fuelTankStockData] = await Promise.all([readingsPromise, 
+             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 oilCollectionPromise,
@@ -107,8 +111,27 @@ module.exports = {
                                                                                                 cashFlowTransPromise,                                                                                                
                                                                                                 cashFlowDenomPromise,
                                                                                                 bankTransPromise,
-                                                                                                fuelTankStockPromise                                                                                                
+                                                                                                fuelTankStockPromise,
+                                                                                                productPricePromise,
+                                                                                                monthlyOfftakePromise                                                                                                
                                                                                               ]);
+
+      // Process readings data
+      productPriceData.forEach((productPrice) => {
+        productPriceList.push({
+          'Product': productPrice.product_code,
+          'Price': productPrice.price,          
+        });
+      });
+
+      monthlyOfftakeData.forEach((monthlyOfftake) => {
+        monthlyOfftakeList.push({
+          'Product': monthlyOfftake.product_code,
+          'Offtake': monthlyOfftake.monthly_Offtake,          
+        });
+      });
+
+       
 
       // Process readings data
       readingsData.forEach((readingData) => {
@@ -472,6 +495,8 @@ module.exports = {
         DenomResult: resultList,
         bankTransactionlist: groupedTransactions,
         FuelTankStocklist: FuelTankStocklist,
+        productPriceList:productPriceList,
+        monthlyOfftakeList: monthlyOfftakeList,
       }
     }else
     {
