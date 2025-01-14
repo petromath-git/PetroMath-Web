@@ -68,6 +68,43 @@ module.exports = {
       return result;
 
    },
+   getPumpPrice: async (locationCode, reportDate) => {
+
+    const data = await module.exports.getclosingid(locationCode,reportDate);
+    const closing_id = data.map(item => item.closing_id);
+
+    const result = await db.sequelize.query(`
+        SELECT DISTINCT mp.product_code, tr.price
+        FROM t_reading tr
+        JOIN m_pump mp ON tr.pump_id = mp.pump_id
+        JOIN t_closing tc ON tr.closing_id = tc.closing_id
+        WHERE mp.location_code = tc.location_code
+        AND tc.closing_id IN (:closingIds)
+        ORDER BY mp.product_code
+    `, {
+        replacements: { closingIds: closing_id },
+        type: Sequelize.QueryTypes.SELECT
+    });
+    return result;
+},
+
+getMonthlyOfftake: async (locationCode, reportDate) => {
+    const result = await db.sequelize.query(`
+        SELECT mt.product_code,
+               COALESCE(SUM(dtl.quantity), 0) AS monthly_Offtake
+        FROM t_tank_stk_rcpt rcpt
+        JOIN t_tank_stk_rcpt_dtl dtl ON rcpt.ttank_id = dtl.ttank_id
+        JOIN m_tank mt ON dtl.tank_id = mt.tank_id
+        WHERE rcpt.location_code = :location
+        AND MONTH(rcpt.decant_date) =  MONTH(DATE(:closeDate))
+        AND YEAR(rcpt.decant_date) = YEAR(DATE(:closeDate))
+        GROUP BY mt.product_code
+    `, {
+        replacements: { location: locationCode, closeDate: reportDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
+    return result;
+},
 
    getsalessummary: async (locationCode, reportDate) => {
     const data =  await module.exports.getclosingid(locationCode,reportDate);
