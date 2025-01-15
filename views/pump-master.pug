@@ -1,0 +1,226 @@
+extends layout
+
+block content
+    .container-fluid
+        .card
+            .card-header
+                h5.card-title Pump Master
+                button.btn.btn-primary.float-right.ml-2(type='button', data-toggle='modal', data-target='#addPumpTankModal')
+                    i.bi.bi-link
+                    |  Link Tank
+                button.btn.btn-primary.float-right(type='button', data-toggle='modal', data-target='#addPumpModal')
+                    i.bi.bi-plus
+                    |  Add Pump
+            .card-body
+                .table-responsive
+                    table.table.table-bordered.table-hover
+                        thead.thead-light
+                            tr
+                                th Nozzle Code
+                                th Make
+                                th Product
+                                th Opening Reading
+                                th Location
+                                th Current Stamping Date
+                                th Stamping Due
+                                th Tank
+                                th Actions
+                        tbody
+                            each pump in pumps
+                                tr
+                                    td= pump.pump_code
+                                    td= pump.pump_make
+                                    td= pump.product_code
+                                    td= pump.opening_reading
+                                    td= pump.location_code
+                                    td= new Date(pump.current_stamping_date).toLocaleDateString('en-IN')
+                                    td= new Date(pump.Stamping_due).toLocaleDateString('en-IN')
+                                    td
+                                        - const pumpMappings = pumpTankMappings.filter(mapping => mapping.pump_id === pump.pump_id)
+                                        if pumpMappings && pumpMappings.length
+                                            each mapping in pumpMappings
+                                                span.badge.badge-info.mr-1= `${mapping.tank_code} (${mapping.tank_product_code})`
+                                        else
+                                            | No tanks linked
+                                    td
+                                        button.btn.btn-info.btn-sm.me-2(
+                                            type='button'
+                                            onclick=`editPump(${pump.pump_id})`
+                                        )
+                                            i.bi.bi-pencil
+                                            |  Edit
+                                        button.btn.btn-danger.btn-sm(
+                                            type='button'
+                                            onclick=`deactivatePump(${pump.pump_id})`
+                                        )
+                                            i.bi.bi-trash
+                                            |  Delete
+
+    //- Add Pump Modal
+    #addPumpModal.modal.fade(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Pump
+                    button.btn-close(type='button', data-dismiss='modal', aria-label='Close')
+                .modal-body
+                    form#addPumpForm
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='pumpCode') Pump Code
+                                    input#pumpCode.form-control(
+                                        type='text'
+                                        name='pump_code'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group
+                                    label(for='pumpMake') Pump Make
+                                    input#pumpMake.form-control(
+                                        type='text'
+                                        name='pump_make'
+                                        required
+                                    )
+                        .row.mt-3
+                            .col-md-6
+                                .form-group
+                                    label(for='productCode') Product Code
+                                    select#productCode.form-control(name='product_code', required)
+                                        option(value='') -- Select Product --
+                                        each product in products
+                                            option(value=product)= product
+                            .col-md-6
+                                .form-group
+                                    label(for='openingReading') Opening Reading
+                                    input#openingReading.form-control(
+                                        type='number'
+                                        step='0.01'
+                                        name='opening_reading'
+                                        required
+                                    )
+                        .row.mt-3
+                            .col-md-6
+                                .form-group
+                                    label(for='stampingDate') Current Stamping Date
+                                    input#stampingDate.form-control(
+                                        type='date'
+                                        name='current_stamping_date'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group
+                                    label(for='stampingDue') Stamping Due Date
+                                    input#stampingDue.form-control(
+                                        type='date'
+                                        name='Stamping_due'
+                                        required
+                                    )
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Close
+                    button#addPumpBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save
+                        |  Save
+
+    //- Edit Pump Modal
+    #editPumpModal.modal.fade(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Pump
+                    button.btn-close(type='button', data-dismiss='modal', aria-label='Close')
+                .modal-body
+                    form#editPumpForm
+                        input#editPumpId(type='hidden', name='pump_id')
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpCode') Pump Code
+                                    input#editPumpCode.form-control(
+                                        type='text'
+                                        name='pump_code'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpMake') Pump Make
+                                    input#editPumpMake.form-control(
+                                        type='text'
+                                        name='pump_make'
+                                        required
+                                    )
+                        .row.mt-3
+                            .col-md-6
+                                .form-group
+                                    label(for='editProductCode') Product Code
+                                    select#editProductCode.form-control(name='product_code', required)
+                                        option(value='') -- Select Product --
+                                        each product in products
+                                            option(value=product)= product
+                            .col-md-6
+                                .form-group
+                                    label(for='editOpeningReading') Opening Reading
+                                    input#editOpeningReading.form-control(
+                                        type='number'
+                                        step='0.01'
+                                        name='opening_reading'
+                                        required
+                                    )
+                        .row.mt-3
+                            .col-md-6
+                                .form-group
+                                    label(for='editStampingDate') Current Stamping Date
+                                    input#editStampingDate.form-control(
+                                        type='date'
+                                        name='current_stamping_date'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group
+                                    label(for='editStampingDue') Stamping Due Date
+                                    input#editStampingDue.form-control(
+                                        type='date'
+                                        name='Stamping_due'
+                                        required
+                                    )
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Close
+                    button#updatePumpBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save
+                        |  Update
+
+    //- Add Pump-Tank Link Modal
+    #addPumpTankModal.modal.fade(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Link Pump to Tank
+                    button.btn-close(type='button', data-dismiss='modal', aria-label='Close')
+                .modal-body
+                    form#addPumpTankForm
+                        .form-group
+                            .form-group
+                                label(for='linkPumpId') Pump
+                                select#linkPumpId.form-control(name='pump_id', required)
+                                    option(value='') -- Select Pump --
+                                    each pump in pumps
+                                        option(value=pump.pump_id, data-product=pump.product_code)= `${pump.pump_code} (${pump.product_code})`
+                            .form-group
+                                label(for='linkTankId') Tank
+                                select#linkTankId.form-control(name='tank_id', required)
+                                    option(value='') -- Select Tank --
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Close
+                    button#addPumpTankBtn.btn.btn-primary(type='button')
+                        i.bi.bi-link
+                        |  Link
+
+    //- Embed data for JavaScript
+    script.
+        const pumps = !{JSON.stringify(pumps)};
+        const tanks = !{JSON.stringify(tanks)};
+        const pumpTankMappings = !{JSON.stringify(pumpTankMappings)};
+        const userLocationCode = '#{user.location_code}';
+
+    script(src="/javascripts/pump-master.js")
+    

@@ -152,6 +152,7 @@ module.exports = {
   TXN_ATTENDANCE_TABLE: "t_attendance",
   TXN_DEADLINE: "t_deadline",
   TXN_DEADLINE_VIEWS: "t_deadline_v",
+  LOGIN_LOG_TABLE: "t_login_log",
 
   // config related to sales
   APP_CONFIGS: {
@@ -173,7 +174,7 @@ module.exports = {
       cashSaleTypes: cashSaleTypes,
       cashSaleTypeCodes: cashSaleTypeCodes,
       receiptTypes: RECEIPT_TYPES,
-      adminRoles: MANAGER_ROLES + ADMIN_ROLES,
+      adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES], 
       tankQuantity: ['4','8','12','5','10'],
       productUnits: ['LIT', 'NOS'],
       decantTimelists: ['0.00','0.30','1.00','1.30','2.00','2.30','3.00','3.30','4.00','4.30','5.00','5.30','6.00','6.30','7.00','7.30',

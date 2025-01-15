@@ -123,13 +123,11 @@ module.exports = {
                 },
                 order: [Sequelize.literal('tank_code ASC')]
             })
-            .then(tanks => {
-                console.log("Raw tanks data:", JSON.stringify(tanks, null, 2));
+            .then(tanks => {              
     
                 return tanks.map(tank => {
                     // Early return if no dip chart data
-                    if (!tank.m_tank_dipchart_header || !tank.m_tank_dipchart_header.m_tank_dipchart_lines) {
-                        console.log(`No dip chart data for tank ${tank.tank_id}`);
+                    if (!tank.m_tank_dipchart_header || !tank.m_tank_dipchart_header.m_tank_dipchart_lines) {                       
                         return tank;
                     }
     
