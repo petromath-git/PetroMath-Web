@@ -20,21 +20,39 @@ const { getPDF } = require('./utils/app-pdf-generator');
 // Passport - configuration - start....
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
+
+
 passport.use(new LocalStrategy(
     function (username, password, done) {
         Person.findOne({ where: { 'User_name': username } })
-            .then(data => {
-                if (data && password === (data.Password)) {
-                    let now = new Date();
-                    const today_date = dateFormat(now, "yyyy-mm-dd");
-                    if (data.effective_end_date > today_date) {
-                        var userInfo = new UserData(data, security.isAdminChk(data));
-                        done(null, userInfo);
+            .then(async data => {
+                try {
+                    if (data && password === (data.Password)) {
+                        let now = new Date();
+                        const today_date = dateFormat(now, "yyyy-mm-dd");
+                        
+                        if (data.effective_end_date > today_date) {
+                            var userInfo = new UserData(data, security.isAdminChk(data));
+                            done(null, userInfo);
+                        } else {
+                            // We'll log disabled account in the route handler
+                            done(null, false, { 
+                                message: `${data.User_Name} Your User Account is Disabled`,
+                                Person_id: data.Person_id,
+                                location_code: data.location_code
+                            });
+                        }
                     } else {
-                        done(null, false, { message: `${data.User_Name} Your User Account is Disabled` });
+                        // We'll log failed login in the route handler
+                        done(null, false, { 
+                            message: 'User name or password is incorrect',
+                            Person_id: data ? data.Person_id : null,
+                            location_code: data ? data.location_code : null
+                        });
                     }
-                } else {
-                    done(null, false, { message: 'User name or password is incorrect' });
+                } catch (err) {
+                    console.warn("err in app :::: " + err + err.toString());
+                    done(null, false, { message: err.toString() });
                 }
             })
             .catch(err => {
@@ -70,6 +88,8 @@ const Person = db.person;
 const ProductDao = require("./dao/product-dao");
 const PersonDao = require("./dao/person-dao");
 var CreditDao = require("./dao/credits-dao");
+const LoginLogDao = require("./dao/login-log-dao");
+
 db.sequelize.sync();
 // ORM DB - end
 
@@ -94,6 +114,7 @@ const dashBoardController = require("./controllers/dashboard-controller");
 const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
 const tankDipController = require("./controllers/tank-dip-controller");
+const pumpController = require("./controllers/pump-controller");
 
 
 const flash = require('express-flash');
@@ -496,6 +517,14 @@ app.delete('/remove-credit-sale', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnCreditSale(req, res, next);  // response returned inside controller
 });
 
+app.post('/new-digital-sales', isLoginEnsured, function (req, res, next) {
+    HomeController.saveDigitalSalesData(req, res, next);  // response returned inside controller
+});
+
+app.delete('/remove-digital-sale', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
+});
+
 app.post('/new-expenses', isLoginEnsured, function (req, res, next) {
     HomeController.saveExpensesData(req, res, next);
 });
@@ -528,12 +557,71 @@ app.get('/login', function (req, res) {
     res.render('login', { title: 'Login' });
 });
 
-app.post('/login', function (req, res, next) {
-    passport.authenticate('local', {
-        successRedirect: '/home',
-        failureRedirect: '/login',
-        failureFlash: true
-    })(req, res, req.body.username, req.body.password, next);
+// app.post('/login', function (req, res, next) {
+//     passport.authenticate('local', {
+//         successRedirect: '/home',
+//         failureRedirect: '/login',
+//         failureFlash: true
+//     })(req, res, req.body.username, req.body.password, next);
+// });
+
+app.post('/login', function(req, res, next) {
+    passport.authenticate('local', async function(err, user, info) {
+        if (err) { 
+            return next(err); 
+        }
+        
+        // Capture request info
+        const loginInfo = {
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'],
+            attempted_username: req.body.username  // Capture the attempted username
+        };
+
+        if (!user) {
+            // Log failed login attempt
+            try {
+                await LoginLogDao.create({
+                    Person_id: info.Person_id || null,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'failed',
+                    failure_reason: info.message,
+                    location_code: info.location_code || null,
+                    created_by: 'SYSTEM'
+                });
+            } catch (error) {
+                console.error("Error logging failed login:", error);
+            }
+            
+            req.flash('error', info.message);
+            return res.redirect('/login');
+        }
+
+        req.logIn(user, async function(err) {
+            if (err) { 
+                return next(err); 
+            }
+
+            // Log successful login after successful authentication
+            try {
+                await LoginLogDao.create({
+                    Person_id: user.Person_id,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'success',
+                    location_code: user.location_code,
+                    created_by: user.Person_id.toString()
+                });
+            } catch (error) {
+                console.error("Error logging login:", error);
+            }
+
+            return res.redirect('/home');
+        });
+    })(req, res, next);
 });
 
 app.get('/changepwd', isLoginEnsured, function (req, res) {
@@ -729,6 +817,33 @@ app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
 
 app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
     tankDipController.validateDip(req, res);
+});
+
+
+
+app.post('/pumps', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.savePump(req, res, next);
+});
+
+app.put('/pumps/:id', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    console.log('User attempting pump update:', req.user);
+    pumpController.updatePump(req, res, next);
+});
+
+app.get('/pump-master', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.getPumpMaster(req, res, next);
+});
+
+app.put('/pumps/:id/deactivate', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.deactivatePump(req, res, next);
+});
+
+app.post('/pump-tanks', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.savePumpTank(req, res, next);
+});
+
+app.get('/pump-tanks/validate', [isLoginEnsured, security.isAdmin()], function(req, res) {
+    pumpController.validatePumpTank(req, res);
 });
 
 // error handler - start.

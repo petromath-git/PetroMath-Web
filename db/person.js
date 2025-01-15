@@ -4,7 +4,7 @@ const config = require("../config/app-config");
 module.exports = function(sequelize, DataTypes) {
     var Person = sequelize.define(config.PERSON_TABLE, {
         Person_id: {
-            type: DataTypes.STRING,
+            type: DataTypes.INTEGER,
             primaryKey: true
         },
         Person_Name: DataTypes.STRING,

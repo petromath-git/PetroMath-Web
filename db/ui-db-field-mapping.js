@@ -153,4 +153,43 @@ module.exports = {
             creation_date: new Date()
         };
     },
+    newPump: function (req) {
+        return {
+            pump_code: req.body.pump_code,
+            pump_make: req.body.pump_make,
+            product_code: req.body.product_code,
+            opening_reading: req.body.opening_reading,
+            location_code: req.user.location_code,
+            current_stamping_date: req.body.current_stamping_date,
+            Stamping_due: req.body.Stamping_due,
+            effective_start_date: new Date(),
+            effective_end_date: '2900-01-01',
+            created_by: req.user.User_Name,
+            creation_date: new Date()
+        };
+    },
+    updatePump: function (req) {
+        return {
+            pump_code: req.body.pump_code,
+            pump_make: req.body.pump_make,
+            product_code: req.body.product_code,
+            opening_reading: req.body.opening_reading,
+            current_stamping_date: req.body.current_stamping_date,
+            Stamping_due: req.body.Stamping_due,
+            updated_by: req.user.User_Name,
+            updation_date: new Date()
+        };
+    },
+
+    newPumpTank: function (req) {
+        return {
+            pump_id: req.body.pump_id,
+            tank_id: req.body.tank_id,
+            location_code: req.user.location_code,
+            effective_start_date: dateFormat(new Date(), "yyyy-mm-dd"),
+            effective_end_date: '2900-01-01',
+            created_by: req.user.User_Name,
+            creation_date: new Date()
+        };
+    },
 }

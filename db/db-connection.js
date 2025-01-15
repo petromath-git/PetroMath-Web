@@ -57,6 +57,7 @@ db.txn_bank_transaction_view = require("./txn-bank-transaction-view")(sequelize,
 db.txn_attendance = require("./txn-attendance")(sequelize, Sequelize);
 db.txn_deadline = require("./txn-deadline")(sequelize, Sequelize);
 db.txn_deadline_views = require("./txn-deadline-views")(sequelize, Sequelize);
+db.loginLog = require("./login-log")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -113,5 +114,8 @@ db.tank_dipchart_lines.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchart
 
 db.tank_dipchart_header.hasMany(db.tank, {foreignKey: 'dipchartid'});
 db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
+
+db.txn_credits.belongsTo(db.credit, {foreignKey: 'creditlist_id', sourceKey: 'creditlist_id'});
+db.credit.hasMany(db.txn_credits, {foreignKey: 'creditlist_id', targetKey: 'creditlist_id'});
 
 module.exports = db;

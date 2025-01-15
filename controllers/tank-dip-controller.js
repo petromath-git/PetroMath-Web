@@ -88,15 +88,7 @@ exports.getTankDipEntry = async function (req, res, next) {
 
 exports.saveTankDipData = async function (req, res, next) {
     try {
-        console.log('1. Starting saveTankDipData');
-        const tankDipData = dbMapping.newTankDip(req);
-        
-        console.log('2. Checking for existing dip with data:', {
-            locationCode: req.user.location_code,
-            tank_id: tankDipData.tank_id,
-            dip_date: tankDipData.dip_date,
-            dip_time: tankDipData.dip_time
-        });
+       
 
         // Direct query with a new connection
         const duplicateCheck = await db.sequelize.query(
@@ -117,18 +109,18 @@ exports.saveTankDipData = async function (req, res, next) {
             }
         );
 
-        console.log('3. Duplicate check result:', duplicateCheck);
+      
 
         if (duplicateCheck && duplicateCheck.length > 0) {
-            console.log('4. Found duplicate, redirecting');
+           
             req.flash('error', 'Dip reading already exists for this tank at this time');
             return res.redirect('/tank-dip');
         }
 
         // Continue with save if no duplicate
-        console.log('5. Starting save transaction');
+ 
         const t = await db.sequelize.transaction();
-        
+       
         try {
             // Save tank dip
             const tankDip = await TankDipDao.create(tankDipData, { transaction: t });
@@ -142,7 +134,7 @@ exports.saveTankDipData = async function (req, res, next) {
                 }
             });
 
-            console.log('Processed pump readings:', pumpReadings);
+          
            
 
             const readingPromises = Object.entries(pumpReadings).map(([pump_id, reading]) => {
@@ -246,7 +238,7 @@ exports.validateDip = async function (req, res) {
             dip_time
         );
 
-        console.log('Validation result:', existingDip);
+        
 
         // Since we're getting an array from the raw query
         // Check if array has any elements
