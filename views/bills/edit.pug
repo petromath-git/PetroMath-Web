@@ -1,0 +1,140 @@
+extends ../layout
+
+block content
+    .container-fluid
+        .card
+            .card-header
+                .d-flex.justify-content-between.align-items-center
+                    h5.card-title.mb-0 Edit Bill
+                        span.text-muted  ##{bill.bill_no}
+                    .float-right
+
+            .card-body              
+                
+                form#billForm(method='POST' action=`/bills/${bill.bill_id}?_method=PUT`)
+                    //- Selection Section
+                    .row.mb-3
+                        .col-12.col-md-4.mb-3.mb-md-0
+                            .form-group
+                                label(for='shift') Select Shift *
+                                select#shift.form-control(name='closing_id' required)
+                                    option(value='') Select Shift
+                                    each shift in shifts
+                                        option(
+                                            value=shift.closing_id 
+                                            selected=shift.closing_id === bill.closing_id
+                                        ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
+
+                        .col-12.col-md-4.mb-3.mb-md-0
+                            .form-group
+                                label Bill Type
+                                input.form-control(
+                                    type='text' 
+                                    value=bill.bill_type 
+                                    readonly 
+                                    disabled
+                                )
+                                input(type='hidden' name='bill_type' value=bill.bill_type)
+
+                        div#creditCustomerDiv.col-12.col-md-4(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                            .form-group
+                                label(for='creditCustomer') Customer *
+                                select#creditCustomer.form-control(name='creditlist_id')
+                                    option(value='') Select Customer
+                                    each credit in credits
+                                        option(value=credit.creditlist_id selected=credit.creditlist_id === bill.creditlist_id) #{credit.Company_Name}
+                  
+                    //- Items Table
+                    .table-responsive
+                        table.table.table-bordered#billItemsTable
+                            thead.thead-light
+                                tr
+                                    th Product
+                                    th.text-right Price
+                                    th.text-right Quantity
+                                    th.text-right Discount
+                                    th.text-right Amount
+                                    th Notes
+                                    th.text-center Actions
+                            tbody#billItems
+                                each item, index in items
+                                    tr.item-row
+                                        td
+                                            select.form-control.product-select(name=`items[${index}][product_id]` required)
+                                                option(value='') Select Product
+                                                each product in products
+                                                    option(value=product.product_id 
+                                                        selected=product.product_id === item.product_id 
+                                                        data-product-name=product.product_name 
+                                                        data-price=product.price) #{product.product_name}
+                                        td
+                                            input.form-control.price-input.text-right(
+                                                type='number' 
+                                                step="0.001" 
+                                                name=`items[${index}][price]` 
+                                                value=item.price 
+                                                readonly
+                                            )
+                                        td
+                                            input.form-control.qty-input.text-right(
+                                                type='number' 
+                                                step='0.001' 
+                                                name=`items[${index}][qty]` 
+                                                value=item.qty 
+                                                required 
+                                                min='0'
+                                            )
+                                        td
+                                            input.form-control.discount-input.text-right(
+                                                type='number' 
+                                                step='0.01' 
+                                                name=`items[${index}][price_discount]` 
+                                                value=item.price_discount 
+                                                min='0'
+                                            )
+                                        td
+                                            input.form-control.amount-input.text-right(
+                                                type='number' 
+                                                step='0.001' 
+                                                name=`items[${index}][amount]` 
+                                                value=item.amount 
+                                                required
+                                            )
+                                        td
+                                            input.form-control.notes-input(
+                                                type='text' 
+                                                name=`items[${index}][notes]` 
+                                                value=item.notes
+                                            )
+                                        td.text-center
+                                            button.btn.btn-danger.btn-sm.remove-row(type='button' disabled) 
+                                                i.bi.bi-trash
+
+                    //- Total Amount Row
+                    .row.mt-3
+                        .col-12.col-md-6.offset-md-6
+                            .card.bg-light
+                                .card-body
+                                    .d-flex.justify-content-between
+                                        h5.mb-0 Total Amount:
+                                        h5#totalAmount.mb-0 ₹ #{parseFloat(bill.total_amount || 0).toFixed(2)}
+
+                    //- Submit Button
+                    .row.mt-3
+                        .col-12.text-right
+                            button.btn.btn-primary#saveBtn(type='submit')
+                                i.bi.bi-save
+                                |  Update Bill
+
+                            button.btn.btn-danger#deleteBillBtn(type='button' data-bill-id=bill.bill_id).ml-2
+                                i.bi.bi-trash
+                                |  Delete Bill    
+
+    //- Embed data for JavaScript
+    script.
+        const products = !{JSON.stringify(products)};
+        const billData = !{JSON.stringify(bill)};
+
+    block scripts
+        script(src="/javascripts/bills-edit.js")        
+                        

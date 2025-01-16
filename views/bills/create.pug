@@ -1,0 +1,107 @@
+extends ../layout
+
+block content
+    .container-fluid
+        .card
+            .card-header
+                .d-flex.justify-content-between.align-items-center
+                    h5.card-title.mb-0 Create New Bill
+                    .float-right.d-none.d-md-block
+                        button.btn.btn-info#addRowDesktop(type='button')
+                            i.bi.bi-plus
+                            |  Add Item
+
+            .card-body               
+                
+                form#billForm(method='POST' action='/bills')
+                    //- Selection Section
+                    .row.mb-3
+                        .col-12.col-md-4.mb-3.mb-md-0
+                            .form-group
+                                label(for='shift') Select Shift *
+                                select#shift.form-control(name='closing_id' required)
+                                    option(value='') Select Shift
+                                    each shift in shifts
+                                        option(
+                                            value=shift.closing_id 
+                                            selected=(typeof bill !== 'undefined' && shift.closing_id === bill.closing_id)
+                                        ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
+                        .col-12.col-md-4.mb-3.mb-md-0
+                            .form-group
+                                label Bill Type *
+                                .mt-2
+                                    .form-check.form-check-inline
+                                        input#cashBill.form-check-input(type='radio' name='bill_type' value='CASH' required checked)
+                                        label.form-check-label(for='cashBill') Cash
+                                    .form-check.form-check-inline.ms-3
+                                        input#creditBill.form-check-input(type='radio' name='bill_type' value='CREDIT' required)
+                                        label.form-check-label(for='creditBill') Credit
+
+                        div#creditCustomerDiv.col-12.col-md-4.d-none
+                            .form-group
+                                label(for='creditCustomer') Customer *
+                                select#creditCustomer.form-control(name='creditlist_id')
+                                    option(value='') Select Customer
+                                    each credit in credits
+                                        option(value=credit.creditlist_id) #{credit.Company_Name}
+                    
+                    //- Items Table - Desktop View
+                    .table-responsive
+                        table.table.table-bordered#billItemsTable
+                            thead.thead-light
+                                tr
+                                    th Product
+                                    th.text-right Price
+                                    th.text-right Quantity
+                                    th.text-right Discount
+                                    th.text-right Amount
+                                    th Notes
+                                    th.text-center Actions
+                            tbody#billItems
+                                tr.item-row
+                                    td
+                                        select.form-control.product-select(name='items[0][product_id]' required)
+                                            option(value='') Select Product
+                                            each product in products
+                                                option(value=product.product_id data-product-name=product.product_name data-price=product.price) #{product.product_name}
+                                    td
+                                        input.form-control.price-input.text-right(type='number' step="0.001" name='items[0][price]' readonly)
+                                    td
+                                        input.form-control.qty-input.text-right(type='number' step='0.001' name='items[0][qty]' required min='0')
+                                    td
+                                        input.form-control.discount-input.text-right(type='number' step='0.01' name='items[0][price_discount]' value="0" min='0')
+                                    td
+                                        input.form-control.amount-input.text-right(type='number' step='0.001' name='items[0][amount]' required min='0')
+                                    td
+                                        input.form-control.notes-input(type='text' name='items[0][notes]')
+                                    td.text-center
+                                        button.btn.btn-danger.btn-sm.remove-row(type='button' disabled) 
+                                            i.bi.bi-trash
+
+                    //- Mobile Items List
+                    #mobileItemsList.list-group.mb-3
+                    
+                    //- Total Amount Row
+                    .row.mt-3
+                        .col-12.col-md-6.offset-md-6
+                            .card.bg-light
+                                .card-body
+                                    .d-flex.justify-content-between
+                                        h5.mb-0 Total Amount:
+                                        h5#totalAmount.mb-0 ₹ 0.00
+
+                    //- Submit Button
+                    .row.mt-3
+                        .col-12.text-right
+                            button.btn.btn-primary#saveBtn(type='submit') Save Bill
+                            button.btn.btn-info.ms-2#printBtn(type='button' disabled)
+                                i.bi.bi-printer
+                                |  Print
+
+
+    //- Embed data for JavaScript
+    script.
+        const products = !{JSON.stringify(products)};
+        const userLocationCode = '#{user.location_code}';
+
+    script(src="/javascripts/bills.js")

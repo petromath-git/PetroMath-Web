@@ -1,0 +1,155 @@
+extends ../layout
+
+block content
+   .container-fluid
+    .card
+        .card-header
+            .d-flex.justify-content-between.align-items-center
+                h5.card-title.mb-0 Bills List
+                button.btn.btn-primary(onclick="window.location.href='/bills/new'")
+                    i.bi.bi-plus
+                    |  Create New Bill
+        
+        .card-body
+            .table-responsive
+                table.table.table-bordered.table-hover
+                    thead.thead-light
+                        tr
+                            th.text-center 
+                                i.bi.bi-arrows-expand
+                            th Bill No
+                            th Type
+                            th Customer
+                            th.text-right Amount
+                            th Status
+                            th.text-center Print Count
+                            th Cashier
+                            th Created Date
+                            th.text-center Actions
+                    tbody
+                        each bill in bills
+                            - var rowClass = bill.bill_status === 'CANCELLED' ? 'table-danger' : ''
+                            tr(class=rowClass)
+                                td.text-center
+                                    button.btn.btn-sm.btn-link.expand-row(data-bill-id=bill.bill_id type='button')
+                                        i.bi.bi-plus-circle
+                                td
+                                    if bill.bill_status === 'DRAFT'
+                                        a(href=`/bills/edit/${bill.bill_id}` class="text-primary hover:text-blue-700") #{bill.bill_no}
+                                    else
+                                        span #{bill.bill_no}
+                                td= bill.bill_type
+                                td= bill.customer_name || ''
+                                td.text-right= parseFloat(bill.total_amount || 0).toFixed(2)
+                                td= bill.bill_status
+                                td.text-center= bill.print_count
+                                td= bill.cashier_name
+                                td= new Date(bill.creation_date).toLocaleDateString('en-IN')
+                                td.text-center
+                                    button.btn.btn-info.btn-sm.me-2.print-bill(
+                                        type='button' 
+                                        data-bill-id=bill.bill_id 
+                                        title="Print Bill"
+                                    )
+                                        i.bi.bi-printer
+                                    if bill.bill_status === 'DRAFT'
+                                        button.btn.btn-danger.btn-sm.delete-bill(
+                                            type='button'
+                                            data-bill-id=bill.bill_id
+                                            title="Delete Bill"
+                                        )
+                                            i.bi.bi-trash
+
+                            // Expandable detail row
+                            tr.bill-details(id=`details-${bill.bill_id}` style='display: none;')
+                                td(colspan='10')
+                                    .bill-details-content(id=`content-${bill.bill_id}`)
+                                        .text-center
+                                            i.bi.bi-hourglass.spin
+                                            |  Loading...
+    script.
+        $(document).ready(function() {
+            $('.expand-row').click(function() {
+                const billId = $(this).data('bill-id');
+                const detailsRow = $(`#details-${billId}`);
+                const icon = $(this).find('i');
+                
+                if (detailsRow.is(':visible')) {
+                    detailsRow.hide();
+                    icon.removeClass('bi-dash-circle').addClass('bi-plus-circle');
+                } else {
+                    detailsRow.show();
+                    icon.removeClass('bi-plus-circle').addClass('bi-dash-circle');
+                    
+                    // Only load content if not already loaded
+                    if ($(`#content-${billId}`).html().includes('Loading')) {
+                        $.get(`/bills/${billId}/details`, function(data) {
+                            const content = `
+                                <div class="container-fluid mt-3 mb-3">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <table class="table table-sm table-bordered">
+                                                <thead class="thead-light">
+                                                    <tr>
+                                                        <th>Product</th>
+                                                        <th class="text-right">Price</th>
+                                                        <th class="text-right">Quantity</th>
+                                                        <th class="text-right">Discount</th>
+                                                        <th class="text-right">Amount</th>
+                                                        <th>Notes</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${data.items.map(item => `
+                                                        <tr>
+                                                            <td>${item.product_name}</td>
+                                                            <td class="text-right">${parseFloat(item.price).toFixed(2)}</td>
+                                                            <td class="text-right">${parseFloat(item.qty).toFixed(3)}</td>
+                                                            <td class="text-right">${parseFloat(item.price_discount || 0).toFixed(2)}</td>
+                                                            <td class="text-right">${parseFloat(item.amount).toFixed(2)}</td>
+                                                            <td>${item.notes || ''}</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                </tbody>
+                                                ${data.bill_type === 'CREDIT' ? `
+                                                    <tfoot>
+                                                        <tr>
+                                                            <td colspan="6">
+                                                                ${data.vehicle_number ? `<strong>Vehicle:</strong> ${data.vehicle_number}` : ''}
+                                                                ${data.indent_number ? `<br><strong>Indent:</strong> ${data.indent_number}` : ''}
+                                                            </td>
+                                                        </tr>
+                                                    </tfoot>
+                                                ` : ''}
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            $(`#content-${billId}`).html(content);
+                        });
+                    }
+                }
+            });
+
+             $('.delete-bill').each(function() {
+                $(this).on('click', function() {
+                    const billId = $(this).data('bill-id');
+                    
+                    if (confirm('Are you sure you want to delete this bill? This action cannot be undone.')) {
+                        fetch(`/bills/${billId}`, {
+                            method: 'DELETE'
+                        }).then(response => {
+                            if (response.redirected) {
+                                window.location.href = response.url;
+                            }
+                        }).catch(error => {
+                            console.error('Delete error:', error);
+                            alert('An error occurred while deleting the bill.');
+                        });
+                    }
+                });
+            });
+
+              
+        });

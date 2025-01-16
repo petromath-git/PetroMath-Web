@@ -115,6 +115,7 @@ const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
 const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
+const billController = require("./controllers/bill-controller");
 
 
 const flash = require('express-flash');
@@ -137,6 +138,10 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Add method-override here
+const methodOverride = require('method-override');
+app.use(methodOverride('_method'));
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -844,6 +849,45 @@ app.post('/pump-tanks', [isLoginEnsured, security.isAdmin()], function(req, res,
 
 app.get('/pump-tanks/validate', [isLoginEnsured, security.isAdmin()], function(req, res) {
     pumpController.validatePumpTank(req, res);
+});
+
+
+// Billing routes
+app.get('/bills', isLoginEnsured, function(req, res, next) {
+    billController.getBills(req, res, next);
+});
+
+app.get('/bills/new', isLoginEnsured, function(req, res, next) {
+    billController.getNewBill(req, res, next);
+});
+
+app.post('/bills', isLoginEnsured, function(req, res, next) {
+    billController.createBill(req, res, next);
+});
+
+app.put('/bills/:billId/cancel', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    billController.cancelBill(req, res, next);
+});
+
+app.get('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.getBillDetails(req, res, next);
+});
+
+app.get('/bills/:billId/details', isLoginEnsured, function(req, res, next) {
+    billController.getBillDetails(req, res, next);
+});
+
+// Billing routes for editing bills
+app.get('/bills/edit/:billId', isLoginEnsured, function(req, res, next) {
+    billController.editBill(req, res, next);
+});
+
+app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.updateBill(req, res, next);
+});
+
+app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.deleteBill(req, res, next);
 });
 
 // error handler - start.

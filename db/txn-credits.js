@@ -14,7 +14,7 @@ module.exports = function(sequelize, DataTypes) {
         },
         bill_no: {
             field: 'bill_no',
-            type: DataTypes.INTEGER
+            type: DataTypes.STRING
         },
         creditlist_id: {
             field: 'creditlist_id',
