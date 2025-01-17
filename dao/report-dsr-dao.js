@@ -50,7 +50,7 @@ module.exports = {
        Round(Min(tr.opening_reading))                           opening,
        Round(Max(tr.closing_reading) - Min(tr.opening_reading)) sale,
        mp.pump_id,
-       Sum(tr.testing) testing
+       Round(Sum(tr.testing)) testing
        FROM   t_reading tr,
        m_pump mp
        WHERE  tr.closing_id IN (:closing_id)
