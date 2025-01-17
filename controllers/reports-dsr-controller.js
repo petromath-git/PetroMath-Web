@@ -139,8 +139,9 @@ module.exports = {
           'Nozzle Code': readingData.pump_code,
           'Closing Reading': readingData.closing,
           'Opening Reading': readingData.opening,
-          Testing: readingData.testing,
-          Sale: readingData.sale,
+           'Nozzle Flow': readingData.sale,
+           Testing: readingData.testing,
+           Sale: readingData.sale - readingData.testing,
         });
       });
 
