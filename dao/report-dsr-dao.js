@@ -91,13 +91,15 @@ module.exports = {
 getMonthlyOfftake: async (locationCode, reportDate) => {
     const result = await db.sequelize.query(`
         SELECT mt.product_code,
-               COALESCE(SUM(dtl.quantity), 0) AS monthly_Offtake
+               COALESCE(SUM(CASE WHEN ( YEAR(rcpt.decant_date) = YEAR(:closeDate) AND MONTH(rcpt.decant_date) = MONTH(:closeDate) )THEN dtl.quantity ELSE 0 END), 0) AS current_month_Offtake,               
+               COALESCE(SUM(CASE WHEN (YEAR(rcpt.decant_date) = YEAR(DATE_SUB(:closeDate, INTERVAL 1 MONTH))                
+                   AND MONTH(rcpt.decant_date) = MONTH(DATE_SUB(:closeDate, INTERVAL 1 MONTH))) THEN dtl.quantity ELSE 0 END), 0) AS last_month_Offtake,
+                   COALESCE(SUM(CASE WHEN ( YEAR(rcpt.decant_date) = YEAR(:closeDate)-1 AND MONTH(rcpt.decant_date) = MONTH(:closeDate) ) THEN dtl.quantity ELSE 0 END), 0) AS last_year_Offtake
         FROM t_tank_stk_rcpt rcpt
         JOIN t_tank_stk_rcpt_dtl dtl ON rcpt.ttank_id = dtl.ttank_id
         JOIN m_tank mt ON dtl.tank_id = mt.tank_id
-        WHERE rcpt.location_code = :location
-        AND MONTH(rcpt.decant_date) =  MONTH(DATE(:closeDate))
-        AND YEAR(rcpt.decant_date) = YEAR(DATE(:closeDate))
+        WHERE rcpt.location_code = :location        
+       -- AND DAY(rcpt.decant_date) <= DAY(:closeDate)
         GROUP BY mt.product_code
     `, {
         replacements: { location: locationCode, closeDate: reportDate },
