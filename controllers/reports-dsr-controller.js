@@ -127,7 +127,9 @@ module.exports = {
       monthlyOfftakeData.forEach((monthlyOfftake) => {
         monthlyOfftakeList.push({
           'Product': monthlyOfftake.product_code,
-          'Offtake': monthlyOfftake.monthly_Offtake,          
+          'Offtake(KL)': monthlyOfftake.current_month_Offtake,          
+          'Last Month Offtake(KL)': monthlyOfftake.last_month_Offtake,          
+          'Last Year Offtake(KL)': monthlyOfftake.last_year_Offtake
         });
       });
 
