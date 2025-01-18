@@ -1,0 +1,143 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-digital-recon')
+        script.
+            
+            // Javascript that gets table data
+            var creditstmtFromServer = !{JSON.stringify(creditstmt)} 
+            
+
+            function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
+                // Start directly with the table
+                var result = "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000; margin-top: 10px;'>";
+                                // Headers
+                    if (array.length > 0 && typeof array[0] === 'object') {
+                        result += "<thead class='thead-light'><tr>";
+                        Object.keys(array[0]).forEach(key => {
+                            if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                                result += "<th style='border: 1px solid #000;' class='text-center'>" + key + "</th>";
+                            }
+                        });
+                        result += "<th style='border: 1px solid #000;' class='text-center'>Status</th>";
+                        result += "</tr></thead>";
+                    }
+
+                    result += "<tbody>";
+
+                for (var i = 0; i < array.length; i++) {
+                    let rowClass = '';
+
+                    // Check if it's the last row and contains "Total"
+                    if (i === array.length - 1) {
+                        let isTotalRow = Object.values(array[i]).some(value => value && 
+                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                        );
+
+                        if (isTotalRow) {
+                            rowClass = 'font-weight-bold text-danger';
+                        }
+                    }
+
+                    result += `<tr class='${rowClass}'>`;
+
+                    Object.keys(array[i]).forEach(key => {
+                        // Skip 'narration', 'companyName', and 'reconciled' columns
+                        if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                            let dataValue = array[i][key];
+
+                            if (numberColumns.includes(key) && dataValue !== "" && !isNaN(dataValue)) {
+                                printedValue = new Intl.NumberFormat('en-IN', {
+                                    style: 'decimal',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                }).format(dataValue);
+
+                                result += "<td class='text-right' style='border: 1px solid #000;'>" + printedValue + "</td>";
+                            } else {
+                                result += "<td class='text-left' style='border: 1px solid #000;'>" + dataValue + "</td>";
+                            }
+                        }
+                    });
+
+                    // Add Status column with tick
+                    result += "<td class='text-center' style='border: 1px solid #000;'>" + 
+                            (array[i].reconciled ? "✓" : "") + "</td>";
+                    result += "</tr>";
+                }
+
+                result += "</tbody>";
+                result += "</table>";
+                return result;
+            }
+
+
+            // Function to filter data based on reconciliation status (unreconciled only)
+            function filterUnreconciledTransactions() {
+                const showUnreconciled = document.getElementById('showUnreconciled').checked;
+                const filteredData = showUnreconciled ? creditstmtFromServer.filter(tx => !tx.reconciled) : creditstmtFromServer;
+                document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit'],"col-sm-8 mx-auto");
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                // Initial table rendering
+                filterUnreconciledTransactions(); // Default to showing all transactions (can change based on checkbox)
+
+                // Listen for changes to the checkbox
+                document.getElementById('showUnreconciled').addEventListener('change', filterUnreconciledTransactions);
+            });
+        
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td Company Name:
+                td
+                    select#company_id.form-control(name='company_id')
+                        if credits                           
+                            each val in credits
+                                option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+            tr
+                td(colspan="2")
+                    div.form-check.mt-2
+                        input#showUnreconciled.form-check-input(
+                            type='checkbox', 
+                            onchange='filterUnreconciledTransactions()', 
+                            style='margin-right: 8px;'
+                        )
+                        label.form-check-label(for='showUnreconciled') Show Only Unreconciled
+                td(colspan="10")
+                
+                include report-print-download.pug
+    div &nbsp;
+    div
+        if creditstmt && creditstmt.length > 0
+            - var companyName = creditstmt[0].companyName            
+            div
+                h6.font-weight-bold.text-center Digital Reconciliation Report
+                h6.font-weight-bold.text-center.text-uppercase= companyName                 
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
+                h6.font-weight-bold.text-right Opening Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                div#creditstmt-table-container
+                h6.font-weight-bold.text-right Closing Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+        else
+            div.row &nbsp;
+            div.row.bg-light No Transactions.  
+
+        // Include the overlay
+        include overlay.pug

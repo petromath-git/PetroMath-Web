@@ -44,6 +44,17 @@ module.exports = {
             });
         }
     },
+    findUserLocations: async (personId) => {
+        const result = await db.sequelize.query(`
+            SELECT location_code FROM m_persons WHERE person_id = :personId
+            UNION
+            SELECT location_code FROM m_person_location WHERE person_id = :personId AND now() BETWEEN effective_start_date AND effective_end_date
+        `, {
+            replacements: { personId: personId },
+            type: Sequelize.QueryTypes.SELECT
+        });
+        return result;
+    },
     create: (user) => {
         return Person.create(user);
     },
@@ -114,6 +125,7 @@ module.exports = {
             { where: { Person_id: personId } }
         );
     },
+
 
 
 };

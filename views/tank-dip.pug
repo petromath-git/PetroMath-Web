@@ -1,0 +1,139 @@
+extends layout
+
+block content
+    .container-fluid
+        .card
+            .card-header
+                h5.card-title Tank Dip Entry
+            .card-body
+                //- Tank Dip Form
+                form#tankDipForm(action="/tank-dip" method="POST")
+                    .row
+                        //- Tank Selection
+                        .col-md-3
+                            .form-group
+                                label(for="tank_id") Tank
+                                select#tank_id.form-control(name="tank_id" required)
+                                    option(value="") -- Select Tank --
+                                    each tank in tanks
+                                        option(value=tank.tank_id data-product=tank.product_code)
+                                            | #{tank.tank_code} - #{tank.product_code}
+
+                        //- Date input
+                        .col-md-3
+                            .form-group
+                                label(for="dip_date") Date
+                                - const today = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                                - const currentDate = new Date(today).toISOString().split('T')[0];
+                                input#dip_date.form-control(
+                                    type="date"
+                                    name="dip_date"
+                                    required
+                                    max=currentDate
+                                )
+
+                        //- Time input
+                        .col-md-3
+                            .form-group
+                                label(for="dip_time") Time
+                                input#dip_time.form-control(
+                                    type="time"
+                                    name="dip_time"
+                                    required
+                                )
+
+                        //- Dip Reading
+                        .col-md-3
+                            .form-group
+                                label(for="dip_reading") Dip Reading (cm)
+                                select#dip_reading.form-control.form-control-sm(
+                                    name="dip_reading"
+                                    required
+                                )
+                                    option(value="") -- Select Dip Value --
+
+                    //- Tank Info Display
+                    #tankInfo.row.mt-3(style="display: none;")
+                        .col-md-4
+                            .form-group
+                                label.font-weight-bold Product Code: 
+                                span#productCode.ml-2
+                        .col-md-4
+                            .form-group
+                                label.font-weight-bold Tank Capacity: 
+                                span#tankCapacity.ml-2
+                        .col-md-4
+                            .form-group
+                                label.font-weight-bold Dead Stock: 
+                                span#deadStock.ml-2
+
+                    //- Connected Pumps Section
+                    #connectedPumpsSection.mt-4(style="display: none;")
+                        .card
+                            .card-header
+                                h6.mb-0 Connected Pump Readings
+                            .card-body
+                                #pumpReadingsContainer.row
+
+                    //- No Pumps Message
+                    #noPumpsMessage.alert.alert-warning.mt-3(style="display: none;")
+                        | No pumps are currently connected to this tank.
+
+                    //- Submit Button
+                    .row.mt-4
+                        .col-12
+                            button.btn.btn-primary(type="submit") 
+                                i.bi.bi-save
+                                |  Save Readings
+
+                //- Existing Dips Table
+                if existingDips && existingDips.length > 0
+                    .row.mt-4
+                        .col-12
+                            .card
+                                .card-header
+                                    h6.mb-0 Today's Dip Readings
+                                .card-body
+                                    .table-responsive
+                                        table.table.table-bordered.table-hover
+                                            thead.thead-light
+                                                tr
+                                                    th Tank
+                                                    th Product
+                                                    th Time
+                                                    th Dip (cm)
+                                                    th Pumps
+                                                    if user.isAdmin
+                                                        th Actions
+                                            tbody
+                                                each dip in existingDips
+                                                    tr
+                                                        td= dip.tank_code
+                                                        td= dip.product_code
+                                                        td= dip.dip_time
+                                                        td= dip.dip_reading
+                                                        td
+                                                            if dip.readings && dip.readings.length > 0
+                                                                each reading in dip.readings
+                                                                    div #{reading.pump_code}: #{reading.reading}
+                                                            else
+                                                                p No readings available.        
+                                                        if user.isAdmin
+                                                            td
+                                                                button.btn.btn-danger.btn-sm.delete-dip(
+                                                                    type="button"
+                                                                    data-dip-id=dip.tdip_id
+                                                                )
+                                                                    i.bi.bi-trash
+                                                                    |  Delete
+
+    // Embed the 'tanks' array as a JavaScript variable
+    script.
+        const tanks = !{JSON.stringify(tanks)};
+        const pumpTankMappings = !{JSON.stringify(pumpTankMappings)};
+        const lastReadings = !{JSON.stringify(lastReadings)};
+        // Now you can use the 'tanks' array in your JavaScript code.
+        console.log(tanks);
+        
+    
+    script(src="/javascripts/tank-dip.js")

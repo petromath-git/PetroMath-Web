@@ -2,49 +2,112 @@ extends layout
 
 block content
     
-    form(method='POST' action='/reports-creditsummary')                
+    form(method='POST' action='/reports-creditsummary')  
+
+        script.
+            
+            // Javascript that gets table data
+            var creditstmtFromServer = !{JSON.stringify(creditsummary)} 
+
+             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
+                var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
+                        result += "<div class='card-header text-center font-weight-bold' >"+tabletitle+"</div>"; // Card header
+                        result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table                                       
+                
+                 // If the array is not empty, add headers from the keys of the first object
+                if (array.length > 0 && typeof array[0] === 'object') {
+                    result += "<thead class='thead-light text-center'><tr>";
+                    Object.keys(array[0]).forEach(key => {                       
+                        result += "<th style='border: 1px solid #000;'>" + key + "</th>"; // Darker border for headers
+                    });
+                    result += "</tr></thead>";
+                }
+            
+                // Loop through the array to build table rows
+                result += "<tbody>";
+                
+                for (var i = 0; i < array.length; i++) {
+
+
+
+                    let rowClass = '';  // Default row class (no styling)
+
+                    // Check if it's the last row and contains "Total"
+                    if (i === array.length - 1) {
+                        // Check if it's the last row and contains "Total" or "Excess"
+                        let isTotalRow = Object.values(array[i]).some(value => value && 
+                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                         );
+
+                        if (isTotalRow) {
+                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
+                        }
+                    }
+
+
+                    result += "<tr>";                   
+                     Object.keys(array[i]).forEach(key => {
+                        let dataValue = array[i][key];   
+
+                     
+                     
+                       // Check if the current column should be formatted as a number
+                        if (numberColumns.includes(key) && dataValue !== "" &&!isNaN(dataValue))
+                        {
+                         
+                            printedValue = new Intl.NumberFormat('en-IN', {
+                                                                style: 'decimal',                                                                
+                                                                minimumFractionDigits:2,
+                                                                maximumFractionDigits:2	
+                                                            }).format(dataValue); 
+
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>"; // Darker border for cells                                                    
+                        }
+                        else
+                            result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
+                     });
+                    result += "</tr>";
+                }
+                result += "</tbody>";
+                result += "</table>";
+                result += "</div>"; // Close card body
+                result += "</div>"; // Close card container
+                return result;
+            }     
+      
+
+
+            document.addEventListener('DOMContentLoaded', function() {
+               
+                document.getElementById('creditsummary-table-container').innerHTML = renderTable(creditstmtFromServer,'',['Balance']);                               
+                 
+            });
+
         table.center
             tr              
-                td To Date:
+                td Date:
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;              
-                td
-                    button.btn.btn-primary(type='submit') Go
+                td &nbsp; 
+                include report-print-download.pug
     div &nbsp;
     div
-        if creditsummary && creditsummary.length > 0
-            table(class="table")
-                thead(class="thead-light")
-                    tr
-                        th.text-right S.No
-                        th &nbsp;
-                        th.text-left Credit Party
-                        th &nbsp;
-                        th.text-right Outstanding                                               
-                tbody                  
-                    - var totaloutstanding = 0
-                    - let serialNumber = 0; // Initialize serial number tracker    
-                    each val in creditsummary
-                            tr
-                                if(val.Outstanding!=0)
-                                    - serialNumber++; // Increment serial number only for valid rows
-                                    td(scope="row").text-right #{serialNumber}
-                                    td &nbsp;
-                                    td(scope="row").text-left= val.CreditParty
-                                    td &nbsp;
-                                    td(scope="row").text-right= val.Outstanding
-                                    - totaloutstanding += Number(val.Outstanding)
-                    tr
-                        td &nbsp;
-                        td &nbsp;
-                        th.text-right Total Outstanding
-                        td &nbsp;
-                        th.text-right.text-danger #{totaloutstanding.toFixed(2)}          
-
+        div.row &nbsp;
+        h4.font-weight-bold.text-center= "Credit Summary Report"                             
+        h4.text-center.text-muted= formattedtoDate
+        h4.font-weight-bold.text-success.text-center    
+        if creditsummary && creditsummary.length > 0                                      
+            div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="creditsummary-table-container") 
         else
             div.row &nbsp;
-            div.row.bg-light No records to display.                   
+            div.row.bg-light No records to display.
+
+    // Include the overlay
+    include overlay.pug                           
                             
 
     

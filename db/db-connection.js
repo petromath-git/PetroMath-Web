@@ -57,6 +57,7 @@ db.txn_bank_transaction_view = require("./txn-bank-transaction-view")(sequelize,
 db.txn_attendance = require("./txn-attendance")(sequelize, Sequelize);
 db.txn_deadline = require("./txn-deadline")(sequelize, Sequelize);
 db.txn_deadline_views = require("./txn-deadline-views")(sequelize, Sequelize);
+db.loginLog = require("./login-log")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -98,5 +99,23 @@ db.location.hasMany(db.txn_deadline, {foreignKey: 'location_id'});
 db.txn_deadline.belongsTo(db.location, {foreignKey: 'location_id'});
 db.location.hasMany(db.txn_deadline_views, {foreignKey: 'location_id'});
 db.txn_deadline_views.belongsTo(db.location, {foreignKey: 'location_id'});
+
+// Add these with your other model imports
+db.pump_tank = require("./pump-tank")(sequelize, Sequelize);
+db.tank_dip = require("./txn-tank-dip")(sequelize, Sequelize);
+db.tank_reading = require("./txn-tank-reading")(sequelize, Sequelize);
+
+db.tank_dipchart_header = require("./tank-dipchart-header")(sequelize, Sequelize);
+db.tank_dipchart_lines = require("./tank-dipchart-lines")(sequelize, Sequelize);
+
+// Add these relationships
+db.tank_dipchart_header.hasMany(db.tank_dipchart_lines, {foreignKey: 'dipchartid'});
+db.tank_dipchart_lines.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
+
+db.tank_dipchart_header.hasMany(db.tank, {foreignKey: 'dipchartid'});
+db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
+
+db.txn_credits.belongsTo(db.credit, {foreignKey: 'creditlist_id', sourceKey: 'creditlist_id'});
+db.credit.hasMany(db.txn_credits, {foreignKey: 'creditlist_id', targetKey: 'creditlist_id'});
 
 module.exports = db;

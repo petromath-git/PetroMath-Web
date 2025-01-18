@@ -1,3 +1,5 @@
+process.env.FONTCONFIG_FILE = '/var/task/fonts.conf';
+
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
@@ -9,25 +11,48 @@ const msg = require("./config/app-messages");
 const config = require("./config/app-config");
 require('dotenv').config();
 const dateFormat = require("dateformat");
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const utils = require("./utils/app-utils");
+const { getPDF } = require('./utils/app-pdf-generator');
+
 
 // Passport - configuration - start....
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
+
+
 passport.use(new LocalStrategy(
     function (username, password, done) {
         Person.findOne({ where: { 'User_name': username } })
-            .then(data => {
-                if (data && password === (data.Password)) {
-                    let now = new Date();
-                    const today_date = dateFormat(now, "yyyy-mm-dd");
-                    if (data.effective_end_date > today_date) {
-                        var userInfo = new UserData(data, security.isAdminChk(data));
-                        done(null, userInfo);
+            .then(async data => {
+                try {
+                    if (data && password === (data.Password)) {
+                        let now = new Date();
+                        const today_date = dateFormat(now, "yyyy-mm-dd");
+                        
+                        if (data.effective_end_date > today_date) {
+                            var userInfo = new UserData(data, security.isAdminChk(data));
+                            done(null, userInfo);
+                        } else {
+                            // We'll log disabled account in the route handler
+                            done(null, false, { 
+                                message: `${data.User_Name} Your User Account is Disabled`,
+                                Person_id: data.Person_id,
+                                location_code: data.location_code
+                            });
+                        }
                     } else {
-                        done(null, false, { message: `${data.User_Name} Your User Account is Disabled` });
+                        // We'll log failed login in the route handler
+                        done(null, false, { 
+                            message: 'User name or password is incorrect',
+                            Person_id: data ? data.Person_id : null,
+                            location_code: data ? data.location_code : null
+                        });
                     }
-                } else {
-                    done(null, false, { message: 'User name or password is incorrect' });
+                } catch (err) {
+                    console.warn("err in app :::: " + err + err.toString());
+                    done(null, false, { message: err.toString() });
                 }
             })
             .catch(err => {
@@ -63,6 +88,8 @@ const Person = db.person;
 const ProductDao = require("./dao/product-dao");
 const PersonDao = require("./dao/person-dao");
 var CreditDao = require("./dao/credits-dao");
+const LoginLogDao = require("./dao/login-log-dao");
+
 db.sequelize.sync();
 // ORM DB - end
 
@@ -76,15 +103,24 @@ const masterController = require("./controllers/master-data-controller");
 const cashflowController = require("./controllers/cash-flow-controller");
 const utilitiesController = require("./controllers/utilities-controller");
 const reportsController = require("./controllers/reports-controller");
+const cashflowReportsController = require("./controllers/reports-cashflow-controller");
+const dsrReportsController = require("./controllers/reports-dsr-controller");
+const gstsummaryreportsController = require("./controllers/reports-gst-summary-controller");
+const digitalReconreportsController = require("./controllers/reports-digital-recon-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
 const dashBoardController = require("./controllers/dashboard-controller");
 const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
+const tankDipController = require("./controllers/tank-dip-controller");
+const pumpController = require("./controllers/pump-controller");
+const billController = require("./controllers/bill-controller");
+
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
+const { log } = require('console');
 
 // app configurations - start
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
@@ -102,6 +138,10 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Add method-override here
+const methodOverride = require('method-override');
+app.use(methodOverride('_method'));
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -304,14 +344,17 @@ app.get('/home', isLoginEnsured, function (req, res, next) {
 
 app.get('/reports', isLoginEnsured, function (req, res, next) {
     let locationCode = req.user.location_code;
+    req.body.reportType = 'CreditDetails';
     let credits = [];
     CreditDao.findAll(locationCode)
         .then(data => {
             data.forEach((credit) => {
-                credits.push({
-                    id: credit.creditlist_id,
-                    name: credit.Company_Name
-                });
+                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
             });
 
             res.render('reports', { title: 'Reports', user: req.user, credits: credits });
@@ -320,13 +363,90 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
 });
 
 app.post('/reports', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'CreditDetails';
     reportsController.getCreditReport(req, res, next);
+});
+
+
+app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
+    let locationCode = req.user.location_code;
+    let credits = [];
+    req.body.caller = 'notpdf';
+    req.body.reportType = 'Creditledger';
+
+    CreditDao.findAll(locationCode)
+        .then(data => {
+            data.forEach((credit) => {
+                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
+            });
+
+            res.render('reports-credit-ledger', { title: 'Reports', user: req.user, credits: credits });
+
+        });
+});
+
+app.post('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'Creditledger';
+    reportsController.getCreditReport(req, res, next);
+});
+
+
+app.get('/reports-digital-recon', isLoginEnsured, function (req, res, next) {
+    let locationCode = req.user.location_code;
+    let credits = [];
+    req.body.caller = 'notpdf';
+
+    // Fetch data asynchronously
+    CreditDao.findAll(locationCode)
+        .then(data => {
+            data.forEach(credit => {
+                console.log(`${credit.Company_Name}  ${credit.card_flag}`);
+                if (credit.card_flag === 'Y') {
+                    credits.push({
+                        id: credit.creditlist_id,
+                        name: credit.Company_Name
+                    });
+                }
+            });
+
+            // Render the response after processing the credits
+            console.log('Processed credits:', credits);
+            res.render('reports-digital-recon', {
+                title: 'Digital Reconciliation Report',
+                user: req.user,
+                credits: credits
+            });
+        })
+        .catch(error => {
+            // Handle errors gracefully
+            console.error('Error fetching credits:', error);
+            res.status(500).send('Internal Server Error');
+        });
+});
+
+app.post('/reports-digital-recon', isLoginEnsured, function (req, res, next) {   
+    digitalReconreportsController.getDigitalReconReport(req, res, next);
+});
+
+app.get('/reports-gst-summary', isLoginEnsured, function (req, res, next) {   
+    req.body.caller = 'notpdf';
+    gstsummaryreportsController.getgstsummaryReport(req, res, next);
+});
+
+app.post('/reports-gst-summary', isLoginEnsured, function (req, res, next) {    
+    gstsummaryreportsController.getgstsummaryReport(req, res, next);
 });
 
 
 app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
     req.body.toClosingDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
     reportsController.getCreditSummaryReport(req, res, next);
 
 });
@@ -335,6 +455,27 @@ app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditSummaryReport(req, res, next);
 });
 
+app.get('/reports-cashflow', isLoginEnsured, function (req, res, next) {
+    req.body.cfclosingDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
+    cashflowReportsController.getCashFlowReport(req, res, next);
+});
+
+app.post('/reports-cashflow', isLoginEnsured, function (req, res, next) {
+    cashflowReportsController.getCashFlowReport(req, res, next);
+});
+
+app.get('/reports-dsr', isLoginEnsured, function (req, res, next) {
+    req.body.fromClosingDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
+    dsrReportsController.getdsrReport(req, res, next);
+});
+
+app.post('/reports-dsr', isLoginEnsured, function (req, res, next) {
+    dsrReportsController.getdsrReport(req, res, next);
+});
+
+app.post('/generate-pdf', isLoginEnsured,getPDF);
 
 
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
@@ -381,6 +522,14 @@ app.delete('/remove-credit-sale', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnCreditSale(req, res, next);  // response returned inside controller
 });
 
+app.post('/new-digital-sales', isLoginEnsured, function (req, res, next) {
+    HomeController.saveDigitalSalesData(req, res, next);  // response returned inside controller
+});
+
+app.delete('/remove-digital-sale', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
+});
+
 app.post('/new-expenses', isLoginEnsured, function (req, res, next) {
     HomeController.saveExpensesData(req, res, next);
 });
@@ -413,12 +562,71 @@ app.get('/login', function (req, res) {
     res.render('login', { title: 'Login' });
 });
 
-app.post('/login', function (req, res, next) {
-    passport.authenticate('local', {
-        successRedirect: '/home',
-        failureRedirect: '/login',
-        failureFlash: true
-    })(req, res, req.body.username, req.body.password, next);
+// app.post('/login', function (req, res, next) {
+//     passport.authenticate('local', {
+//         successRedirect: '/home',
+//         failureRedirect: '/login',
+//         failureFlash: true
+//     })(req, res, req.body.username, req.body.password, next);
+// });
+
+app.post('/login', function(req, res, next) {
+    passport.authenticate('local', async function(err, user, info) {
+        if (err) { 
+            return next(err); 
+        }
+        
+        // Capture request info
+        const loginInfo = {
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'],
+            attempted_username: req.body.username  // Capture the attempted username
+        };
+
+        if (!user) {
+            // Log failed login attempt
+            try {
+                await LoginLogDao.create({
+                    Person_id: info.Person_id || null,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'failed',
+                    failure_reason: info.message,
+                    location_code: info.location_code || null,
+                    created_by: 'SYSTEM'
+                });
+            } catch (error) {
+                console.error("Error logging failed login:", error);
+            }
+            
+            req.flash('error', info.message);
+            return res.redirect('/login');
+        }
+
+        req.logIn(user, async function(err) {
+            if (err) { 
+                return next(err); 
+            }
+
+            // Log successful login after successful authentication
+            try {
+                await LoginLogDao.create({
+                    Person_id: user.Person_id,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'success',
+                    location_code: user.location_code,
+                    created_by: user.Person_id.toString()
+                });
+            } catch (error) {
+                console.error("Error logging login:", error);
+            }
+
+            return res.redirect('/home');
+        });
+    })(req, res, next);
 });
 
 app.get('/changepwd', isLoginEnsured, function (req, res) {
@@ -572,6 +780,7 @@ app.delete('/delete-banktransaction', [isLoginEnsured, security.isAdmin()], func
 app.get('/account-type', isLoginEnsured, function (req, res) {
     bankAccountController.getAccountingType(req, res);    // response returned inside controller
 });
+
 app.get('/charts', isLoginEnsured, function (req, res) {
     res.render('charts', { user: req.user, location: req.user.location_code });    // response returned inside controller
 });
@@ -592,6 +801,93 @@ app.post('/deadline', [isLoginEnsured, security.isAdmin()], function (req, res, 
 app.put('/deadline/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     deadlineController.updateDeadlineData(req, res);
 
+});
+
+// Add these routes with your other route definitions
+app.get('/tank-dip', isLoginEnsured, function(req, res, next) {
+    tankDipController.getTankDipEntry(req, res, next);
+});
+
+app.post('/tank-dip', isLoginEnsured, function(req, res, next) {
+    tankDipController.saveTankDipData(req, res, next);
+});
+
+app.delete('/tank-dip', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    tankDipController.deleteTankDip(req, res, next);
+});
+
+app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
+    tankDipController.searchDips(req, res, next);
+});
+
+app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
+    tankDipController.validateDip(req, res);
+});
+
+
+
+app.post('/pumps', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.savePump(req, res, next);
+});
+
+app.put('/pumps/:id', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    console.log('User attempting pump update:', req.user);
+    pumpController.updatePump(req, res, next);
+});
+
+app.get('/pump-master', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.getPumpMaster(req, res, next);
+});
+
+app.put('/pumps/:id/deactivate', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.deactivatePump(req, res, next);
+});
+
+app.post('/pump-tanks', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    pumpController.savePumpTank(req, res, next);
+});
+
+app.get('/pump-tanks/validate', [isLoginEnsured, security.isAdmin()], function(req, res) {
+    pumpController.validatePumpTank(req, res);
+});
+
+
+// Billing routes
+app.get('/bills', isLoginEnsured, function(req, res, next) {
+    billController.getBills(req, res, next);
+});
+
+app.get('/bills/new', isLoginEnsured, function(req, res, next) {
+    billController.getNewBill(req, res, next);
+});
+
+app.post('/bills', isLoginEnsured, function(req, res, next) {
+    billController.createBill(req, res, next);
+});
+
+app.put('/bills/:billId/cancel', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
+    billController.cancelBill(req, res, next);
+});
+
+app.get('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.getBillDetails(req, res, next);
+});
+
+app.get('/bills/:billId/details', isLoginEnsured, function(req, res, next) {
+    billController.getBillDetails(req, res, next);
+});
+
+// Billing routes for editing bills
+app.get('/bills/edit/:billId', isLoginEnsured, function(req, res, next) {
+    billController.editBill(req, res, next);
+});
+
+app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.updateBill(req, res, next);
+});
+
+app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
+    billController.deleteBill(req, res, next);
 });
 
 // error handler - start.

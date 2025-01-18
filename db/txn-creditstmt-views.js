@@ -12,11 +12,15 @@ module.exports = function(sequelize, DataTypes) {
         },
         bill_no: {
             field: 'bill_no',
-            type: DataTypes.INTEGER
+            type: DataTypes.STRING
         },
         company_name: {
             field: 'company_name',
             type: DataTypes.STRING,
+        },
+        creditlist_id: {
+            field: 'creditlist_id',
+            type: DataTypes.INTEGER
         },
         product_name: {
             field: 'product_name',

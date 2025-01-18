@@ -8,10 +8,11 @@ module.exports = {
   DB: "petrolpumpv1",
   DIALECT: "mysql",
   pool: {
-    max: 1,
+    max: 5,
     min: 0,
     acquire: 30000,
     idle: 10000,
+    evict: 1000     // Run cleanup more frequentl
   },
 
   // Server config

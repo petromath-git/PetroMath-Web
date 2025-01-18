@@ -18,7 +18,7 @@ module.exports = {
     },
     getDayBalance: (locationCode,closingQueryToDate) => {             
         return db.sequelize.query(
-            `select mcl.company_name,get_closing_credit_balance(mcl.creditlist_id,:closing_date) as ClosingData
+            `select upper(mcl.company_name) company_name,get_closing_credit_balance(mcl.creditlist_id,:closing_date) as ClosingData
              from m_credit_list mcl where location_code = :locationCode
              and  COALESCE(mcl.card_flag,'N') <> 'Y' order by 2 desc `,
             {   replacements: { locationCode: locationCode,closing_date: closingQueryToDate}, 
@@ -59,5 +59,22 @@ module.exports = {
             });
 
         }
+    },
+    getLocationDetails: (location_code) => {
+        return db.sequelize.query(
+            `SELECT location_name, address,location_id,location_code
+             FROM m_location 
+             WHERE location_code = :location_code`,
+            {
+                replacements: { location_code: location_code },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        ).then(results => {
+            if (results.length > 0) {
+                return results[0];
+            } else {
+                throw new Error("Location not found");
+            }
+        });
     }
 }

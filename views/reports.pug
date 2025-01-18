@@ -1,72 +1,87 @@
 extends layout
 
 block content
-    
-    form(method='POST' action='/reports')                
+    form(method='POST' action='/reports')
         table.center
             tr
-                td From Date:
+                td Date Range:
                 td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;
-                td To Date:
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
                 td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;
                 td Company Name:
                 td
                     select#company_id.form-control(name='company_id')
-                      if credits
-                        option(value=-1, selected=company_id === -1 ? true : undefined) All
-                          each val in credits
-                            option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
-                td &nbsp;
-                td
-                    button.btn.btn-primary(type='submit') Go
+                        if credits
+                            option(value=-1, selected=company_id === -1 ? true : undefined) All
+                            each val in credits
+                                option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+                include report-print-download.pug
     div &nbsp;
     div
-        console.log(creditstmt)
         if creditstmt && creditstmt.length > 0
+            - var companyName = creditstmt[0].companyName
+            - var cidparam = creditstmt[0].cidparam
+            div.row &nbsp;
+            h6.font-weight-bold.text-center= "Credit Detail Report"
+            if(cidparam == -1)
+                h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
+            else
+                h5.font-weight-bold.text-center.text-uppercase= companyName                 
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
             h4.font-weight-bold.text-success.text-center
-            table(class="table")
+            table.table.table-bordered.border.table-sm
                 thead(class="thead-light")
                     tr
                         th Date                        
-                        th BillNo                      
+                        th Bill No/Receipt No.                      
                         th ProductName
-                        th Price
-                        th PriceDiscount
-                        th Quantity
-                        th Amount
+                        th.text-right Price
+                        th.text-right PriceDiscount
+                        th.text-right Quantity
+                        th.text-right Amount
                         th Notes
                 tbody
-                    tr  
-                        - for (let i = 0; i < 5; ++i) {
-                          td
-                        - }                        
-                        td.text-center Opening Balance                           
-                        td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
-                        
+                    if(cidparam != -1)
+                        tr  
+                            - for (let i = 0; i < 5; ++i) {
+                            td &nbsp;
+                            - }                        
+                            td.text-center Opening Balance                           
+                            td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
                     each val in creditstmt
                         tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                            td(scope="row")= val.tranDate                            
-                            td(scope="row")= val.billno                            
-                            td(scope="row")= val.productName
-                            td(scope="row")= val.price
-                            td(scope="row")= val.price_discount
-                            td(scope="row")= val.quantity
-                            td(scope="row")= val.amount
-                            td(scope="row")= val.notes
-                    tr  
-                        - for (let i = 0; i < 5; ++i) {
-                          td
-                        - }
-                        td.text-center Closing Balance                                                   
-                        td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
-                             
+                            td(scope="row")= val.Date                            
+                            td(scope="row")= val['Bill No/Receipt No.']                            
+                            td(scope="row")= val.Product
+                            td.text-right(scope="row")= val.Price
+                            td.text-right(scope="row")= val['Price Discount']
+                            td.text-right(scope="row")= val.Qty
+                            td.text-right(scope="row") #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Amount)}
+                            td(scope="row")= val.Narration
+                    if(cidparam != -1)
+                        tr  
+                            - for (let i = 0; i < 5; ++i) {
+                            td
+                            - }
+                            td.text-center Closing Balance                                                   
+                            td.text-danger.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
         else
             div.row &nbsp;
-            div.row.bg-light No records to display.                   
-                            
+            div.row.bg-light No Transactions.  
 
-    
+        // Include the overlay
+        include overlay.pug
+

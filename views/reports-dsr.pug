@@ -1,0 +1,312 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-dsr')
+        script.
+            
+            // Javascript that gets table data
+            var pumpReadingFromServer = !{JSON.stringify(readinglist)}
+            var salesSummaryFromServer = !{JSON.stringify(salessummarylist)}
+            var salesCollectionFromServer = !{JSON.stringify(collectionlist)}
+            var creditSalesFromServer = !{JSON.stringify(creditsaleslist)}
+            var cardSalesFromServer = !{JSON.stringify(cardsalelist)}
+            var cardSalesSummaryFromServer = !{JSON.stringify(CardSaleSummarylist)}
+            var cashSalesFromServer = !{JSON.stringify(CashSaleslist)}
+            var expenseFromServer = !{JSON.stringify(expenselist)}
+            var stockReceiptFromServer = !{JSON.stringify(stockreceiptlist)}
+            var creditReceiptFromServer = !{JSON.stringify(creditReceiptList)}
+            var shiftSummaryFromServer = !{JSON.stringify(shiftSummaryList)}
+            var cashFlowFromServer = !{JSON.stringify(Cashflowstmtlist)}
+            var denomResultFromServer = !{JSON.stringify(DenomResult)}
+            var bankTransactionFromServer = !{JSON.stringify(bankTransactionlist)}   
+            var fuelTankStocklistFromServer = !{JSON.stringify(FuelTankStocklist)}  
+            var productPriceListFromServer = !{JSON.stringify(productPriceList)}  
+            var monthlyOfftakeFromServer = !{JSON.stringify(monthlyOfftakeList)}
+            
+            
+
+            
+            function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
+
+                   // Check if the array is empty
+                    if (array.length === 0) {
+                        return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";  // Just return a simple message if no data
+                    }
+
+                var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
+                        result += "<div class='card-header text-center font-weight-bold' >"+tabletitle+"</div>"; // Card header
+                        result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table                                       
+                
+                 // If the array is not empty, add headers from the keys of the first object
+                if (array.length > 0 && typeof array[0] === 'object') {
+                    result += "<thead class='thead-light text-center'><tr>";
+                    Object.keys(array[0]).forEach(key => {                       
+                        result += "<th style='border: 1px solid #000;'>" + key + "</th>"; // Darker border for headers
+                    });
+                    result += "</tr></thead>";
+                }
+            
+                // Loop through the array to build table rows
+                result += "<tbody>";
+                
+                for (var i = 0; i < array.length; i++) {
+
+
+
+                    let rowClass = '';  // Default row class (no styling)
+
+                    // Check if it's the last row and contains "Total"
+                    if (i === array.length - 1) {
+                        // Check if it's the last row and contains "Total" or "Excess"
+                        let isTotalRow = Object.values(array[i]).some(value => value && 
+                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                         );
+
+                        if (isTotalRow) {
+                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
+                        }
+                    }
+
+
+                    result += "<tr>";                   
+                     Object.keys(array[i]).forEach(key => {
+                        let dataValue = array[i][key];   
+
+                     
+                     
+                       // Check if the current column should be formatted as a number
+                        if (numberColumns.includes(key) && dataValue !== "" &&!isNaN(dataValue))
+                        {
+                         
+                            printedValue = new Intl.NumberFormat('en-IN', {
+                                                                style: 'decimal',                                                                
+                                                                minimumFractionDigits:2,
+                                                                maximumFractionDigits:2	
+                                                            }).format(dataValue); 
+
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>"; // Darker border for cells                                                    
+                        }
+                        else
+                            result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
+                     });
+                    result += "</tr>";
+                }
+                result += "</tbody>";
+                result += "</table>";
+                result += "</div>"; // Close card body
+                result += "</div>"; // Close card container
+                return result;
+            }
+
+            function renderTransposedTable(array,tabletitle,numberColumns = [],tableWidthClass='') {
+
+                 var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
+                        result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>"; // Card header
+                        result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
+                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table
+                        result += "<tbody>"; 
+
+                
+
+                // Loop through the array to transpose data into rows
+                
+                Object.keys(array[0]).forEach(key => {
+                   
+                                result += "<td class='font-weight-bold' style='background-color: #f7f7f7; border: 1px solid #000;'>" + key + "</td>"; // Bold first column with grey background
+
+                                array.forEach((item, index) => {
+                                    let rowClass = ''; // Default row class (no styling)
+
+                                    
+                                   
+
+                                    // Check if the current item in the last row contains "Total", "Excess", or "Shortage"
+                                    let itemValue = item[key];                                  
+                                     
+
+                                    if (key && 
+                                        (key.toString().toLowerCase().includes("total") || 
+                                        key.toString().toLowerCase().includes("excess") || 
+                                        key.toString().toLowerCase().includes("shortage"))) {
+                                        rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total", "Excess", or "Shortage"
+                                    }
+
+
+                                    if (numberColumns.includes(key) && itemValue !== "" &&!isNaN(itemValue)) {
+                                    // Format as a number with commas and fixed decimal places
+                                            itemValue = new Intl.NumberFormat('en-IN', {
+                                                style: 'decimal',
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2
+                                            }).format(itemValue);
+                                     }
+
+
+
+
+                            // Add the value to the table cell with the appropriate class
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + (itemValue || '') + "</td>";
+                        });
+
+                        result += "</tr>";
+                    });
+
+                result += "</tbody>";
+                result += "</table>";
+                result += "</div>"; // Close card body
+                result += "</div>"; // Close card container
+                return result;
+            }           
+
+
+            document.addEventListener('DOMContentLoaded', function() {
+
+                   document.addEventListener('DOMContentLoaded', function() {
+                   if (personLocations.length === 1) {
+                        document.getElementById('locationCode').value = personLocations[0].LocationCodes;
+                    }
+                }); 
+
+
+                const goButton = document.getElementById('goButton');
+                const overlay = document.getElementById('loadingOverlay');
+
+                goButton.addEventListener('click', function(event) {
+                    // Prevent form submission if you want to show the overlay while processing
+                    event.preventDefault();
+
+                    // Show the overlay
+                    overlay.style.display = 'flex';
+
+                    // Simulate a loading process (for example, wait for 2 seconds)
+                    setTimeout(function() {
+                        // Hide the overlay once the process is done
+                        overlay.style.display = 'none';
+                        
+                        // Optionally, submit the form after the overlay is hidden
+                        document.querySelector('form').submit();
+                    }, 2000);  // 2 seconds delay, replace with real processing time
+                });
+                
+               
+                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Cash Sales']);
+                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
+                document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
+                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Card Sales',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
+                document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
+                document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
+                document.getElementById('creditreceipt-table-container').innerHTML = renderTable(creditReceiptFromServer,'Customer Receipt',['Amount']);
+               // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
+                document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price'], 'col-sm-8 mx-auto');
+                document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
+                document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
+                document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Denomination Amount','Excess/Shortage'],"col-sm-8 mx-auto");
+                document.getElementById('monthlyofftake-table-container').innerHTML = renderTable(monthlyOfftakeFromServer, 'Monthly Fuel Offtake', ['Offtake'], 'col-sm-8 mx-auto');
+                
+                    let resultHtml = ""; // Variable to store the generated HTML
+
+                    // Loop through each bank account group
+                    Object.keys(bankTransactionFromServer).forEach(account => {
+                        const transactions = bankTransactionFromServer[account];
+
+                        // Use the existing renderTable function
+                        resultHtml += renderTable(
+                            transactions, 
+                            `Transactions for ${account}`, // Title for each account
+                            ["Credit", "Debit"], // Columns to format as numbers
+                            "col-sm-8 mx-auto" // Optional class for table width
+                        );
+                    });
+
+                
+                document.getElementById('banktransaction-table-container').innerHTML = resultHtml
+            });
+
+        table.center
+            tr
+                td Report Date:
+                td
+                    input#fromClosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
+                td &nbsp;
+                if personLocations.length > 1
+                    td Location:
+                    td
+                        select#locationCode.form-control(name='locationCode', required)
+                            option(value='') Select Location
+                            each location in personLocations
+                                option(value=location.LocationCodes selected=(location.LocationCodes === locationCode))= location.LocationCodes                        
+                    td &nbsp;
+                include report-print-download.pug
+    div 
+        div.row &nbsp;
+        h5.text-center.text-muted= locationName
+        h4.font-weight-bold.text-center= "Day Close Report "                                                                 
+        h4.text-center.text-muted= formattedFromClosingDate                
+        h4.font-weight-bold.text-success.text-center                           
+    if(closingData == 'Available')                
+        div.row        
+            div.col-md-8
+                div.row &nbsp;                
+                div(id="salesSummary-table-container")        
+            div.col-md-4
+                div.row &nbsp;               
+                div(id="salesCollection-table-container")
+        div.row
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="cashsale-table-container")     
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="cardsale-table-container")       
+        div.row    
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="creditsale-table-container")    
+            div.col-md-6  
+                div.row &nbsp;                
+                div(id="expense-table-container")
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="shiftsummary-table-container")          
+        div.row
+            div.col-md-12                
+                div(id="stockreceipt-table-container")
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="creditreceipt-table-container") 
+        div.row
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="product-price-table-container")          
+            div.col-md-6
+                div.row &nbsp;                
+                div(id="monthlyofftake-table-container")                                  
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="reading-table-container") 
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="cashflow-table-container") 
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="denomresult-table-container")
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="banktransaction-table-container")
+                                    
+
+    else
+        div.row &nbsp;
+        div.row.bg-light No Transactions.
+
+    // Include the overlay
+    include overlay.pug                         
