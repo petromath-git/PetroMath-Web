@@ -108,6 +108,23 @@ getMonthlyOfftake: async (locationCode, reportDate) => {
     return result;
 },
 
+
+getDeadline: async (locationCode, reportDate) => {
+    const result = await db.sequelize.query(`
+        select tv.deadline_date,DAYNAME(td.deadline_date) day,tv.message
+                                          from t_deadline_v tv,t_deadline td
+                                         where tv.display_warning = 'Y' AND td.t_deadline_id = tv.t_deadline_id 
+                                              and tv.location_code = :location
+    `, {
+        replacements: { location: locationCode, closeDate: reportDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
+    return result;
+},
+
+
+
+
    getsalessummary: async (locationCode, reportDate) => {
     const data =  await module.exports.getclosingid(locationCode,reportDate);
     const closing_id = data.map(item => item.closing_id);
@@ -128,8 +145,10 @@ getMonthlyOfftake: async (locationCode, reportDate) => {
                                         from t_reading tr,m_pump mp 
                                         where tr.closing_id in (:closing_id) and   tr.pump_id = mp.pump_id 
                                         group by  mp.pump_code,mp.product_code) a lEFT OUTER JOIN
-                                        (select sum(tcr.qty) cr_qty,mp.product_name from t_credits tcr,m_product mp where 1=1
+                                        (select sum(tcr.qty) cr_qty,mp.product_name from t_credits tcr,m_product mp,m_credit_list mcl where 1=1
                                         and  tcr.product_id = mp.product_id
+                                        and  tcr.creditlist_id = mcl.creditlist_id
+                                        and  COALESCE(mcl.card_flag,'N') = 'N'
                                         and  tcr.closing_id in (:closing_id) group by mp.product_name)b 
                                         ON a.product_code = b.product_name
                                         lEFT OUTER JOIN
