@@ -47,6 +47,7 @@ module.exports = {
       let personLocations= [];
       let productPriceList= [];
       let monthlyOfftakeList= [];
+      let deadlineList= [];
       let renderData = {};
 
 
@@ -89,6 +90,7 @@ module.exports = {
       const fuelTankStockPromise =  DsrReportDao.getfuelstock(locationCode, fromDate);
       const productPricePromise   =  DsrReportDao.getPumpPrice(locationCode, fromDate);
       const monthlyOfftakePromise = DsrReportDao.getMonthlyOfftake(locationCode, fromDate);
+      const deadlinePromise = DsrReportDao.getDeadline(locationCode, fromDate);
       
       
 
@@ -96,7 +98,7 @@ module.exports = {
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
              cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
-             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData] = await Promise.all([readingsPromise, 
+             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 oilCollectionPromise,
@@ -113,7 +115,8 @@ module.exports = {
                                                                                                 bankTransPromise,
                                                                                                 fuelTankStockPromise,
                                                                                                 productPricePromise,
-                                                                                                monthlyOfftakePromise                                                                                                
+                                                                                                monthlyOfftakePromise,
+                                                                                                deadlinePromise                                                                                                
                                                                                               ]);
 
       // Process readings data
@@ -124,12 +127,40 @@ module.exports = {
         });
       });
 
+
+      const getMonthName = (date) => {
+        const options = { month: 'short', year:  'numeric' };
+        return new Intl.DateTimeFormat('en-IN', options).format(date);
+      };
+
+
+
+      
+
+        // Calculate dates for current, last month, and last year
+        const currentMonthName = getMonthName(closingDate);
+
+        const lastMonthDate = new Date(closingDate);
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonthName = getMonthName(lastMonthDate);
+
+        const lastYearDate = new Date(closingDate);
+        lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
+        const lastYearMonthName = getMonthName(lastYearDate);
+
+        console.log('currentMonthName:', currentMonthName);
+        console.log('lastMonthName:', lastMonthName);
+        console.log('lastYearMonthName:', lastYearMonthName);
+
       monthlyOfftakeData.forEach((monthlyOfftake) => {
+
+        
+
         monthlyOfftakeList.push({
           'Product': monthlyOfftake.product_code,
-          'Offtake(KL)': monthlyOfftake.current_month_Offtake,          
-          'Last Month Offtake(KL)': monthlyOfftake.last_month_Offtake,          
-          'Last Year Offtake(KL)': monthlyOfftake.last_year_Offtake
+          [currentMonthName]: monthlyOfftake.current_month_Offtake,          
+          [lastMonthName]: monthlyOfftake.last_month_Offtake,          
+          [lastYearMonthName]: monthlyOfftake.last_year_Offtake
         });
       });
 
@@ -147,21 +178,32 @@ module.exports = {
         });
       });
 
-      let cashSales = 0;
+
+      deadlineData.forEach((deadline) => {     
+       
+
+        deadlineList.push({
+          'Date': deadline.deadline_date,
+          'Day': deadline.day,
+          'Message': deadline.message,                    
+        });
+      });
+
+      let DigiandCashSales = 0;
 
       // Process sales summary data
       salesSummaryData.forEach((salesSummary) => {
 
         
-        cashSales = salesSummary.total_sales - salesSummary.credit_sales;
+        DigiandCashSales = salesSummary.total_sales - salesSummary.credit_sales;
 
         SalesSummarylist.push({
           Product: salesSummary.product_code,
           'Nozzle Flow': salesSummary.nozzle_sales,
           'Testing': salesSummary.nozzle_test,
           'Total Sales': salesSummary.total_sales,
-          'Credit Sales': salesSummary.credit_sales,
-          'Cash Sales': cashSales.toFixed(2),
+          'Credit Sales': salesSummary.credit_sales,          
+          'Digital+Cash Sales': DigiandCashSales.toFixed(2),
         });
       });
 
@@ -209,7 +251,7 @@ module.exports = {
               // Add totals to the collection list
         Collectionlist.push({         
           Cash: `${formatter.format(totalCash + totalOilCash)} (${((totalCash + totalOilCash) / grandTotal * 100).toFixed(2)}%)`,
-          Card: `${formatter.format(totalCard)} (${(totalCard / grandTotal * 100).toFixed(2)}%)`,
+          Digital: `${formatter.format(totalCard)} (${(totalCard / grandTotal * 100).toFixed(2)}%)`,
           Credit: `${formatter.format(totalCredit + totalOilCredit)} (${((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2)}%)`
         });
 
@@ -278,7 +320,7 @@ module.exports = {
         totalCardSummarySales += parseFloat(cardSummarySales.amt);
 
         CardSaleSummarylist.push({          
-          'Card': cardSummarySales.name,           
+          'Digital': cardSummarySales.name,           
            Amount: cardSummarySales.amt
         });
       });
@@ -500,6 +542,7 @@ module.exports = {
         FuelTankStocklist: FuelTankStocklist,
         productPriceList:productPriceList,
         monthlyOfftakeList: monthlyOfftakeList,
+        deadlineList: deadlineList
       }
     }else
     {
