@@ -124,12 +124,40 @@ module.exports = {
         });
       });
 
+
+      const getMonthName = (date) => {
+        const options = { month: 'short', year:  'numeric' };
+        return new Intl.DateTimeFormat('en-IN', options).format(date);
+      };
+
+
+
+      
+
+        // Calculate dates for current, last month, and last year
+        const currentMonthName = getMonthName(closingDate);
+
+        const lastMonthDate = new Date(closingDate);
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonthName = getMonthName(lastMonthDate);
+
+        const lastYearDate = new Date(closingDate);
+        lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
+        const lastYearMonthName = getMonthName(lastYearDate);
+
+        console.log('currentMonthName:', currentMonthName);
+        console.log('lastMonthName:', lastMonthName);
+        console.log('lastYearMonthName:', lastYearMonthName);
+
       monthlyOfftakeData.forEach((monthlyOfftake) => {
+
+        
+
         monthlyOfftakeList.push({
           'Product': monthlyOfftake.product_code,
-          'Offtake(KL)': monthlyOfftake.current_month_Offtake,          
-          'Last Month Offtake(KL)': monthlyOfftake.last_month_Offtake,          
-          'Last Year Offtake(KL)': monthlyOfftake.last_year_Offtake
+          [currentMonthName]: monthlyOfftake.current_month_Offtake,          
+          [lastMonthName]: monthlyOfftake.last_month_Offtake,          
+          [lastYearMonthName]: monthlyOfftake.last_year_Offtake
         });
       });
 
