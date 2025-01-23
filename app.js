@@ -117,7 +117,7 @@ const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
 
-const vehicleRoutes = require('./routes/vehicle-routes');
+//const vehicleRoutes = require('./routes/vehicle-routes');
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
@@ -920,7 +920,7 @@ app.get('/bills/check-bills-for-shift/:shiftId', isLoginEnsured, function(req, r
     billController.checkBillsForShift(req, res, next);
 });
 
-app.use('/vehicles', vehicleRoutes);
+//app.use('/vehicles', vehicleRoutes);
 
 
 // error handler - start.
