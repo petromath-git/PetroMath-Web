@@ -195,7 +195,7 @@ block content
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
-                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Cash Sales',['Quantity','Price','Discount','Amount']);
+                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
@@ -310,7 +310,7 @@ block content
         div.row
             div.col-md-12
                 div.row &nbsp;                
-                div(id="denomresult-table-container")        
+                div(id="banktransaction-table-container")        
         div.row
             div.col-md-12
                 div.row &nbsp;                
