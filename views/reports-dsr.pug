@@ -192,18 +192,18 @@ block content
                 
                
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
-                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
+                document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card']);                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
-                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount']);
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
-                document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount']);
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
                 document.getElementById('creditreceipt-table-container').innerHTML = renderTable(creditReceiptFromServer,'Customer Receipt',['Amount']);
                // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
-                document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price'], 'col-sm-8 mx-auto');
+                document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price']);
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
-                document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
+                document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"]);
                 document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Denomination Amount','Excess/Shortage'],"col-sm-8 mx-auto");
                 document.getElementById('deadline-table-container').innerHTML = renderTable(deadlineListFromServer,'Deadlines',[],"col-sm-8 mx-auto");
                 
@@ -213,7 +213,7 @@ block content
                 // Determine which columns should be formatted as numbers
                 const numberColumns = dynamicHeaders.filter((header) => header !== "Product");
                                 
-                document.getElementById('monthlyofftake-table-container').innerHTML = renderTable(monthlyOfftakeFromServer, 'Month Fuel Offtake in KL', numberColumns, 'col-sm-8 mx-auto');
+                document.getElementById('monthlyofftake-table-container').innerHTML = renderTable(monthlyOfftakeFromServer, 'Month Fuel Offtake in KL', numberColumns);
                 
                     let resultHtml = ""; // Variable to store the generated HTML
 
@@ -225,8 +225,8 @@ block content
                         resultHtml += renderTable(
                             transactions, 
                             `Transactions for ${account}`, // Title for each account
-                            ["Credit", "Debit"], // Columns to format as numbers
-                            "col-sm-8 mx-auto" // Optional class for table width
+                            ["Credit", "Debit"] // Columns to format as numbers
+                            
                         );
                     });
 
@@ -255,71 +255,49 @@ block content
         h4.font-weight-bold.text-center= "Day Close Report "                                                                 
         h4.text-center.text-muted= formattedFromClosingDate                
         h4.font-weight-bold.text-success.text-center                           
-    if(closingData == 'Available')                
-        div.row        
-            div.col-md-8
-                div.row &nbsp;                
-                div(id="salesSummary-table-container")        
-            div.col-md-4
-                div.row &nbsp;               
-                div(id="salesCollection-table-container")
-        div.row
-            div.col-md-6
-                div.row &nbsp;                
-                div(id="cashsale-table-container")     
-            div.col-md-6
-                div.row &nbsp;                
-                div(id="cardsale-table-container")       
-        div.row    
-            div.col-md-6
-                div.row &nbsp;                
-                div(id="creditsale-table-container")    
-            div.col-md-6  
-                div.row &nbsp;                
-                div(id="expense-table-container")
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="shiftsummary-table-container")          
-        div.row
-            div.col-md-12                
-                div(id="stockreceipt-table-container")
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="creditreceipt-table-container") 
-        div.row
-            div.col-md-6
-                div.row &nbsp;                
-                div(id="product-price-table-container")          
-            div.col-md-6
-                div.row &nbsp;                
-                div(id="monthlyofftake-table-container")                                  
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="reading-table-container") 
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="cashflow-table-container") 
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="denomresult-table-container")
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="banktransaction-table-container")        
-        div.row
-            div.col-md-12
-                div.row &nbsp;                
-                div(id="deadline-table-container")
-                                    
-
+    if closingData == 'Available'
+        .container-fluid
+            .row
+                .col-md-8
+                    div(id="salesSummary-table-container")
+                .col-md-4
+                    div(id="salesCollection-table-container")
+            
+            .row
+                .col-md-6
+                    div(id="cashsale-table-container")
+                .col-md-6
+                    div(id="cardsale-table-container")
+            
+            .row
+                .col-md-12
+                    div(id="creditsale-table-container")                
+                    
+            .row
+                .col-md-6
+                    div(id="expense-table-container")
+                .col-md-6
+                    div(id="shiftsummary-table-container")
+            .row
+                .col-md-12                    
+                    div(id="stockreceipt-table-container")
+                    div(id="creditreceipt-table-container")
+            
+            .row
+                .col-md-6
+                        div(id="product-price-table-container")
+                .col-md-6
+                        div(id="monthlyofftake-table-container")
+                
+            .row
+                .col-md-12
+                        div(id="reading-table-container")
+                        div(id="cashflow-table-container")
+                        div(id="denomresult-table-container")
+                        div(id="banktransaction-table-container")
+                        div(id="deadline-table-container")
     else
-        div.row &nbsp;
-        div.row.bg-light No Transactions.
+        .row.bg-light No Transactions.
 
     // Include the overlay
     include overlay.pug                         

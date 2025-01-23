@@ -1,4 +1,4 @@
-const { request } = require("express");
+
 
 function generatePDF(currentPage,isPrint = 'N') { 
 
@@ -12,7 +12,10 @@ function generatePDF(currentPage,isPrint = 'N') {
 
     requestBody.caller = 'PDF';
 
-    if (currentPage.includes('creditsummary')) {
+    if (currentPage.includes('bills')) {
+        requestBody.reportType = 'Bills';
+        requestBody.billId = document.getElementById('printButton').getAttribute('data-bill-id');
+    } else if (currentPage.includes('creditsummary')) {
         requestBody.reportType = 'CreditSummary';
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;
     } else if (currentPage.includes('reports-cashflow')){
@@ -88,6 +91,7 @@ function generatePDF(currentPage,isPrint = 'N') {
             //newTab.onload = () => {newTab.print(); // Automatically triggers print
             //                }
             }
+            window.location.reload();
         }
 
          // Hide the overlay after file is prepared

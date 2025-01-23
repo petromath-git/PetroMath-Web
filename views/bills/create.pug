@@ -5,7 +5,8 @@ block content
         .card
             .card-header
                 .d-flex.justify-content-between.align-items-center
-                    h5.card-title.mb-0 Create New Bill
+                    h5.card-title.mb-0#billTitle.text-center
+                        | #{billType === 'CASH' ? 'CASH BILL' : 'CREDIT BILL'}
                     .float-right.d-none.d-md-block
                         button.btn.btn-info#addRowDesktop(type='button')
                             i.bi.bi-plus
@@ -18,32 +19,39 @@ block content
                     .row.mb-3
                         .col-12.col-md-4.mb-3.mb-md-0
                             .form-group
-                                label(for='shift') Select Shift *
-                                select#shift.form-control(name='closing_id' required)
-                                    option(value='') Select Shift
-                                    each shift in shifts
-                                        option(
-                                            value=shift.closing_id 
-                                            selected=(typeof bill !== 'undefined' && shift.closing_id === bill.closing_id)
-                                        ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
+                                if shifts.length === 1
+                                    label Shift
+                                    p.form-control-plaintext #{shifts[0].cashier_name}(#{shifts[0].closing_id}) - #{new Date(shifts[0].creation_date).toLocaleDateString('en-IN')}
+                                    input(type='hidden' name='closing_id' value=shifts[0].closing_id)
+                                else
+                                    label(for='shift') Select Shift *
+                                    select#shift.form-control(name='closing_id' required)
+                                        option(value='') Select Shift
+                                        each shift in shifts
+                                            option(
+                                                value=shift.closing_id 
+                                                selected=(typeof bill !== 'undefined' && shift.closing_id === bill.closing_id)
+                                            ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
                         .col-12.col-md-4.mb-3.mb-md-0
                             .form-group
                                 label Bill Type *
                                 .mt-2
-                                    .form-check.form-check-inline
-                                        input#cashBill.form-check-input(type='radio' name='bill_type' value='CASH' required checked)
-                                        label.form-check-label(for='cashBill') Cash
-                                    .form-check.form-check-inline.ms-3
-                                        input#creditBill.form-check-input(type='radio' name='bill_type' value='CREDIT' required)
-                                        label.form-check-label(for='creditBill') Credit
-
+                                    if billType === 'CASH'                        
+                                        .form-check.form-check-inline
+                                            input#cashBill.form-check-input(type='radio' name='bill_type' value='CASH' required checked)
+                                            label.form-check-label(for='cashBill') Cash
+                                    else                        
+                                        .form-check.form-check-inline
+                                            input#creditBill.form-check-input(type='radio' name='bill_type' value='CREDIT' required)
+                                            label.form-check-label(for='creditBill') Credit
+                                        .form-check.form-check-inline
+                                            input#digitalBill.form-check-input(type='radio' name='bill_type' value='DIGITAL' required)
+                                            label.form-check-label(for='digitalBill') Digital
                         div#creditCustomerDiv.col-12.col-md-4.d-none
                             .form-group
                                 label(for='creditCustomer') Customer *
                                 select#creditCustomer.form-control(name='creditlist_id')
-                                    option(value='') Select Customer
-                                    each credit in credits
-                                        option(value=credit.creditlist_id) #{credit.Company_Name}
+                                    option(value='') Select Customer                                    
                     
                     //- Items Table - Desktop View
                     .table-responsive
@@ -102,6 +110,8 @@ block content
     //- Embed data for JavaScript
     script.
         const products = !{JSON.stringify(products)};
+        const digitalCustomers = !{JSON.stringify(digitalCustomers)};
+        const creditCustomers = !{JSON.stringify(creditCustomers)};
         const userLocationCode = '#{user.location_code}';
 
     script(src="/javascripts/bills.js")

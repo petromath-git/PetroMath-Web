@@ -1,0 +1,27 @@
+extends ../layout
+
+block content 
+  .d-flex.justify-content-between.align-items-center.mb-4
+    p.mb-4.text-center.font-weight-bold= bill.type
+    p.mb-0 Date: #{bill.date}
+    p.mb-0.font-weight-bold Bill # title
+  p.mb-4.text-center.font-weight-bold= bill.customer.name
+  
+
+  table.table.table-bordered.mb-4
+    thead
+      tr
+        th Product
+        th Quantity
+        th Price
+        th Price Discount
+        th Total
+    tbody
+      each item in bill.items
+        tr
+          td= item.product_name
+          td= item.quantity
+          td= item.price
+          td= item.discount
+          td= item.total
+

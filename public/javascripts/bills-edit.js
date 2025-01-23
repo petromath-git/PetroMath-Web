@@ -75,26 +75,63 @@ document.addEventListener('DOMContentLoaded', function() {
         totalAmountDisplay.textContent = `₹ ${total.toFixed(2)}`;
     }
 
-   // Bill Type change handler
-        document.querySelectorAll('input[name="bill_type"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                const creditCustomerDiv = document.getElementById('creditCustomerDiv');
-                const creditCustomerSelect = document.getElementById('creditCustomer');
-                
-                if (this.value === 'CREDIT') {
-                    creditCustomerDiv.classList.remove('d-none');
-                    creditCustomerSelect.required = true;
-                } else {
-                    creditCustomerDiv.classList.add('d-none');
-                    creditCustomerSelect.required = false;
-                    creditCustomerSelect.value = ''; // Clear selection when switching to cash
-                }
-            });
-        });
+  
 
     // Initial setup for rows
     const rows = billItemsTable.querySelectorAll('.item-row');
-    rows.forEach(row => attachProductSelectListener(row));
+    rows.forEach(row => attachProductSelectListener(row));  
+
+     // Add Item functionality
+const addRow = document.getElementById('addRow');
+if (addRow) {
+    addRow.addEventListener('click', function() {
+        const tbody = billItemsTable.querySelector('tbody');
+        const templateRow = tbody.querySelector('.item-row');
+        const newRow = templateRow.cloneNode(true);
+        const rowCount = tbody.querySelectorAll('.item-row').length;
+
+        // Update the indices in the name attributes
+        newRow.querySelectorAll('select, input').forEach(element => {
+            if (element.name) {
+                element.name = element.name.replace(/\[\d+\]/, `[${rowCount}]`);
+            }
+            // Clear values
+            element.value = '';
+        });
+
+        // Enable remove button for new row
+        const removeBtn = newRow.querySelector('.remove-row');
+        removeBtn.disabled = false;
+        removeBtn.onclick = function() {
+            if (tbody.querySelectorAll('.item-row').length > 1) {
+                newRow.remove();
+                updateTotalAmount();
+            }
+        };
+
+        // Attach product select listener to new row
+        attachProductSelectListener(newRow);
+
+        tbody.appendChild(newRow);
+    });
+}
+
+    // Enable remove buttons for existing rows if more than one
+    const existingRows = billItemsTable.querySelectorAll('.item-row');
+    if (existingRows.length > 1) {
+        existingRows.forEach(row => {
+            const removeBtn = row.querySelector('.remove-row');
+            removeBtn.disabled = false;
+            removeBtn.onclick = function() {
+                if (existingRows.length > 1) {
+                    row.remove();
+                    updateTotalAmount();
+                }
+            };
+        });
+    }
+
+
 
     // Initial total amount calculation
     updateTotalAmount();
@@ -102,8 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Form validation
     billForm.addEventListener('submit', function(e) {
         const shift = document.getElementById('shift').value;
-        const billType = document.getElementById('billType').value;
-        const creditCustomer = billType === 'CREDIT' ? document.getElementById('creditCustomer').value : null;
+        
 
         if (!shift) {
             alert('Please select a shift');
@@ -111,11 +147,55 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
-        if (billType === 'CREDIT' && !creditCustomer) {
-            alert('Please select a customer for credit bill');
+        //Quantity cannot be 0       
+
+        // Iterate over all Quantity inputs
+        document.querySelectorAll('.qty-input').forEach(qtyInput => {
+            const qty = parseFloat(qtyInput.value) || 0;
+
+            // Check if the line Quantity is greater than 0
+            if (qty <= 0) {
+                alert('Quantity Cannot 0.');                
+                qtyInput.focus(); // Focus the invalid input for user attention
+                return; // Exit loop for this iteration
+            }
+            
+        });
+
+
+
+        let totalAmount = 0;
+        let isValid = true; // Flag to track validity of individual line amounts
+
+        // Iterate over all amount inputs
+        document.querySelectorAll('.amount-input').forEach(amountInput => {
+            const amount = parseFloat(amountInput.value) || 0;
+
+            // Check if the line amount is greater than 0
+            if (amount <= 0) {
+                alert('Each line amount must be greater than 0.');
+                isValid = false;
+                amountInput.focus(); // Focus the invalid input for user attention
+                return; // Exit loop for this iteration
+            }
+
+            totalAmount += amount;
+        });
+
+        // If any line amount is invalid, prevent form submission
+        if (!isValid) {
             e.preventDefault();
             return false;
         }
+
+        // Check if the total amount is greater than 0
+        if (totalAmount <= 0) {
+            alert('Total amount must be greater than 0.');
+            e.preventDefault();
+            return false;
+        }
+
+    
 
         // Check if there are any items
         const items = document.querySelectorAll('.item-row');

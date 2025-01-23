@@ -117,6 +117,7 @@ const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
 
+const vehicleRoutes = require('./routes/vehicle-routes');
 
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
@@ -152,7 +153,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
 
 // Routes - start
-app.get('/', isLoginEnsured, function (req, res) {
+app.get('/', isLoginEnsured, function (req, res) {    
     res.redirect('/home');
 });
 
@@ -857,8 +858,18 @@ app.get('/bills', isLoginEnsured, function(req, res, next) {
     billController.getBills(req, res, next);
 });
 
+app.get('/bills/check-drafts', isLoginEnsured, function(req, res, next) {
+    billController.checkDraftBills(req, res, next);
+});
+
 app.get('/bills/new', isLoginEnsured, function(req, res, next) {
-    billController.getNewBill(req, res, next);
+    const billType = req.query.type || 'CASH'; // Default to 'CASH' if no type is provided
+    billController.getNewBill(req, res, next, billType);
+});
+
+// Check before allowing to create a new bill
+app.get('/bills/check-draft-shifts', isLoginEnsured, function(req, res, next) {
+    billController.checkDraftShifts(req, res, next);
 });
 
 app.post('/bills', isLoginEnsured, function(req, res, next) {
@@ -889,6 +900,28 @@ app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
 app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
     billController.deleteBill(req, res, next);
 });
+
+app.put('/bills/:billId/print', isLoginEnsured, function(req, res, next) {
+    billController.printBill(req, res, next);
+});
+
+app.put('/bills/:billId/cancel', isLoginEnsured, function(req, res, next) {
+    billController.cancelBill(req, res, next);
+});
+
+
+
+app.get('/bills/check-drafts-for-shift/:shiftId', isLoginEnsured, function(req, res, next) {
+    billController.checkDraftsForShift(req, res, next);
+});
+
+
+app.get('/bills/check-bills-for-shift/:shiftId', isLoginEnsured, function(req, res, next) {
+    billController.checkBillsForShift(req, res, next);
+});
+
+app.use('/vehicles', vehicleRoutes);
+
 
 // error handler - start.
 app.use(function (req, res, next) {
