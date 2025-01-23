@@ -676,40 +676,10 @@ function formGivenAndRemain(oilId, productAlias, user) {
 
 // Add new page - add cash sales to DB via ajax
 function saveCashSales() {
-    return new Promise((resolve, reject) => {
-        const cashSaleTag = 'cash-sale-';
-        const cashSaleRow = cashSaleTag + 'table-row-';
-        const tabToActivate = 'credit_sales_tab';
-        const currentTabId = 'new_cash_sales';
-        const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + cashSaleRow + ']:not([type="hidden"])');
-        let newSales = [], updateSales = [], newHiddenFieldsArr = [];
-        const user = JSON.parse(document.getElementById("user").value);
-        salesObj.forEach((saleObj) => {
-            if (!saleObj.className.includes('-none')) {
-                const saleObjRowNum = saleObj.id.replace(cashSaleRow, '');
-                const saleField = document.getElementById(cashSaleTag + 'amt-' + saleObjRowNum);
-                const hiddenField = document.getElementById(cashSaleTag + saleObjRowNum + '_hiddenId');
-                if (parseFloat(saleField.value) > 0 || (hiddenField.value && parseInt(hiddenField.value) > 0)) {
-                    if (hiddenField.value && parseInt(hiddenField.value) > 0) {
-                        // Scenario: Where user clears the value to '0', so just update the data in DB
-                        updateSales.push(formCashSales(hiddenField.value, cashSaleTag, saleObjRowNum, user));
-                    } else {
-                        newHiddenFieldsArr.push(cashSaleTag + saleObjRowNum);
-                        newSales.push(formCashSales(undefined, cashSaleTag, saleObjRowNum, user));
-                    }
-                }
-            }
-        });
-        console.log("NEW CASH SALES DATA " + JSON.stringify(newSales));
-        console.log("UPDATE CASH SALES DATA " + JSON.stringify(updateSales));
-        postAjaxNew('new-cash-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'cashsales_id')
-            .then((data) => {
-                resolve(data);
-            });
-        if (newSales.length === 0 && updateSales.length === 0) {
-            resolve(true);      // tab click handled in trackMenu()
-        }
-    });
+    return new Promise((resolve) => {
+        // Just resolve immediately since we don't want to save cash sales here anymore
+        resolve(true);
+    });    
 }
 
 function formCashSales(salesId, cashSaleTag, saleObjRowNum, user) {
@@ -730,40 +700,10 @@ function formCashSales(salesId, cashSaleTag, saleObjRowNum, user) {
 
 // Add new page - add credit sales to DB via ajax
 function saveCreditSales() {
-    return new Promise((resolve, reject) => {
-        const creditSaleTag = 'credit-';
-        const creditSaleRow = creditSaleTag + 'table-row-';
-        const tabToActivate = 'expenses_tab';
-        const currentTabId = 'new_credit_sales';
-        const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + creditSaleRow + ']:not([type="hidden"])');
-        let newSales = [], updateSales = [], newHiddenFieldsArr = [];
-        const user = JSON.parse(document.getElementById("user").value);
-        salesObj.forEach((saleObj) => {
-            if (!saleObj.className.includes('-none')) {
-                const saleObjRowNum = saleObj.id.replace(creditSaleRow, '');
-                const saleField = document.getElementById(creditSaleTag + 'amt-' + saleObjRowNum);
-                const hiddenField = document.getElementById(creditSaleTag + saleObjRowNum + '_hiddenId');
-                if (parseFloat(saleField.value) > 0 || (hiddenField.value && parseInt(hiddenField.value) > 0)) {
-                    if (hiddenField.value && parseInt(hiddenField.value) > 0) {
-                        // Scenario: Where user clears the value to '0', so just update the data in DB
-                        updateSales.push(formCreditSales(hiddenField.value, creditSaleTag, saleObjRowNum, user));
-                    } else {
-                        newHiddenFieldsArr.push(creditSaleTag + saleObjRowNum);
-                        newSales.push(formCreditSales(undefined, creditSaleTag, saleObjRowNum, user));
-                    }
-                }
-            }
-        });
-        console.log("New Credit sales data " + JSON.stringify(newSales));
-        console.log("Update Credit sales data " + JSON.stringify(updateSales));
-        postAjaxNew('new-credit-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'tcredit_id')
-            .then((data) => {
-                resolve(data);
-            });
-        if (newSales.length == 0 && updateSales.length == 0) {
-            resolve(true);      // tab click handled in trackMenu()
-        }
-    });
+    return new Promise((resolve) => {
+        // Just resolve immediately since we don't want to save cash sales here anymore
+        resolve(true);
+    });    
 }
 
 function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
@@ -1175,15 +1115,71 @@ function putAjax(uri, data) {
     });
 }
 
+// function finishClosing(hiddenPrefix, uri, redirect) {
+//     const r = confirm("Please confirm if you want to freeze the closing?");
+//     if (r == true) {
+//         const id = document.getElementById(hiddenPrefix + '_hiddenId').value;
+//         if (id && parseInt(id) > 0) {
+//             ajaxLoading('d-md-block');
+//             // Prepare AJAX requests & handlers
+//             const ajaxUpdateReq = new XMLHttpRequest();
+//             ajaxUpdateReq.onreadystatechange = function () {
+//                 if (ajaxUpdateReq.readyState == 4) {
+//                     ajaxLoading('d-md-none');
+//                     console.log("Close record [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
+//                     if (ajaxUpdateReq.status == 200 || ajaxUpdateReq.status == 500) {
+//                         const updateResult = JSON.parse(ajaxUpdateReq.responseText);
+//                         showToastMessage(updateResult, 7000);
+//                         if (ajaxUpdateReq.status == 200) {
+//                             if (redirect.includes("tab")) {
+//                                 Promise.resolve('hello')
+//                                     .then(promiseTimeout(5000))
+//                                     .then(document.getElementById(redirect).click());
+//                             } else {
+//                                 window.location.href = '/' + redirect;
+//                             }
+//                         }
+//                     }
+//                 }
+//             };
+//             ajaxUpdateReq.open("POST", uri + '?id=' + id, true);
+//             ajaxUpdateReq.setRequestHeader("Content-type", "application/json");
+//             ajaxUpdateReq.send();
+//         }
+//     }
+// }
+
 function finishClosing(hiddenPrefix, uri, redirect) {
-    const r = confirm("Please confirm if you want to freeze the closing?");
-    if (r == true) {
-        const id = document.getElementById(hiddenPrefix + '_hiddenId').value;
-        if (id && parseInt(id) > 0) {
+    const id = document.getElementById(hiddenPrefix + '_hiddenId').value;
+    
+    if (id && parseInt(id) > 0) {
+        // First check for draft bills
+        const checkDraftBillsReq = new XMLHttpRequest();
+        checkDraftBillsReq.onreadystatechange = function() {
+            if (checkDraftBillsReq.readyState == 4) {
+                if (checkDraftBillsReq.status == 200) {
+                    const response = JSON.parse(checkDraftBillsReq.responseText);
+                    if (response.hasDraftBills) {
+                        alert('Cannot close shift. There are draft bills pending. Please complete or delete draft bills before closing the shift.');
+                        return;
+                    } else {
+                        // Proceed with closing if no draft bills
+                        proceedWithClosing();
+                    }
+                }
+            }
+        };
+        checkDraftBillsReq.open("GET", `/bills/check-drafts-for-shift/${id}`, true);
+        checkDraftBillsReq.send();
+    }
+
+    function proceedWithClosing() {
+        const r = confirm("Please confirm if you want to freeze the closing?");
+        if (r == true) {
             ajaxLoading('d-md-block');
             // Prepare AJAX requests & handlers
             const ajaxUpdateReq = new XMLHttpRequest();
-            ajaxUpdateReq.onreadystatechange = function () {
+            ajaxUpdateReq.onreadystatechange = function() {
                 if (ajaxUpdateReq.readyState == 4) {
                     ajaxLoading('d-md-none');
                     console.log("Close record [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
@@ -1209,12 +1205,33 @@ function finishClosing(hiddenPrefix, uri, redirect) {
     }
 }
 
+
 function deleteClosing(closingId) {
-    const r = confirm("Please confirm if you want to delete the closing?");
-    if (r == true) {
-        if (deleteAjax('delete-closing', closingId, 'closing-record-' + closingId, 'd-md-none')) {
-            //console.log(location.href );
-            document.getElementById('home_tab').click();
+    // First check if shift has any bills
+    const checkBillsReq = new XMLHttpRequest();
+    checkBillsReq.onreadystatechange = function() {
+        if (checkBillsReq.readyState == 4) {
+            if (checkBillsReq.status == 200) {
+                const response = JSON.parse(checkBillsReq.responseText);
+                if (response.hasBills) {
+                    alert('Cannot delete shift. There are bills associated with this shift.');
+                    return;
+                } else {
+                    // Proceed with deletion if no bills found
+                    proceedWithDelete();
+                }
+            }
+        }
+    };
+    checkBillsReq.open("GET", `/bills/check-bills-for-shift/${closingId}`, true);
+    checkBillsReq.send();
+
+    function proceedWithDelete() {
+        const r = confirm("Please confirm if you want to delete the closing?");
+        if (r == true) {
+            if (deleteAjax('delete-closing', closingId, 'closing-record-' + closingId, 'd-md-none')) {
+                document.getElementById('home_tab').click();
+            }
         }
     }
 }

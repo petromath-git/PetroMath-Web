@@ -6,6 +6,7 @@ const cashflowReportsController = require("../controllers/reports-cashflow-contr
 const dsrReportsController = require("../controllers/reports-dsr-controller");
 const gstReportsController = require("../controllers/reports-gst-summary-controller");
 const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
+const billsReportsController = require("../controllers/bill-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 
@@ -24,7 +25,9 @@ module.exports = {
 
         const locationDetails = await locationdao.getLocationDetails(location);
 
-        if(req.body.reportType == 'CreditSummary')
+        if (req.body.reportType === 'Bills') {
+            htmlContent = await billsReportsController.printBill(req, res, next);
+        } else if(req.body.reportType == 'CreditSummary')
         {
         htmlContent = await reportsController.getCreditSummaryReport(req, res, next);
         } else if (req.body.reportType == 'CreditDetails')
@@ -187,9 +190,9 @@ module.exports = {
             </div>`,
             margin: {
                 top: '120px',    // Increased from 80px to give more space for header
-                bottom: '90px',  // Increased from 60px to give more space for footer
-                left: '20px',
-                right: '20px'
+                bottom: '40px',  // Increased from 60px to give more space for footer
+                left: '100px',
+                right: '40px'
             }
         });
 

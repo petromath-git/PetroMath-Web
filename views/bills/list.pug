@@ -6,11 +6,48 @@ block content
         .card-header
             .d-flex.justify-content-between.align-items-center
                 h5.card-title.mb-0 Bills List
-                button.btn.btn-primary(onclick="window.location.href='/bills/new'")
-                    i.bi.bi-plus
-                    |  Create New Bill
+                .ml-auto
+                    button.btn.btn-primary#cashBillBtn(type='button')
+                        i.bi.bi-cash
+                        |  Create Cash Bill
+                    button.btn.btn-secondary(style='margin-left: 8px;')#creditBillBtn(type='button')
+                        i.bi.bi-credit-card
+                        |  Create Credit Bill
         
         .card-body
+            // Add this search row
+            .row.mb-3
+                .col-md-2
+                    .form-group
+                        label(for='billNoSearch') Bill No
+                        input#billNoSearch.form-control(type='text' placeholder='Search Bill No')
+                .col-md-2
+                    .form-group
+                        label(for='shiftSearch') Shift
+                        select#shiftSearch.form-control
+                            option(value='') All Shifts
+                            each shift in shifts
+                                option(value=shift.closing_id)= shift.shift_display        
+                .col-md-2
+                    .form-group
+                        label(for='billTypeSearch') Bill Type
+                        select#billTypeSearch.form-control
+                            option(value='') All Types
+                            option(value='CASH') Cash
+                            option(value='CREDIT') Credit
+                            option(value='DIGITAL') Digital
+                .col-md-2
+                    .form-group
+                        label(for='billStatusSearch') Status
+                        select#billStatusSearch.form-control
+                            option(value='') All Status
+                            option(value='DRAFT') Draft
+                            option(value='ACTIVE') Active
+                            option(value='CANCELLED') Cancelled
+                .col-md-2
+                    .form-group
+                        label(for='dateSearch') Date
+                        input#dateSearch.form-control(type='date')
             .table-responsive
                 table.table.table-bordered.table-hover
                     thead.thead-light
@@ -27,39 +64,50 @@ block content
                             th Created Date
                             th.text-center Actions
                     tbody
-                        each bill in bills
-                            - var rowClass = bill.bill_status === 'CANCELLED' ? 'table-danger' : ''
-                            tr(class=rowClass)
+                        each bill in bills                            
+                            tr
                                 td.text-center
                                     button.btn.btn-sm.btn-link.expand-row(data-bill-id=bill.bill_id type='button')
                                         i.bi.bi-plus-circle
                                 td
                                     if bill.bill_status === 'DRAFT'
-                                        a(href=`/bills/edit/${bill.bill_id}` class="text-primary hover:text-blue-700") #{bill.bill_no}
+                                        a(href=`/bills/edit/${bill.bill_id}` 
+                                        class="text-primary hover:text-blue-700" 
+                                        title=`Bill ID: ${bill.bill_id}`) #{bill.bill_no}
                                     else
-                                        span #{bill.bill_no}
+                                        span(title=`Bill ID: ${bill.bill_id}`) #{bill.bill_no}
                                 td= bill.bill_type
                                 td= bill.customer_name || ''
                                 td.text-right= parseFloat(bill.total_amount || 0).toFixed(2)
-                                td= bill.bill_status
+                                td(class=bill.bill_status === 'CANCELLED' ? 'text-danger fw-bold' : '')= bill.bill_status
                                 td.text-center= bill.print_count
                                 td= bill.cashier_name
                                 td= new Date(bill.creation_date).toLocaleDateString('en-IN')
                                 td.text-center
-                                    button.btn.btn-info.btn-sm.me-2.print-bill(
-                                        type='button' 
-                                        data-bill-id=bill.bill_id 
-                                        title="Print Bill"
-                                    )
-                                        i.bi.bi-printer
-                                    if bill.bill_status === 'DRAFT'
-                                        button.btn.btn-danger.btn-sm.delete-bill(
-                                            type='button'
-                                            data-bill-id=bill.bill_id
-                                            title="Delete Bill"
-                                        )
-                                            i.bi.bi-trash
-
+                                    div.d-flex.gap-2
+                                        if bill.bill_status !== 'CANCELLED'
+                                            button.btn.btn-info.btn-sm.ms-4(
+                                                type='button' 
+                                                onClick='generatePDF(window.location.href, "Y")', 
+                                                id="printButton", 
+                                                data-bill-id=bill.bill_id
+                                                title="Print Bill"
+                                            )
+                                                i.bi.bi-printer
+                                        if bill.bill_status === 'DRAFT'
+                                            button.btn.btn-danger.btn-sm.delete-bill.ms-4(
+                                                type='button'
+                                                data-bill-id=bill.bill_id
+                                                title="Delete Bill"
+                                            )
+                                                i.bi.bi-trash
+                                        else if bill.bill_status === 'ACTIVE' && bill.closing_status === 'DRAFT'
+                                            button.btn.btn-warning.btn-sm.cancel-bill.ms-4(
+                                                type='button'
+                                                data-bill-id=bill.bill_id
+                                                title="Cancel Bill"
+                                            )
+                                                i.bi.bi-x-circle
                             // Expandable detail row
                             tr.bill-details(id=`details-${bill.bill_id}` style='display: none;')
                                 td(colspan='10')
@@ -69,6 +117,64 @@ block content
                                             |  Loading...
     script.
         $(document).ready(function() {
+
+            $('#cashBillBtn, #creditBillBtn').click(function(e) {
+                    e.preventDefault();
+                    const clickedButton = $(this);
+
+                    // First check for draft shifts
+                    $.get('/bills/check-draft-shifts')
+                        .then(function(shiftResponse) {
+                            if (!shiftResponse.hasDraftShifts) {
+                                alert('No open shifts available. Please create a new shift first.\n\nதிறந்த ஷிப்ட் இல்லை. முதலில் புதிய ஷிப்ட் உருவாக்கவும்.');
+                                return Promise.reject('No open shifts');
+                            }
+                            
+                            // If shifts exist, then check for draft bills
+                            return $.get('/bills/check-drafts');
+                        })
+                        .then(function(draftResponse) {
+                            if (draftResponse.hasDrafts) {
+                                const draftDetails = draftResponse.draftBills.map(bill => 
+                                    `Bill ${bill.bill_no} (Cashier: ${bill.cashier_name})`
+                                ).join('\n');
+
+                                alert(`${draftDetails}\n\nPlease complete or delete existing draft bills before creating a new one.\n\nபுதிய பில் உருவாக்குவதற்கு முன், நிலுவையில் உள்ள பில்களை முடிக்கவும் அல்லது நீக்கவும்`);
+                                return Promise.reject('Draft bills exist');
+                            }
+                            
+                            // If all checks pass, proceed to create bill
+                            const billType = clickedButton.attr('id') === 'cashBillBtn' ? 'CASH' : 'CREDIT';
+                            window.location.href = `/bills/new?type=${billType}`;
+                        })
+                        .fail(function(error) {
+                            if (error === 'No open shifts' || error === 'Draft bills exist') {
+                                return; // Already showed alert
+                            }
+                            console.error('Error during checks:', error);
+                            alert('Error checking shifts and drafts. Please try again.');
+                        });
+                });
+
+
+            //-   $('#cashBillBtn, #creditBillBtn').click(function(e) {
+            //-     e.preventDefault();
+                
+            //-     // Check for draft shifts
+            //-     $.get('/bills/check-draft-shifts', function(response) {
+            //-         if (!response.hasDraftShifts) {
+            //-             alert('No open shifts available. Please create a new shift first.');
+            //-         } else {
+            //-             // Determine bill type based on which button was clicked
+            //-                     const billType = clickedButton.attr('id') === 'cashBillBtn' ? 'CASH' : 'CREDIT';
+            //-                     window.location.href = `/bills/new?type=${billType}`;
+            //-         }
+            //-     }).fail(function(error) {
+            //-         console.error('Error checking draft Shifts:', error);
+            //-         alert('Error checking draft Shifts. Please try again.');
+            //-     });
+            //- });
+ 
             $('.expand-row').click(function() {
                 const billId = $(this).data('bill-id');
                 const detailsRow = $(`#details-${billId}`);
@@ -149,7 +255,118 @@ block content
                         });
                     }
                 });
-            });
+            });          
 
+       
+            function filterTable() {
+                const billNo = $('#billNoSearch').val().toLowerCase();
+                const shift = $('#shiftSearch').val();  // Now gets the closing_id value
+                const billType = $('#billTypeSearch').val();
+                const billStatus = $('#billStatusSearch').val();
+                const searchDate = $('#dateSearch').val();
+
+                $('.table tbody tr:not(.bill-details)').each(function() {
+                    const $row = $(this);
+                    const rowBillNo = $row.find('td:eq(1)').text().toLowerCase();
+                    const rowShift = $row.find('td:eq(7)').text().match(/\((\d+)\)/)?.[1] || '';
+                    const rowType = $row.find('td:eq(2)').text();
+                    const rowStatus = $row.find('td:eq(5)').text();
+                    
+                    const dateStr = $row.find('td:eq(8)').text();
+                    const [day, month, year] = dateStr.split('/');
+                    const rowDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+                    const matchesBillNo = !billNo || rowBillNo.includes(billNo);
+                    const matchesShift = !shift || rowShift === shift;
+                    const matchesType = !billType || rowType === billType;
+                    const matchesStatus = !billStatus || rowStatus === billStatus;
+                    const matchesDate = !searchDate || rowDate === searchDate;
+
+                    if (matchesBillNo && matchesShift && matchesType && matchesStatus && matchesDate) {
+                        $row.show();
+                    } else {
+                        $row.hide();
+                        $(`#details-${$row.find('.expand-row').data('bill-id')}`).hide();
+                    }
+                });
+            }
+
+
+            // Attach event listeners to search inputs
+            $('#billNoSearch, #shiftSearch, #billTypeSearch, #billStatusSearch, #dateSearch').on('input change', filterTable);
+
+                // Cancel Bill functionality
+                // Cancel Bill functionality
+                $('.cancel-bill').click(function() {
+                    const billId = $(this).data('bill-id');
+                    
+                    // Create modal for reason input
+                    const modalHtml = `
+                        <div class="modal fade" id="cancelBillModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Cancel Bill</h5>
+                                        <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="form-group">
+                                            <label for="cancelReason">Cancellation Reason *</label>
+                                            <textarea id="cancelReason" class="form-control" rows="3" required></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                        <button type="button" class="btn btn-warning" id="confirmCancel">Cancel Bill</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+
+                    // Add modal to body if it doesn't exist
+                    if (!$('#cancelBillModal').length) {
+                        $('body').append(modalHtml);
+                    }
+
+                    // Show modal
+                    $('#cancelBillModal').modal('show');
+
+                    // Handle confirmation
+                    $('#confirmCancel').off('click').on('click', function() {
+                        const reason = $('#cancelReason').val().trim();
+                        
+                        if (!reason) {
+                            alert('Please provide a cancellation reason');
+                            return;
+                        }
+
+                        fetch(`/bills/${billId}/cancel`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ reason: reason })
+                        }).then(response => {
+                            if (response.redirected) {
+                                window.location.href = response.url;
+                            } else {
+                                response.json().then(data => {
+                                    if (data.success) {
+                                        location.reload();
+                                    } else {
+                                        alert(data.error || 'Failed to cancel bill');
+                                    }
+                                }).catch(() => {
+                                    location.reload(); // Reload if we can't parse JSON response
+                                });
+                            }
+                        }).catch(error => {
+                            console.error('Cancel error:', error);
+                            alert('An error occurred while cancelling the bill');
+                        });
+
+                        $('#cancelBillModal').modal('hide');
+                    });
+                });
               
         });

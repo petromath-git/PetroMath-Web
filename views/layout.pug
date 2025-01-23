@@ -45,10 +45,12 @@ html
                             span.navbar-toggler-icon
                         .collapse.navbar-collapse#navbarNav
                             ul.navbar-nav.mr-auto
+                                li.nav-item(class=(title === 'Bills' ? 'active' : ''))
+                                    a.nav-link(href='/bills') Billing
                                 // Admin-specific links
-                                if user.isAdmin
+                                if user.isAdmin                                    
                                     li.nav-item(class=(title === 'Shift Closing' ? 'active' : ''))
-                                        a.nav-link(href='/home') Shift Closing
+                                        a.nav-link(href='/home') Shift Closing                                      
                                     li.nav-item(class=(title === 'Credit Receipts' ? 'active' : ''))
                                         a.nav-link(href='/creditreceipts') Credit Receipts
                                     li.nav-item(class=(title === 'Tank Receipts' ? 'active' : ''))
@@ -81,6 +83,7 @@ html
                                             a.dropdown-item(href='/users') Create Users
                                             a.dropdown-item(href='/products') Create Products
                                             a.dropdown-item(href='/credits') Create Credit Party
+                                            a.dropdown-item(href='/pump-master') Create Nozzle
                                     li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
                                         a.nav-link(href='/utilities') Utilities
                             // Right-aligned user details and logout

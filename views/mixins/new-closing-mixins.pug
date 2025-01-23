@@ -133,26 +133,23 @@ mixin addCashSales(cashSaleRowNo, rowData)
     tr(class=trClass id=trId)
         input(type='hidden' id=prefix + cashSaleRowNo + '_hiddenId' value=rowData.saleId)
         td
-            select.form-control(name=prefix+'product-'+cashSaleRowNo id=prefix+'product-'+cashSaleRowNo onChange='creditOrSaleUpdateProductTypePrices(this, ' + cashSaleRowNo + ', \'' + prefix +'\')')
+            select.form-control(name=prefix+'product-'+cashSaleRowNo id=prefix+'product-'+cashSaleRowNo onChange='creditOrSaleUpdateProductTypePrices(this, ' + cashSaleRowNo + ', \'' + prefix +'\')' disabled)
                 if productValues
                     each val in productValues
                         option(value=`${val.productId}` selected= val.productId === rowData.productId)= val.productAlias
         td
-            input.form-control(name=prefix+'billno-' + cashSaleRowNo id=prefix+'billno-' + cashSaleRowNo value=rowData.billNo type='number' required min=1)
+            input.form-control(name=prefix+'billno-' + cashSaleRowNo id=prefix+'billno-' + cashSaleRowNo value=rowData.billNo required min=1 readonly)
             
         td
-            input.form-control(type='number' min=0 oninput='validity.valid||(value="0")' name=prefix+'price-' + cashSaleRowNo id=prefix+'price-' + cashSaleRowNo  value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.01 readonly)
+            input.form-control(type='number' min=0 oninput='validity.valid||(value="0")' name=prefix+'price-' + cashSaleRowNo id=prefix+'price-' + cashSaleRowNo value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.01 readonly)
         td
-            input.form-control(type='number' min=0 oninput='validity.valid||(value="0")' name=prefix + 'discount-' + cashSaleRowNo id=prefix + 'discount-' + cashSaleRowNo  value=rowData.priceDiscount onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.01)
+            input.form-control(type='number' min=0 oninput='validity.valid||(value="0")' name=prefix + 'discount-' + cashSaleRowNo id=prefix + 'discount-' + cashSaleRowNo value=rowData.priceDiscount onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.01 readonly)
         td
-            input.form-control(type='number' name=prefix+'qty-' + cashSaleRowNo id=prefix+'qty-' + cashSaleRowNo min=0 oninput='validity.valid||(value="")' value=rowData.qty onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.001)
+            input.form-control(type='number' name=prefix+'qty-' + cashSaleRowNo id=prefix+'qty-' + cashSaleRowNo min=0 oninput='validity.valid||(value="")' value=rowData.qty onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + cashSaleRowNo + ')' step=0.001 readonly)
         td
-            input.form-control(type='number' name=prefix+'amt-' + cashSaleRowNo id=prefix+'amt-' + cashSaleRowNo min=0 oninput='validity.valid||(value="")' onchange='calculateCashOrCreditQuantity(\'' + prefix + '\', ' + cashSaleRowNo + ')' value=rowData.amount step=0.001)
+            input.form-control(type='number' name=prefix+'amt-' + cashSaleRowNo id=prefix+'amt-' + cashSaleRowNo min=0 oninput='validity.valid||(value="")' onchange='calculateCashOrCreditQuantity(\'' + prefix + '\', ' + cashSaleRowNo + ')' value=rowData.amount step=0.001 readonly)
         td
-            textarea.form-control(name=prefix + 'notes-' + cashSaleRowNo id=prefix + 'notes-' + cashSaleRowNo style="height:36px")= rowData.notes
-        td
-            button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-cash-sale", calculateCashSaleTotal)')
-                span(aria-hidden="true") &times;
+            textarea.form-control(name=prefix + 'notes-' + cashSaleRowNo id=prefix + 'notes-' + cashSaleRowNo style="height:36px" readonly)= rowData.notes       
 
 //- Add new page: used by addCredits & addCashSales - a separate fn will populate product rates
 mixin optionsForProductRates(cashOrCreditSalePrefix)
@@ -179,15 +176,15 @@ mixin addCredits(creditRowNo, rowData)
     tr(class=trClass id=trId)
         input(type='hidden' id=prefix + creditRowNo + '_hiddenId' value=rowData.tCreditId)
         td
-            select.form-control(name=prefix + 'product-'+creditRowNo id=prefix + 'product-'+creditRowNo  onChange='creditOrSaleUpdateProductTypePrices(this, ' + creditRowNo + ', \'' + prefix +'\')')
+            select.form-control(name=prefix + 'product-'+creditRowNo id=prefix + 'product-'+creditRowNo onChange='creditOrSaleUpdateProductTypePrices(this, ' + creditRowNo + ', \'' + prefix +'\')' disabled)
                 if productValues
                     each val in productValues
                         option(value=`${val.productId}` selected= rowData.productId === val.productId)= val.productAlias
         td
-            input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo type='number' min=1 oninput='validity.valid||(value="1")')
+            input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo min=1 oninput='validity.valid||(value="1")' readonly)
         td
             input(type='hidden' id=prefix +'companyName_'+ creditRowNo, value = rowData.companyName)
-            select.form-control(name=prefix + 'type-' + creditRowNo, id=prefix + 'type-' + creditRowNo, onChange='toggleCreditTypes(this, ' + creditRowNo + ', \'' + prefix + '\', ' + JSON.stringify(config.creditTypes) + ')')
+            select.form-control(name=prefix + 'type-' + creditRowNo id=prefix + 'type-' + creditRowNo onChange='toggleCreditTypes(this, ' + creditRowNo + ', \'' + prefix + '\', ' + JSON.stringify(config.creditTypes) + ')' disabled)
                 if config.creditTypes
                     each val in config.creditTypes
                         option(value=`${val}` selected= rowData.creditType === val)= val
@@ -195,30 +192,27 @@ mixin addCredits(creditRowNo, rowData)
             - var displayType1Class = 'd-md-none'
             if rowData.creditType === config.creditTypes[0]
                 - displayType1Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo, class = displayType1Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')')
+            select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo class = displayType1Class onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')' disabled)
                 if creditCompanyValues
                     each val in creditCompanyValues
                         option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
             - var displayType2Class = 'd-md-none'
             if rowData.creditType === config.creditTypes[1]
                 - displayType2Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[1] + '-' + creditRowNo id=prefix + config.creditTypes[1] + '-' + creditRowNo, class = displayType2Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')')
+            select.form-control(name=prefix + config.creditTypes[1] + '-' + creditRowNo id=prefix + config.creditTypes[1] + '-' + creditRowNo class = displayType2Class onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')' disabled)
                 if suspenseValues
                     each val in suspenseValues
                         option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
         td
             input.form-control(type='number' name=prefix + 'price-' + creditRowNo id=prefix + 'price-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01 readonly)
         td
-            input.form-control(type='number' name=prefix + 'discount-' + creditRowNo id=prefix + 'discount-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.priceDiscount onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01)
+            input.form-control(type='number' name=prefix + 'discount-' + creditRowNo id=prefix + 'discount-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.priceDiscount onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01 readonly)
         td
-            input.form-control(type='number' name=prefix + 'qty-' + creditRowNo id=prefix + 'qty-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.qty onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.001)
+            input.form-control(type='number' name=prefix + 'qty-' + creditRowNo id=prefix + 'qty-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.qty onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.001 readonly)
         td
-            input.form-control(type='number' name=prefix + 'amt-' + creditRowNo id=prefix + 'amt-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.amount onchange='calculateCashOrCreditQuantity(\'' + prefix + '\', ' + creditRowNo + ')' step=0.001)
+            input.form-control(type='number' name=prefix + 'amt-' + creditRowNo id=prefix + 'amt-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.amount onchange='calculateCashOrCreditQuantity(\'' + prefix + '\', ' + creditRowNo + ')' step=0.001 readonly)
         td
-            textarea.form-control(name=prefix + 'notes-' + creditRowNo id=prefix + 'notes-' + creditRowNo style="height:36px")= rowData.notes
-        td
-            button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\', "remove-credit-sale", calculateCreditTotal)')
-                span(aria-hidden="true") &times;
+            textarea.form-control(name=prefix + 'notes-' + creditRowNo id=prefix + 'notes-' + creditRowNo style="height:36px" readonly)= rowData.notes        
 
 //- Add new page: Dom elements to show new custom expenses on 'add'
 mixin addExpenses(rowNo, rowData)
