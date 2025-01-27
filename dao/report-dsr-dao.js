@@ -551,6 +551,7 @@ return result;
           CALCULATE_EXSHORTAGE(tc.closing_id) AS ex_short,
           (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id =tc.closing_id and toil.product_id = mp.product_id
           and upper(mp.product_name) = '2T LOOSE' ) loose,
+          tc.notes,
           ${caseStatements}
         FROM 
           t_closing tc
@@ -564,7 +565,7 @@ return result;
           tc.closing_status = 'CLOSED'
           AND tc.closing_id IN (:closing_id)
         GROUP BY 
-          tc.closing_id, tc.location_code, mper.Person_Name, mper.Person_id, mper.Role, tc.closing_date`;
+          tc.closing_id, tc.location_code, mper.Person_Name, mper.Person_id, mper.Role, tc.closing_date,tc.notes`;
       
       // Execute the query
       const result = await db.sequelize.query(query,  {

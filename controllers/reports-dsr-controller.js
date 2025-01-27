@@ -417,12 +417,13 @@ module.exports = {
         // Handle unknown columns dynamically (for product sales data)
         Object.keys(shiftsummary).forEach((key) => {
           // Skip already handled known columns
-          if (!['person_name', 'closing_date_formatted','loose','ex_short'].includes(key)) {
+          if (!['person_name', 'closing_date_formatted','loose','ex_short','notes'].includes(key)) {
             keyValue[key] = shiftsummary[key];
           }
         });
         keyValue['2T Loose'] = shiftsummary.loose;
         keyValue['Excess/Shortage'] = shiftsummary.ex_short;
+        keyValue['Notes'] = shiftsummary.notes;
       
         // Push the created key-value pair object to shiftSummaryList
         shiftSummaryList.push(keyValue);
