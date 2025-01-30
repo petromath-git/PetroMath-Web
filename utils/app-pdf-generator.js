@@ -180,13 +180,13 @@ module.exports = {
                                 <span style="font-size: 14px;">${locationDetails.address}</span>
                                 <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
                             </div>`,
-            footerTemplate: `<div style="font-size: 10px; color: #555; text-align: center; width: 100%;">
+            footerTemplate: `<div style="font-size: 14px; text-align: center; width: 100%;">
                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
-                <span>This is a computer-generated document. Generated on: ${currentDateTime}</span>                              
+                <span>This is a computer-generated document and requires no signature. Generated on: ${currentDateTime}</span>                              
                 <br>
-                <span style="font-size: 9px;">© ${currentYear} petromath.co.in</span>
+                <span style="font-size: 12px;">© ${currentYear} petromath.co.in</span>
                 <br>
-                <span style="font-size: 9px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+                <span style="font-size: 12px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
             </div>`,
             margin: {
                 top: '120px',    // Increased from 80px to give more space for header

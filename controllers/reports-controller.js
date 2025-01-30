@@ -54,33 +54,63 @@ module.exports = {
 
               const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
 
-            if(reportType == 'Creditledger'){
-              data1.forEach((creditstmtData) => {
-                Creditstmtlist.push({
-                Date: dateFormat(creditstmtData.tran_date,"dd-mm-yyyy"),                                
-                "Bill No/Receipt No.": creditstmtData.bill_no,
-                companyName: creditstmtData.company_name,                
-                Debit:creditstmtData.product_name !== null ? creditstmtData.amount : null,
-                Credit:creditstmtData.product_name === null ? creditstmtData.amount : null,           
-                Narration: creditstmtData.notes
+              if (reportType == 'Creditledger') {
+                let runningBalance = Number(OpeningBal); // Ensure it's a number
+              
+                data1.forEach((creditstmtData) => {
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+              
+                  if (creditstmtData.product_name !== null) {
+                    // Debit transaction (purchases increase the balance)
+                    runningBalance += transactionAmount;
+                  } else {
+                    // Credit transaction (payments reduce the balance)
+                    runningBalance -= transactionAmount;
+                  }
+
+                  
+              
+                  Creditstmtlist.push({
+                    Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
+                    Particulars: creditstmtData.bill_no,
+                    companyName: creditstmtData.company_name,
+                    Debit: creditstmtData.product_name !== null ? transactionAmount : null,
+                    Credit: creditstmtData.product_name === null ? transactionAmount : null,
+                    Narration: creditstmtData.notes,
+                    Balance: runningBalance, // Updated balance calculation
+                  });
                 });
-              });  
-            }
-            else {  
-              data1.forEach((creditstmtData) => {
-                                Creditstmtlist.push({
-                                Date: dateFormat(creditstmtData.tran_date,"dd-mm-yyyy"),                                
-                                "Bill No/Receipt No.": creditstmtData.bill_no,
-                                companyName: creditstmtData.company_name,
-                                Product: creditstmtData.product_name,
-                                Price: creditstmtData.price,
-                                "Price Discount": creditstmtData.price_discount,
-                                Qty: creditstmtData.qty,
-                                Amount: creditstmtData.amount,
-                                Narration: creditstmtData.notes                                
-                            });
-                        });
-            }
+              }
+              else {  
+                let runningBalance = Number(OpeningBal); // Ensure it's a number
+              
+                data1.forEach((creditstmtData) => {
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+              
+                  if (creditstmtData.product_name !== null) {
+                    // Debit transaction (purchases increase the balance)
+                    runningBalance += transactionAmount;
+                  } else {
+                    // Credit transaction (payments reduce the balance)
+                    runningBalance -= transactionAmount;
+                  }
+              
+                  Creditstmtlist.push({
+                    Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),                                
+                    Particulars: creditstmtData.bill_no,
+                    companyName: creditstmtData.company_name,
+                    Product: creditstmtData.product_name,
+                    Price: creditstmtData.price,
+                    "Price Discount": creditstmtData.price_discount,
+                    Qty: creditstmtData.qty,
+                    Debit: creditstmtData.product_name !== null ? transactionAmount : null,
+                    Credit: creditstmtData.product_name === null ? transactionAmount : null, 
+                    Narration: creditstmtData.notes,
+                    Balance: runningBalance // Updated balance
+                  });
+                });
+              }
+              
                         const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
                         const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
                         
@@ -179,6 +209,97 @@ module.exports = {
                
 
           }
-  }
+  },
+  getSalesSummaryReport: async(req, res) => {
+    //console.log(req);
+     let locationCode = req.user.location_code;
+     let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+    
+     let caller = req.body.caller;
+     
+   
+
+     
+     if(req.body.fromClosingDate) {
+       fromDate =req.body.fromClosingDate;
+     }
+     if(req.body.toClosingDate) {
+       toDate = req.body.toClosingDate;
+     }
+     let Saleslist=[];     
+     let renderData = {};
+
+      
+             
+           
+
+
+           const data1 = await ReportDao.getSales(locationCode, fromDate,toDate);
+
+       
+           data1.forEach((salesSummary) => {
+            const keyValue = {};
+          
+            // Handle known columns directly
+            keyValue['Date'] = salesSummary.closing_date_formatted;
+                 
+          
+            // Handle unknown columns dynamically (for product sales data)
+            Object.keys(salesSummary).forEach((key) => {
+              // Skip already handled known columns
+              if (!['closing_date_formatted','loose'].includes(key)) {
+                keyValue[key] = salesSummary[key];
+              }
+            });
+
+            // Add the '2T Loose' column
+            keyValue['2T Loose'] = salesSummary.loose;  
+
+            // Push the created key-value pair object to shiftSummaryList
+            Saleslist.push(keyValue);
+            
+          });
+      
+                     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
+                     const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
+                     
+                       // Prepare the render data
+                   renderData ={
+                     title: 'Sales Summary Reports', 
+                     user: req.user, 
+                     fromClosingDate: fromDate,
+                     toClosingDate: toDate, 
+                     formattedFromDate: formattedFromDate,
+                     formattedToDate: formattedToDate,
+                     Saleslist: Saleslist,                                   
+                  
+                   }
+
+                 if(caller=='notpdf') {
+                 res.render('report-sales-summary',renderData);
+                 }else
+                 {                
+             
+                   return new Promise((resolve, reject) => {
+                     res.render('report-sales-summary',renderData,
+                        (err, html) => {
+                         if (err) {
+                           console.error('getSalesSummaryReport: Error in res.render:', err);
+                           reject(err); // Reject the promise if there's an error
+                         } else {
+                           console.log('getSalesSummaryReport: Successfully rendered HTML');
+                           resolve(html); // Resolve the promise with the HTML content
+                         }
+                     });
+                   }); 
+                  
+   
+             }
+ 
+ 
+ 
+           }
+
 }
         
