@@ -15,6 +15,8 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const utils = require("./utils/app-utils");
 const { getPDF } = require('./utils/app-pdf-generator');
+const { getBrowser } = require('./utils/browserHelper');
+
 
 
 // Passport - configuration - start....
@@ -911,6 +913,8 @@ app.use(function (err, req, res, next) {
 app.listen(process.env.SERVER_PORT, function () {
     console.log('Express server listening on port ' + process.env.SERVER_PORT);
 });
+
+getBrowser().then(() => console.log('Browser is ready for use.')); // used for PDF Generation.
 
 // port - end
 module.exports = app;
