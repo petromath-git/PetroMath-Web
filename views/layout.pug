@@ -28,6 +28,17 @@ html
         //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
         //-         return formattedInteger + '.' + decimal;
         //-     }
+        style.
+            @media print {
+            table.table-bordered {
+                border-collapse: collapse !important;
+            }
+            table.table-bordered,
+            table.table-bordered th,
+            table.table-bordered td {
+                border: 1px solid #000 !important; /* Increase thickness if needed */
+            }
+            }
 
         
     - var isFreezedRecord = false;    

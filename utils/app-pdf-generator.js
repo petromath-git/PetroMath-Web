@@ -9,12 +9,15 @@ const digitalReconreportsController = require("../controllers/reports-digital-re
 const billsReportsController = require("../controllers/bill-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
+const { getBrowser } = require('./browserHelper');
+const performance = require('perf_hooks').performance;
 
-
+const msToSeconds = ms => (ms / 1000).toFixed(2);
 
 module.exports = {   
 
     getPDF : async (req,res,next) => {
+        const startTime = performance.now();
       try {
         
         let htmlContent = '';
@@ -22,8 +25,10 @@ module.exports = {
         // if empty then select the default location
         let location = req.body.locationCode||req.user.location_code;
         console.log('Location '+location);
-
+        
         const locationDetails = await locationdao.getLocationDetails(location);
+
+        const contentStart = performance.now();
 
         if (req.body.reportType === 'Bills') {
             htmlContent = await billsReportsController.printBill(req, res, next);
@@ -51,6 +56,9 @@ module.exports = {
         {
                 htmlContent = await digitalReconreportsController.getDigitalReconReport(req, res, next);
         }
+
+        const contentEnd = performance.now();
+        console.log(`HTML content generation took: ${contentEnd - contentStart}ms`);
 
 
                                    // Apply page break styles to the HTML content
@@ -111,14 +119,31 @@ module.exports = {
                
 
              
-
+                const pdfStart = performance.now();
+                const browser = await getBrowser(); // Get the already launched browser
 
         //const browser = await puppeteer.launch();
-        const browser = await puppeteer.launch({executablePath: process.env.CHROMIUM_PATH,ignoreDefaultArgs: ['--disable-extensions']});
+//        const browser = await puppeteer.launch({executablePath: process.env.CHROMIUM_PATH,ignoreDefaultArgs: ['--disable-extensions']});
+        
+        
+        
+        const browserend = performance.now();
+        console.log(`Browser handle generation took: ${browserend - pdfStart}ms`);
         const page = await browser.newPage();
-        await page.setContent(htmlContent);
-        await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
-       
+        const pageend = performance.now();
+        console.log(`Browser New page  generation took: ${pageend - browserend}ms`);
+      //  await page.setContent(htmlContent);
+     //   await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
+        
+             // Set content with optimized options
+             await page.setContent(htmlContent, {
+                waitUntil: 'domcontentloaded',
+                timeout: 5000
+            });
+
+        const pdfEnd = performance.now();
+        console.log(`Content Load took: ${pdfEnd - pageend}ms`);
+        console.log(`PDF generation took: ${pdfEnd - pdfStart}ms`);
        
 
         await page.evaluate(() => {
@@ -197,7 +222,8 @@ module.exports = {
         });
 
       
-        await browser.close();
+        //await browser.close();
+        await page.close(); // Close the tab, but NOT the browser
 
         console.log('PDF buffer size:', pdfBuffer.length); // Log the buffer size
         
