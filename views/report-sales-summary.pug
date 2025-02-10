@@ -1,17 +1,22 @@
 extends layout
 
 block content
-    form(method='POST' action='/reports-gst-summary')
+    form(method='POST' action='/reports-sales-summary')
         script.
             
             // Javascript that gets table data
-            var purchaseSummaryFromServer = !{JSON.stringify(purchaseTransactionlist)}   
+            var SaleSummaryFromServer = !{JSON.stringify(Saleslist)}   
 
             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
 
                    // Check if the array is empty
                     if (array.length === 0) {
                         return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";  // Just return a simple message if no data
+                    }
+
+                    // If no numberColumns provided, assume all keys except 'Date' are numeric.
+                    if (numberColumns.length === 0 && typeof array[0] === 'object') {
+                        numberColumns = Object.keys(array[0]).filter(key => key !== 'Date');
                     }
 
                 var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
@@ -59,14 +64,25 @@ block content
                        // Check if the current column should be formatted as a number
                         if (numberColumns.includes(key) && dataValue !== "" &&!isNaN(dataValue))
                         {
-                         
-                            printedValue = new Intl.NumberFormat('en-IN', {
-                                                                style: 'decimal',                                                                
-                                                                minimumFractionDigits:2,
-                                                                maximumFractionDigits:2	
-                                                            }).format(dataValue); 
+                                let printedValue;
+                            // If this is the total row (detected by the presence of "text-danger" in rowClass), convert to KL.
+                            if (rowClass.indexOf('text-danger') !== -1) {
+                                let numericValue = Number(dataValue) / 1000;
+                                printedValue = new Intl.NumberFormat('en-IN', {
+                                    style: 'decimal',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2	
+                                }).format(numericValue) + " KL";
+                            } else {
+                                printedValue = new Intl.NumberFormat('en-IN', {
+                                    style: 'decimal',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2	
+                                }).format(dataValue);
+                            }
+                           
+                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>";
 
-                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>"; // Darker border for cells                                                    
                         }
                         else
                             result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
@@ -82,26 +98,8 @@ block content
 
    
 
-            document.addEventListener('DOMContentLoaded', function() {             
-               
-            
-                    let resultHtml = ""; // Variable to store the generated HTML
-
-                    // Loop through each bank account group
-                    Object.keys(purchaseSummaryFromServer).forEach(Product => {
-                        const transactions = purchaseSummaryFromServer[Product];
-
-                        // Use the existing renderTable function
-                        resultHtml += renderTable(
-                            transactions, 
-                            `${Product}`, // Title for each account
-                            ["Amount"] ,// Columns to format as number
-                            "col-sm-8 mx-auto"
-                        );
-                    });
-
-                
-                document.getElementById('PurchaseSummary-table-container').innerHTML = resultHtml
+            document.addEventListener('DOMContentLoaded', function() {                    
+                document.getElementById('SalesSummary-table-container').innerHTML = renderTable(SaleSummaryFromServer,'Sales (Ltrs.)');
             });
 
         table.center
@@ -126,14 +124,10 @@ block content
                 include report-print-download.pug
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center= "GST Fuel Purchase Summary "                                                                
-        h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
+        h4.font-weight-bold.text-center= "Fuel Sales Summary "                                                                
+        h6.text-center= `${formattedFromDate}   to   ${formattedToDate}` 
         h4.font-weight-bold.text-success.text-center                           
-    if(purchaseTransactionlist)                
-        div.row        
-            div.col-md-12
-                div.row &nbsp;                                             
-                div(id="PurchaseSummary-table-container")        
+    if(Saleslist)                
             div.col-md-12
                 div.row &nbsp;               
                 div(id="SalesSummary-table-container")       

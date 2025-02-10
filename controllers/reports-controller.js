@@ -260,6 +260,26 @@ module.exports = {
             Saleslist.push(keyValue);
             
           });
+
+          // Compute totals for each column (excluding the 'Date' column)
+    if (Saleslist.length > 0) {
+      const totals = {};
+      Saleslist.forEach((row) => {
+        for (const key in row) {
+          if (key === 'Date') continue;
+          // Convert values to numbers; if not a number, treat as 0.
+          totals[key] = (totals[key] || 0) + Number(row[key] || 0);
+        }
+      });
+
+      // Create a new row for totals.
+      const totalRow = { 'Date': 'Total' };
+      Object.keys(totals).forEach((key) => {
+        totalRow[key] = totals[key];
+      });
+      // Append the total row to the Saleslist.
+      Saleslist.push(totalRow);
+    }
       
                      const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
                      const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
