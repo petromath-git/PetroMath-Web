@@ -444,6 +444,14 @@ app.post('/reports-gst-summary', isLoginEnsured, function (req, res, next) {
     gstsummaryreportsController.getgstsummaryReport(req, res, next);
 });
 
+app.get('/reports-sales-summary', isLoginEnsured, function (req, res, next) {   
+    req.body.caller = 'notpdf';
+    reportsController.getSalesSummaryReport(req, res, next);
+});
+
+app.post('/reports-sales-summary', isLoginEnsured, function (req, res, next) {    
+    reportsController.getSalesSummaryReport(req, res, next);
+});
 
 app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     //res.render('reports-creditsummary', { title: 'Credit Summary Reports', user: req.user });
