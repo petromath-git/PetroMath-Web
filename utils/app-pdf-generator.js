@@ -54,7 +54,11 @@ module.exports = {
         }
         else if (req.body.reportType == 'DigitalRecon')
         {
-                htmlContent = await digitalReconreportsController.getDigitalReconReport(req, res, next);
+            htmlContent = await digitalReconreportsController.getDigitalReconReport(req, res, next);
+        }
+        else if (req.body.reportType == 'SalesSummary')
+        {
+            htmlContent = await reportsController.getSalesSummaryReport(req, res, next);
         }
 
         const contentEnd = performance.now();
