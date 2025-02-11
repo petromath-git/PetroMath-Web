@@ -44,9 +44,69 @@ module.exports = {
       return result;
 
    },
- 
- 
+   getSalesConsolidated: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT
+        mp.product_code AS product,
+        SUM(tr.closing_reading - tr.opening_reading - tr.testing) AS litres,
+        SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) AS amount
+      FROM t_closing tc
+      JOIN t_reading tr ON tc.closing_id = tr.closing_id
+      JOIN m_pump mp 
+        ON tr.pump_id = mp.pump_id 
+        AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
+      WHERE tc.closing_status = 'CLOSED'
+        AND tc.location_code = :locationCode
+        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+      GROUP BY mp.product_code
+      ORDER BY mp.product_code;
+    `;
+  
+    const result = await db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT
+    });
+  
+    return result;
+  },
 
-
+  getNonFuelSalesConsolidated: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT
+        mp.product_name AS product,
+        SUM(s.qty) AS total_qty,
+        SUM(s.amount) AS total_amount
+      FROM (
+        SELECT closing_id, product_id, qty, amount
+        FROM t_credits
+        UNION ALL
+        SELECT closing_id, product_id, qty, amount
+        FROM t_cashsales
+        UNION ALL
+        SELECT closing_id, product_id, (given_qty - returned_qty) AS qty, ((given_qty - returned_qty) * price) AS amount
+        FROM t_2toil
+      ) s
+      JOIN t_closing tc ON s.closing_id = tc.closing_id
+      JOIN m_product mp ON s.product_id = mp.product_id
+      WHERE tc.closing_status = 'CLOSED'
+        AND tc.location_code = :locationCode
+        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND mp.product_name NOT IN (
+            SELECT DISTINCT product_code 
+            FROM m_pump 
+            WHERE location_code = :locationCode
+        )
+      GROUP BY mp.product_name
+      ORDER BY mp.product_name;
+    `;
+  
+    const result = await db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT,
+    });
+  
+    return result;
+  }
+  
 }
 

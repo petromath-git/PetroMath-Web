@@ -26,9 +26,16 @@ module.exports = {
   
       
       
-      const purchaseDataPromise =  GstSummaryDao.getpurchasesummary(locationCode, fromDate,toDate);  
-      // Wait for all promises to resolve
-      const [purchaseData] = await Promise.all([purchaseDataPromise]);
+        // Retrieve purchase data, fuel sales data, and non-fuel sales data concurrently.
+        const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
+        const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
+        const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
+  
+        const [purchaseData, salesData, nonFuelSalesData] = await Promise.all([
+          purchaseDataPromise,
+          salesDataPromise,
+          nonFuelSalesDataPromise
+        ]);
 
       
         
@@ -41,8 +48,25 @@ module.exports = {
           return acc;
         }, {});
 
+          // Process sales data: create a summary list with Product, Litres, and Amount
+        const salesSummaryList = [];
+        salesData.forEach((salesRow) => {
+          salesSummaryList.push({
+            'Product': salesRow.product,   // Ensure your DAO returns a column named "product"
+            'Volume (Ltrs)': salesRow.litres,       // Total litres sold for the product
+            'Amount': salesRow.amount        // Total sales amount for the product
+          });
+        });
         
- 
+         // Process non-fuel sales data: create a summary list with Product, Volume, and Amount.
+      const nonFuelSalesSummaryList = [];
+      nonFuelSalesData.forEach((salesRow) => {
+        nonFuelSalesSummaryList.push({
+          'Product': salesRow.product,            // The product name from m_product
+          'Volume (Ltrs)': salesRow.total_qty,      // Total quantity sold (in litres)
+          'Amount': salesRow.total_amount           // Total sales amount for the product
+        });
+      });
       
         const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
         const formattedToDate = moment(toDate).format('DD/MM/YYYY');
@@ -56,6 +80,8 @@ module.exports = {
         formattedFromDate: formattedFromDate,
         formattedToDate: formattedToDate,            
         purchaseTransactionlist: groupedTransactions,
+        salesSummaryList: salesSummaryList,
+        nonFuelSalesSummaryList: nonFuelSalesSummaryList 
       }
     
     
