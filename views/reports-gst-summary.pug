@@ -5,7 +5,9 @@ block content
         script.
             
             // Javascript that gets table data
-            var purchaseSummaryFromServer = !{JSON.stringify(purchaseTransactionlist)}   
+            var purchaseSummaryFromServer = !{JSON.stringify(purchaseTransactionlist)}
+            var salesSummaryFromServer = !{JSON.stringify(salesSummaryList)}
+            var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}      
 
             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
 
@@ -87,7 +89,7 @@ block content
             
                     let resultHtml = ""; // Variable to store the generated HTML
 
-                    // Loop through each bank account group
+                    // Loop through each Product account group
                     Object.keys(purchaseSummaryFromServer).forEach(Product => {
                         const transactions = purchaseSummaryFromServer[Product];
 
@@ -102,6 +104,8 @@ block content
 
                 
                 document.getElementById('PurchaseSummary-table-container').innerHTML = resultHtml
+                document.getElementById('SalesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
+                document.getElementById('NonFuel-SalesSummary-table-container').innerHTML = renderTable(nonFuelSalesSummaryFromServer,'Non Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
             });
 
         table.center
@@ -136,7 +140,10 @@ block content
                 div(id="PurchaseSummary-table-container")        
             div.col-md-12
                 div.row &nbsp;               
-                div(id="SalesSummary-table-container")       
+                div(id="SalesSummary-table-container")
+            div.col-md-12
+                div.row &nbsp;               
+                div(id="NonFuel-SalesSummary-table-container")              
     else
         div.row &nbsp;
         div.row.bg-light No Transactions.
