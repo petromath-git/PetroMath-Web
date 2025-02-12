@@ -36,8 +36,7 @@ module.exports = {
         {
            htmlContent = await reportsController.getCreditReport(req, res, next);
         }else if (req.body.reportType == 'DSR')
-        {
-            console.log( req.body.locationCode); 
+        {             
             htmlContent = await dsrReportsController.getdsrReport(req, res, next);
         }else if (req.body.reportType == 'CashFlow')
         {

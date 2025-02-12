@@ -44,6 +44,35 @@ module.exports = {
       return result;
 
    },
+   getPurchaseSummaryConsolidated: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT 
+        p.product_name AS Product,
+        SUM(trd.quantity * 1000) AS Total_Quantity,
+        SUM(trd.amount) AS Total_Amount
+      FROM 
+        t_tank_stk_rcpt tr
+        JOIN t_tank_stk_rcpt_dtl trd ON tr.ttank_id = trd.ttank_id
+        JOIN m_tank t ON trd.tank_id = t.tank_id
+        JOIN m_product p 
+          ON t.product_code = p.product_name 
+          AND p.location_code = tr.location_code
+      WHERE 
+        tr.location_code = :locationCode
+        AND tr.invoice_date BETWEEN :reportFromDate AND :reportToDate
+      GROUP BY 
+        p.product_name
+      ORDER BY 
+        p.product_name;
+    `;
+  
+    const result = await db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT
+    });
+    
+    return result;
+  },  
    getSalesConsolidated: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT
