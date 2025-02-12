@@ -35,7 +35,10 @@ function generatePDF(currentPage,isPrint = 'N') {
     }  else if (currentPage.includes('reports-gst-summary')) {
         requestBody.reportType = 'GstSummary';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
-        requestBody.toClosingDate = document.getElementById('toclosingDate').value;        
+        requestBody.toClosingDate = document.getElementById('toclosingDate').value; 
+        const locationCodeElement = document.getElementById('locationCode');
+        requestBody.locationCode = locationCodeElement ? locationCodeElement.value:'';  // if no location code obtained
+                                                                                        // subsequent code will use req.user.location_code       
     }else if (currentPage.includes('reports-digital-recon')) {
         requestBody.reportType = 'DigitalRecon';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
