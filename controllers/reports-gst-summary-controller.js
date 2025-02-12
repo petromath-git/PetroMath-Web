@@ -1,15 +1,26 @@
 const dateFormat = require('dateformat');
-const utils = require("../utils/app-utils");
 var GstSummaryDao = require("../dao/report-gst-summary-dao");
-var CashFlowReportDao = require("../dao/report-cashflow-dao");
 const moment = require('moment');
+var locationdao = require("../dao/report-dao");
+var personDao = require("../dao/person-dao");
+
 
 
 module.exports = {
   getgstsummaryReport: async (req, res) => {
     try {
-        let locationCode = req.user.location_code;
-        let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+        let locationCode = req.body.locationCode||req.user.location_code;      // get from selected location.
+        const locationDetails = await locationdao.getLocationDetails(locationCode);
+        
+
+        // Get today's date
+        const today = new Date();
+        // Create a new Date object for the first day of the current month
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        // Format the date as "yyyy-mm-dd"
+        let fromDate = dateFormat(firstDayOfMonth, "yyyy-mm-dd");
+
+        
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
         let caller = req.body.caller;  // to know if this is for generating PDF or Serve to browser
 
@@ -21,23 +32,45 @@ module.exports = {
         }
 
 
-      let renderData = {};
+       
 
+       const personId = req.user.Person_id; 
+       const personLocationPromise =  await personDao.findUserLocations(personId);
+       let personLocations = [];
+      
+            // Process Person Location Data
+           personLocationPromise.forEach((locations) => {
+             personLocations.push({
+                 'LocationCodes': locations.location_code,           
+             });
+           });
+
+           let renderData = {};    
   
       
       
         // Retrieve purchase data, fuel sales data, and non-fuel sales data concurrently.
         const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
+        const purchaseConsolDataPromise = GstSummaryDao.getPurchaseSummaryConsolidated(locationCode, fromDate, toDate);
         const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
         const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
   
-        const [purchaseData, salesData, nonFuelSalesData] = await Promise.all([
+        const [purchaseData,purchaseConsolData, salesData, nonFuelSalesData] = await Promise.all([
           purchaseDataPromise,
+          purchaseConsolDataPromise,
           salesDataPromise,
           nonFuelSalesDataPromise
         ]);
 
-      
+      //  purchaseData is retrieved by calling getPurchaseSummaryConsolidated
+      const purchaseSummaryList = [];
+      purchaseConsolData.forEach((purchaseRow) => {
+        purchaseSummaryList.push({
+          'Product': purchaseRow.Product,               // The product name
+          'Volume (Ltrs)': purchaseRow.Total_Quantity,    // Total quantity (already multiplied by 1000 as needed)
+          'Amount': purchaseRow.Total_Amount             // Total purchase amount
+        });
+      });
         
 
         const groupedTransactions = purchaseData.reduce((acc, transaction) => {
@@ -77,9 +110,13 @@ module.exports = {
         user: req.user, 
         fromClosingDate: fromDate,
         toClosingDate: toDate, 
+        personLocations: personLocations,
+        locationName: locationDetails.location_name,
+        locationCode: locationCode,
         formattedFromDate: formattedFromDate,
         formattedToDate: formattedToDate,            
         purchaseTransactionlist: groupedTransactions,
+        purchaseSummaryList: purchaseSummaryList,
         salesSummaryList: salesSummaryList,
         nonFuelSalesSummaryList: nonFuelSalesSummaryList 
       }

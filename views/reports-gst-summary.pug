@@ -5,7 +5,8 @@ block content
         script.
             
             // Javascript that gets table data
-            var purchaseSummaryFromServer = !{JSON.stringify(purchaseTransactionlist)}
+            var purchaseTransactionFromServer = !{JSON.stringify(purchaseTransactionlist)}
+            var purchaseSummaryFromServer = !{JSON.stringify(purchaseSummaryList)}
             var salesSummaryFromServer = !{JSON.stringify(salesSummaryList)}
             var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}      
 
@@ -90,8 +91,8 @@ block content
                     let resultHtml = ""; // Variable to store the generated HTML
 
                     // Loop through each Product account group
-                    Object.keys(purchaseSummaryFromServer).forEach(Product => {
-                        const transactions = purchaseSummaryFromServer[Product];
+                    Object.keys(purchaseTransactionFromServer).forEach(Product => {
+                        const transactions = purchaseTransactionFromServer[Product];
 
                         // Use the existing renderTable function
                         resultHtml += renderTable(
@@ -103,7 +104,8 @@ block content
                     });
 
                 
-                document.getElementById('PurchaseSummary-table-container').innerHTML = resultHtml
+                document.getElementById('PurchaseInvoice-table-container').innerHTML = resultHtml
+                document.getElementById('PurchaseSummary-table-container').innerHTML = renderTable(purchaseSummaryFromServer,'Fuel Purchase',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
                 document.getElementById('SalesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
                 document.getElementById('NonFuel-SalesSummary-table-container').innerHTML = renderTable(nonFuelSalesSummaryFromServer,'Non Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
             });
@@ -127,10 +129,19 @@ block content
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;
+                if personLocations.length > 1
+                    td Location:
+                    td
+                        select#locationCode.form-control(name='locationCode', required)
+                            option(value='') Select Location
+                            each location in personLocations
+                                option(value=location.LocationCodes selected=(location.LocationCodes === locationCode))= location.LocationCodes                        
+                td &nbsp;
                 include report-print-download.pug
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center= "GST Fuel Purchase Summary "                                                                
+        h5.text-center.text-muted= locationName
+        h4.font-weight-bold.text-center= "GST Summary Report "                                                                
         h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
         h4.font-weight-bold.text-success.text-center                           
     if(purchaseTransactionlist)                
@@ -143,7 +154,11 @@ block content
                 div(id="SalesSummary-table-container")
             div.col-md-12
                 div.row &nbsp;               
-                div(id="NonFuel-SalesSummary-table-container")              
+                div(id="NonFuel-SalesSummary-table-container") 
+            div.col-md-12
+                h4.text-center Purchase Invoice Details
+                div.row &nbsp;               
+                div(id="PurchaseInvoice-table-container")                   
     else
         div.row &nbsp;
         div.row.bg-light No Transactions.
