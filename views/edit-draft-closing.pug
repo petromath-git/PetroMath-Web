@@ -179,7 +179,7 @@ block content
                                         th Action
                                     tr
                                         td
-                                            select#reading-pump-name.form-control
+                                            select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
                                                 each val in pumps
                                                     option= val.pumpCode
                                         td
