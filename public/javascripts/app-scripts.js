@@ -90,18 +90,24 @@ function hideAndDeleteReadingPump(elementId) {
     deleteAjax('remove-reading', deleteObj.value, elementId, 'col-3 d-md-none');
 }
 
-//Price change based on selection..
 function updatePriceOnReadingTab(isOnLoad) {
-    const pumpName = document.getElementById("reading-pump-name").value;
+    // Get the select element and its current value
+    const pumpSelect = document.getElementById("reading-pump-name");
+    const pumpName = pumpSelect.value;
+
     if (pumpName.startsWith("HSD")) {
         document.getElementById("reading-price").value = document.getElementById("rate_hsdrate").value;
     } else if (pumpName.startsWith("XMS")) {
         document.getElementById("reading-price").value = document.getElementById("rate_xmsrate").value;
-    } else {
+    } else if (pumpName.startsWith("MS")) {
         document.getElementById("reading-price").value = document.getElementById("rate_msrate").value;
+    } else {
+        document.getElementById("reading-price").value = "";
     }
+
+    // Reset the selection to the first option if onLoad is true
     if (isOnLoad) {
-        pumpName.selectedIndex = "0";
+        pumpSelect.selectedIndex = 0;
     }
 }
 
