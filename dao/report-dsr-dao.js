@@ -132,6 +132,7 @@ getDeadline: async (locationCode, reportDate) => {
     
     const result = await db.sequelize.query(
         `select a.product_code,
+               count(distinct a.pump_code) as nozzle_count, 
                COALESCE(round(sum(a.sales),2),0) nozzle_sales,
                COALESCE(c.test_qty,0) nozzle_test,
                COALESCE(round(sum(a.sales)-c.test_qty,2),0) total_sales,
