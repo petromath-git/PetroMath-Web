@@ -50,28 +50,24 @@ module.exports = {
 
       console.log(TotalDenomAmount)
 
-       const bankDetails = await CashflowReportDao.getBankAccounts(locationCode,fromDate);  
-
-       // Initialize the array to hold the results
-       let bankTransactions = [];
-
-       for (let i = 0; i < bankDetails.length; i++) {
-        const account = bankDetails[i];
-        const accountNickname = account.account_nickname;
-        const accountId = account.bank_id;
+      
   
         // Second query: Get transactions for each account
-        const transactionDetails = await CashflowReportDao.getBankTransaction(locationCode, fromDate, accountId);
+        const transactionDetails = await CashflowReportDao.getBankTransaction(locationCode, fromDate);
   
-        // Combine the results into a single array
-        bankTransactions.push({
-          accountNickname: accountNickname, 
-          accountId: accountId,         
-          transactions: transactionDetails
-        });
-      }
+        const groupedTransactions = transactionDetails.reduce((acc, transaction) => {
+          
+         
 
-      console.log(bankTransactions);
+          if (!acc[transaction.bank_account]) {
+            acc[transaction.bank_account] = [];
+          }
+          acc[transaction.bank_account].push(transaction);
+          return acc;
+        }, {});
+      
+       
+     
 
 
 
@@ -83,7 +79,7 @@ module.exports = {
         cashflowstmt: Cashflowstmtlist,
         denomination: Denomlist,
         TotalDenom: TotalDenomAmount,
-        bankTransactions: bankTransactions
+        bankTransactions: groupedTransactions
       };
 
       // Render the appropriate response
