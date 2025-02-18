@@ -65,7 +65,7 @@ block content
                          );
 
                         if (isTotalRow) {
-                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
+                            rowClass = 'font-weight-bold'; // Apply bold  for "Total" row
                         }
                     }
 
@@ -130,7 +130,7 @@ block content
                                         (key.toString().toLowerCase().includes("total") || 
                                         key.toString().toLowerCase().includes("excess") || 
                                         key.toString().toLowerCase().includes("shortage"))) {
-                                        rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total", "Excess", or "Shortage"
+                                        rowClass = 'font-weight-bold'; // Apply bold for "Total", "Excess", or "Shortage"
                                     }
 
 
@@ -191,7 +191,7 @@ block content
                 });
                 
                
-                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
+                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Nozzle Count','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
