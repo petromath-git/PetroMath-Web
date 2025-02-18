@@ -197,10 +197,25 @@ module.exports = {
         
         DigiandCashSales = salesSummary.total_sales - salesSummary.credit_sales;
 
+        // Ensure both values are numbers before comparison
+        // const actualTesting = Number(salesSummary.nozzle_test);  
+        // const expectedTesting = Number(salesSummary.nozzle_count) * 5;
+
+        // // Declare formattedTesting inside the loop for each row
+        // let formattedTesting = actualTesting;
+
+        // // Append '*' only if there's a mismatch
+        // if (actualTesting !== expectedTesting) {
+        //     formattedTesting = `***   ${actualTesting}   ***`; // Convert to string with an asterisk
+        // }
+
+
+
         SalesSummarylist.push({
           Product: salesSummary.product_code,
+          'Nozzle Count': salesSummary.nozzle_count,
           'Nozzle Flow': salesSummary.nozzle_sales,
-          'Testing': salesSummary.nozzle_test,
+          'Testing': salesSummary.nozzle_test,       
           'Total Sales': salesSummary.total_sales,
           'Credit Sales': salesSummary.credit_sales,          
           'Digital+Cash Sales': DigiandCashSales.toFixed(2),
