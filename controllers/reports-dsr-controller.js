@@ -7,6 +7,7 @@ const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 const moment = require('moment');
 var locationdao = require("../dao/report-dao");
+var ReportDao = require("../dao/report-dao");
 
 
 module.exports = {
@@ -445,6 +446,37 @@ module.exports = {
         
       });
 
+
+
+      const Creditsummarylist = [];      
+      let totalBalance = 0;  // Initialize total balance counter
+      let count = 0;  // Initialize count for top 3 customers with large balances
+      
+      const data = await ReportDao.getDayBalance(locationCode, fromDate);
+      
+      data.forEach((creditSummaryData) => {
+         // Convert ClosingData to number before adding
+        totalBalance += Number(creditSummaryData.ClosingData);
+      
+        // Check if ClosingData is not between -10 and 10 AND count is less than 3
+        if ((creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) && count < 3) {
+          Creditsummarylist.push({
+            'Credit Customer': creditSummaryData.company_name,
+            'Balance': creditSummaryData.ClosingData
+          });
+          count++;
+        }
+      });
+      
+              // Add total as the last row
+        Creditsummarylist.push({
+          'Credit Customer': 'Total(All Customer Balances)',
+          'Balance': totalBalance
+        });
+              
+
+
+
       // Initialize the Cashflowstmtlist array and variables to sum credits and debits
       let Cashflowstmtlist = [];
       let totalCredits = 0;
@@ -558,7 +590,8 @@ module.exports = {
         FuelTankStocklist: FuelTankStocklist,
         productPriceList:productPriceList,
         monthlyOfftakeList: monthlyOfftakeList,
-        deadlineList: deadlineList
+        deadlineList: deadlineList,
+        Creditsummarylist:Creditsummarylist
       }
     }else
     {
