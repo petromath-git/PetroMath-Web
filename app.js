@@ -118,6 +118,7 @@ const creditController = require("./controllers/credit-controller");
 const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
+const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
 
 
 const flash = require('express-flash');
@@ -898,6 +899,31 @@ app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
 
 app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
     billController.deleteBill(req, res, next);
+});
+
+// Lubes Invoice routes
+app.get('/lubes-invoice-home', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceHome(req, res, next);
+});
+
+app.get('/lubes-invoice/new', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.createNewInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceEntry(req, res, next);
+});
+
+app.post('/lubes-invoice/save', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.saveLubesInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice/delete', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.deleteLubesInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice/close', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.finishInvoice(req, res, next);
 });
 
 // error handler - start.
