@@ -1,6 +1,34 @@
 extends layout
 
 block content
+    script.
+        function deleteInvoice(invoiceId,status) {
+            // Check if invoice is in DRAFT status
+            if (status !== 'DRAFT') {
+                alert('Only draft invoices can be deleted.');
+                return;
+            }
+
+
+            if (confirm('Are you sure you want to delete this invoice?')) {
+                fetch(`/lubes-invoice/delete?id=${invoiceId}`, {
+                    method: 'GET'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success || result.message) {
+                        alert(result.message || 'Invoice deleted successfully');
+                        window.location.reload();
+                    } else {
+                        alert('Failed to delete invoice');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the invoice');
+                });
+            }
+        }
     div.row
         div.col-6
             form(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
@@ -51,7 +79,7 @@ block content
                                             span.oi.oi-pencil
                                         if(user.isAdmin)
                                             span &nbsp;
-                                            a.btn.btn-danger(onClick=`deleteInvoice(${val.lubes_hdr_id})`)
+                                            a.btn.btn-danger(onClick=`deleteInvoice(${val.lubes_hdr_id}, '${val.closing_status}')`)
                                                 span.oi.oi-trash
                                 if (val.closing_status === 'CLOSED')
                                     td
