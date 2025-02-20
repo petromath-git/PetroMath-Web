@@ -153,6 +153,8 @@ module.exports = {
   TXN_DEADLINE: "t_deadline",
   TXN_DEADLINE_VIEWS: "t_deadline_v",
   LOGIN_LOG_TABLE: "t_login_log",
+  LUBES_INVOICE_HDR_TABLE: "t_lubes_inv_hdr",
+  LUBES_INVOICE_LINES_TABLE: "t_lubes_inv_lines",
 
   // config related to sales
   APP_CONFIGS: {

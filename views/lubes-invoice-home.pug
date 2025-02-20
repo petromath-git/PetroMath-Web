@@ -1,0 +1,59 @@
+extends layout
+
+block content
+    div.row
+        div.col-6
+            form(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
+                table.center
+                    tr
+                        td From Date:
+                        td
+                            input#invoice_fromDate.form-control(type='date', name='invoice_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                        td &nbsp;
+                        td To Date:
+                        td
+                            input#invoice_toDate.form-control(type='date', name='invoice_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
+                        td &nbsp;
+                        td
+                            button.btn.btn-primary(type='submit') Go
+        div.col-6
+            form(method='GET' action='/lubes-invoice/new' id='newinvoice')
+                input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
+                input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
+                div(style="text-align:right;")
+                    button.btn.btn-primary(type='submit') Create New Invoice
+
+    div &nbsp;
+    div
+        if invoiceValues && invoiceValues.length > 0
+            table(class="table")
+                thead(class="thead-light")
+                    tr
+                        th Invoice Number
+                        th Date
+                        th Amount
+                        th Status
+                        th Actions
+                    tbody
+                        each val in invoiceValues
+                            tr(id=`invoice-record-${val.lubes_hdr_id}`)
+                                td
+                                    span= val.invoice_number
+                                td
+                                    span= val.date
+                                td
+                                    span= val.amount ? parseFloat(val.amount).toFixed(2) : '0.00'
+                                td
+                                    span= val.closing_status
+                                if (val.closing_status === 'DRAFT')
+                                    td
+                                        a.btn.btn-info(href='/lubes-invoice?id=' + val.lubes_hdr_id)
+                                            span.oi.oi-pencil
+                                        if(user.isAdmin)
+                                            span &nbsp;
+                                            a.btn.btn-danger(onClick=`deleteInvoice(${val.lubes_hdr_id})`)
+                                                span.oi.oi-trash
+                                if (val.closing_status === 'CLOSED')
+                                    td
+                                        a.btn.btn-info(href='/lubes-invoice?id=' + val.lubes_hdr_id)
+                                            span.oi.oi-envelope-open

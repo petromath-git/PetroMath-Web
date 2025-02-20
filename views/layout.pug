@@ -66,10 +66,13 @@ html
                                         a.nav-link(href='/tankreceipts') Tank Receipts
                                     li.nav-item(class=(title === 'Tank Dip Entry' ? 'active' : ''))
                                         a.nav-link(href='/tank-dip') Tank Dip Entry    
-                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
+                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : 
+                                    ''))
                                         a.nav-link(href='/bank-transaction') Bank Transaction    
                                     li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
                                         a.nav-link(href='/cashflowhome') Day Close
+                                    li.nav-item(class=(title === 'Lubes Invoice: Home' || title === 'Lubes Invoice' || title === 'New Lubes Invoice' ? 'active' : ''))
+                                        a.nav-link(href='/lubes-invoice-home') Lubes    
                                     li.nav-item.dropdown
                                         a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
                                         .dropdown-menu(aria-labelledby='reportsDropdown')
