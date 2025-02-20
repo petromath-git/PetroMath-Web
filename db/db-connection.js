@@ -58,6 +58,9 @@ db.txn_attendance = require("./txn-attendance")(sequelize, Sequelize);
 db.txn_deadline = require("./txn-deadline")(sequelize, Sequelize);
 db.txn_deadline_views = require("./txn-deadline-views")(sequelize, Sequelize);
 db.loginLog = require("./login-log")(sequelize, Sequelize);
+db.t_lubes_inv_hdr = require("./txn-lubes-header")(sequelize, Sequelize);
+db.t_lubes_inv_lines = require("./txn-lubes-lines")(sequelize, Sequelize);
+db.m_supplier = require("./suppliers")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -117,5 +120,27 @@ db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
 
 db.txn_credits.belongsTo(db.credit, {foreignKey: 'creditlist_id', sourceKey: 'creditlist_id'});
 db.credit.hasMany(db.txn_credits, {foreignKey: 'creditlist_id', targetKey: 'creditlist_id'});
+
+// Assuming you have db.t_lubes_inv_lines and db.product or db.m_product
+db.t_lubes_inv_lines.belongsTo(db.product, {
+    foreignKey: 'product_id',
+    targetKey: 'product_id'
+});
+
+db.product.hasMany(db.t_lubes_inv_lines, {
+    foreignKey: 'product_id',
+    sourceKey: 'product_id'
+});
+
+db.t_lubes_inv_hdr.hasMany(db.t_lubes_inv_lines, {
+    foreignKey: 'lubes_hdr_id',
+    sourceKey: 'lubes_hdr_id'
+});
+
+db.t_lubes_inv_lines.belongsTo(db.t_lubes_inv_hdr, {
+    foreignKey: 'lubes_hdr_id',
+    targetKey: 'lubes_hdr_id'
+});
+
 
 module.exports = db;
