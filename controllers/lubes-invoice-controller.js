@@ -159,23 +159,38 @@ module.exports = {
     }    
 ,
     
-    deleteLubesInvoice: (req, res, next) => {
-        if(req.query.id) {
-            lubesInvoiceDao.deleteLubesInvoice(req.query.id)
-                .then(data => {
-                    if (data == 1) {
-                        res.status(200).send({message: 'Invoice successfully deleted.'});
-                    } else {
-                        res.status(500).send({error: 'Invoice deletion failed or not available to delete.'});
-                    }
-                }).catch(err => {
-                    console.error("Error deleting invoice:", err);
-                    res.status(500).send({error: 'Error during invoice deletion: ' + err.message});
-                });
-        } else {
-            res.status(400).send({error: 'Invoice ID is required'});
-        }
-    },
+deleteLubesInvoice: (req, res, next) => {
+    if(req.query.id) {
+        // First, check the invoice status
+        lubesInvoiceDao.findLubesInvoice(req.user.location_code, req.query.id)
+            .then(invoice => {
+                // Check if invoice exists and is in DRAFT status
+                if (!invoice) {
+                    return res.status(404).send({error: 'Invoice not found.'});
+                }
+
+                if (invoice.closing_status !== 'DRAFT') {
+                    return res.status(400).send({error: 'Only draft invoices can be deleted.'});
+                }
+
+                // If invoice is in DRAFT, proceed with deletion
+                return lubesInvoiceDao.deleteLubesInvoice(req.query.id)
+                    .then(data => {
+                        if (data == 1) {
+                            res.status(200).send({message: 'Invoice successfully deleted.'});
+                        } else {
+                            res.status(500).send({error: 'Invoice deletion failed or not available to delete.'});
+                        }
+                    });
+            })
+            .catch(err => {
+                console.error("Error deleting invoice:", err);
+                res.status(500).send({error: 'Error during invoice deletion: ' + err.message});
+            });
+    } else {
+        res.status(400).send({error: 'Invoice ID is required'});
+    }
+},
     
     finishInvoice: (req, res, next) => {
         lubesInvoiceDao.finishInvoice(req.query.id).then(
