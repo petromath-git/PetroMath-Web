@@ -142,5 +142,10 @@ db.t_lubes_inv_lines.belongsTo(db.t_lubes_inv_hdr, {
     targetKey: 'lubes_hdr_id'
 });
 
+db.t_lubes_inv_hdr.belongsTo(db.m_supplier, {
+    foreignKey: 'supplier_id',
+    targetKey: 'supplier_id'
+});
+
 
 module.exports = db;

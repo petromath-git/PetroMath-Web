@@ -233,9 +233,14 @@ function getLubesInvoiceDetailsPromise(invoiceDetails, req, res, next) {
 }
 
 function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional) {
-    if(fromDate === undefined) fromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    if(toDate === undefined) toDate = dateFormat(new Date(), "yyyy-mm-dd");
+    // If no dates provided, use financial year dates
+    if(fromDate === undefined || toDate === undefined) {
+        const financialYearDates = getFinancialYearDates();
+        fromDate = financialYearDates.fromDate;
+        toDate = financialYearDates.toDate;
+    }
     
+    // You'll need to join with suppliers and invoice lines to get these details
     lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate)
         .then(invoices => {
             let invoiceValues = [];
@@ -244,10 +249,12 @@ function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional
                     invoiceValues.push({
                         lubes_hdr_id: invoice.lubes_hdr_id,
                         invoice_number: invoice.invoice_number,
+                        supplier_name: invoice.Supplier ? invoice.Supplier.supplier_name : 'N/A',
                         closing_status: invoice.closing_status,
                         notes: invoice.notes,
                         date: dateFormat(invoice.invoice_date, 'dd-mmm-yyyy'),
-                        amount: parseFloat(invoice.invoice_amount) || 0 // Ensure it's a number
+                        amount: parseFloat(invoice.invoice_amount) || 0,
+                        total_lines: invoice.LubesInvoiceLines ? invoice.LubesInvoiceLines.length : 0
                     });
                 });
             }
@@ -265,4 +272,32 @@ function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional
             console.error("Error gathering invoices:", err);
             next(err);
         });
+}
+
+function formatFinancialYearDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getFinancialYearDates(date = new Date()) {
+    const currentYear = date.getFullYear();
+    const currentMonth = date.getMonth();
+
+    let fromDate, toDate;
+
+    // Financial year starts from April 1st
+    if (currentMonth >= 3) { // April (3) to December
+        fromDate = new Date(currentYear, 3, 1); // April 1st of current year
+        toDate = new Date(currentYear + 1, 2, 31); // March 31st of next year
+    } else { // January to March
+        fromDate = new Date(currentYear - 1, 3, 1); // April 1st of previous year
+        toDate = new Date(currentYear, 2, 31); // March 31st of current year
+    }
+
+    return {
+        fromDate: formatFinancialYearDate(fromDate),
+        toDate: formatFinancialYearDate(toDate)
+    };
 }

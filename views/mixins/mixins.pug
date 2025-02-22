@@ -70,30 +70,116 @@ mixin addTxnReceipt(rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'creditReceipts\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
 
-//- add new product
 mixin addMasterProduct(rowCnt)
     - let id = 'product-master-table-row-' + rowCnt;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
-            input.form-control(type='text', name='m_product_name_'+ rowCnt, id='m_product_name_'+ rowCnt, required)
+            // Product Name: allow user to type and then convert after a delay
+            input.form-control(
+                type='text', 
+                name='m_product_name_'+ rowCnt, 
+                id='m_product_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter Product Name", 
+                oninput="delayedUpperCase(this)"
+            )
+            //- Hidden qty field with default value 1
+            input(type='hidden', name='m_product_qty_'+ rowCnt, id='m_product_qty_'+ rowCnt, value="1")
         td(scope="row")
-            input.form-control(type='number', name='m_product_qty_'+ rowCnt, id='m_product_qty_'+ rowCnt, min=0 oninput='validity.valid||(value="")', value=0 , required, step=0.001)
+            // SKU Name: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_sku_name_'+ rowCnt, 
+                id='m_product_sku_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter SKU Name", 
+                oninput="delayedUpperCase(this)"
+            )
         td(scope="row")
-            select.form-control(id='m_product_unit_'+ rowCnt, name='m_product_unit_'+ rowCnt, required)
+            // SKU Number: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_sku_number_'+ rowCnt, 
+                id='m_product_sku_number_'+ rowCnt, 
+                required, 
+                placeholder="Enter SKU Number", 
+                oninput="delayedUpperCase(this)"
+            )
+        td(scope="row")
+            // HSN Code: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_hsn_code_'+ rowCnt, 
+                id='m_product_hsn_code_'+ rowCnt, 
+                placeholder="Enter HSN Code", 
+                oninput="delayedUpperCase(this)"
+            )
+        td(scope="row")
+            select.form-control(
+                id='m_product_unit_'+ rowCnt, 
+                name='m_product_unit_'+ rowCnt, 
+                required
+            )
+                option(value="" disabled selected) Select Unit
                 if config.productUnits
                     each val in config.productUnits
-                        option(value=`${val}`)=val
+                        option(value=`${val}`)= val
         td(scope="row")
-            input.form-control(type='number', name='m_product_price_' + rowCnt, id='m_product_price_' + rowCnt, min=0 oninput='validity.valid||(value="")', value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_price_' + rowCnt, 
+                    id='m_product_price_' + rowCnt, 
+                    min=0, 
+                    oninput='validity.valid||(value="")', 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text Price (₹)
         td(scope="row")
-            input.form-control(type='text', name='m_product_ledger_name_'+ rowCnt, id='m_product_ledger_name_'+ rowCnt, required)
+            input.form-control(
+                type='text', 
+                name='m_product_ledger_name_'+ rowCnt, 
+                id='m_product_ledger_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter Ledger Name"
+            )
         td(scope="row")
-            input.form-control(type='number', name='m_product_cgst_'+ rowCnt, id='m_product_cgst_'+ rowCnt, min=0 , value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_cgst_'+ rowCnt, 
+                    id='m_product_cgst_'+ rowCnt, 
+                    min=0, 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text CGST %
         td(scope="row")
-            input.form-control(type='number', name='m_product_sgst_'+ rowCnt, id='m_product_sgst_'+ rowCnt, min=0 , value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_sgst_'+ rowCnt, 
+                    id='m_product_sgst_'+ rowCnt, 
+                    min=0, 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text SGST %
         td(scope="row")
-            button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'product-master\', \'' + id + '\')', id = id + '_close')
+            button.close(
+                type="button", 
+                aria-label="Close", 
+                onclick='hideMasterEntryRow("product-master", "' + id + '")', 
+                id=id + '_close'
+            )
                 span(aria-hidden="true") &times;
 
 //- add new user

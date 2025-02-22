@@ -39,6 +39,16 @@ module.exports = {
                     }
                 ] 
             },
+            include: [
+                {
+                    model: Supplier,
+                    attributes: ['supplier_name']
+                },
+                {
+                    model: LubesInvoiceLine,
+                    attributes: ['lubes_line_id']
+                }
+            ],
             order: [Sequelize.literal('invoice_date')]
         });
     },
