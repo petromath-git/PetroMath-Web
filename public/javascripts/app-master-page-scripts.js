@@ -69,7 +69,37 @@ function hideMasterEntryRow(prefix, rowId) {
     document.getElementById(prefix + '-save').disabled = true;
     reloadPage(rowId);
     hideRow(rowId);
+
+    // Add only this line for product master
+    if (rowId.includes('product-master')) {
+        hideRow(rowId.replace('product-master-table-row', 'details') + '-row');
+    }
 }
+
+
+// New function specific to product master
+function showProductMasterRow(obj, prefix) {
+    // Call the original function to maintain existing behavior
+    showMasterEntryRow(obj, prefix);
+    
+    // Additional handling for expandable details
+    let rowId = prefix + '-table-row-0';
+    let detailsRowId = 'details-0-row';
+    
+    // Show the details row
+    document.getElementById(detailsRowId).style.display = '';
+    
+    // Expand the details section
+    document.getElementById('details-0').classList.add('show');
+    
+    // Update chevron icon
+    let chevronButton = document.querySelector(`#${rowId} .oi-chevron-right`);
+    if (chevronButton) {
+        chevronButton.classList.remove('oi-chevron-right');
+        chevronButton.classList.add('oi-chevron-bottom');
+    }
+}
+
 
 // Users - scripts - end
 

@@ -926,6 +926,10 @@ app.get('/lubes-invoice/close', isLoginEnsured, function(req, res, next) {
     lubesInvoiceController.finishInvoice(req, res, next);
 });
 
+app.get('/lubes-invoice/lines', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceLines(req, res, next);
+});
+
 // error handler - start.
 app.use(function (req, res, next) {
     next(createError(403));
