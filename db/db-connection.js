@@ -134,17 +134,20 @@ db.product.hasMany(db.t_lubes_inv_lines, {
 
 db.t_lubes_inv_hdr.hasMany(db.t_lubes_inv_lines, {
     foreignKey: 'lubes_hdr_id',
-    sourceKey: 'lubes_hdr_id'
+    sourceKey: 'lubes_hdr_id',
+    as: 'LubesInvoiceLines'
 });
 
 db.t_lubes_inv_lines.belongsTo(db.t_lubes_inv_hdr, {
     foreignKey: 'lubes_hdr_id',
-    targetKey: 'lubes_hdr_id'
+    targetKey: 'lubes_hdr_id',
+    as: 'InvoiceHeader'
 });
 
 db.t_lubes_inv_hdr.belongsTo(db.m_supplier, {
     foreignKey: 'supplier_id',
-    targetKey: 'supplier_id'
+    targetKey: 'supplier_id',
+    as: 'Supplier'
 });
 
 

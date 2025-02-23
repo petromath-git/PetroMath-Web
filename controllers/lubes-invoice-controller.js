@@ -204,7 +204,59 @@ deleteLubesInvoice: (req, res, next) => {
                 console.error("Error finishing invoice:", err);
                 res.status(500).send({error: 'Error during invoice closing: ' + err.message});
             });
+    },
+    // Add this to your controller module.exports
+getLubesInvoiceLines: (req, res, next) => {
+    if (!req.query.id) {
+        return res.status(400).json({
+            success: false,
+            message: 'Invoice ID is required'
+        });
     }
+
+    lubesInvoiceDao.findLubesInvoiceLines(req.query.id)
+        .then(lines => {
+            if (!lines) {
+
+              
+                return res.status(404).json({
+                    success: false,
+                    message: 'No lines found for this invoice'
+                });
+            }
+
+            console.log(lines);
+
+            // Transform the data to ensure we handle missing Product properly
+            const transformedLines = lines.map(line => {
+                const lineData = line.toJSON();
+                return {
+                    ...lineData,
+                    amount: parseFloat(lineData.amount) || 0,
+                    mrp: parseFloat(lineData.mrp) || 0,
+                    net_rate: parseFloat(lineData.net_rate) || 0,
+                    qty: parseFloat(lineData.qty) || 0,
+                    // Ensure product data is safely accessed
+                    product_name: lineData.m_product ? lineData.m_product.product_name : 'Unknown Product',
+                    unit: lineData.Product ? lineData.Product.unit : '',
+                    price: lineData.Product ? lineData.Product.price : 0
+                };
+            });
+
+            res.json({
+                success: true,
+                lines: transformedLines
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching invoice lines:", err);
+            res.status(500).json({
+                success: false,
+                message: 'Error fetching invoice lines',
+                error: err.message
+            });
+        });
+}
 };
 
 function getLubesInvoiceDetailsPromise(invoiceDetails, req, res, next) {
@@ -246,6 +298,10 @@ function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional
             let invoiceValues = [];
             if(invoices && invoices.length > 0) {
                 invoices.forEach(invoice => {
+
+                 
+
+
                     invoiceValues.push({
                         lubes_hdr_id: invoice.lubes_hdr_id,
                         invoice_number: invoice.invoice_number,
