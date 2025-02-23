@@ -13,9 +13,10 @@ module.exports = {
             include: [
                 {
                     model: LubesInvoiceLine,
+                    as: 'LubesInvoiceLines', // Specify the alias defined in the association
                     include: [
                         {
-                            model: Product || db.m_product,
+                            model: Product,
                             attributes: ['product_name', 'unit', 'price']
                         }
                     ]
@@ -39,6 +40,18 @@ module.exports = {
                     }
                 ] 
             },
+            include: [
+                {
+                    model: Supplier,           
+                    as: 'Supplier',  // Added the missing alias          
+                    attributes: ['supplier_name']
+                },
+                {
+                    model: LubesInvoiceLine,
+                    as: 'LubesInvoiceLines', // Use the alias you defined above
+                    attributes: ['lubes_line_id']
+                }
+            ],
             order: [Sequelize.literal('invoice_date')]
         });
     },
@@ -66,7 +79,7 @@ module.exports = {
             where: { lubes_hdr_id: lubesHdrId },
             include: [
                 {
-                    model: Product,
+                    model: Product,                    
                     attributes: ['product_name', 'unit', 'price']
                 }
             ],

@@ -1115,8 +1115,7 @@ function enableCredit(index, creditID) {
 
 
 function editProduct(id, productId) {
-    document.getElementById("product-price-" + id).readOnly = false;
-    document.getElementById("product-unit-" + id).disabled = false;
+    document.getElementById("product-price-" + id).readOnly = false;   
     document.getElementById("product-ledger-name-" + id).readOnly = false;
     document.getElementById("product-cgst-" + id).readOnly = false;
     document.getElementById("product-sgst-" + id).readOnly = false;
@@ -1130,15 +1129,37 @@ function saveProduct(id, productId) {
     const ledgerName = document.getElementById("product-ledger-name-" + id);
     const cgst = document.getElementById("product-cgst-" + id);
     const sgst = document.getElementById("product-sgst-" + id);
+    const skuName = document.getElementById("product-sku-name-" + id);
+    const skuNumber = document.getElementById("product-sku-number-" + id);
+    const hsnCode = document.getElementById("product-hsn-code-" + id);
+
     if (productPrice.value && parseInt(productPrice.value) > 0) {
         if (putAjax('product/' + productId, {
             m_product_price: productPrice.value,
             m_product_unit: productUnit.value,
             m_product_ledger_name: ledgerName.value,
             m_product_cgst: cgst.value,
-            m_product_sgst: sgst.value
+            m_product_sgst: sgst.value,
+            m_product_sku_name: skuName.value,
+            m_product_sku_number: skuNumber.value,
+            m_product_hsn_code: hsnCode.value
         })) {
-            postProductEdit(id);
+            // Make fields readonly
+            productPrice.readOnly = true;
+            productUnit.disabled = true;
+            ledgerName.readOnly = true;
+            cgst.readOnly = true;
+            sgst.readOnly = true;
+            skuName.readOnly = true;
+            skuNumber.readOnly = true;
+            hsnCode.readOnly = true;
+
+            // Update button visibility
+            document.getElementById("product-edit-" + id).className = showClassName;
+            document.getElementById("product-save-" + id).className = "btn btn-info " + hideClassName;
+
+            // Show success message
+            showAlert('Product saved successfully!');
         }
     }
 }
@@ -1152,6 +1173,18 @@ function postProductEdit(id) {
     document.getElementById("product-edit-" + id).className = "btn btn-info";
     document.getElementById("product-save-" + id).className = "btn-info " + hideClassName;
 }
+
+
+function delayedUpperCase(element) {
+    // Clear any previous timer for this element (if using a property on the element)
+    if (element.delayTimer) {
+      clearTimeout(element.delayTimer);
+    }
+    // Set a new timer to convert the text to uppercase after 1 second (1000 ms)
+    element.delayTimer = setTimeout(function() {
+      element.value = element.value.toUpperCase();
+    }, 200);
+  }
 
 function putAjax(uri, data) {
     return new Promise((resolve, reject) => {
