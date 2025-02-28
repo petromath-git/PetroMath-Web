@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const supplierSelect = document.getElementById('supplier_id');
     const invoiceDateInput = document.getElementById('invoice_date');
 
+    // Store all suppliers with their effective dates
+    let allSuppliers = [];
+    
     // Get product options HTML (used when adding new rows)
     function getProductOptions() {
         return products.map(product => 
@@ -15,6 +18,118 @@ document.addEventListener('DOMContentLoaded', function() {
                 ${product.product_name}
             </option>`
         ).join('');
+    }
+
+    // Fetch all suppliers with their effective dates
+    function fetchAllSuppliersWithDates() {
+        fetch('/lubes-invoice/suppliers-with-dates')
+            .then(response => {
+                if (!response.ok) {
+                    // Log the response for debugging
+                    response.text().then(text => {
+                        console.error('Error response:', text);
+                    });
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    allSuppliers = data.suppliers || [];
+                    
+                    // Initially filter suppliers based on the current invoice date
+                    if (invoiceDateInput && invoiceDateInput.value) {
+                        filterSuppliersByDate(invoiceDateInput.value);
+                    }
+                } else {
+                    console.error('Failed to fetch suppliers with dates:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching suppliers with dates:', error);
+                // Continue with the existing suppliers
+            });
+    }
+    
+    // Filter suppliers based on the selected date
+    function filterSuppliersByDate(dateStr) {
+        if (!supplierSelect || !dateStr || allSuppliers.length === 0) return;
+        
+        const selectedDate = new Date(dateStr);
+        const currentSelectedValue = supplierSelect.value;
+        
+        // Save the current options to an array
+        const currentOptions = Array.from(supplierSelect.options).map(opt => ({
+            value: opt.value,
+            text: opt.text,
+            selected: opt.selected
+        }));
+        
+        // Clear current options (except the first one)
+        while (supplierSelect.options.length > 1) {
+            supplierSelect.remove(1);
+        }
+        
+        // Add suppliers active on the selected date
+        allSuppliers.forEach(supplier => {
+            const startDate = supplier.effective_start_date ? new Date(supplier.effective_start_date) : null;
+            const endDate = supplier.effective_end_date ? new Date(supplier.effective_end_date) : null;
+            
+            const isActive = 
+                (!startDate || selectedDate >= startDate) && 
+                (!endDate || selectedDate <= endDate);
+            
+            if (isActive) {
+                const option = document.createElement('option');
+                option.value = supplier.supplier_id;
+                option.text = supplier.supplier_name;
+                
+                // Keep selected value if it exists and is valid
+                if (currentSelectedValue && currentSelectedValue == supplier.supplier_id) {
+                    option.selected = true;
+                }
+                
+                supplierSelect.add(option);
+            }
+        });
+        
+        // If the previously selected supplier is no longer valid, clear the selection
+        if (currentSelectedValue && !Array.from(supplierSelect.options).some(opt => opt.value === currentSelectedValue)) {
+            supplierSelect.value = '';
+            
+            // Show a warning if a supplier was previously selected but is now filtered out
+            if (currentSelectedValue) {
+                alert('The previously selected supplier is not active on the selected invoice date.');
+            }
+        }
+    }
+
+    // Function to fetch historical rate for a product
+    async function fetchHistoricalRate(productId, netRateInput) {
+        try {
+            const response = await fetch(`/lubes-invoice/historical-data?productId=${productId}`);
+            const data = await response.json();
+            
+            if (data.success && data.history && data.history.length > 0) {
+                // Get the most recent historical rate
+                const lastRate = data.history[0].net_rate;
+                
+                // Check if lastRate is a number and convert it if needed
+                const numericRate = parseFloat(lastRate) || 0;
+                
+                // Set as placeholder
+                netRateInput.placeholder = `Last: ${numericRate.toFixed(2)}`;
+                
+                // You could also set the value if you want to pre-fill it
+                // netRateInput.value = numericRate.toFixed(2);
+                // calculateAmount(netRateInput);
+            } else {
+                netRateInput.placeholder = "";
+            }
+        } catch (error) {
+            console.error("Error fetching historical data:", error);
+            netRateInput.placeholder = "";
+        }
     }
 
     // Setup row events for a specific row
@@ -34,8 +149,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (selectedOption.value) {
                 const unit = selectedOption.getAttribute('data-unit') || '';
                 unitCell.textContent = unit;
+                
+                // Fetch historical rate when product is selected
+                fetchHistoricalRate(selectedOption.value, netRateInput);
             } else {
                 unitCell.textContent = '';
+                netRateInput.placeholder = "";
             }
         }
         
@@ -282,16 +401,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Close invoice
-    if (closeBtn) {
-        closeBtn.addEventListener('click', function() {
-            const invoiceId = document.getElementById('lubes_hdr_id')?.value;
-            
-            if (!invoiceId) {
-                alert('No invoice selected to close');
-                return;
-            }
 
+
+    // Close invoice
+if (closeBtn) {
+    closeBtn.addEventListener('click', function() {
+        const invoiceId = document.getElementById('lubes_hdr_id')?.value;
+        
+        if (!invoiceId) {
+            alert('No invoice selected to close');
+            return;
+        }
+
+        if (confirm('Are you sure you want to close this invoice? This action cannot be undone.')) {
             fetch(`/lubes-invoice/close?id=${invoiceId}`, {
                 method: 'GET'
             })
@@ -307,7 +429,17 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error:', error);
                 alert('An error occurred while closing the invoice');
+                // Redirect to home page even on error, after showing the alert
+                window.location.href = '/lubes-invoice-home';
             });
+        }
+    });
+}
+
+    // Listen for date change events to update supplier list
+    if (invoiceDateInput) {
+        invoiceDateInput.addEventListener('change', function() {
+            filterSuppliersByDate(this.value);
         });
     }
 
@@ -320,4 +452,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize when DOM is loaded
     setupAllRows();
+    fetchAllSuppliersWithDates();
 });

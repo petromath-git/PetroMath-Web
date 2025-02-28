@@ -1,6 +1,7 @@
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const lubesInvoiceDao = require("../dao/lubes-invoice-dao");
+const supplierDao = require("../dao/supplier-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 // Add these imports
@@ -192,19 +193,46 @@ deleteLubesInvoice: (req, res, next) => {
     }
 },
     
-    finishInvoice: (req, res, next) => {
-        lubesInvoiceDao.finishInvoice(req.query.id).then(
-            (data) => {
-                if(data == 1) {
-                    res.status(200).send({message: 'The invoice has been closed.'});
+finishInvoice: (req, res, next) => {
+    lubesInvoiceDao.finishInvoice(req.query.id).then(
+        (data) => {
+            if(data == 1) {
+                // Check if this is an AJAX request
+                if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                    // Respond with JSON for AJAX requests
+                    res.status(200).json({
+                        success: true,
+                        message: 'The invoice has been closed.'
+                    });
                 } else {
-                    res.status(500).send({error: 'Error while closing the invoice.'});
+                    // Redirect for normal requests
+                    req.flash('success', 'The invoice has been closed.'); // If you use flash messages
+                    res.redirect('/lubes-invoice-home');
                 }
-            }).catch(err => {
-                console.error("Error finishing invoice:", err);
-                res.status(500).send({error: 'Error during invoice closing: ' + err.message});
-            });
-    },
+            } else {
+                if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                    res.status(500).json({
+                        success: false,
+                        message: 'Error while closing the invoice.'
+                    });
+                } else {
+                    req.flash('error', 'Error while closing the invoice.'); // If you use flash messages
+                    res.redirect('/lubes-invoice-home');
+                }
+            }
+        }).catch(err => {
+            console.error("Error finishing invoice:", err);
+            if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                res.status(500).json({
+                    success: false,
+                    message: 'Error during invoice closing: ' + err.message
+                });
+            } else {
+                req.flash('error', 'Error during invoice closing: ' + err.message); // If you use flash messages
+                res.redirect('/lubes-invoice-home');
+            }
+        });
+},
     // Add this to your controller module.exports
 getLubesInvoiceLines: (req, res, next) => {
     if (!req.query.id) {
@@ -253,6 +281,73 @@ getLubesInvoiceLines: (req, res, next) => {
             res.status(500).json({
                 success: false,
                 message: 'Error fetching invoice lines',
+                error: err.message
+            });
+        });
+},
+getHistoricalData: (req, res, next) => {
+    const productId = req.query.productId;
+    if (!productId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Product ID is required'
+        });
+    }
+
+    lubesInvoiceDao.getHistoricalPurchaseData(req.user.location_code, productId)
+        .then(history => {
+            res.json({
+                success: true,
+                history: history
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching historical data:", err);
+            res.status(500).json({
+                success: false,
+                message: 'Error fetching historical data',
+                error: err.message
+            });
+        });
+},
+// Get suppliers active on a specific date
+getSuppliersActiveOnDate: (req, res, next) => {
+    const date = req.query.date ? new Date(req.query.date) : new Date();
+    const locationCode = req.user.location_code;
+    
+    supplierDao.findSuppliersActiveOnDate(locationCode, date)
+        .then(suppliers => {
+            res.json({
+                success: true,
+                suppliers: suppliers
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching suppliers for date:", err);
+            res.status(500).json({
+                success: false,
+                message: 'Error fetching suppliers for the specified date',
+                error: err.message
+            });
+        });
+},
+
+// Get all suppliers with their effective dates for client-side filtering
+getSuppliersWithDates: (req, res, next) => {
+    const locationCode = req.user.location_code;
+    
+    supplierDao.getAllSuppliersWithDates(locationCode)
+        .then(suppliers => {
+            res.json({
+                success: true,
+                suppliers: suppliers
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching suppliers with dates:", err);
+            res.status(500).json({
+                success: false,
+                message: 'Error fetching suppliers with dates',
                 error: err.message
             });
         });

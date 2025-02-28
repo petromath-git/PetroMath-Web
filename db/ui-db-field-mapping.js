@@ -192,4 +192,17 @@ module.exports = {
             creation_date: new Date()
         };
     },
+    newSupplier: function (req) {
+        const now = new Date();
+        return {
+            supplier_name: req.body.supplier_name_0,
+            supplier_short_name: req.body.supplier_short_name_0,
+            location_code: req.user.location_code,
+            location_id: req.user.location_id,
+            created_by: req.user.username,
+            creation_date: now,
+            effective_start_date: now,
+            effective_end_date: '9999-12-31 23:59:59'
+        };
+    },
 }
