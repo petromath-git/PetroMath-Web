@@ -1,0 +1,25 @@
+extends layout
+include mixins/mixins
+
+block content
+    table(class="table" id="suppliers-table")
+        thead(class="thead-light")
+            tr
+                th(scope="col") #
+                th(scope="col") Name
+                th(scope="col") Short Name
+                th(scope="col") Location Code
+                th(scope="col") End Date
+                th(scope="col") Enable Supplier
+        tbody
+            each val, index in suppliers
+                tr(id='supplier-' + index)
+                    th(scope="row")= index + 1
+                    td= val.name
+                    td= val.shortName
+                    td= val.locationCode
+                    td= val.effective_end_date
+                    td
+                        div.align-items-start
+                            button.btn.btn-info(id="enable-supplier-"+index, onclick="enableSupplier('"+index+"', '"+ val.id +"')")
+                                span.oi.oi-check

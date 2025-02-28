@@ -76,6 +76,90 @@ function hideMasterEntryRow(prefix, rowId) {
     }
 }
 
+// Suppliers - scripts - start
+
+function showSupplierMasterEntryRow(button) {
+    const rowId = 'suppliers-table-row-0';
+    const row = document.getElementById(rowId);
+    const saveButton = document.getElementById('suppliers-save');
+    if (row && saveButton) {
+        row.classList.remove('d-md-none');
+        button.disabled = true;
+        saveButton.disabled = false;
+    }
+}
+
+function hideMasterEntryRow(prefix, rowId) {
+    const row = document.getElementById(rowId);
+    const addButton = document.getElementById(prefix + '-add-new');
+    const saveButton = document.getElementById(prefix + '-save');
+    if (row && addButton && saveButton) {
+        row.classList.add('d-md-none');
+        addButton.disabled = false;
+        saveButton.disabled = true;
+        // Clear input fields
+        const inputs = row.getElementsByTagName('input');
+        for (let input of inputs) {
+            input.value = '';
+        }
+    }
+}
+
+function disableSupplier(index, supplierId) {
+    if (confirm('Are you sure you want to disable this supplier?')) {
+        fetch('/suppliers/disable/' + supplierId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('supplier-' + index);
+                if (row) {
+                    row.remove();
+                }
+                alert('Supplier disabled successfully');
+            } else {
+                alert('Error disabling supplier');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error disabling supplier');
+        });
+    }
+}
+
+function enableSupplier(index, supplierId) {
+    if (confirm('Are you sure you want to enable this supplier?')) {
+        fetch('/suppliers/enable/' + supplierId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('supplier-' + index);
+                if (row) {
+                    row.remove();
+                }
+                alert('Supplier enabled successfully');
+            } else {
+                alert('Error enabling supplier');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error enabling supplier');
+        });
+    }
+}
+
+// Suppliers - scripts - End
 
 // New function specific to product master
 function showProductMasterRow(obj, prefix) {
