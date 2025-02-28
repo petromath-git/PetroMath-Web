@@ -447,25 +447,38 @@ module.exports = {
       });
 
 
-
       const Creditsummarylist = [];      
       let totalBalance = 0;  // Initialize total balance counter
-      let count = 0;  // Initialize count for top 3 customers with large balances
+      let count = 0;  // Counter for limiting entries on non-special days
+      
+      const fromDateObj = new Date(fromDate);  // Convert fromDate to Date object
+      const dayOfMonth = fromDateObj.getDate();
+      const lastDayOfMonth = new Date(fromDateObj.getFullYear(), fromDateObj.getMonth() + 1, 0).getDate(); // Get last day of the month
       
       const data = await ReportDao.getDayBalance(locationCode, fromDate);
       
-      data.forEach((creditSummaryData) => {
-         // Convert ClosingData to number before adding
-        totalBalance += Number(creditSummaryData.ClosingData);
+      // Determine if all entries should be added or limited to 3
+      const isSpecialDay = (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth);
       
-        // Check if ClosingData is not between -10 and 10 AND count is less than 3
-        if ((creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) && count < 3) {
-          Creditsummarylist.push({
-            'Credit Customer': creditSummaryData.company_name,
-            'Balance': creditSummaryData.ClosingData
-          });
-          count++;
-        }
+      data.forEach((creditSummaryData) => {
+          // Convert ClosingData to number before adding
+          totalBalance += Number(creditSummaryData.ClosingData);
+      
+          // If it's a special day, push all data
+          if (isSpecialDay && (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10)) {
+              Creditsummarylist.push({
+                  'Credit Customer': creditSummaryData.company_name,
+                  'Balance': creditSummaryData.ClosingData
+              });
+          } 
+          // On other days, limit to 3 entries only
+          else if ((creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) && count < 3) {
+              Creditsummarylist.push({
+                  'Credit Customer': creditSummaryData.company_name,
+                  'Balance': creditSummaryData.ClosingData
+              });
+              count++;
+          }
       });
       
               // Add total as the last row
@@ -591,7 +604,10 @@ module.exports = {
         productPriceList:productPriceList,
         monthlyOfftakeList: monthlyOfftakeList,
         deadlineList: deadlineList,
-        Creditsummarylist:Creditsummarylist
+        Creditsummarylist:Creditsummarylist,
+        creditSummaryTitle: (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth) 
+        ? 'Credit Customer Balances (All Customers)' 
+        : 'Credit Customer Balances (Top 3)'  // Pass title dynamically
       }
     }else
     {
