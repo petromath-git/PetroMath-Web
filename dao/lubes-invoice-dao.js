@@ -185,5 +185,30 @@ module.exports = {
             },
             { where: { product_id: productId } }
         );
-    }
+    },
+    getHistoricalPurchaseData: (locationCode, productId) => {
+        return LubesInvoiceLine.findAll({
+            include: [{
+                model: LubesInvoiceHeader,
+                as: 'InvoiceHeader',  // Add this alias to match the association
+                where: {
+                    location_code: locationCode,
+                    closing_status: 'CLOSED'
+                },
+                attributes: ['invoice_date']
+            }],
+            where: {
+                product_id: productId
+            },
+            attributes: [
+                'net_rate',
+                'qty',
+                'amount'
+            ],
+            order: [
+                ['InvoiceHeader', 'invoice_date', 'DESC']  // Update order clause with alias
+            ],
+            limit: 5 // Get last 5 purchases
+        });
+    },
 };

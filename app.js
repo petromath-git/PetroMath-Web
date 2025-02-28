@@ -90,6 +90,7 @@ const Person = db.person;
 const ProductDao = require("./dao/product-dao");
 const PersonDao = require("./dao/person-dao");
 var CreditDao = require("./dao/credits-dao");
+const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 
 db.sequelize.sync();
@@ -119,6 +120,7 @@ const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
 const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
+const supplierController = require("./controllers/supplier-controller");
 
 
 const flash = require('express-flash');
@@ -929,6 +931,117 @@ app.get('/lubes-invoice/close', isLoginEnsured, function(req, res, next) {
 app.get('/lubes-invoice/lines', isLoginEnsured, function(req, res, next) {
     lubesInvoiceController.getLubesInvoiceLines(req, res, next);
 });
+
+app.get('/lubes-invoice/historical-data', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getHistoricalData(req, res, next);
+});
+
+// Get suppliers with effective dates for client-side filtering
+app.get('/lubes-invoice/suppliers-with-dates', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getSuppliersWithDates(req, res, next);
+});
+
+// Get suppliers active on a specific date (alternative server-side approach)
+app.get('/lubes-invoice/suppliers-active-on-date', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getSuppliersActiveOnDate(req, res, next);
+});
+
+
+// Get suppliers list
+app.get('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    supplierController.findSuppliers(req.user.location_code).then(data => {
+        res.render('suppliers', { 
+            title: 'Suppliers', 
+            user: req.user, 
+            suppliers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching suppliers:', err);
+        res.status(500).render('error', { 
+            message: 'Error fetching suppliers' 
+        });
+    });
+});
+
+// Create new supplier
+app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const newSupplier = dbMapping.newSupplier(req);
+    
+    SupplierDao.findSupplierByName(newSupplier.supplier_name, newSupplier.location_code).then(
+        (data) => {
+            if (data && data.length > 0) {
+                supplierController.findSuppliers(newSupplier.location_code).then((data) => {
+                    res.status(400).render('suppliers', {
+                        title: 'Suppliers',
+                        user: req.user,
+                        suppliers: data,
+                        messages: { warning: msg.WARN_SUPPLIER_DUPLICATE }
+                    });
+                });
+            } else {
+                SupplierDao.create(newSupplier).then(() => {
+                    res.redirect('/suppliers');
+                }).catch(err => {
+                    console.error('Error creating supplier:', err);
+                    res.status(500).render('error', { 
+                        message: 'Error creating supplier' 
+                    });
+                });
+            }
+        }
+    ).catch(err => {
+        console.error('Error checking supplier existence:', err);
+        res.status(500).render('error', { 
+            message: 'Error processing supplier creation' 
+        });
+    });
+});
+
+// Enable/disable supplier routes
+app.post('/suppliers/disable/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    SupplierDao.disableSupplier(req.params.id, req.user.username)
+        .then(() => {
+            res.json({ success: true });
+        })
+        .catch(err => {
+            console.error('Error disabling supplier:', err);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error disabling supplier' 
+            });
+        });
+});
+
+app.post('/suppliers/enable/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    SupplierDao.enableSupplier(req.params.id, req.user.username)
+        .then(() => {
+            res.json({ success: true });
+        })
+        .catch(err => {
+            console.error('Error enabling supplier:', err);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error enabling supplier' 
+            });
+        });
+});
+
+// View disabled suppliers
+app.get('/enable-supplier', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    supplierController.findDisabledSuppliers(req.user.location_code).then(data => {
+        res.render('enable-supplier', { 
+            title: 'Enable Supplier', 
+            user: req.user, 
+            suppliers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching disabled suppliers:', err);
+        res.status(500).render('error', { 
+            message: 'Error fetching disabled suppliers' 
+        });
+    });
+});
+
 
 // error handler - start.
 app.use(function (req, res, next) {

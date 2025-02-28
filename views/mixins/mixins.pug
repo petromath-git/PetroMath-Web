@@ -201,6 +201,20 @@ mixin addNewUser(rowCnt)
         td(scope="row")
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'users\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
+
+
+mixin addNewSupplier(rowCnt)
+    - let id = 'suppliers-table-row-' + rowCnt;
+    tr(class='d-md-none' id=id)
+        th(scope="row")
+        td(scope="row")
+            input.form-control(type='text', name='supplier_name_'+ rowCnt, id='supplier_name_'+ rowCnt, placeholder="Supplier Name", required)
+        td(scope="row")
+            input.form-control(type='text', name='supplier_short_name_'+ rowCnt, id='supplier_short_name_'+ rowCnt, placeholder="Short Name", required)
+        td(scope="row")
+            button.close(type="button" aria-label="Close" onclick='hideMasterEntryRow(\'suppliers\', \'' + id + '\')', id = id + '_close')
+                span(aria-hidden="true") &times;
+
 //- cash flow header
 mixin addCashFlowHeader()
     tr
