@@ -67,6 +67,8 @@ block content
                             td &nbsp;
                             td &nbsp;
                             td &nbsp;
+                            if showPriceDiscountColumn
+                                td &nbsp;
                             td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
                     each val in creditstmt
                         tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
@@ -90,6 +92,8 @@ block content
                             td &nbsp;
                             td &nbsp;
                             td &nbsp;
+                            if showPriceDiscountColumn
+                                td &nbsp;
                             td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
             div.col-12.text-right E &amp; OE
             div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
