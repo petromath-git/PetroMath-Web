@@ -25,30 +25,38 @@ module.exports = {
         });
     },
     
-    findLubesInvoices: (locationCode, fromDate, toDate) => {
+    findLubesInvoices: (locationCode, fromDate, toDate, supplierId) => {
+        // Build the base where clause with location and dates
+        const whereClause = { 
+            [Op.and]: [
+                { location_code: locationCode },
+                {
+                    invoice_date: Sequelize.where(
+                        Sequelize.fn("date_format", Sequelize.col("invoice_date"), '%Y-%m-%d'), ">=", fromDate)
+                },
+                {
+                    invoice_date: Sequelize.where(
+                        Sequelize.fn("date_format", Sequelize.col("invoice_date"), '%Y-%m-%d'), "<=", toDate)
+                }
+            ] 
+        };
+        
+        // Add supplier filter if provided
+        if (supplierId) {
+            whereClause[Op.and].push({ supplier_id: supplierId });
+        }
+    
         return LubesInvoiceHeader.findAll({
-            where: { 
-                [Op.and]: [
-                    { location_code: locationCode },
-                    {
-                        invoice_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("invoice_date"), '%Y-%m-%d'), ">=", fromDate)
-                    },
-                    {
-                        invoice_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("invoice_date"), '%Y-%m-%d'), "<=", toDate)
-                    }
-                ] 
-            },
+            where: whereClause,
             include: [
                 {
                     model: Supplier,           
-                    as: 'Supplier',  // Added the missing alias          
+                    as: 'Supplier',  
                     attributes: ['supplier_name']
                 },
                 {
                     model: LubesInvoiceLine,
-                    as: 'LubesInvoiceLines', // Use the alias you defined above
+                    as: 'LubesInvoiceLines', 
                     attributes: ['lubes_line_id']
                 }
             ],

@@ -191,7 +191,10 @@ app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
                     price: product.price,
                     ledger_name: product.ledger_name,
                     cgst_percent: product.cgst_percent,
-                    sgst_percent: product.sgst_percent
+                    sgst_percent: product.sgst_percent,
+                    sku_name: product.sku_name,
+                    sku_number: product.sku_number,
+                    hsn_code: product.hsn_code                   
                 });
             });
             res.render('products', { title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS, });
