@@ -134,43 +134,57 @@ block content
         }
 
     div.row
-        div.col-6
-            form(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
-                table.center
-                    tr
-                        td From Date:
-                        td
-                            input#invoice_fromDate.form-control(
-                                type='date', 
-                                name='invoice_fromDate', 
-                                value=fromDate, 
-                                max=currentDate, 
-                                format="dd/mm/yyyy" 
-                                required 
-                                onChange="copyToHidden(this);"
-                            )
-                        td &nbsp;
-                        td To Date:
-                        td
-                            input#invoice_toDate.form-control(
-                                type='date', 
-                                name='invoice_toDate', 
-                                value=toDate, 
-                                max=currentDate, 
-                                format="dd/mm/yyyy" 
-                                required 
-                                onChange="copyToHidden(this);"
-                            )
-                        td &nbsp;
-                        td
-                            button.btn.btn-primary(type='submit') Go
-        div.col-6
-            form(method='GET' action='/lubes-invoice/new' id='newinvoice')
-                input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
-                input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
-                div(style="text-align:right;")
-                    button.btn.btn-primary(type='submit') Create New Invoice
-
+    div.col-12
+        form(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
+            table.center
+                tr
+                    td Date Range:
+                    td
+                        select#dateRange.form-control.form-control-sm(onchange="updateInvoiceDateRange()")
+                            option(value='this_month') This Month
+                            option(value='last_month') Last Month
+                            option(value='this_financial_year') This Financial Year
+                            option(value='last_financial_year') Last Financial Year
+                            option(value='custom', selected=true) Custom Date
+                    td &nbsp;                   
+                    td#fromDateLabel From Date:
+                    td
+                        input#invoice_fromDate.form-control.form-control-sm(
+                            type='date', 
+                            name='invoice_fromDate', 
+                            value=fromDate,                            
+                            format="dd/mm/yyyy",
+                            required,
+                            onChange="copyToHidden(this);"
+                        )
+                    td &nbsp;                   
+                    td#toDateLabel To Date:
+                    td
+                        input#invoice_toDate.form-control.form-control-sm(
+                            type='date', 
+                            name='invoice_toDate', 
+                            value=toDate,                             
+                            format="dd/mm/yyyy",
+                            required,
+                            onChange="copyToHidden(this);"
+                        )
+                    td &nbsp;
+                    td Supplier:
+                    td
+                        select#supplier_id.form-control.form-control-sm(name='supplier_id')
+                            option(value='') All Suppliers
+                            each supplier in suppliers
+                                option(value=supplier.supplier_id, 
+                                    selected=selectedSupplierId == supplier.supplier_id)= supplier.supplier_name
+                    td &nbsp;
+                    td
+                        button.btn.btn-sm.btn-primary(type='submit') Go
+                    td &nbsp;
+                    td
+                        a.btn.btn-sm.btn-primary(href='/lubes-invoice/new') Create New Invoice
+            
+            input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
+            input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
     div &nbsp;
     div
         if invoiceValues && invoiceValues.length > 0

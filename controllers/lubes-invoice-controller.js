@@ -12,8 +12,15 @@ const LubesInvoiceLine = db.t_lubes_inv_lines;
 
 module.exports = {
     getLubesInvoiceHome: (req, res, next) => {
-        gatherLubesInvoices(req.query.invoice_fromDate, req.query.invoice_toDate, 
-            req.user, res, next, {});
+        gatherLubesInvoices(
+            req.query.invoice_fromDate, 
+            req.query.invoice_toDate,
+            req.query.supplier_id, 
+            req.user, 
+            res, 
+            next, 
+            {}
+        );
     },
     
     getLubesInvoiceEntry: (req, res, next) => {
@@ -379,7 +386,7 @@ function getLubesInvoiceDetailsPromise(invoiceDetails, req, res, next) {
     });
 }
 
-function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional) {
+function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, messagesOptional) {
     // If no dates provided, use financial year dates
     if(fromDate === undefined || toDate === undefined) {
         const financialYearDates = getFinancialYearDates();
@@ -387,16 +394,22 @@ function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional
         toDate = financialYearDates.toDate;
     }
     
-    // You'll need to join with suppliers and invoice lines to get these details
-    lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate)
-        .then(invoices => {
+    // Create promises for both data fetches
+    const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
+    const invoicesPromise = lubesInvoiceDao.findLubesInvoices(
+        user.location_code, 
+        fromDate, 
+        toDate, 
+        supplierId
+    );
+    
+    // Execute both promises together
+    Promise.all([suppliersPromise, invoicesPromise])
+        .then(([suppliers, invoices]) => {
             let invoiceValues = [];
+            
             if(invoices && invoices.length > 0) {
                 invoices.forEach(invoice => {
-
-                 
-
-
                     invoiceValues.push({
                         lubes_hdr_id: invoice.lubes_hdr_id,
                         invoice_number: invoice.invoice_number,
@@ -415,11 +428,14 @@ function gatherLubesInvoices(fromDate, toDate, user, res, next, messagesOptional
                 user: user,
                 fromDate: fromDate, 
                 toDate: toDate,
+                selectedSupplierId: supplierId,
+                suppliers: suppliers,
                 invoiceValues: invoiceValues,
                 currentDate: utils.currentDate(),
                 messages: messagesOptional
             });
-        }).catch(err => {
+        })
+        .catch(err => {
             console.error("Error gathering invoices:", err);
             next(err);
         });
