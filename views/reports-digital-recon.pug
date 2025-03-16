@@ -15,7 +15,7 @@ block content
                     if (array.length > 0 && typeof array[0] === 'object') {
                         result += "<thead class='thead-light'><tr>";
                         Object.keys(array[0]).forEach(key => {
-                            if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                            if (key !== 'companyName' && key !== 'reconciled') {
                                 result += "<th style='border: 1px solid #000;' class='text-center'>" + key + "</th>";
                             }
                         });
@@ -42,8 +42,8 @@ block content
                     result += `<tr class='${rowClass}'>`;
 
                     Object.keys(array[i]).forEach(key => {
-                        // Skip 'narration', 'companyName', and 'reconciled' columns
-                        if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                        // Skip 'companyName', and 'reconciled' columns
+                        if (key !== 'companyName' && key !== 'reconciled') {
                             let dataValue = array[i][key];
 
                             if (numberColumns.includes(key) && dataValue !== "" && !isNaN(dataValue)) {
