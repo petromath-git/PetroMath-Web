@@ -63,11 +63,12 @@ module.exports = {
     // Create full dataset for reconciliation
     const fullDataset = data1.map((creditstmtData) => ({
       Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
-      "Bill No/Receipt No.": creditstmtData.bill_no,
+      Narration: [creditstmtData.bill_no, creditstmtData.notes]
+    .filter(Boolean) // Remove null/undefined values
+    .join(" - "), // Concatenate bill_no and notes with a separator
       companyName: creditstmtData.company_name,
       Debit: creditstmtData.product_name !== null ? creditstmtData.amount : null,
-      Credit: creditstmtData.product_name === null ? creditstmtData.amount : null,
-      Narration: creditstmtData.notes
+      Credit: creditstmtData.product_name === null ? creditstmtData.amount : null     
     }));
 
     function findMatchingTransactions(transactions) {
