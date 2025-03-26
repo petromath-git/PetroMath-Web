@@ -149,21 +149,33 @@ module.exports = {
         lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
         const lastYearMonthName = getMonthName(lastYearDate);
 
-        console.log('currentMonthName:', currentMonthName);
-        console.log('lastMonthName:', lastMonthName);
-        console.log('lastYearMonthName:', lastYearMonthName);
+       
 
-      monthlyOfftakeData.forEach((monthlyOfftake) => {
-
+        let totalCurrentMonthOfftake = 0;
+        let totalLastMonthOfftake = 0;
+        let totalLastYearOfftake = 0;
         
-
-        monthlyOfftakeList.push({
-          'Product': monthlyOfftake.product_code,
-          [currentMonthName]: monthlyOfftake.current_month_Offtake,          
-          [lastMonthName]: monthlyOfftake.last_month_Offtake,          
-          [lastYearMonthName]: monthlyOfftake.last_year_Offtake
+        monthlyOfftakeData.forEach((monthlyOfftake) => {
+          // Accumulate totals for each off-take field
+          totalCurrentMonthOfftake += Number(monthlyOfftake.current_month_Offtake || 0);
+          totalLastMonthOfftake += Number(monthlyOfftake.last_month_Offtake || 0);
+          totalLastYearOfftake += Number(monthlyOfftake.last_year_Offtake || 0);
+        
+          monthlyOfftakeList.push({
+            'Product': monthlyOfftake.product_code,
+            [currentMonthName]: monthlyOfftake.current_month_Offtake,
+            [lastMonthName]: monthlyOfftake.last_month_Offtake,
+            [lastYearMonthName]: monthlyOfftake.last_year_Offtake
+          });
         });
-      });
+        
+        // Add the totals to the list for each field
+        monthlyOfftakeList.push({
+          'Product': 'Total', // Label for the total row
+          [currentMonthName]: totalCurrentMonthOfftake,
+          [lastMonthName]: totalLastMonthOfftake,
+          [lastYearMonthName]: totalLastYearOfftake
+        });
 
        
 
