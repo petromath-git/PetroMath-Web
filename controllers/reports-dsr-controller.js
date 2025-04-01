@@ -136,13 +136,24 @@ module.exports = {
 
 
 
+      function getSafePreviousMonthDate(date) {
+        const originalDay = date.getDate();
+        const safeDate = new Date(date); 
+        safeDate.setDate(1); // Set to 1st to avoid overflow issues
+        safeDate.setMonth(safeDate.getMonth() - 1);
+      
+        const daysInMonth = new Date(safeDate.getFullYear(), safeDate.getMonth() + 1, 0).getDate();
+        safeDate.setDate(Math.min(originalDay, daysInMonth)); // Clamp to month's max day
+      
+        return safeDate;
+      }
+
       
 
         // Calculate dates for current, last month, and last year
         const currentMonthName = getMonthName(closingDate);
 
-        const lastMonthDate = new Date(closingDate);
-        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonthDate = getSafePreviousMonthDate(closingDate);
         const lastMonthName = getMonthName(lastMonthDate);
 
         const lastYearDate = new Date(closingDate);
