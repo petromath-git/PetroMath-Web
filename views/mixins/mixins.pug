@@ -438,23 +438,30 @@ mixin addTxnAccount(rowCnt)
                     each val in accountList
                         option(value=`${val.bank_id}`)= val.nickname
         td(scope="row")
-            select.form-control(name= 'trans_type_' + rowCnt id='trans_type_'+ rowCnt required onChange="populateAccountType('"+rowCnt+"')")
+            select.form-control(name= 'trans_type_' + rowCnt id='trans_type_'+ rowCnt required)
                 if TxnTypes
                     each val in TxnTypes
-                        option(value=`${val.id}`)= val.txntype
+                        option(value=`${val.id}`)= val.txntype        
         td(scope="row")
-            input(type='hidden' name='h_acct_type' id='h_acct_type')
-            select.form-control(name= 'accnt_type_' + rowCnt id='accnt_type_'+ rowCnt required)
-                if AcctTypes
-                    each val in AcctTypes
-                        option(value=`${val.attr}`)= val.attr
+            input.form-control(
+                type="text",
+                name="ledgername_" + rowCnt,
+                id="ledgername_" + rowCnt,
+                list="ledgerList_" + rowCnt,
+                placeholder="Start typing ledger name...",
+                required
+            )
+
+            datalist(id="ledgerList_" + rowCnt)
+                if ledgerList
+                    each ledger in ledgerList
+                        option(value=ledger.name)= ledger.name + ' (' + ledger.source + ')' 
         td(scope="row")
             input.form-control(type='number', name='debitamount_' + rowCnt, id='debitamount_' + rowCnt, min=0 step=0.01 onChange="disableCreditInput('"+rowCnt+"')" disabled=false)
         td(scope="row")
-            input.form-control(type='number', name='creditamount_' + rowCnt, id='creditamount_' + rowCnt, min=0 step=0.01 onChange="disableDebitInput('"+rowCnt+"')" disabled=false)
+            input.form-control(type='number', name='creditamount_' + rowCnt, id='creditamount_' + rowCnt, min=0 step=0.01 onChange="disableDebitInput('"+rowCnt+"')" disabled=false)        
         td(scope="row")
-        td(scope="row")
-            textarea.form-control(name="banknotes_" + rowCnt id="banknotes_"+ rowCnt style="height:36px")
+            textarea.form-control(name="banknotes_" + rowCnt id="banknotes_"+ rowCnt style="height:36px")        
         td(scope="row")
         td(scope="row")
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'banktransaction\', \'' + id + '\')', id = id + '_close')

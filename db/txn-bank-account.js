@@ -63,6 +63,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'accounting_type',
             type: DataTypes.STRING
         },
+        ledger_name: {
+            field: 'ledger_name',
+            type: DataTypes.STRING
+        },
     }, {
         timestamps: false,
         freezeTableName: true

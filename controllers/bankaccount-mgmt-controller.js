@@ -33,6 +33,7 @@ module.exports = {
             getTransactionTypePromise(),
             getBankTransactionByDate(locationCode,fromDate,toDate,bankid),
             geAccountingTypePromise(),
+            getLedgerNamePromise(locationCode)  // 👈 new
             //getAccountingTypeMapPromise()
             ])
         .then((values) => {
@@ -49,6 +50,7 @@ module.exports = {
             TxnTypes:values[2].value,
             transactionList:values[3].value.transactionlist,
             AcctTypes: values[4].value,
+            ledgerList: values[5].value
             //AccntTransMap: values[5].value
             });
         });
@@ -110,6 +112,21 @@ const getLocationId = (locationCode) => {
                 resolve({location_id:location_id});
             });
 
+    });
+}
+
+const getLedgerNamePromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        BankAcctDao.getLedgerNames(locationCode)
+            .then(data => {
+                const ledgerList = data.map(row => ({
+                    id: row.id,
+                    name: row.ledger_name,
+                    source: row.source_type
+                }));
+                resolve(ledgerList);
+            })
+            .catch(err => reject(err));
     });
 }
 
@@ -183,6 +200,7 @@ const getBankTransactionByDate = (locationCode, fromDate,toDate,bankid) => {
                         closing_balance: transData.closing_bal,
                         transaction_type:transData.transaction_type,
                         accounting_type: transData.accounting_type,
+                        ledger_name: transData.ledger_name,
                         remarks:transData.remarks,
                         closed_flag: transData.closed_flag
                     });
