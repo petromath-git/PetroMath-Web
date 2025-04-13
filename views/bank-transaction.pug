@@ -37,11 +37,10 @@ block content
                                     th(scope="col") Transaction Date
                                     th(scope="col") Account Number
                                     th(scope="col") Transaction Type
-                                    th(scope="col") Accounting Type
+                                    th(scope="col") Ledger Name                                     
                                     th(scope="col") Debit Amount
-                                    th(scope="col") Credit Amount
-                                    th(scope="col") Closing Balance
-                                    th(scope="col") Remarks
+                                    th(scope="col") Credit Amount                                       
+                                    th(scope="col") Remarks                                    
                                     th(scope="col") Delete
                                 tbody
                                     - var prefix = 'tl_';
@@ -60,16 +59,14 @@ block content
                                                         each data in TxnTypes
                                                             if(data.id === val.transaction_type)
                                                                 span=data.txntype
-                                                td
-                                                    span=val.accounting_type
+                                                td 
+                                                    span= val.ledger_name                                                                                                                
                                                 td
                                                     span=val.debit_amount
                                                 td 
-                                                    span=val.credit_amount
+                                                    span=val.credit_amount                                                                                                                                                        
                                                 td
-                                                    span=val.closing_balance
-                                                td
-                                                    span=val.remarks
+                                                    span=val.remarks                                                 
                                                 if(val.closed_flag == 'N')
                                                     td(scope="row")
                                                         div(class="row flex-nowrap")

@@ -24,6 +24,27 @@ module.exports = {
         });
     },
 
+    getLedgerNames:  (locationCode) => {
+        const result =  db.sequelize.query(`
+            SELECT 
+                id, 
+                source_type, 
+                location_code, 
+                ledger_name 
+            FROM 
+                m_ledger_names_v
+            WHERE 
+                location_code = :locationCode OR location_code IS NULL
+            ORDER BY 
+                ledger_name ASC
+        `, {
+            replacements: { locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        });
+    
+        return result;
+    },
+
     getLocationId: (locationCode) => {
         return Location.findOne({
             attributes: ['location_id'],

@@ -122,6 +122,7 @@ module.exports = {
             accounting_type:req.body.accnt_type_0,
             expense_date: req.body.txn_exp_date_0,
             remarks: req.body.banknotes_0,
+            ledger_name:req.body.ledgername_0,
             created_by: req.user.Person_id,
             updated_by: req.user.Person_id
         };
