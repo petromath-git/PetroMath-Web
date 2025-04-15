@@ -34,9 +34,7 @@ module.exports = {
             FROM 
                 m_ledger_names_v
             WHERE 
-                location_code = :locationCode OR location_code IS NULL
-            ORDER BY 
-                ledger_name ASC
+                location_code = :locationCode OR location_code IS NULL      
         `, {
             replacements: { locationCode },
             type: Sequelize.QueryTypes.SELECT
