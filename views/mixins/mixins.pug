@@ -443,19 +443,11 @@ mixin addTxnAccount(rowCnt)
                     each val in TxnTypes
                         option(value=`${val.id}`)= val.txntype        
         td(scope="row")
-            input.form-control(
-                type="text",
-                name="ledgername_" + rowCnt,
-                id="ledgername_" + rowCnt,
-                list="ledgerList_" + rowCnt,
-                placeholder="Start typing ledger name...",
-                required
-            )
-
-            datalist(id="ledgerList_" + rowCnt)
+            select.form-control(name="ledgername_" + rowCnt, id="ledgername_" + rowCnt, required)
+                option(value='') Select Ledger
                 if ledgerList
                     each ledger in ledgerList
-                        option(value=ledger.name)= ledger.name + ' (' + ledger.source + ')' 
+                        option(value=ledger.name)= ledger.name + ' (' + ledger.source + ')'
         td(scope="row")
             input.form-control(type='number', name='debitamount_' + rowCnt, id='debitamount_' + rowCnt, min=0 step=0.01 onChange="disableCreditInput('"+rowCnt+"')" disabled=false)
         td(scope="row")
