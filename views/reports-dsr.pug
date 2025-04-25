@@ -103,6 +103,12 @@ block content
 
             function renderTransposedTable(array,tabletitle,numberColumns = [],tableWidthClass='') {
 
+
+                 // Defensive check: Return message if array is empty or not valid
+                if (!Array.isArray(array) || array.length === 0 || typeof array[0] !== 'object') {
+                    return `<p class='text-center'><strong> *** No ${tabletitle} *** </strong></p>`;
+                }
+
                  var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
                         result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>"; // Card header
                         result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
@@ -198,7 +204,7 @@ block content
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
-                document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
+                document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary',[],"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
                 document.getElementById('creditreceipt-table-container').innerHTML = renderTable(creditReceiptFromServer,'Customer Receipt',['Amount']);
                // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
