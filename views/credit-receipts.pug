@@ -30,7 +30,7 @@ block content
                     th(scope="col") Credit Party
                     th(scope="col") Amount
                     th(scope="col") Notes
-                    th(scope="col") Modify
+                    th(scope="col") Delete
                 tbody
                     - var prefix = 'cr_';
                     each val, index in cashReceipts
@@ -54,7 +54,10 @@ block content
                                 select.form-control(name=prefix+'crcompanyname_' + index, id=prefix+'crcompanyname_' + index, disabled)
                                     if creditCompanyValues
                                         each company in creditCompanyValues
-                                            option(value=`${company.creditorId}` selected= val.company_name === company.creditorName)= company.creditorName
+                                            option(
+                                                value=`${company.creditlist_id}`
+                                                selected=(val.company_id == company.creditlist_id)
+                                                )= company.Company_Name
                                 //- input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
                             td(scope="row")
                                 input.form-control(type="number" id="cramount_"+index value=val.amount readonly)
@@ -63,13 +66,13 @@ block content
                             if(val.showEditOrDelete)
                                 td(scope="row")
                                     div(class="row flex-nowrap")
-                                        a.btn.btn-info(id="receipt-edit-"+index onclick="editReceipt('"+index+"','"+ val.id +"')")
-                                           span.oi.oi-pencil(style="color: white;")
+                                        //-a.btn.btn-info(id="receipt-edit-"+index onclick="editReceipt('"+index+"','"+ val.id +"')")
+                                        //-   span.oi.oi-pencil(style="color: white;")
                                         div &nbsp;&nbsp;
                                         a.btn.btn-danger(id="receipt-delete-" + index onclick="deleteReceipt('creditReceipts_row_"+ index+"','" + val.id + "')")
                                             span.oi.oi-trash(style="color: white;")
-                                        div &nbsp;&nbsp;
-                                        a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')" style="color: white;") Save
+                                        //-   div &nbsp;&nbsp;
+                                        //-   a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')" style="color: white;") Save
                     - var rowCnt = 0
                     while rowCnt < 1
                         +addTxnReceipt(rowCnt++)

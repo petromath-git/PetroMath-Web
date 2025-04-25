@@ -60,13 +60,13 @@ const CASH_FLOW_DENOMINATION_VALUES = [
 const MAX_ALLOWED_DRAFTS_PER_LOCATION = 10;
 const MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION = 5;
 const CREDIT_RECEIPT_EDIT_DELETE_ALLOWED_DAYS = 1;
-const RECEIPT_TYPES = [
-  {id:'cash', label: 'Cash'},
-  {id:'cheque', label: 'Cheque'},
-  {id:'online_txn', label: 'RTGS/NEFT'},
-  {id:'bank_deposit', label: 'Bank Deposit'},
-  {id:'fleet_card', label: 'Fleet Card'},
-  {id:'others', label: 'Others'},
+const RECEIPT_TYPES = [ 
+  { id: 'cash', label: 'Cash', allow_manual_entry: true },
+  { id: 'cheque', label: 'Cheque', allow_manual_entry: false },
+  { id: 'online_txn', label: 'RTGS/NEFT', allow_manual_entry: false },
+  { id: 'bank_deposit', label: 'Bank Deposit', allow_manual_entry: false },
+  { id: 'fleet_card', label: 'Fleet Card', allow_manual_entry: true },
+  { id: 'others', label: 'Others', allow_manual_entry: true }
 ];
 
 module.exports = {

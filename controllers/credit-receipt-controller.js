@@ -5,6 +5,7 @@ const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const txnController = require("../controllers/txn-common-controller");
 const cashFlowController = require("../controllers/cash-flow-controller");
+const CreditsDao = require("../dao/credits-dao");
 
 module.exports = {
 
@@ -38,55 +39,118 @@ module.exports = {
     },
 
     // Get credit receipts - from and to date provided
-    getReceipts: (req, res) => {
-        let locationCode = req.user.location_code;
+    getReceipts: async (req, res) => {
+        const locationCode = req.user.location_code;
         let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+    
         if (req.query.receipts_fromDate) {
             fromDate = req.query.receipts_fromDate;
         }
         if (req.query.receipts_toDate) {
             toDate = req.query.receipts_toDate;
         }
-        let receipts = [];
-        Promise.allSettled([CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
-        txnController.creditCompanyDataPromise(locationCode),
-        txnController.suspenseDataPromise(locationCode)])
-            .then(values => {
-                values[0].value.forEach((receipt) => {
-                    let creditlist = receipt.m_credit_list;
-                    let isEditOrDeleteAllowed = false;
-                    if (creditlist) {
-                        // isEditOrDeleteAllowed = utils.noOfDaysDifference(receipt.receipt_date, utils.currentDate())
-                        //     < config.APP_CONFIGS.receiptEditOrDeleteAllowedDays ? true : false;
+    
+        try {
+            const [receiptResult, activeCreditResult, suspenseResult] = await Promise.all([
+                CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
+                txnController.creditCompanyDataPromise(locationCode),  // active credit companies
+                txnController.suspenseDataPromise(locationCode)
+            ]);
 
-                        isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null ? true : false;
-                        receipts.push({
-                            id: receipt.treceipt_id,
-                            company_name: creditlist.Company_Name,
-                            receipt_type: receipt.receipt_type,
-                            receipt_no: receipt.receipt_no, amount: receipt.amount, notes: receipt.notes,
-                            receipt_date: receipt.receipt_date_fmt,
-                            showEditOrDelete: isEditOrDeleteAllowed,
-                            creditType: creditlist.type
-                        });
-                    } else {
-                        console.warn("Server app error: Looks like data is corrupted, debug more.")
-                    }
-                });
-                res.render('credit-receipts', {
-                    title: 'Credit Receipts', user: req.user,
-                    config: config.APP_CONFIGS,
-                    cashReceipts: receipts,
-                    creditCompanyValues: values[1].value,
-                    suspenseValues: values[2].value,
-                    currentDate: utils.currentDate(),
-                    minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
-                    fromDate: fromDate,
-                    toDate: toDate
-                });
+            
+            
+    
+            const receipts = [];
+            const inactiveCreditIds = new Set();
+    
+            receiptResult.forEach((receipt) => {
+                const creditlist = receipt.m_credit_list;
+                let isEditOrDeleteAllowed = false;
+    
+                if (creditlist) {
+                    // If the effective_end_date is in the past, mark as inactive
+
+                    const endDate = creditlist.effective_end_date;
+                    
+
+                    if (endDate && new Date(endDate) < new Date()) {
+                        inactiveCreditIds.add(creditlist.creditlist_id);
+                    }                   
+    
+                    isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null;
+    
+                    
+
+                    const { creditlist_id, Company_Name, type } = creditlist.dataValues;
+
+                    receipts.push({
+                        id: receipt.treceipt_id,
+                        company_id: creditlist_id,                    
+                        company_name: Company_Name,                   
+                        receipt_type: receipt.receipt_type,
+                        receipt_no: receipt.receipt_no,
+                        amount: receipt.amount,
+                        notes: receipt.notes,
+                        receipt_date: receipt.receipt_date_fmt,
+                        showEditOrDelete: receipt.dataValues.cashflow_date === null,
+                        creditType: type
+                    });
+                } else {
+                    console.warn("Server app error: Missing or corrupted credit list");
+                }
             });
+    
+            // Fetch inactive credit party details only if needed
+            let inactiveCreditDetails = [];
+            if (inactiveCreditIds.size > 0) {
+                inactiveCreditDetails = await CreditsDao.findCreditDetails([...inactiveCreditIds]);
+            }
+    
+            // Final datasets for view rendering
+            const activeCreditCompanyValues = activeCreditResult;
+            const activeSuspenseValues = suspenseResult;           // Already plain
+            const creditCompanyValues = [
+                ...activeCreditCompanyValues.map(c => ({
+                    creditlist_id: c.creditorId,         // normalize to standard field
+                    Company_Name: c.creditorName,
+                    type: c.type
+                })),
+                ...activeSuspenseValues.map(c => ({
+                    creditlist_id: c.creditorId,
+                    Company_Name: c.creditorName,
+                    type: c.type
+                })),
+                ...inactiveCreditDetails.map(c => ({
+                    creditlist_id: c.creditlist_id,
+                    Company_Name: c.Company_Name,
+                    type: c.type
+                }))
+            ];
+
+
+          
+    
+            res.render('credit-receipts', {
+                title: 'Credit Receipts',
+                user: req.user,
+                config: config.APP_CONFIGS,
+                cashReceipts: receipts,
+                creditCompanyValues: creditCompanyValues,              // main table: show active + inactive
+                activeCreditCompanyValues: activeCreditCompanyValues,  // mixin (add new): only active
+                suspenseValues: suspenseResult,
+                currentDate: utils.currentDate(),
+                minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
+                fromDate: fromDate,
+                toDate: toDate
+            });
+    
+        } catch (err) {
+            console.error("Error fetching credit receipts:", err);
+            res.status(500).send("Internal Server Error");
+        }
     },
+    
 
     // Update credit receipt
     updateReceipts: (req, res) => {

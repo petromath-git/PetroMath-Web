@@ -114,15 +114,19 @@ module.exports = {
     newBankTransaction: function (req) {
         const data = {
             trans_date: req.body.trans_date_0,
-            bank_id:req.body.acctno_0,
-            //location_id:req.body.location_id_0,
-            credit_amount:req.body.creditamount_0,
-            debit_amount:req.body.debitamount_0,
-            transaction_type:req.body.trans_type_0,
-            accounting_type:req.body.accnt_type_0,
+            bank_id: req.body.acctno_0,
+            credit_amount: req.body.creditamount_0,
+            debit_amount: req.body.debitamount_0,
+            transaction_type: req.body.trans_type_0,
+            accounting_type: req.body.accnt_type_0,
             expense_date: req.body.txn_exp_date_0,
             remarks: req.body.banknotes_0,
-            ledger_name:req.body.ledgername_0,
+    
+            // ✅ Cleanly separated ledger metadata
+            ledger_name: req.body.ledgername_0,
+            external_id: req.body.external_id_0 || null,
+            external_source: req.body.external_source_0 || null,
+    
             created_by: req.user.Person_id,
             updated_by: req.user.Person_id
         };

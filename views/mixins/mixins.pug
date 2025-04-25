@@ -28,8 +28,8 @@ mixin addTxnReceipt(rowCnt)
     - let id = 'creditReceipts-table-row-' + rowCnt;
     - const prefix = 'cr_';
     - var creditId = undefined, creditType = config.creditTypes[0];
-    if(creditCompanyValues && creditCompanyValues[0])
-        - creditId = creditCompanyValues[0].creditorId;
+    if(activeCreditCompanyValues && activeCreditCompanyValues[0])
+        - creditId = activeCreditCompanyValues[0].creditorId;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
@@ -40,7 +40,8 @@ mixin addTxnReceipt(rowCnt)
             select.form-control(name=prefix + 'receiptType_' + rowCnt, id=prefix + 'receiptType_' + rowCnt)
                 if config.receiptTypes
                     each val in config.receiptTypes
-                        option(value=`${val.label}`)= val.label
+                        if val.allow_manual_entry
+                            option(value=`${val.label}`)= val.label
         td(scope="row")
             input(type='hidden' id=prefix + 'companyId_' + rowCnt, name=prefix + 'companyId_' + rowCnt, value = creditId)
             select.form-control(name=prefix + 'type-' + rowCnt, id=prefix + 'type-' + rowCnt, onChange='toggleCreditTypes(this, ' + rowCnt + ', \'' + prefix + '\', ' + JSON.stringify(config.creditTypes) + ')')
@@ -52,8 +53,8 @@ mixin addTxnReceipt(rowCnt)
             if creditType === config.creditTypes[0]
                 - displayType1Class = 'd-md-block'
             select.form-control(name=prefix + config.creditTypes[0] + '-' + rowCnt id=prefix + config.creditTypes[0] + '-' + rowCnt, class = displayType1Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + rowCnt + ')')
-                if creditCompanyValues
-                    each val in creditCompanyValues
+                if activeCreditCompanyValues
+                    each val in activeCreditCompanyValues
                         option(value=`${val.creditorId}`)= val.creditorName
             - var displayType2Class = 'd-md-none'
             if creditType === config.creditTypes[1]
@@ -443,11 +444,24 @@ mixin addTxnAccount(rowCnt)
                     each val in TxnTypes
                         option(value=`${val.id}`)= val.txntype        
         td(scope="row")
-            select.form-control(name="ledgername_" + rowCnt, id="ledgername_" + rowCnt, required)
+            select.form-control(
+                id="ledger_selector_" + rowCnt,
+                required,
+                onChange="updateLedgerFields(" + rowCnt + ")"
+            )
                 option(value='') Select Ledger
                 if ledgerList
                     each ledger in ledgerList
-                        option(value=ledger.name)= ledger.name + ' (' + ledger.source + ')'
+                        option(
+                            value=ledger.id,
+                            data-source=ledger.source,
+                            data-name=ledger.name
+                        )= ledger.name + ' (' + ledger.source + ')'
+
+            // Separate hidden fields for clean mapping
+            input(type="hidden", name="external_id_" + rowCnt, id="external_id_" + rowCnt)
+            input(type="hidden", name="external_source_" + rowCnt, id="external_source_" + rowCnt)
+            input(type="hidden", name="ledgername_" + rowCnt, id="ledgername_" + rowCnt)            
         td(scope="row")
             input.form-control(type='number', name='debitamount_' + rowCnt, id='debitamount_' + rowCnt, min=0 step=0.01 onChange="disableCreditInput('"+rowCnt+"')" disabled=false)
         td(scope="row")
