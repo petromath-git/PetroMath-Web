@@ -1695,3 +1695,13 @@ function postDeadlineEdit(id) {
 function getcurrencyformatter (plainnumber) {
  return new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(plainnumber)
 };
+
+
+function updateLedgerFields(rowCnt) {
+    const selector = document.getElementById("ledger_selector_" + rowCnt);
+    const selectedOption = selector.options[selector.selectedIndex];
+
+    document.getElementById("external_id_" + rowCnt).value = selectedOption.value || '';
+    document.getElementById("external_source_" + rowCnt).value = selectedOption.getAttribute("data-source") || '';
+    document.getElementById("ledgername_" + rowCnt).value = selectedOption.getAttribute("data-name") || '';
+}

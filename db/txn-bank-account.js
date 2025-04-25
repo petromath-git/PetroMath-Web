@@ -67,6 +67,16 @@ module.exports = function(sequelize, DataTypes) {
             field: 'ledger_name',
             type: DataTypes.STRING
         },
+        external_id: {
+            field: 'external_id',
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        external_source: {
+            field: 'external_source',
+            type: DataTypes.STRING(50),  // or DataTypes.STRING
+            allowNull: true
+        }
     }, {
         timestamps: false,
         freezeTableName: true
