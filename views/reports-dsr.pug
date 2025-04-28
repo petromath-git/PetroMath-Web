@@ -238,7 +238,8 @@ block content
                     });
 
                 
-                document.getElementById('banktransaction-table-container').innerHTML = resultHtml
+                document.getElementById('banktransaction-table-container').innerHTML = resultHtml;
+                document.getElementById('deadline-table-container').innerHTML = renderTable(deadlineListFromServer,'Deadlines',[],"col-sm-8 mx-auto");
             });
 
         table.center
