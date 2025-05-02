@@ -57,9 +57,43 @@ module.exports = {
     },
 
     saveTransactionData: (req, res, next) => {
-        BankAcctDao.create(dbMapping.newBankTransaction(req));
-        res.redirect('/bank-transaction?tbankfromDate=' + req.body.tbank_fromDate_hiddenValue +
-            '&tbanktoDate=' + req.body.tbank_toDate_hiddenValue);
+                const transactions = [];
+                   // Extract all keys that match trans_date_*
+                const usedIndices = Object.keys(req.body)
+                .filter(key => key.startsWith('trans_date_'))
+                .map(key => key.replace('trans_date_', ''));
+
+                 // Loop through only valid indices
+                for (const index of usedIndices) {
+
+                    const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
+                    const debit = parseFloat(req.body[`debitamount_${index}`] || 0);
+                    
+                    if (credit === 0 && debit === 0) {
+                        return res.status(400).send({
+                            error: `Row ${parseInt(index) + 1} is incomplete. Please enter Credit or Debit amount or delete the row before submitting.`
+                        });
+                    }
+
+                    const txn = dbMapping.newBankTransaction(req, index);
+                    if (txn) transactions.push(txn);  // optional check
+                }
+
+                if (transactions.length === 0) {
+                    return res.status(400).send({ error: 'No transactions submitted.' });
+                }
+
+                Promise.all(
+                    transactions.map(txn => BankAcctDao.create(txn))
+                )
+                .then(() => {
+                    res.redirect('/bank-transaction?tbankfromDate=' + req.body.tbank_fromDate_hiddenValue +
+                        '&tbanktoDate=' + req.body.tbank_toDate_hiddenValue);
+                })
+                .catch(err => {
+                    console.error('Error saving transactions:', err);
+                    res.status(500).send({ error: 'Transaction save failed.', details: err });
+                });
     },
     
     deleteTransaction: (req, res, next) => {
