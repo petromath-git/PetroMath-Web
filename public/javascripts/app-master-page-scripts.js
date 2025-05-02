@@ -64,6 +64,67 @@ function showMasterEntryRow(obj, prefix) {
     showAddedRow(prefix);
 }
 
+let rowCounter = 0;
+
+        function showMultipleMasterRow(btn, prefix) {
+            const template = document.getElementById('banktransaction-template-row');
+            const clone = template.cloneNode(true);
+            clone.classList.remove('d-none');
+
+            const newRowId = `${prefix}-table-row-${rowCounter}`;
+            clone.id = newRowId;
+
+            // Update all input/select/textarea IDs and names inside the row
+            clone.querySelectorAll('[id]').forEach(el => {
+                el.id = el.id.replace('template', rowCounter);
+            });
+
+            clone.querySelectorAll('[name]').forEach(el => {
+                el.name = el.name.replace('template', rowCounter);
+            });
+
+            clone.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = false;
+            });
+
+            clone.querySelectorAll('[onchange]').forEach(el => {
+                const oldAttr = el.getAttribute('onchange');
+                if (oldAttr && oldAttr.includes('updateLedgerFields(')) {
+                    el.setAttribute('onchange', `updateLedgerFields(${rowCounter})`);
+                }
+            });
+
+            clone.querySelectorAll('[onclick]').forEach(el => {
+                const oldAttr = el.getAttribute('onclick');
+                if (oldAttr && oldAttr.includes('removeBankTxnRow')) {
+                    el.setAttribute('onclick', `removeBankTxnRow('banktransaction-table-row-${rowCounter}')`);
+                }
+            });
+
+            clone.querySelectorAll('[oninput]').forEach(el => {
+                const oldAttr = el.getAttribute('oninput');
+            
+                if (oldAttr && oldAttr.includes('disableCreditInput(')) {
+                    el.setAttribute('oninput', `disableCreditInput(${rowCounter})`);
+                }
+            
+                if (oldAttr && oldAttr.includes('disableDebitInput(')) {
+                    el.setAttribute('oninput', `disableDebitInput(${rowCounter})`);
+                }
+            });
+
+            document.getElementById('banktransaction-rows').appendChild(clone);
+            document.getElementById(`${prefix}-save`).disabled = false;
+            rowCounter++;
+        }
+
+function removeBankTxnRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) {
+        row.remove();
+    }
+}
+
 function hideMasterEntryRow(prefix, rowId) {
     document.getElementById(prefix + '-add-new').disabled = false;
     document.getElementById(prefix + '-save').disabled = true;

@@ -251,35 +251,42 @@ function changeHaltflag(){
 
 }
 
-function disableDebitInput(rowNum){
-    const amount=document.getElementById('creditamount_'+rowNum).value;
-    if(amount>0){
-        document.getElementById('debitamount_'+rowNum).disabled=true;
-        document.getElementById('banktransaction-save').disabled = false;
-    }
-    if(amount==0 || amount== '')
-        document.getElementById('debitamount_'+rowNum).disabled=false;
-}
-
 function disableCreditInput(rowNum){
-    const amount=document.getElementById('debitamount_'+rowNum).value;
-    if(amount>0){
-        document.getElementById('banktransaction-save').disabled = false;
-        document.getElementById('creditamount_'+rowNum).disabled=true;
-    }
-        
-    if(amount==0 || amount== '')
-        document.getElementById('creditamount_'+rowNum).disabled=false;
+    const debitVal = parseFloat(document.getElementById('debitamount_' + rowNum).value || 0);
+    const creditField = document.getElementById('creditamount_' + rowNum);
+    creditField.disabled = debitVal > 0;
 }
 
-function validCreditDebit(){
-    const cramount=document.getElementById('creditamount_'+0).value;
-    const dbamount=document.getElementById('debitamount_'+0).value;
-    if(cramount == 0 && dbamount == 0){
-        document.getElementById('banktransaction-save').disabled = true;
-        window.alert("Please enter Credit or Debit Amount");
-    }
+function disableDebitInput(rowNum){
+    const creditVal = parseFloat(document.getElementById('creditamount_' + rowNum).value || 0);
+    const debitField = document.getElementById('debitamount_' + rowNum);
+    debitField.disabled = creditVal > 0;
 }
+
+function validCreditDebit() {
+   
+
+    for (let i = 0; i < rowCounter; i++) {
+        const creditField = document.getElementById(`creditamount_${i}`);
+        const debitField = document.getElementById(`debitamount_${i}`);
+        const row = document.getElementById(`banktransaction-table-row-${i}`);
+
+        // Skip rows that don't exist (e.g., deleted ones)
+        if (!creditField || !debitField) continue;
+
+        const cr = parseFloat(creditField.value || 0);
+        const dr = parseFloat(debitField.value || 0);
+
+        if (cr === 0 && dr === 0) {
+            alert(`Row ${i + 1} is incomplete. Enter credit or debit, or remove the row.`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+        }
+    }
+
+    return true;
+    }
+
 
 function changeCheckValue(prefix,rownum){
 

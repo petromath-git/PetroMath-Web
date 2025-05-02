@@ -24,14 +24,13 @@ block content
                 td
                     button.btn.btn-primary(type='submit') Go
     br
-    form(method='POST' action='/bank-transaction')
+    form(method='POST' action='/bank-transaction' onsubmit='return validCreditDebit()')
         input(type='hidden' id='tbank_fromDate_hiddenValue' name='tbank_fromDate_hiddenValue' value=fromDate)
         input(type='hidden' id='tbank_toDate_hiddenValue' name='tbank_toDate_hiddenValue' value=toDate)   
         div 
             div.col-16
                 div.table-responsive
-                    table.table#banktransaction-table
-                        tbody.w-100
+                    table.table#banktransaction-table                        
                             thead.thead-light
                                 tr
                                     th(scope="col") Transaction Date
@@ -42,7 +41,7 @@ block content
                                     th(scope="col") Credit Amount                                       
                                     th(scope="col") Remarks                                    
                                     th(scope="col") Delete
-                                tbody
+                            tbody#banktransaction-rows
                                     - var prefix = 'tl_';
                                     if transactionList && transactionList.length > 0
                                         each val, index in transactionList
@@ -72,11 +71,17 @@ block content
                                                         div(class="row flex-nowrap")
                                                             a.btn.btn-danger(id="transaction-delete-" + index onclick="deleteTransaction('banktransaction_row_"+ index+"','" + val.t_bank_id + "')")
                                                                 span.oi.oi-trash
-                                - var rowCnt = 0
-                                while rowCnt < 1
-                                    +addTxnAccount(rowCnt++)
+                                    // Hidden template row for JS cloning
+                                    tr.d-none(id="banktransaction-template-row")
+                                        +addTxnAccount('template')                            
+                               
                                     
             div(align="center")
-                button.btn.btn-info(type="button", id="banktransaction-add-new" onClick="showMasterEntryRow(this, 'banktransaction')" title="Only one can be added at a time.") Add New
+                button.btn.btn-info(type="button", id="banktransaction-add-new" onClick="showMultipleMasterRow(this, 'banktransaction')" title="Add new bank transaction row.") Add New
                 span &nbsp;&nbsp;&nbsp;&nbsp;
-                button.btn.btn-primary(type="submit", id="banktransaction-save" disabled=true, title="Enabled on 'Add New'" onClick="validCreditDebit()") Save
+                button.btn.btn-primary(
+                                        type="submit",
+                                        id="banktransaction-save",
+                                        disabled=true,
+                                        title="Enabled on 'Add New'"
+                                    ) Save
