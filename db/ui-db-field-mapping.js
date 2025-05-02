@@ -111,22 +111,26 @@ module.exports = {
         
     },
 
-    newBankTransaction: function (req) {
+    newBankTransaction: function (req, rowCnt) {
+
+        const creditRaw = parseFloat(req.body[`creditamount_${rowCnt}`]);
+        const debitRaw = parseFloat(req.body[`debitamount_${rowCnt}`]);
+
+        
+
+
         const data = {
-            trans_date: req.body.trans_date_0,
-            bank_id: req.body.acctno_0,
-            credit_amount: req.body.creditamount_0,
-            debit_amount: req.body.debitamount_0,
-            transaction_type: req.body.trans_type_0,
-            accounting_type: req.body.accnt_type_0,
-            expense_date: req.body.txn_exp_date_0,
-            remarks: req.body.banknotes_0,
-    
-            // ✅ Cleanly separated ledger metadata
-            ledger_name: req.body.ledgername_0,
-            external_id: req.body.external_id_0 || null,
-            external_source: req.body.external_source_0 || null,
-    
+            trans_date: req.body[`trans_date_${rowCnt}`],
+            bank_id: req.body[`acctno_${rowCnt}`],
+            credit_amount: (isNaN(creditRaw) || creditRaw === 0) ? null : creditRaw,
+            debit_amount: (isNaN(debitRaw) || debitRaw === 0) ? null : debitRaw,
+            transaction_type: req.body[`trans_type_${rowCnt}`],
+            accounting_type: req.body[`accnt_type_${rowCnt}`],
+            expense_date: req.body[`txn_exp_date_${rowCnt}`],
+            remarks: req.body[`banknotes_${rowCnt}`],
+            ledger_name: req.body[`ledgername_${rowCnt}`],
+            external_id: req.body[`external_id_${rowCnt}`],
+            external_source: req.body[`external_source_${rowCnt}`],
             created_by: req.user.Person_id,
             updated_by: req.user.Person_id
         };
