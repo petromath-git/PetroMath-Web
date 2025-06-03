@@ -566,7 +566,8 @@ module.exports = {
         let resultList = [];  // This will hold both the cashflowresult and TotalDenomAmount
 
         resultList.push({
-          'Denomination Amount': totaldenomamount.toFixed(2),
+          'Cashflow Balance': cashflowresult.toFixed(2),
+          'Denomination Total': totaldenomamount.toFixed(2),
           'Excess/Shortage': (totaldenomamount-cashflowresult).toFixed(2)
         });
 
