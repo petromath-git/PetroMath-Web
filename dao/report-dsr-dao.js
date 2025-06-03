@@ -508,6 +508,7 @@ return result;
                                             where 1=1
                                             and tr.creditlist_id = mcl.creditlist_id
                                             and tr.location_code = :location_code
+                                            and coalesce(card_flag,'N') <> 'Y'
                                             and   DATE(tr.cashflow_date) = :cashflow_date`,
             {
             replacements: {location_code:locationCode,cashflow_date: reportDate}, 
