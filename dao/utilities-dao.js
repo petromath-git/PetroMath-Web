@@ -25,7 +25,13 @@ module.exports = {
     },
     getTallyXmlData: (exportDate, locationCode) => {
         return db.sequelize.query(
-            "select tally_export('"+ exportDate + "','"+ locationCode+ "') as xmlData;"
+            "SELECT tally_export(:exportDate, :locationCode, 'EXPORT') AS xmlData;",
+            {
+                replacements: { exportDate: exportDate, locationCode: locationCode },
+                type: db.Sequelize.QueryTypes.SELECT,
+                raw: true,
+                // logging: console.log, // optional for debugging
+            }
         );
     }
 }
