@@ -38,16 +38,19 @@ module.exports = {
     getTallyExport: (req, res, next) => {
         let exportDate = dateFormat(req.body.exportDate, "yyyy-mm-dd");
         let locationCode = req.user.location_code;
-        UtilsDao.getTallyXmlData(exportDate, locationCode).then((result) => {
-            if (result && !result.error) {
+    
+        UtilsDao.getTallyXmlData(exportDate, locationCode).then((rows) => {
+            if (rows && rows[0] && !rows.error) {
                 res.set({
-                    'Content-Disposition': 'attachment; filename=\"tallyexp-' +locationCode+'-'+ exportDate + '.xml\"',
+                    'Content-Disposition': `attachment; filename="tallyexp-${locationCode}-${exportDate}.xml"`,
                     'Content-type': 'application/xml'
                 });
-                res.send(result[0][0].xmlData);
+                res.send(rows[0].xmlData);  // rows[0].xmlData — correct!
             } else {
-                res.status(400).send({error: result ? result.error : 'No results found.'});
+                res.status(400).send({ error: rows ? rows.error : 'No results found.' });
             }
+        }).catch((err) => {
+            res.status(500).send({ error: err.message });
         });
     }
 }
