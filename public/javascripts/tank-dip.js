@@ -42,7 +42,7 @@ $(document).ready(function() {
     });
 
     // Delete dip handler
-    $('.delete-dip').click(function() {
+    $(document).on('click', '.delete-dip', function() {
         if (confirm('Are you sure you want to delete this dip reading?')) {
             const dipId = $(this).data('dip-id');
             deleteDipReading(dipId);
@@ -220,6 +220,7 @@ async function validateAndSubmit() {
         }
 
         // If all validations pass, submit the form
+        $('#submitBtn').prop('disabled', true).text('Saving...');
         $('#tankDipForm')[0].submit();
 
     } catch (error) {
@@ -228,11 +229,7 @@ async function validateAndSubmit() {
     }
 }
 
-// Bind the consolidated validation to form submit
-$('#tankDipForm').off('submit').on('submit', function(e) {
-    e.preventDefault();
-    validateAndSubmit();
-});
+
 
 function showError(message) {
     $('#snackbar')
