@@ -8,7 +8,7 @@ const Sequelize = require("sequelize");
 
 function TankDipDao() {
 
-    this.create = async function(tankDipData) {
+    this.create = async function(tankDipData,options = {}) {
        
         
         try {
@@ -32,6 +32,7 @@ function TankDipDao() {
                         creation_date: new Date(), // Current timestamp
                         updation_date: new Date() // Current timestamp
                     },
+                    transaction: options.transaction,
                     type: db.Sequelize.QueryTypes.INSERT
                 }
             );
@@ -46,7 +47,7 @@ function TankDipDao() {
         }
     };
 
-    this.createPumpReading = async function(pumpReadingData) {
+    this.createPumpReading = async function(pumpReadingData,options = {}) {
 
         console.log("Creating pump reading with data:", pumpReadingData);
         
@@ -77,6 +78,7 @@ function TankDipDao() {
                         creation_date: new Date(), // Current timestamp
                         updation_date: new Date() // Current timestamp
                     },
+                    transaction: options.transaction,
                     type: db.Sequelize.QueryTypes.INSERT
                 }
             );

@@ -88,19 +88,30 @@ exports.getTankDipEntry = async function (req, res, next) {
 
 exports.saveTankDipData = async function (req, res, next) {
     try {
-       
 
+        console.log('>>> saveTankDipData called at:', new Date().toISOString());
+
+        
+        const tankDipData = {
+            tank_id: req.body.tank_id,
+            dip_date: req.body.dip_date,
+            dip_time: req.body.dip_time,
+            dip_reading: req.body.dip_reading,
+            location_code: req.user.location_code,
+            created_by: req.user.User_Name,
+            creation_date: new Date()
+        };
         // Direct query with a new connection
         const duplicateCheck = await db.sequelize.query(
             `SELECT tdip_id 
              FROM t_tank_dip td 
-             WHERE td.location_code = :locationCode
+             WHERE td.location_code = :location_code
              AND Date(td.dip_date) = :dip_date
              AND td.dip_time = :dip_time
              AND td.tank_id = :tank_id`,
             {
                 replacements: { 
-                    locationCode: req.user.location_code,
+                    location_code: tankDipData.location_code,
                     tank_id: tankDipData.tank_id,
                     dip_date: tankDipData.dip_date,
                     dip_time: tankDipData.dip_time
@@ -122,6 +133,8 @@ exports.saveTankDipData = async function (req, res, next) {
         const t = await db.sequelize.transaction();
        
         try {
+
+            console.log('Creating tank dip now with:', tankDipData);
             // Save tank dip
             const tankDip = await TankDipDao.create(tankDipData, { transaction: t });
             
