@@ -28,7 +28,11 @@ module.exports = {
     const result = await db.sequelize.query(`SELECT closing_id
                                                 FROM   t_closing tc
                                                 WHERE  tc.location_code = :locationCode
-                                                    AND Date(tc.closing_date) = :reportDate`,                                                   
+                                                    AND cashflow_id in (SELECT cashflow_id
+                                                    FROM   t_cashflow_closing tc
+                                                    WHERE  tc.location_code = :locationCode
+                                                        AND Date(tc.cashflow_date) = :reportDate
+                                                        AND closing_status = 'CLOSED')`,                                                   
                                                     {
                                                         replacements: { locationCode: locationCode, reportDate: reportDate },
                                                         type: Sequelize.QueryTypes.SELECT
