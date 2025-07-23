@@ -66,7 +66,8 @@ const RECEIPT_TYPES = [
   { id: 'online_txn', label: 'RTGS/NEFT', allow_manual_entry: false },
   { id: 'bank_deposit', label: 'Bank Deposit', allow_manual_entry: false },
   { id: 'fleet_card', label: 'Fleet Card', allow_manual_entry: true },
-  { id: 'others', label: 'Others', allow_manual_entry: true }
+  { id: 'others', label: 'others', allow_manual_entry: true },
+  { id: 'digital', label: 'Digital', allow_manual_entry: true }
 ];
 
 module.exports = {

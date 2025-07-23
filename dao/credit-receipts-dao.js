@@ -12,6 +12,7 @@ module.exports = {
                 'treceipt_id',
                 'receipt_no',
                 'creditlist_id',
+                'digital_creditlist_id',
                 'receipt_type',
                 'amount',
                 'notes',
