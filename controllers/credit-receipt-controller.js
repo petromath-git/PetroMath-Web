@@ -14,13 +14,26 @@ module.exports = {
         const txnReceiptDate = req.body.txn_receipt_date_0;
         let locationCode = req.user.location_code;
 
-        cashFlowController.checkCashFlowClosingStatus(locationCode, txnReceiptDate)
-            .then(cashFlowClosing => {
-                if (cashFlowClosing.length == 1 && cashFlowClosing[0].status === 'CLOSED') {
-                    req.flash('error', "Receipt Cannot be Saved. Cash flow for " + dateFormat(txnReceiptDate, 'dd-mm-yyyy') + " is already Closed.");
-                    res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
-                        '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
-                } else {
+        console.log('Saving receipt data:', req.body);
+
+        // Validation
+            if (!req.body.cr_companyId_0 || req.body.cr_companyId_0 === '') {
+                req.flash('error', 'Please select a Credit Party.');
+                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                return;
+            }
+
+            // Validate digital vendor if receipt type is digital
+            if (req.body.cr_receiptType_0 === 'Digital' && 
+                (!req.body.cr_digitalcreditparty_0 || req.body.cr_digitalcreditparty_0 === '')) {
+                req.flash('error', 'Please select a Digital Vendor for digital receipts.');
+                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                return;
+            }
+
+        
                     CreditReceiptsDao.create(dbMapping.newReceipt(req))
                         .then(data => {
                             console.log('CreditReceiptsDao.create result:', data);
@@ -34,8 +47,8 @@ module.exports = {
                                     '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
                             }
                         })
-                }
-            })
+               
+            
     },
 
     // Get credit receipts - from and to date provided
@@ -86,7 +99,8 @@ module.exports = {
 
                     receipts.push({
                         id: receipt.treceipt_id,
-                        company_id: creditlist_id,                    
+                        company_id: creditlist_id,
+                        digital_company_id: receipt.digital_creditlist_id,                    
                         company_name: Company_Name,                   
                         receipt_type: receipt.receipt_type,
                         receipt_no: receipt.receipt_no,
@@ -106,9 +120,17 @@ module.exports = {
             if (inactiveCreditIds.size > 0) {
                 inactiveCreditDetails = await CreditsDao.findCreditDetails([...inactiveCreditIds]);
             }
-    
+       
+             
+
             // Final datasets for view rendering
-            const activeCreditCompanyValues = activeCreditResult;
+            
+            const activeCreditCompanyValues = activeCreditResult.filter(
+                (c) => !c.card_flag || c.card_flag !== 'Y'
+            );
+
+            
+
             const activeSuspenseValues = suspenseResult;           // Already plain
             const creditCompanyValues = [
                 ...activeCreditCompanyValues.map(c => ({
@@ -128,6 +150,26 @@ module.exports = {
                 }))
             ];
 
+            const inactiveDigitalCreditDetails = inactiveCreditDetails.filter(
+                c => c.card_flag === 'Y'
+            );  
+            const digitalCreditCompanyValues = activeCreditResult.filter(
+                (c) => c.card_flag === 'Y'
+            );
+
+            const digitalCompanyValues = [
+                ...digitalCreditCompanyValues.map(c => ({
+                    creditlist_id: c.creditorId,
+                    Company_Name: c.creditorName,
+                    type: c.type
+                })),
+                ...inactiveDigitalCreditDetails.map(c => ({
+                    creditlist_id: c.creditlist_id,
+                    Company_Name: c.Company_Name,
+                    type: c.type
+                }))
+            ];
+
 
           
     
@@ -137,7 +179,9 @@ module.exports = {
                 config: config.APP_CONFIGS,
                 cashReceipts: receipts,
                 creditCompanyValues: creditCompanyValues,              // main table: show active + inactive
+                digitalCompanyValues: digitalCompanyValues,  // main table: show Digital active + inactive
                 activeCreditCompanyValues: activeCreditCompanyValues,  // mixin (add new): only active
+                digActiveCreditCompanyValues: digitalCreditCompanyValues,  // mixin (add new): only active digital
                 suspenseValues: suspenseResult,
                 currentDate: utils.currentDate(),
                 minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
@@ -160,6 +204,7 @@ module.exports = {
             receipt_type: req.body.receipt_type,
             credit_type: req.body.credit_type,
             creditlist_id: req.body.company_id,
+            digital_creditlist_id: req.body.digital_creditlist_id || null,
             amount: req.body.amount,
             notes: req.body.notes
         }).then(data => {

@@ -208,6 +208,87 @@ function toggleCreditTypes(obj, rowNo, creditRowPrefix, creditTypes) {
     });
 }
 
+
+function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, creditTypes) {
+    console.log('toggleReceiptRelatedDropdowns called for row:', rowNo);
+    console.log('creditRowPrefix:', creditRowPrefix);
+    console.log('creditTypes:', creditTypes);
+    console.log('changedElement:', changedElement);
+
+    // Define CSS classes for show/hide states
+    const showClassName = 'd-md-block';
+    const hideClassName = 'd-md-none';
+
+    const receiptTypeEl = document.getElementById(`${creditRowPrefix}receiptType_${rowNo}`);
+    const creditTypeEl = document.getElementById(`${creditRowPrefix}type-${rowNo}`);
+    const digitalDropdown = document.getElementById(`${creditRowPrefix}digitalcreditparty_${rowNo}`);
+
+    // Early return if essential elements are missing
+    if (!receiptTypeEl || !creditTypeEl) {
+        console.warn('Essential elements not found for row:', rowNo);
+        return;
+    }
+
+    // Get values - use changedElement value if it's one of our target elements
+    let receiptType, creditType;
+    
+    if (changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
+        receiptType = changedElement.value?.toLowerCase();
+        creditType = creditTypeEl.value;
+    } else if (changedElement.id === `${creditRowPrefix}type-${rowNo}`) {
+        receiptType = receiptTypeEl.value?.toLowerCase();
+        creditType = changedElement.value;
+    } else {
+        // Fallback to reading from DOM
+        receiptType = receiptTypeEl.value?.toLowerCase();
+        creditType = creditTypeEl.value;
+    }
+
+    console.log('receiptType:', receiptType);
+    console.log('creditType:', creditType);
+
+    // Handle digital vendor dropdown - enable/disable based on receipt type ONLY
+    if (digitalDropdown) {
+        console.log('Digital dropdown found, current disabled state:', digitalDropdown.disabled);
+        
+        // Only change digital vendor state when receipt type changes, not credit type
+        if (changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
+            if (receiptType === 'digital') {
+                console.log('Digital receipt type selected - enabling digital vendor dropdown');
+                digitalDropdown.disabled = false;
+            } else {
+                console.log('Non-digital receipt type - disabling digital vendor dropdown');
+                digitalDropdown.disabled = true;
+                digitalDropdown.selectedIndex = 0; // Reset to first option
+            }
+        }
+        // If credit type changed, don't touch the digital vendor dropdown state
+        else {
+            console.log('Credit type changed - leaving digital vendor dropdown state unchanged');
+        }
+    }
+
+    // Handle Credit Party dropdowns - original working logic (show/hide with CSS classes)
+    creditTypes.forEach((type) => {
+        const creditTypeSelect = document.getElementById(`${creditRowPrefix}${type}-${rowNo}`);
+        if (creditTypeSelect) {
+            if (type === creditType) {
+                console.log(`Showing dropdown for credit type: ${type}`);
+                creditTypeSelect.className = `form-control ${showClassName}`;
+                updateHiddenCreditId(creditTypeSelect, creditRowPrefix, rowNo);
+            } else {
+                console.log(`Hiding dropdown for credit type: ${type}`);
+                creditTypeSelect.className = `form-control ${hideClassName}`;
+            }
+        } else {
+            console.log(`Dropdown not found for credit type: ${type}, expected ID: ${creditRowPrefix}${type}-${rowNo}`);
+        }
+    });
+}
+// Note: This function uses the existing updateHiddenCreditId function
+// which updates both companyName_ and companyId_ hidden fields
+// Note: This function uses the existing updateHiddenCreditId function
+// which updates both companyName_ and companyId_ hidden fields
 function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
     let hiddenObj = document.getElementById(creditRowPrefix + 'companyName_' + rowNo);
     if (hiddenObj) {

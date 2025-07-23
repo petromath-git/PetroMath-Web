@@ -11,6 +11,7 @@ module.exports = function (sequelize, DataTypes) {
       },
       receipt_no: DataTypes.INTEGER,
       creditlist_id: DataTypes.INTEGER,
+      digital_creditlist_id: DataTypes.INTEGER,  // ← NEW FIELD
       receipt_type: DataTypes.STRING,
       amount: DataTypes.DECIMAL,
       notes: DataTypes.STRING,
