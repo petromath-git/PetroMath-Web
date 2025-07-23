@@ -26,8 +26,9 @@ block content
                     th(scope="col") Receipt Date
                     th(scope="col") ReceiptNo
                     th(scope="col") Receipt Type
-                    th(scope="col") Credit Type
+                    th(scope="col") Credit Type                    
                     th(scope="col") Credit Party
+                    th(scope="col") Digital Vendor
                     th(scope="col") Amount
                     th(scope="col") Notes
                     th(scope="col") Delete
@@ -51,13 +52,43 @@ block content
                                             option(value=`${type}` selected= val.creditType === type)= type
                                 creditType
                             td(scope="row")
-                                select.form-control(name=prefix+'crcompanyname_' + index, id=prefix+'crcompanyname_' + index, disabled)
+                                select.form-control(
+                                    name=`${prefix}crcompanyname_${index}`, 
+                                    id=`${prefix}crcompanyname_${index}`, 
+                                    disabled
+                                    aria-label=`Credit company ${index + 1}`
+                                )
                                     if creditCompanyValues
                                         each company in creditCompanyValues
                                             option(
-                                                value=`${company.creditlist_id}`
+                                                value=company.creditlist_id
                                                 selected=(val.company_id == company.creditlist_id)
+                                            )= company.Company_Name
+                            
+                            // Digital Vendor column
+                            td(scope="row")
+                                if val.receipt_type === 'Digital'
+                                    select.form-control(
+                                        name=`${prefix}digitalcompanyname_${index}`, 
+                                        id=`${prefix}digitalcompanyname_${index}`, 
+                                        disabled
+                                        aria-label=`Digital vendor ${index + 1}`
+                                    )
+                                        if digitalCompanyValues
+                                            each company in digitalCompanyValues
+                                                option(
+                                                    value=company.creditlist_id
+                                                    selected=(val.digital_company_id == company.creditlist_id)
                                                 )= company.Company_Name
+                                else
+                                    // Empty field for non-digital receipts
+                                    input.form-control(
+                                        type="text" 
+                                        disabled 
+                                        readonly
+                                        placeholder="N/A"
+                                        aria-label=`Digital vendor ${index + 1} (not applicable)`
+                                    )
                                 //- input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
                             td(scope="row")
                                 input.form-control(type="number" id="cramount_"+index value=val.amount readonly)

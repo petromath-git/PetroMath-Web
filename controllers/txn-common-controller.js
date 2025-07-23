@@ -160,7 +160,7 @@ const creditCompanyDataPromise = (locationCode) => {
         CreditDao.findCredits(locationCode)
             .then(data => {
                 data.forEach((credit) => {
-                    companies.push({creditorId: credit.creditlist_id, creditorName: credit.Company_Name});
+                    companies.push({creditorId: credit.creditlist_id, creditorName: credit.Company_Name, card_flag: credit.card_flag});
                 });
                 resolve(companies);
             });

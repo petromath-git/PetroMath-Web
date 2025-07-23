@@ -59,7 +59,7 @@ module.exports = {
     },
     findCreditDetails: (creditIds) => {
         return Credit.findAll({
-            attributes: ['creditlist_id', 'Company_Name', 'type', 'address', 'phoneno', 'gst', 'short_name'], where: { 'creditlist_id': creditIds },
+            attributes: ['creditlist_id', 'Company_Name', 'type', 'card_flag','address', 'phoneno', 'gst', 'short_name'], where: { 'creditlist_id': creditIds },
             order: [Sequelize.literal('Company_Name')],
         });
     },

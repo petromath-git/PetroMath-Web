@@ -44,6 +44,7 @@ module.exports = {
             receipt_date: req.body.txn_receipt_date_0,
             receipt_no: req.body.creditreceiptno_0,
             creditlist_id : req.body.cr_companyId_0,
+            digital_creditlist_id: req.body.cr_digitalcreditparty_0 || null,
             receipt_type: req.body.cr_receiptType_0,
             amount: req.body.cramount_0,
             notes: req.body.crnotes_0,
