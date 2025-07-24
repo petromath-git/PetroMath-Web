@@ -1,0 +1,49 @@
+extends layout
+
+block content
+    form(method='POST', action='/tank-dip/search')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#dip_fromDate.form-control(
+                        type='date',
+                        name='fromDate',
+                        value=fromDate,
+                        required
+                    )
+                td &nbsp;
+                td To Date:
+                td
+                    input#dip_toDate.form-control(
+                        type='date',
+                        name='toDate',
+                        value=toDate,
+                        required
+                    )
+                td &nbsp;
+                td
+                    button.btn.btn-primary(type='submit') Go
+    br
+
+    table(class="table")
+        thead(class="thead-light")
+            tr
+                th #
+                th Dip Date
+                th Dip Time
+                th Tank Code
+                th Product
+                th Dip Reading
+            tbody
+                if dips.length
+                    each dip, index in dips
+                        tr
+                            td #{index + 1}
+                            td #{dip.dip_date}
+                            td #{dip.dip_time}
+                            td #{dip.tank_code}
+                            td #{dip.product_code}
+                            td #{dip.dip_reading}                              
+    div(align="center")
+        button.btn.btn-primary(type="button", onclick="window.location.href='/tank-dip'") Add New
