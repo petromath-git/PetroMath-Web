@@ -234,6 +234,28 @@ function TankDipDao() {
 
 
     };
+
+    this.searchDipByDateRange = async function(location_code, fromDate, toDate) {
+        try {
+            const results = await db.sequelize.query(
+                `SELECT d.tdip_id, d.tank_id, t.tank_code, t.product_code, d.dip_date, d.dip_time, d.dip_reading
+                 FROM t_tank_dip d
+                 JOIN m_tank t ON d.tank_id = t.tank_id
+                 WHERE d.location_code = :location_code
+                 AND d.dip_date BETWEEN :fromDate AND :toDate
+                 ORDER BY d.dip_date, d.dip_time`,
+                {
+                    replacements: { location_code, fromDate, toDate },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return results;
+        } catch (error) {
+            console.error("Error in searchDipByDateRange:", error);
+            throw error;
+        }
+    };
+    
 }
 
 module.exports = new TankDipDao();

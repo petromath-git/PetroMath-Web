@@ -271,6 +271,62 @@ exports.validateDip = async function (req, res) {
     }
 };
 
+
+
+exports.searchDipPage = async (req, res, next) => {
+    try {
+
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+        const dateFormat = require("dateformat");
+        const fromDate = dateFormat(firstDay, "yyyy-mm-dd");
+        const toDate = dateFormat(lastDay, "yyyy-mm-dd");    
+
+
+        res.render("tank-dip-search", {
+            title: "Tank Dip Search",
+            fromDate: fromDate,
+            toDate: toDate,
+            dips: [],
+            user: req.user, 
+            messages: req.flash() // optional but consistent with layout expectations
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.searchDipResults = async (req, res, next) => {
+    try {
+        const fromDate = req.body.fromDate;
+        const toDate = req.body.toDate;
+
+        const dips = await TankDipDao.searchDipByDateRange(
+            req.user.location_code,
+            fromDate,
+            toDate
+        );
+
+        res.render("tank-dip-search", {
+            title: "Tank Dip Search",
+            fromDate,
+            toDate,
+            dips,
+            user: req.user, 
+            messages: req.flash()
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+
+
+
+
 function calculateIntermediateDipCm(dipChartLines) {
     let result = [];
     

@@ -832,14 +832,19 @@ app.delete('/tank-dip', [isLoginEnsured, security.isAdmin()], function(req, res,
     tankDipController.deleteTankDip(req, res, next);
 });
 
-app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
-    tankDipController.searchDips(req, res, next);
-});
+// app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
+//     tankDipController.searchDips(req, res, next);
+// });
 
 app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
     tankDipController.validateDip(req, res);
 });
 
+// Tank Dip Search Page
+app.get('/tank-dip/search', [isLoginEnsured], tankDipController.searchDipPage);
+
+// Tank Dip Search Results
+app.post('/tank-dip/search', [isLoginEnsured], tankDipController.searchDipResults)
 
 
 app.post('/pumps', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
