@@ -214,5 +214,28 @@ module.exports = {
             effective_start_date: now,
             effective_end_date: '9999-12-31 23:59:59'
         };
+    },    
+    newVehicle: function (req, rowIndex = 0) {
+        const data = {
+            creditlist_id: req.body.creditlist_id,
+            vehicle_type: req.body[`m_vehicle_type_${rowIndex}`] || null,
+            vehicle_number: req.body[`m_vehicle_number_${rowIndex}`],
+            created_by: req.user.Person_id,
+            updated_by: req.user.Person_id,
+            creation_date: new Date(),
+            updation_date: new Date(),
+            effective_start_date: dateFormat(new Date(), "yyyy-mm-dd"),
+            effective_end_date: '2400-01-01'
+        };
+        return data;
     },
+    updateVehicle: function (req, rowIndex = 0) {
+        const data = {
+            vehicle_type: req.body[`m_vehicle_type_${rowIndex}`] || null,
+            vehicle_number: req.body[`m_vehicle_number_${rowIndex}`],
+            updated_by: req.user.Person_id,
+            updation_date: new Date()
+        };
+        return data;
+    }
 }

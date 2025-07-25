@@ -61,6 +61,7 @@ db.loginLog = require("./login-log")(sequelize, Sequelize);
 db.t_lubes_inv_hdr = require("./txn-lubes-header")(sequelize, Sequelize);
 db.t_lubes_inv_lines = require("./txn-lubes-lines")(sequelize, Sequelize);
 db.m_supplier = require("./suppliers")(sequelize, Sequelize);
+db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  // Import the creditlistvehicle model
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -75,6 +76,8 @@ db.credit.belongsTo(db.credit_receipts, {foreignKey: 'creditlist_id', targetKey:
 //db.cashflowClosing.belongsTo(db.txn_closing, {foreignKey: 'closing_date', sourceKey: 'cashflow_date'});
 db.txn_closing.belongsTo(db.cashflow_closing, {foreignKey: 'closing_date', targetKey: 'cashflow_date'});
 db.cashflow_closing.hasMany(db.txn_closing, {foreignKey: 'closing_date', sourceKey: 'cashflow_date'});
+db.credit.hasMany(db.creditlistvehicle, {foreignKey: 'creditlist_id'});
+db.creditlistvehicle.belongsTo(db.credit, {foreignKey: 'creditlist_id'});
 
 db.lookup.hasMany(db.txn_cashflow, {sourceKey: 'description', foreignKey: 'type', constraints: false});
 db.txn_cashflow.belongsTo(db.lookup, {foreignKey: 'description', constraints: false});

@@ -1183,11 +1183,34 @@ function disableCredit(index, creditID) {
 
 function enableCredit(index, creditID) {
     console.log("Enable Credit" + creditID);
-    const r = confirm("Please confirm if you want to enable the user?");
+    const r = confirm("Please confirm if you want to enable the Credit?");
     if (r == true) {
         putAjax('enable-credit/' + creditID, {}).then(success => {
             if (success) {
-                document.getElementById('user-' + index).className = 'd-md-none';
+                document.getElementById('credit-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+function disableVehicle(index, vehicleId) {
+    const r = confirm("Please confirm if you want to disable the Vehicle?");
+    if (r == true) {
+        putAjax('disable-vehicle/' + vehicleId, {}).then(success => {
+            if (success) {
+                document.getElementById('vehicle-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+function enableVehicle(index, vehicleId) {
+    console.log("Enable Vehicle" + vehicleId);
+    const r = confirm("Please confirm if you want to enable the Vehicle?");
+    if (r == true) {
+        putAjax('enable-vehicle/' + creditID, {}).then(success => {
+            if (success) {
+                document.getElementById('vehicle-' + index).className = 'd-md-none';
             }
         });
     }
