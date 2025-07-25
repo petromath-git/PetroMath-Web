@@ -131,6 +131,8 @@ const { log } = require('console');
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
+const vehicleRoutes = require('./routes/vehicle-routes'); 
+
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
@@ -143,6 +145,7 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+app.use('/vehicles', vehicleRoutes);
 
 // Add method-override here
 const methodOverride = require('method-override');

@@ -1,0 +1,54 @@
+extends layout
+include mixins/mixins
+
+block content
+    form(method='POST' action='/vehicles')
+        input(type="hidden", name="creditlist_id", value=creditlist_id)
+        
+        // Header with back button
+        .d-flex.justify-content-between.align-items-center.mb-3
+            span Vehicles for Credit Party ##{creditlist_id}
+            a.btn.btn-secondary(href="/credits") 
+                span.oi.oi-arrow-left
+                |  Back to Credits
+        
+        table(class="table" id="vehicles-table")
+            thead(class="thead-light")
+                tr
+                    th(scope="col") #
+                    th(scope="col") Vehicle Number
+                    th(scope="col") Vehicle Type
+                    th(scope="col") Disable Vehicle
+            tbody
+                each vehicle, index in vehicles
+                    tr(id='vehicle-' + index)
+                        th(scope="row")= index + 1
+                        td= vehicle.vehicle_number
+                        td= vehicle.vehicle_type
+                        td
+                            div.align-items-start
+                                button.btn.btn-info(id="disable-vehicle-"+index, onclick="disableVehicle('"+index+"', '"+ vehicle.vehicle_id +"')", title="Disable Vehicle")
+                                    span.oi.oi-delete
+                
+                // Add new vehicle row (initially hidden)
+                - var rowCnt = 0
+                while rowCnt < 1
+                    +addNewVehicle(rowCnt++)
+                    
+        div(align="center")
+            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'vehicles')", id='vehicles-add-new', title="Add a new vehicle") Add New
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='vehicles-save') Save            
+    // JavaScript functions
+    script.
+        // Function to disable a vehicle (similar to disableUser)
+        function disableVehicle(index, vehicleId) {
+            const r = confirm("Please confirm if you want to disable the vehicle?");
+            if (r == true) {
+                putAjax('disable', { vehicle_id: vehicleId }).then(success => {
+                    if (success) {
+                        document.getElementById('vehicle-' + index).className = 'd-md-none';
+                    }
+                });
+            }
+        }

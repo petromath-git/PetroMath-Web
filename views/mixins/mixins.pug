@@ -280,6 +280,25 @@ mixin addNewUser(rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'users\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
 
+mixin addNewVehicle(rowCnt)
+    tr(id='vehicles-table-row-' + rowCnt, class='d-md-none')
+        th(scope="row") #
+        td
+            input.form-control(type='text', name='m_vehicle_number_' + rowCnt, id='m_vehicle_number_' + rowCnt, placeholder='Enter vehicle number', required)
+        td
+            select.form-control(name='m_vehicle_type_' + rowCnt, id='m_vehicle_type_' + rowCnt, required)
+                option(value='') Select Vehicle Type
+                option(value='Truck') Truck
+                option(value='Tanker') Tanker
+                option(value='Trailer') Trailer
+                option(value='Car') Car
+                option(value='Bike') Bike
+                option(value='Other') Other
+        td
+            button.btn.btn-danger.btn-sm(type='button', onclick='hideRow("vehicles-table-row-' + rowCnt + '", "", "")', title='Remove this row')
+                span.oi.oi-x
+        input(type='hidden', name='vehicles_' + rowCnt + '_hiddenId', id='vehicles_' + rowCnt + '_hiddenId')
+
 
 mixin addNewSupplier(rowCnt)
     - let id = 'suppliers-table-row-' + rowCnt;
