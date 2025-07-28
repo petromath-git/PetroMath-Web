@@ -17,7 +17,11 @@ module.exports = function(sequelize, DataTypes) {
         creation_date: DataTypes.DATE,
         updation_date: DataTypes.DATE,
 		effective_start_date: DataTypes.DATE,
-		effective_end_date: DataTypes.DATE
+		effective_end_date: DataTypes.DATE,
+        creditlist_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        }
     }, {
         timestamps: false
     });
