@@ -1,0 +1,87 @@
+doctype html
+html
+    head
+        title PetroMath:#{title}
+        //- meta(name="viewport" content="width=device-width, initial-scale=1.0")
+        link(rel='stylesheet', href='/stylesheets/style.css')
+        script(src='/javascripts/app-scripts.js')
+        script(src='/javascripts/app-master-page-scripts.js')
+        script(src='/javascripts/draft-edit-scripts.js')
+        script(src='/javascripts/app-validator.js')
+        script(src='/javascripts/app-generate-pdf.js',defer)
+        script(src='/javascripts/app-report-date.js',defer)
+        script(src='/javascripts/app-report-table-generator.js')
+        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
+        script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
+        script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
+        script(src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js')
+        script(src='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js')
+        script(src ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')
+        script(src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js')
+        link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
+        link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
+        link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpg" src="/images/mc_logo.jpg")
+        link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
+        //- script.
+        //-     function formatIndianCurrency(number) {
+        //-         const [integer, decimal] = number.toFixed(2).split('.');
+        //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+        //-         return formattedInteger + '.' + decimal;
+        //-     }
+        style.
+            @media print {
+            table.table-bordered {
+                border-collapse: collapse !important;
+            }
+            table.table-bordered,
+            table.table-bordered th,
+            table.table-bordered td {
+                border: 1px solid #000 !important; /* Increase thickness if needed */
+            }
+            }
+
+        
+    - var isFreezedRecord = false;    
+    if(closingData && closingData.closingStatus === 'CLOSED')
+        - isFreezedRecord = true;
+    body(onload='populateSummaryFn(' + isFreezedRecord +');')
+        h1.text-center(id='petromath-heading')  #{companyName}
+        if (user)
+            div#ajax-loading(class='d-sm-none')
+                img#loading-image(src="images/ajax-loader.gif" alt="Loading..." width="300px" height="300px")
+            div
+                div
+                    nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top                        
+                        button.navbar-toggler(type='button', data-toggle='collapse', data-target='#navbarNav', aria-controls='navbarNav', aria-expanded='false', aria-label='Toggle navigation')
+                            span.navbar-toggler-icon
+                        .collapse.navbar-collapse#navbarNav
+                            ul.navbar-nav.mr-auto                                
+                                li.nav-item(class=(title === 'Credit Statement' ? 'active' : ''))
+                                    a.nav-link(href='/reports-customer') Credit Statement                                
+                            // Right-aligned user details and logout
+                            ul.navbar-nav.ml-auto                                
+                                li.nav-item
+                                    a.nav-link(href='/changepwd') Change Password
+                                li.nav-item
+                                    a.nav-link(href='/logout') Logout
+                                li.nav-item.navbar-text.text-white
+                                    b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'    
+
+                        // Centered title
+                        //- if title
+                        //-     h5.text-center.text-light.mt-2 #{title}
+                        //- else
+                        //-     h5.text-center.text-light.mt-2 &nbsp;
+        if messages.error
+            div &nbsp;
+            div(class='alert alert-danger' required="false") #{messages.error}
+        if messages.success
+            div &nbsp;
+            div(class='alert alert-success' required="false") #{messages.success}
+        if messages.warning
+            div &nbsp;
+            div(class='alert alert-warning' required="false") #{messages.warning}
+        div &nbsp;
+        div#static-snackbar(class='alert alert-danger d-md-none')
+        div#snackbar
+        block content

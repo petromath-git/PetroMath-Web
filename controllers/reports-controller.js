@@ -13,10 +13,23 @@ module.exports = {
         let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
        // let cname = req.body.company_name;
-        let cid = req.body.company_id;
+        let cid;
+        let route;
+
+        console.log('getCreditReport: User Role:', req.user.Role);
+        console.log('getCreditReport: User Creditlist ID:', req.user.creditlist_id);
+
+        if(req.user.Role === 'Customer'){
+          cid = req.user.creditlist_id;
+          route = 'home-customer';
+        }
+        else{
+          cid = req.body.company_id;
+          route = 'reports';
+        }
         let caller = req.body.caller;
         let reportType = req.body.reportType;
-        let route = 'reports';
+        
 
         if (reportType == 'Creditledger'){
           route = 'reports-credit-ledger';
@@ -35,17 +48,29 @@ module.exports = {
         let closingBal;
         let renderData = {};
 
-         CreditDao.findAll(locationCode)
-              .then(data => {
-                data.forEach((credit) => {
-                  if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
-                    credits.push({
-                      id: credit.creditlist_id,
-                      name: credit.Company_Name
-                    });
-                  }
-                });
-              });
+        CreditDao.findAll(locationCode)
+        .then(data => {
+            // If the user is a Customer, filter credits based on their `creditlist_id`
+            data.forEach((credit) => {
+                if (req.user.Role === 'Customer') {
+                    // Only include credit data that matches the logged-in user's creditlist_id
+                    if (credit.creditlist_id === cid) {  // Exclude Digital (card_flag === 'Y')
+                        credits.push({
+                            id: credit.creditlist_id,
+                            name: credit.Company_Name
+                        });
+                    }
+                } else {
+                    // For non-Customer roles, you can apply other filters or show data differently
+                    if (!(credit.card_flag === 'Y')) {  // Exclude Digital (card_flag === 'Y')
+                        credits.push({
+                            id: credit.creditlist_id,
+                            name: credit.Company_Name
+                        });
+                    }
+                }
+            })
+          });
                 
               const data = await  ReportDao.getBalance(cid, fromDate,toDate);
               OpeningBal = data[0].OpeningData;

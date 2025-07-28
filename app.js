@@ -159,9 +159,103 @@ app.use(express.static(path.join(__dirname, 'public')));
 const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
 
+app.use((req, res, next) => {
+    // If the user is logged in and has a creditlist_id, set the companyName
+    console.log("User data in middleware:", req.user);
+    if (req.user && req.user.creditlist_id) {
+        const creditlistId = req.user.creditlist_id;
+
+        // Query the `m_creditlist` table to get the customer name (Company_Name)
+        CreditDao.findCreditDetails(creditlistId)
+            .then(creditDetails => {
+                if (creditDetails && creditDetails.length > 0) {
+                    // Set the companyName globally in res.locals
+                    res.locals.companyName = creditDetails[0].Company_Name;
+                } else {
+                    res.locals.companyName = 'Guest';  // Fallback if no details found
+                }
+                next();
+            })
+            .catch(err => {
+                console.error('Error fetching customer details:', err);
+                res.locals.companyName = 'Guest';  // Fallback in case of error
+                next();
+            });
+    } else {
+        // If the user is not logged in, set a default guest name
+        res.locals.companyName = 'Guest';
+        next();
+    }
+});
+
+
+
+
+app.get('/login', function (req, res) {
+    res.render('login', { title: 'Login' });
+});
+
 // Routes - start
 app.get('/', isLoginEnsured, function (req, res) {
+    if(req.user.Role === 'Customer') {
+        res.redirect('/home-customer');    
+    }
     res.redirect('/home');
+});
+
+
+app.get('/home-customer',isLoginEnsured, function (req, res) {   
+        res.render('home-customer', { title: 'Customer Statement', user: req.user });
+   
+});
+
+app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
+    res.render('home-customer', { title: 'Customer Statement', user: req.user });
+});
+
+app.post('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getCreditReport(req, res, next);
+});
+
+
+app.get('/logout', function (req, res) {
+    req.logout(function (err) {
+        if (err) { return next(err); }
+        res.redirect('/login');
+    });
+});
+
+
+app.get('/changepwd', isLoginEnsured, function (req, res) {
+    res.render('change-pwd', { title: 'Change Password', user: req.user });
+});
+
+app.post('/changepwd', isLoginEnsured, function (req, res) {
+    const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
+    promiseResponse.then((result) => {
+        if (result === true) {
+            res.render('change-pwd', {
+                title: 'Change Password',
+                user: req.user,
+                messages: { success: "Password changed successfully" }
+            });
+        } else {
+            res.render('change-pwd', {
+                title: 'Change Password',
+                user: req.user,
+                messages: { error: "Error while changing password." }
+            });
+        }
+    });
+});
+
+app.use(security.isNotCustomer());
+
+
+app.post('/reports-customer', isLoginEnsured, function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getCreditReport(req, res, next);
 });
 
 app.post('/creditreceipts', [isLoginEnsured, security.isAdmin()], function (req, res) {
@@ -577,9 +671,7 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
-app.get('/login', function (req, res) {
-    res.render('login', { title: 'Login' });
-});
+
 
 // app.post('/login', function (req, res, next) {
 //     passport.authenticate('local', {
@@ -643,40 +735,16 @@ app.post('/login', function(req, res, next) {
                 console.error("Error logging login:", error);
             }
 
-            return res.redirect('/home');
+            if(user.Role === 'Customer') {              
+                return res.redirect('/home-customer');
+                        }
+                else{
+                    return res.redirect('/home');}            
         });
     })(req, res, next);
 });
 
-app.get('/changepwd', isLoginEnsured, function (req, res) {
-    res.render('change-pwd', { title: 'Change Password', user: req.user });
-});
 
-app.post('/changepwd', isLoginEnsured, function (req, res) {
-    const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
-    promiseResponse.then((result) => {
-        if (result === true) {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { success: "Password changed successfully" }
-            });
-        } else {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { error: "Error while changing password." }
-            });
-        }
-    });
-});
-
-app.get('/logout', function (req, res) {
-    req.logout(function (err) {
-        if (err) { return next(err); }
-        res.redirect('/login');
-    });
-});
 
 app.get('/cashflow', isLoginEnsured, function (req, res, next) {
     cashflowController.getCashFlowEntry(req, res, next);
