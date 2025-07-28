@@ -6,6 +6,7 @@ var UserData = function UserData(user, isAdmin) {
     this.Role = user.Role;
     this.location_code = user.location_code;
     this.isAdmin = isAdmin;
+    this.creditlist_id = user.creditlist_id;
 }
 
 module.exports = UserData;

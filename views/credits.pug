@@ -14,7 +14,8 @@ block content
                     th(scope="col") Phone Number
                     th(scope="col") GST Number
                     th(scope="col") Balance
-                    th(scope="col") Disable Credit  
+                    th(scope="col") Vehicles
+                    th(scope="col") Disable Credit                    
             tbody
                 each val, index in credits
                     tr(id='credit-' + index)
@@ -25,8 +26,10 @@ block content
                         td= val.address
                         td= val.phoneno
                         td= val.gst
-                        - var balance = val.balance.toLocaleString('en', {minimumFractionDigits: minFixedValue});
+                        - var balance = val.balance.toLocaleString('en', {minimumFractionDigits: 2});
                         td Rs. #{balance}
+                        td
+                            button.btn.btn-info(onclick=`viewVehicles('${val.id}')`) View Vehicles
                         td
                             div.align-items-start
                                 button.btn.btn-info(id="disable-credit-"+index, onclick="disableCredit('"+index+"', '"+ val.id +"')")
@@ -41,3 +44,19 @@ block content
             button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'credit-master')", id='credit-master-add-new') Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", id='credit-master-save', disabled=true) Save
+    script.
+        function viewVehicles(creditlistId) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/vehicles/get';
+            form.style.display = 'none';
+            
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'creditlist_id';
+            input.value = creditlistId;
+            
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        }

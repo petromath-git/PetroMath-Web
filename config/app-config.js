@@ -113,6 +113,7 @@ module.exports = {
   PUMP_TANK_TABLE: "m_pump_tank",
   TXN_TANK_DIP: "t_tank_dip",
   TXN_TANK_READING: "t_tank_reading",
+  CREDIT_LIST_VEHICLE_TABLE: "m_creditlist_vehicles", // Table for credit list vehicles
 
 
 

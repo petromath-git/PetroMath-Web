@@ -11,7 +11,9 @@ module.exports = {
             return Person.findAll({
                 where: {
                     [Op.and]: [
-                        { 'location_code': locationCode }, { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+                        { 'location_code': locationCode }, 
+                        { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+                        { 'creditlist_id': null }
 
                     ]
                 }, order: [
@@ -110,7 +112,8 @@ module.exports = {
             where: {
                 [Op.and]: [
                     { location_code: locationCode }, // Match location code
-                    { effective_end_date: { [Op.lt]: now } } // effective_start_date < current date
+                    { effective_end_date: { [Op.lt]: now } }, // effective_start_date < current date
+                    { creditlist_id: null }
                 ]    
             },order: [
                 ['effective_end_date', 'DESC']

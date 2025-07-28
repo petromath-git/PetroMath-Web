@@ -1,0 +1,99 @@
+extends layout-customer
+
+block content
+    form(method='POST' action='/reports-indiv-customer')
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                
+                include report-print-download.pug
+    div &nbsp;
+    div
+        if creditstmt && creditstmt.length > 0
+            - var companyName = creditstmt[0].companyName
+            - var cidparam = creditstmt[0].cidparam
+            - var showPriceDiscountColumn = creditstmt.some(val => val['Price Discount'] != null && val['Price Discount'] != '' && val['Price Discount'] != 0)
+            div.row &nbsp;
+            h6.font-weight-bold.text-center= "Credit Detail Report"
+            if(cidparam == -1)
+                h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
+            else
+                h5.font-weight-bold.text-center.text-uppercase= companyName                 
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
+            h4.font-weight-bold.text-success.text-center
+            table.table.table-bordered.border.table-sm
+                thead(class="thead-light")
+                    tr
+                        th.text-center Date                        
+                        th.text-center Particulars                      
+                        th.text-center Product Name
+                        th.text-center Price (Rs.)
+                        if showPriceDiscountColumn
+                            th.text-center PriceDiscount (Rs.)
+                        th.text-center Quantity
+                        th.text-center Debit (Rs.)
+                        th.text-center Credit (Rs.)
+                        th.text-center Balance (Rs.)
+                        th.text-center Narration
+                tbody
+                    if(cidparam != -1)
+                        tr                              
+                            td &nbsp;
+                            td.text-left Opening Balance                           
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            if showPriceDiscountColumn
+                                td &nbsp;
+                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
+                    each val in creditstmt
+                        tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
+                            td(scope="row")= val.Date                            
+                            td(scope="row")= val.Particulars                           
+                            td(scope="row")= val.Product
+                            td.text-right(scope="row")= val.Price
+                            if showPriceDiscountColumn
+                                td.text-right(scope="row")= val['Price Discount']
+                            td.text-right(scope="row")= val.Qty
+                            td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
+                            td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
+                            td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
+                            td(scope="row")= val.Narration
+                    if(cidparam != -1)
+                        tr  
+                            td &nbsp;                           
+                            td.text-left Closing Balance                                                   
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            td &nbsp;
+                            if showPriceDiscountColumn
+                                td &nbsp;
+                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
+            div.col-12.text-right E &amp; OE
+            div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
+        else
+            div.row &nbsp;
+            div.row.bg-light No Transactions.  
+
+        // Include the overlay
+        include overlay.pug
+
