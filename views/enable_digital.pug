@@ -1,0 +1,65 @@
+extends layout
+
+block content
+    div.container-fluid
+        h2 Enable Digital Customers
+        
+        if digitalCustomers && digitalCustomers.length > 0
+            table.table.table-striped
+                thead.thead-light
+                    tr
+                        th #
+                        th Company Name
+                        th Phone Number
+                        th GST Number
+                        th Action
+                tbody
+                    each customer, index in digitalCustomers
+                        tr(id=`digital-row-${customer.id}`)
+                            td= index + 1
+                            td= customer.name
+                            td= customer.phoneno
+                            td= customer.gst
+                            td
+                                button.btn.btn-success.btn-sm(
+                                    onclick=`enableDigital(${customer.id})`
+                                    id=`enable-btn-${customer.id}`
+                                ) Enable
+        else
+            div.alert.alert-info
+                p No disabled digital customers found.
+        
+        div.mt-3
+            a.btn.btn-secondary(href="/digital") Back to Digital Master
+
+    script.
+        function enableDigital(digitalId) {
+            if (confirm('Are you sure you want to enable this digital customer?')) {
+                fetch(`/enable-digital/${digitalId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        // Remove the row from the table
+                        document.getElementById(`digital-row-${digitalId}`).remove();
+                        
+                        // Check if there are any remaining rows
+                        const tbody = document.querySelector('tbody');
+                        if (tbody && tbody.children.length === 0) {
+                            location.reload(); // Reload to show "no disabled customers" message
+                        }
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while enabling the digital customer.');
+                });
+            }
+        }

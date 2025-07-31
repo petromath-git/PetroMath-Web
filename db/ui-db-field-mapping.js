@@ -237,5 +237,21 @@ module.exports = {
             updation_date: new Date()
         };
         return data;
+    },
+    newDigitalCustomer: (req) => {
+        return {
+            Company_Name: req.body.m_digital_name,
+            type: 'credit',
+            short_name: req.body.m_digital_name,
+            address: req.body.m_digital_name,
+            phoneno: req.body.m_digital_phoneno,
+            gst: req.body.m_digital_gst,
+            Opening_Balance: 0.00,
+            location_code: req.user.location_code,
+            created_by: req.user.Person_id,
+            card_flag: 'Y',  // This is the key difference - marks it as digital
+            effective_start_date: new Date(),
+            effective_end_date: '2099-12-31'
+        };
     }
 }
