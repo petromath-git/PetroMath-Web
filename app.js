@@ -204,13 +204,31 @@ app.get('/', isLoginEnsured, function (req, res) {
 });
 
 
-app.get('/home-customer',isLoginEnsured, function (req, res) {   
-        res.render('home-customer', { title: 'Customer Statement', user: req.user });
-   
+app.get('/home-customer',isLoginEnsured, function (req, res) { 
+    res.redirect('/reports-indiv-customer');   
 });
 
-app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
-    res.render('home-customer', { title: 'Customer Statement', user: req.user });
+app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) { 
+    const today = new Date();
+    
+    // Get the first day of the current month
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Get the last day of the current month
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    // Format the dates to 'yyyy-mm-dd' format for consistency
+    const fromClosingDate = firstDay.toISOString().split('T')[0];
+    const toClosingDate = lastDay.toISOString().split('T')[0];
+    req.body.reportType = 'CreditDetails';
+    req.body.caller = 'notpdf';
+    req.body.fromClosingDate = fromClosingDate;
+    req.body.toClosingDate = toClosingDate;
+    
+
+    console.log('reports-indiv-customer: User Role:', req.user.Role);
+    reportsController.getCreditReport(req, res, next);
+    console.log('reports-indiv-customer: User Role:', req.user.Role);
 });
 
 app.post('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
@@ -235,11 +253,16 @@ app.post('/changepwd', isLoginEnsured, function (req, res) {
     const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
     promiseResponse.then((result) => {
         if (result === true) {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { success: "Password changed successfully" }
-            });
+            req.flash('success', 'Password changed successfully');
+            res.redirect('/');
+            
+            // Redirect to the home page
+            // res.render('change-pwd', {
+            //     title: 'Change Password',
+            //     user: req.user,
+            //     messages: { success: "Password changed successfully" }
+            //});
+        
         } else {
             res.render('change-pwd', {
                 title: 'Change Password',
@@ -249,6 +272,9 @@ app.post('/changepwd', isLoginEnsured, function (req, res) {
         }
     });
 });
+
+
+app.post('/generate-pdf', isLoginEnsured,getPDF);
 
 app.use(security.isNotCustomer());
 
@@ -588,7 +614,7 @@ app.post('/reports-dsr', isLoginEnsured, function (req, res, next) {
     dsrReportsController.getdsrReport(req, res, next);
 });
 
-app.post('/generate-pdf', isLoginEnsured,getPDF);
+
 
 
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
