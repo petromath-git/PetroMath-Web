@@ -1,0 +1,58 @@
+extends layout
+include mixins/mixins
+
+block content
+    form(method='POST' action='/digital')
+        table(class="table" id="digital-master-table")
+            thead(class="thead-light")
+                tr
+                    th(scope="col") #
+                    th(scope="col") Company Name
+                    th(scope="col") Phone Number
+                    th(scope="col") GST Number
+                    th(scope="col") Disable Digital                    
+            tbody
+                each val, index in digitalCustomers
+                    tr(id='digital-' + index)
+                        th(scope="row")= index + 1
+                        td= val.name
+                        td= val.phoneno
+                        td= val.gst
+                        td
+                            div.align-items-start
+                                button.btn.btn-info(id="disable-digital-"+index, onclick="disableDigital('"+index+"', '"+ val.id +"')")
+                                    span.oi.oi-delete
+                                    
+                - var rowCnt = 0
+                while rowCnt < 1
+                    +addMasterDigital(rowCnt++)
+        div(align="center")
+            button.btn.btn-primary(type="button", onClick="window.location.href='/enable_digital'", id="enable-digital", title="Enable Digital Customer") Enable Digital
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'digital-master')", id='digital-master-add-new') Add New
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-primary(type="submit", id='digital-master-save', disabled=true) Save
+    script.
+        function disableDigital(index, digitalId) {
+            if (confirm('Are you sure you want to disable this digital customer?')) {
+                fetch(`/disable-digital/${digitalId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        alert(data.message);
+                        location.reload();
+                    } else if (data.error) {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while disabling the digital customer.');
+                });
+            }
+        }

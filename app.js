@@ -380,7 +380,7 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
 });
 
 app.get('/enable_credit', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findDisableCredits(req.user.location_code)
+    creditController.findDisableCreditCustomersOnly(req.user.location_code)
         .then(data => {
             res.render('enable_credit', {
                 title: 'Disabled Credits',
@@ -430,6 +430,81 @@ app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (r
     })
 });
 
+
+
+app.get('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findDigitalCustomers(req.user.location_code).then(data => {
+        res.render('digital', { 
+            title: 'Digital Master', 
+            user: req.user, 
+            digitalCustomers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching digital customers:', err);
+        res.status(500).send('Error loading digital customers');
+    });
+});
+
+
+// Digital Master - POST route (for saving new digital customers)
+app.post('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    // Set card_flag to 'Y' for digital customers
+    req.body.card_flag = 'Y';
+    CreditDao.create(dbMapping.newDigitalCustomer(req));
+    res.redirect('/digital');
+});
+
+
+// Enable Digital Customer page
+app.get('/enable_digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findDisableDigitalCustomers(req.user.location_code)
+        .then(data => {
+            res.render('enable_digital', {
+                title: 'Disabled Digital Customers',
+                user: req.user,
+                digitalCustomers: data
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching disabled digital customers:", err);
+            res.status(500).send("An error occurred.");
+        });
+});
+
+// Enable specific digital customer
+app.put('/enable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const digitalId = req.params.id;
+    CreditDao.enableCredit(digitalId)
+        .then(data => {
+            if (data == 1) {
+                res.status(200).send({ success: true, message: 'Digital customer enabled successfully.' });
+            } else {
+                res.status(400).send({ success: false, error: 'Error enabling digital customer.' });
+            }
+        })
+        .catch(err => {
+            console.error('Error enabling digital customer:', err);
+            res.status(500).send({ success: false, error: 'Error enabling digital customer.' });
+        });
+});
+
+// Disable specific digital customer
+app.put('/disable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const digitalId = req.params.id;
+    CreditDao.disableCredit(digitalId).then(data => {
+        if (data == 1) {
+            res.status(200).send({ message: 'Digital customer disabled successfully.' });
+        } else {
+            res.status(500).send({ error: 'Error disabling digital customer.' });
+        }
+    })
+    .catch(err => {
+        console.error('Error disabling digital customer:', err);
+        res.status(500).send({ error: 'Error disabling digital customer.' });
+    });
+});
+
+
 app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     masterController.findUsers(req.user.location_code).then(data => {
         res.render('users', { title: 'Users', user: req.user, users: data });
@@ -458,7 +533,7 @@ app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
 });
 
 app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findCredits(req.user.location_code).then(data => {
+    creditController.findCreditCustomersOnly(req.user.location_code).then(data => {
         res.render('credits', { title: 'Credits', user: req.user, credits: data });
     });
 });

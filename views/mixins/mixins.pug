@@ -24,6 +24,20 @@ mixin addMasterCredit(rowCnt)
                 span(aria-hidden="true") &times;
 
 
+
+mixin addMasterDigital(index)
+    tr(id='digital-master-table-row-' + index, class='d-md-none')
+        th(scope="row") New
+        td
+            input.form-control(type='text', name='m_digital_name', placeholder='Company Name', required)
+        td
+            input.form-control(type='tel', name='m_digital_phoneno', placeholder='Phone Number')
+        td
+            input.form-control(type='text', name='m_digital_gst', placeholder='GST Number')
+        td
+            button.close(type="button" aria-label="Close" onclick='hideMasterEntryRow(\'digital-master\', \'digital-master-table-row-' + index + '\')')
+                span(aria-hidden="true") &times;
+
 mixin addTxnReceipt(rowCnt)
     - let id = 'creditReceipts-table-row-' + rowCnt;
     - const prefix = 'cr_';
