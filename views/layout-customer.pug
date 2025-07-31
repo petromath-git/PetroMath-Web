@@ -57,7 +57,7 @@ html
                         .collapse.navbar-collapse#navbarNav
                             ul.navbar-nav.mr-auto                                
                                 li.nav-item(class=(title === 'Credit Statement' ? 'active' : ''))
-                                    a.nav-link(href='/reports-customer') Credit Statement                                
+                                    a.nav-link(href='/reports-indiv-customer') Credit Statement                                
                             // Right-aligned user details and logout
                             ul.navbar-nav.ml-auto                                
                                 li.nav-item
@@ -85,3 +85,5 @@ html
         div#static-snackbar(class='alert alert-danger d-md-none')
         div#snackbar
         block content
+        footer(class='text-center mt-4 py-3')
+            p &copy; 2025 <a href="https://www.petromath.co.in" target="_blank">petromath.co.in</a>. All rights reserved.

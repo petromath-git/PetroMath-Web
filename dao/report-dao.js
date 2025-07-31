@@ -190,7 +190,7 @@ module.exports = {
             LEFT JOIN loose_sales ls ON DATE(tc.closing_date) = ls.closing_date
             WHERE 
               tc.closing_status = 'CLOSED'
-              AND tc.closing_date BETWEEN :reportFromDate AND :reportToDate
+              AND date(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
               AND tc.location_code = :locationCode
             GROUP BY tc.closing_date
             ORDER BY tc.closing_date ASC

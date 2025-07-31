@@ -22,6 +22,8 @@ block content
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;                
                 include report-print-download.pug
+                td 
+                    input(type="hidden" id="company_id" name="company_id" value=company_id)    
     div &nbsp;
     div
         if creditstmt && creditstmt.length > 0

@@ -21,7 +21,7 @@ module.exports = {
 
         if(req.user.Role === 'Customer'){
           cid = req.user.creditlist_id;
-          route = 'home-customer';
+          route = 'reports-customer-facing';
         }
         else{
           cid = req.body.company_id;
@@ -164,10 +164,10 @@ module.exports = {
                         res.render(route,renderData,
                            (err, html) => {
                             if (err) {
-                              console.error('getCreditSummaryReport: Error in res.render:', err);
+                              console.error('getCreditReport: Error in res.render:', err);
                               reject(err); // Reject the promise if there's an error
                             } else {
-                              console.log('getCreditSummaryReport: Successfully rendered HTML');
+                              console.log('getCreditReport: Successfully rendered HTML');
                               resolve(html); // Resolve the promise with the HTML content
                             }
                         });
