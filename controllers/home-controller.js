@@ -12,6 +12,7 @@ const dateFormat = require('dateformat');
 const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
 const security = require("../utils/app-security");
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 
 module.exports = {
 
@@ -30,7 +31,8 @@ module.exports = {
                     txnController.creditCompanyDataPromise(locationCode),
                     txnController.suspenseDataPromise(locationCode),
                     expenseDataPromise(locationCode),
-                    personAttendanceDataPromise(locationCode)])
+                    personAttendanceDataPromise(locationCode),
+                    vehicleDataPromise(locationCode)])
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
@@ -45,7 +47,8 @@ module.exports = {
                             creditCompanyValues: values[3].value,
                             suspenseValues: values[4].value,
                             expenseValues: values[5].value.expenses,
-                            usersList: values[6].value.allUsers
+                            usersList: values[6].value.allUsers,
+                            vehicleData: values[7].value
                         });
                     }).catch((err) => {
                     console.warn("Error while getting data using promises " + err.toString());
@@ -496,3 +499,46 @@ const personAttendanceDataPromise = (locationCode) => {
             });
     });
 }
+
+const vehicleDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        CreditVehicleDao.findAllVehiclesForLocation(locationCode)
+            .then(data => {
+                // Group vehicles by creditlist_id for easier access
+                const vehiclesByCredit = {};
+                data.forEach(vehicle => {
+                    if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                        vehiclesByCredit[vehicle.creditlist_id] = [];
+                    }
+                    vehiclesByCredit[vehicle.creditlist_id].push({
+                        vehicleId: vehicle.vehicle_id,
+                        vehicleNumber: vehicle.vehicle_number,
+                        vehicleType: vehicle.vehicle_type,
+                        companyName: vehicle.company_name
+                    });
+                });
+                resolve(vehiclesByCredit);
+            })
+            .catch(err => {
+                console.error("Error loading vehicles:", err);
+                resolve({});
+            });
+    });
+};
+
+// Add API endpoint for dynamic vehicle loading
+module.exports.getVehiclesByCreditId = (req, res, next) => {
+    const creditListId = req.params.creditListId;
+    CreditVehicleDao.findAll(creditListId)
+        .then(data => {
+            const vehicles = data.map(v => ({
+                vehicleId: v.vehicle_id,
+                vehicleNumber: v.vehicle_number,
+                vehicleType: v.vehicle_type
+            }));
+            res.json({ success: true, vehicles });
+        })
+        .catch(err => {
+            res.status(500).json({ success: false, error: err.toString() });
+        });
+};

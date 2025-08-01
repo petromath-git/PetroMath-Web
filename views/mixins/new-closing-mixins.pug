@@ -173,7 +173,7 @@ mixin addCredits(creditRowNo, rowData)
     if(creditCompanyValues && creditCompanyValues[0])
         - creditName = creditCompanyValues[0].creditorName;
     if(!rowData)
-        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName};
+        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null};
     if(rowData.tCreditId && parseInt(rowData.tCreditId) > 0)
         - trClass = ''
     tr(class=trClass id=trId)
@@ -195,7 +195,7 @@ mixin addCredits(creditRowNo, rowData)
             - var displayType1Class = 'd-md-none'
             if rowData.creditType === config.creditTypes[0]
                 - displayType1Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo, class = displayType1Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')')
+            select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo, class = displayType1Class, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
                 if creditCompanyValues
                     each val in creditCompanyValues
                         option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
@@ -206,6 +206,13 @@ mixin addCredits(creditRowNo, rowData)
                 if suspenseValues
                     each val in suspenseValues
                         option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
+        td
+            select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
+                option(value='') Select Vehicle
+                //- If editing and vehicle data exists, populate vehicles for the selected credit party
+                if rowData.creditListId && vehicleData && vehicleData[rowData.creditListId]
+                    each vehicle in vehicleData[rowData.creditListId]
+                        option(value=vehicle.vehicleId selected= rowData.vehicleId === vehicle.vehicleId)= vehicle.vehicleNumber + ' (' + vehicle.vehicleType + ')'        
         td
             input.form-control(type='number' name=prefix + 'price-' + creditRowNo id=prefix + 'price-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01 readonly)
         td
@@ -219,6 +226,7 @@ mixin addCredits(creditRowNo, rowData)
         td
             button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\', "remove-credit-sale", calculateCreditTotal)')
                 span(aria-hidden="true") &times;
+
 
 //- Add new page: Dom elements to show new custom expenses on 'add'
 mixin addExpenses(rowNo, rowData)

@@ -86,10 +86,41 @@ module.exports = {
         }
     },
 
+    findAllVehiclesForLocation: (locationCode) => {
+        return db.sequelize.query(
+            `SELECT 
+                v.vehicle_id,
+                v.creditlist_id,
+                v.vehicle_number,
+                v.vehicle_type,
+                c.Company_Name as company_name
+            FROM m_creditlist_vehicles v
+            INNER JOIN m_credit_list c ON v.creditlist_id = c.creditlist_id
+            WHERE c.location_code = :locationCode
+                AND (v.effective_end_date IS NULL OR v.effective_end_date >= CURDATE())
+                AND (c.effective_end_date IS NULL OR c.effective_end_date >= CURDATE())
+            ORDER BY v.vehicle_number`,
+            {
+                replacements: { locationCode },
+                type: db.sequelize.QueryTypes.SELECT
+            }
+        );
+    },
+
     // Get vehicle details by vehicle_id
     findByVehicleId: (vehicleId) => {
         return CreditListVehicle.findOne({
             where: { vehicle_id: vehicleId }
+        });
+    },
+
+
+    findByVehicleIds: (vehicleIds) => {
+        return CreditListVehicle.findAll({
+            where: { 
+                vehicle_id: vehicleIds
+            },
+            attributes: ['vehicle_id', 'vehicle_number', 'vehicle_type', 'creditlist_id']
         });
     },
 

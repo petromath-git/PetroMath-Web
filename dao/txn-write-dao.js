@@ -50,7 +50,7 @@ module.exports = {
     },
     saveCreditSales: (data) => {
         const salesTxn = TxnCreditSales.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["bill_no", "creditlist_id",
+            updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
                 "product_id", "price", "price_discount", "qty", "amount", "notes", "updated_by", "updation_date"]});
         return salesTxn;
     },

@@ -1,3 +1,5 @@
+//closing-edit-controller.js
+
 const TxnReadDao = require("../dao/txn-read-dao");
 const TxnWriteDao = require("../dao/txn-write-dao");
 const ProductDao = require("../dao/product-dao");
@@ -6,6 +8,7 @@ const homeController = require("./home-controller");
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const security = require("../utils/app-security");
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 
 // Edit flow: This controller takes care of all joins to get data for editing.
 
@@ -28,7 +31,8 @@ module.exports = {
                 txnExpensesPromise(closingId, locationCode),
                 txnController.txnDenominationPromise(closingId),
                 txnController.txnAttendanceDataPromise(closingId),
-                homeController.personAttendanceDataPromise(locationCode)])
+                homeController.personAttendanceDataPromise(locationCode),
+                vehicleDataPromise(locationCode)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -49,7 +53,8 @@ module.exports = {
                         t_expenses: values[11].value.t_expenses,
                         t_denoms: values[12].value,
                         attendanceData: values[13].value,
-                        usersList: values[14].value.allUsers
+                        usersList: values[14].value.allUsers,
+                        vehicleData: values[15].value
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
@@ -224,3 +229,30 @@ const txnExpensesPromise = (closingId, locationCode) => {
             });
     });
 }
+
+
+const vehicleDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        CreditVehicleDao.findAllVehiclesForLocation(locationCode)
+            .then(data => {
+                // Group vehicles by creditlist_id for easier access
+                const vehiclesByCredit = {};
+                data.forEach(vehicle => {
+                    if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                        vehiclesByCredit[vehicle.creditlist_id] = [];
+                    }
+                    vehiclesByCredit[vehicle.creditlist_id].push({
+                        vehicleId: vehicle.vehicle_id,
+                        vehicleNumber: vehicle.vehicle_number,
+                        vehicleType: vehicle.vehicle_type,
+                        companyName: vehicle.company_name
+                    });
+                });
+                resolve(vehiclesByCredit);
+            })
+            .catch(err => {
+                console.error("Error loading vehicles:", err);
+                resolve({});
+            });
+    });
+};
