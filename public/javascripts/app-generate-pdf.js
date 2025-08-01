@@ -1,4 +1,3 @@
-const { request } = require("express");
 
 function generatePDF(currentPage,isPrint = 'N') { 
 

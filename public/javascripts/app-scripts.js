@@ -859,6 +859,7 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'closing_id': document.getElementById('closing_hiddenId').value,
         'bill_no': document.getElementById(creditSaleTag + 'billno-' + creditObjRowNum).value,
         'creditlist_id': getCreditType(creditSaleTag, creditObjRowNum),
+        'vehicle_id': document.getElementById(creditSaleTag + 'vehicle-' + creditObjRowNum).value,  // ADD THIS
         'product_id': document.getElementById(creditSaleTag + 'product-' + creditObjRowNum).value,
         'price': document.getElementById(creditSaleTag + 'price-' + creditObjRowNum).value,
         'price_discount': document.getElementById(creditSaleTag + 'discount-' + creditObjRowNum).value,
@@ -1808,4 +1809,198 @@ function updateLedgerFields(rowCnt) {
     document.getElementById("external_id_" + rowCnt).value = selectedOption.value || '';
     document.getElementById("external_source_" + rowCnt).value = selectedOption.getAttribute("data-source") || '';
     document.getElementById("ledgername_" + rowCnt).value = selectedOption.getAttribute("data-name") || '';
+}
+
+
+// ==================== VEHICLE FUNCTIONALITY - ADD AT END OF app-scripts.js ====================
+
+// Global variable to store vehicle data
+let vehicleDataByCredit = {};
+
+// Initialize vehicle data on page load using jQuery
+$(document).ready(function() {
+    // Store vehicle data passed from backend
+    console.log('Checking for vehicleData:', typeof vehicleData !== 'undefined' ? 'Found' : 'Not found');
+
+    if (typeof vehicleData !== 'undefined') {
+        vehicleDataByCredit = vehicleData;
+    }
+    
+    // Initialize Select2 for existing rows
+    initializeVehicleSelect2();
+});
+
+// Initialize Select2 for vehicle dropdowns
+function initializeVehicleSelect2() {
+    $('.select2-vehicle').select2({
+        placeholder: 'Search vehicle number...',
+        allowClear: true,
+        width: '100%',
+        minimumInputLength: 0,
+        theme: 'default' // or 'bootstrap4' if you're using Bootstrap 4 theme
+    });
+    
+    // Add change event handler for vehicle selection
+    $('.select2-vehicle').on('change', function() {
+        onVehicleSelect(this);
+    });
+}
+
+// Updated function to handle credit selection and load vehicles
+function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
+
+    console.log('updateCreditAndLoadVehicles called with:', {
+        creditListId: obj.value,
+        creditRowPrefix: creditRowPrefix,
+        rowNo: rowNo
+    });
+
+    // First update the hidden credit ID
+    updateHiddenCreditId(obj, creditRowPrefix, rowNo);
+    
+    // Then load vehicles for the selected credit party
+    const creditListId = obj.value;
+    const vehicleSelect = document.getElementById(creditRowPrefix + 'vehicle-' + rowNo);
+
+    console.log('Looking for vehicles for creditListId:', creditListId);
+    console.log('Available vehicle data:', vehicleDataByCredit);
+    
+    // Clear existing options
+    $(vehicleSelect).empty().append('<option value="">Select Vehicle</option>');
+    
+    if (creditListId && vehicleDataByCredit[creditListId]) {
+        // Populate with vehicles for this credit party
+        vehicleDataByCredit[creditListId].forEach(vehicle => {
+            const option = new Option(
+                `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
+                vehicle.vehicleId
+            );
+            $(vehicleSelect).append(option);
+        });
+    }
+    
+    // Trigger Select2 update
+    $(vehicleSelect).trigger('change');
+}
+
+// Function to handle vehicle selection and auto-populate credit party
+function onVehicleSelect(vehicleSelect) {
+    const rowNo = $(vehicleSelect).data('row');
+    const selectedVehicleId = vehicleSelect.value;
+    const prefix = 'credit-';
+    
+    if (!selectedVehicleId) return;
+    
+    // Find which credit party this vehicle belongs to
+    let creditListId = null;
+    for (const [creditId, vehicles] of Object.entries(vehicleDataByCredit)) {
+        if (vehicles.some(v => v.vehicleId == selectedVehicleId)) {
+            creditListId = creditId;
+            break;
+        }
+    }
+    
+    if (creditListId) {
+        // Get the current credit type
+        const creditTypeSelect = document.getElementById(prefix + 'type-' + rowNo);
+        const creditType = creditTypeSelect.value;
+        
+        // Set the credit party dropdown
+        const creditPartySelect = document.getElementById(prefix + creditType + '-' + rowNo);
+        if (creditPartySelect) {
+            creditPartySelect.value = creditListId;
+            // Update hidden credit ID
+            updateHiddenCreditId(creditPartySelect, prefix, rowNo);
+        }
+    }
+}
+
+// Create a wrapper function that calls showAddedRow and then initializes vehicle select2
+function showAddedCreditRow() {
+    // First call the existing showAddedRow function
+    showAddedRow('credit', calculateCreditTotal);
+    
+    // Then initialize Select2 for any new vehicle dropdowns
+    initializeNewVehicleSelects();
+}
+
+// Function to initialize Select2 for newly added rows
+function initializeNewVehicleSelects() {
+    const prefix = 'credit-';
+    const userRowsCnt = document.getElementById(prefix + 'table').rows.length;
+    
+    // Check each row to find newly visible ones that need Select2 initialization
+    for (let i = 0; i < userRowsCnt; i++) {
+        const vehicleSelectId = prefix + 'vehicle-' + i;
+        const vehicleSelect = document.getElementById(vehicleSelectId);
+        
+        if (vehicleSelect && !$(vehicleSelect).hasClass('select2-hidden-accessible')) {
+            // This select hasn't been initialized with Select2 yet
+            $(vehicleSelect).select2({
+                placeholder: 'Search vehicle number...',
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 0,
+                theme: 'default'
+            });
+            
+            // Add change event handler
+            $(vehicleSelect).on('change', function() {
+                onVehicleSelect(this);
+            });
+        }
+    }
+}
+
+// Optional: Validate that selected vehicle belongs to selected credit party
+function validateVehicleSelection(rowNo) {
+    const prefix = 'credit-';
+    const creditListId = getCreditType(prefix, rowNo);
+    const vehicleId = document.getElementById(prefix + 'vehicle-' + rowNo).value;
+    
+    if (vehicleId && creditListId) {
+        const validVehicles = vehicleDataByCredit[creditListId] || [];
+        const isValid = validVehicles.some(v => v.vehicleId == vehicleId);
+        
+        if (!isValid) {
+            showToastMessage({error: 'Selected vehicle does not belong to the credit party'});
+            return false;
+        }
+    }
+    return true;
+}
+
+// Optional: Load vehicles dynamically via AJAX (if you prefer this approach over preloading)
+function loadVehiclesDynamically(creditListId, vehicleSelectId) {
+    const vehicleSelect = $('#' + vehicleSelectId);
+    
+    // Show loading state
+    vehicleSelect.empty().append('<option value="">Loading vehicles...</option>');
+    vehicleSelect.prop('disabled', true);
+    
+    $.ajax({
+        url: '/api/vehicles/' + creditListId,
+        method: 'GET',
+        success: function(response) {
+            vehicleSelect.prop('disabled', false);
+            vehicleSelect.empty().append('<option value="">Select Vehicle</option>');
+            
+            if (response.success && response.vehicles) {
+                response.vehicles.forEach(vehicle => {
+                    vehicleSelect.append(new Option(
+                        `${vehicle.vehicleNumber} (${vehicle.vehicleType})`,
+                        vehicle.vehicleId
+                    ));
+                });
+            }
+            
+            vehicleSelect.trigger('change');
+        },
+        error: function(err) {
+            console.error('Error loading vehicles:', err);
+            vehicleSelect.prop('disabled', false);
+            vehicleSelect.empty().append('<option value="">Error loading vehicles</option>');
+            showToastMessage({error: 'Failed to load vehicles. Please try again.'});
+        }
+    });
 }

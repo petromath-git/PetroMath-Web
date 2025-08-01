@@ -269,6 +269,7 @@ block content
                                                 th(scope="col") Bill #
                                                 th(scope="col") Type
                                                 th(scope="col") Company
+                                                th(scope="col") Vehicle Number
                                                 th(scope="col") Price
                                                 th(scope="col") Price Discount
                                                 th(scope="col") Quantity
@@ -291,7 +292,7 @@ block content
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedRow('credit')") Add credits
+                            button.btn.btn-info(type="button", onClick="showAddedCreditRow()") Add credits
 
                     div.row
                         div.col &nbsp;
@@ -509,5 +510,7 @@ block content
                             div(align="center")
                                 span
                                     button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home_tab\')') CLOSE &raquo;
-
+    script.    
+        var vehicleData = !{JSON.stringify(vehicleData || {})};
+        console.log('Vehicle data from backend:', vehicleData);    
 
