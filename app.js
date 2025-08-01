@@ -1222,6 +1222,7 @@ app.get('/enable-supplier', [isLoginEnsured, security.isAdmin()], function (req,
     });
 });
 
+app.get('/api/vehicles/:creditListId', HomeController.getVehiclesByCreditId);
 
 // error handler - start.
 app.use(function (req, res, next) {

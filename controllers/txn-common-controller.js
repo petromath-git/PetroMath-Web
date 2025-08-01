@@ -1,3 +1,5 @@
+//txn-common-controller.js
+
 const TxnReadDao = require("../dao/txn-read-dao");
 const ProductDao = require("../dao/product-dao");
 const PumpDao = require("../dao/pump-dao");
@@ -107,38 +109,54 @@ const getProductNamesPromise = (productIds) => {
 }
 
 // Show closing records flow: Getting txn credits data based on closing id
+// In txn-common-controller.js
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
+
 const txnCreditsPromise = (closingId) => {
     return new Promise((resolve, reject) => {
         TxnReadDao.getCreditsByClosingId(closingId)
             .then(data => {
                 if (data && data.length > 0) {
-                    let credits = [], productIds = [], creditIds = [];
+                    let credits = [], productIds = [], creditIds = [], vehicleIds = [];
                     data.forEach((read) => {
                         creditIds.push(read.creditlist_id);
                         productIds.push(read.product_id);
+                        if (read.vehicle_id) {
+                            vehicleIds.push(read.vehicle_id);
+                        }
                     });
-                    Promise.allSettled([getProductNamesPromise(productIds), getCreditDetailsPromise(creditIds)])
-                        .then((result) => {
-                            const productData = result[0].value;
-                            const creditListData = result[1].value;
-                            data.forEach((credit) => {
-                                credits.push({
-                                    tCreditId: credit.tcredit_id,
-                                    billNo: credit.bill_no,
-                                    creditListId: credit.creditlist_id,
-                                    productId: credit.product_id,
-                                    creditType: utils.getCreditType(credit.creditlist_id, creditListData),
-                                    companyName: utils.getCompanyName(credit.creditlist_id, creditListData),
-                                    productName: utils.getProductName(credit.product_id, productData),
-                                    price: credit.price,
-                                    priceDiscount: credit.price_discount,
-                                    qty: credit.qty,
-                                    amount: credit.amount,
-                                    notes: credit.notes
-                                });
+                    
+                    Promise.allSettled([
+                        getProductNamesPromise(productIds), 
+                        getCreditDetailsPromise(creditIds),
+                        vehicleIds.length > 0 ? CreditVehicleDao.findByVehicleIds(vehicleIds) : Promise.resolve([])
+                    ])
+                    .then((result) => {
+                        const productData = result[0].value;
+                        const creditListData = result[1].value;
+                        const vehicleData = result[2].value || [];
+                        
+                        data.forEach((credit) => {
+                            const vehicleInfo = vehicleData.find(v => v.vehicle_id === credit.vehicle_id);
+                            
+                            credits.push({
+                                tCreditId: credit.tcredit_id,
+                                billNo: credit.bill_no,
+                                creditListId: credit.creditlist_id,
+                                vehicleId: credit.vehicle_id,
+                                productId: credit.product_id,
+                                creditType: utils.getCreditType(credit.creditlist_id, creditListData),
+                                companyName: utils.getCompanyName(credit.creditlist_id, creditListData),
+                                productName: utils.getProductName(credit.product_id, productData),
+                                price: credit.price,
+                                priceDiscount: credit.price_discount,
+                                qty: credit.qty,
+                                amount: credit.amount,
+                                notes: credit.notes
                             });
-                            resolve(credits);
                         });
+                        resolve(credits);
+                    });
                 } else {
                     resolve([]);
                 }

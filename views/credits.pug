@@ -12,8 +12,7 @@ block content
                     th(scope="col") Short Name
                     th(scope="col") Address
                     th(scope="col") Phone Number
-                    th(scope="col") GST Number
-                    th(scope="col") Balance
+                    th(scope="col") GST Number                    
                     th(scope="col") Vehicles
                     th(scope="col") Disable Credit                    
             tbody
@@ -25,11 +24,10 @@ block content
                         td= val.short_name
                         td= val.address
                         td= val.phoneno
-                        td= val.gst
-                        - var balance = val.balance.toLocaleString('en', {minimumFractionDigits: 2});
-                        td Rs. #{balance}
+                        td= val.gst                                                
                         td
-                            button.btn.btn-info(onclick=`viewVehicles('${val.id}')`) View Vehicles
+                            button.btn.btn-info(onclick=`viewVehicles('${val.id}')`)
+                                span.oi.oi-eye
                         td
                             div.align-items-start
                                 button.btn.btn-info(id="disable-credit-"+index, onclick="disableCredit('"+index+"', '"+ val.id +"')")

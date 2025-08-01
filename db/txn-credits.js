@@ -20,6 +20,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'creditlist_id',
             type: DataTypes.INTEGER
         },
+        vehicle_id: {  
+            field: 'vehicle_id',
+            type: DataTypes.INTEGER
+        },
         product_id: {
             field: 'product_id',
             type: DataTypes.INTEGER
