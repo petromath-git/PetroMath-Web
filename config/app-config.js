@@ -23,6 +23,7 @@ cashSaleTypeCodes.set(cashSaleTypes[1], 'OUT');
 const CASHIER_ROLES = ["Cashier"];
 const MANAGER_ROLES = ["Manager"];
 const ADMIN_ROLES = ["admin"];
+const SUPERUSER_ROLES = ["SuperUser"];
 
 const PRODUCT_PUMPS = [MS_DESC, HSD_DESC, XMS_DESC];
 const PRODUCT_2T = [POUCH_DESC, LOOSE_DESC];
@@ -178,7 +179,7 @@ module.exports = {
       cashSaleTypes: cashSaleTypes,
       cashSaleTypeCodes: cashSaleTypeCodes,
       receiptTypes: RECEIPT_TYPES,
-      adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES], 
+      adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES, ...SUPERUSER_ROLES], 
       tankQuantity: ['4','8','12','5','10'],
       productUnits: ['LIT', 'NOS'],
       decantTimelists: ['0.00','0.30','1.00','1.30','2.00','2.30','3.00','3.30','4.00','4.30','5.00','5.30','6.00','6.30','7.00','7.30',

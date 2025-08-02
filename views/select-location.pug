@@ -1,0 +1,24 @@
+extends layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-md-6
+        .card
+          .card-header.bg-info.text-white.text-center
+            h2.mb-0 Select Location
+          .card-body
+            
+            // Form to select a location
+            form(method='POST', action='/select-location')
+              .form-group.mb-3
+                label.form-label(for='location') Location:
+                select.form-control(name='location', id='location', required)
+                  each location in locations
+                    option(value=location.location_code, selected=location.location_code === selectedLocation) #{location.location_name}
+              
+              .row.g-2
+                .col-6
+                  button.btn.btn-primary.w-100(type='submit') Set Location
+                .col-6
+                  button.btn.btn-secondary.w-100(type='button', onclick="window.location.href='/home'") Cancel
