@@ -92,6 +92,7 @@ const PersonDao = require("./dao/person-dao");
 var CreditDao = require("./dao/credits-dao");
 const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
+const LocationDao = require("./dao/location-dao");
 
 db.sequelize.sync();
 // ORM DB - end
@@ -836,6 +837,13 @@ app.post('/login', function(req, res, next) {
                 console.error("Error logging login:", error);
             }
 
+
+             // Check if the user is a superuser
+             if (user.Role === 'SuperUser') {
+                // Redirect to location selection page if superuser
+                return res.redirect('/select-location');
+            }
+
             if(user.Role === 'Customer') {              
                 return res.redirect('/home-customer');
                         }
@@ -1223,6 +1231,51 @@ app.get('/enable-supplier', [isLoginEnsured, security.isAdmin()], function (req,
 });
 
 app.get('/api/vehicles/:creditListId', HomeController.getVehiclesByCreditId);
+
+
+app.get('/select-location', isLoginEnsured, async function (req, res) {
+    
+    
+    
+    // Ensure only superusers can access this route
+    if (req.user.Role !== 'SuperUser') {
+        return res.redirect('/');
+    }
+
+    
+
+    try {
+        // Fetch locations using the LocationDao
+        const availableLocations = await LocationDao.findAllLocations();
+
+        // Render the select-location view with the available locations
+        res.render('select-location', {
+            title: 'Select Location',
+            locations: availableLocations,
+            selectedLocation: req.user.location_code
+        });
+    } catch (error) {
+        console.error("Error fetching locations:", error);
+        res.status(500).send("An error occurred while fetching locations.");
+    }
+});
+
+
+app.post('/select-location', isLoginEnsured, function (req, res) {
+    // Ensure only superusers can access this route
+    if (req.user.Role !== 'SuperUser') {
+        return res.redirect('/');
+    }
+
+    console.log("User attempting to set location:", req.user);
+    // Store the selected location in the session
+    req.user.location_code = req.body.location;
+
+    console.log("User selected location:", req.user.location_code);
+
+    // Redirect to home or dashboard after selecting the location
+    res.redirect('/home');
+});
 
 // error handler - start.
 app.use(function (req, res, next) {

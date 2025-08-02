@@ -212,7 +212,7 @@ block content
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
                 document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
                 document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Cashflow Balance','Denomination Total','Excess/Shortage'],"col-sm-8 mx-auto");
-                  document.getElementById('creditoutstanding-table-container').innerHTML = renderTable(CreditsummarylistFromServer,creditSummaryTitle,['Balance'],"col-sm-6 mx-auto");
+                  document.getElementById('creditoutstanding-table-container').innerHTML = renderTable(CreditsummarylistFromServer,creditSummaryTitle,['Balance','Interest Incurred (Today)'],"col-sm-6 mx-auto");
                 
                 // Extract dynamic column headers from the server-provided data
                 const dynamicHeaders = Object.keys(monthlyOfftakeFromServer[0]); // e.g., ["Product", "Jan 2025", "Dec 2024", "Jan 2024"]

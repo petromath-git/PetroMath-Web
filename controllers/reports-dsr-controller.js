@@ -485,20 +485,27 @@ module.exports = {
       
       data.forEach((creditSummaryData) => {
           // Convert ClosingData to number before adding
-          totalBalance += Number(creditSummaryData.ClosingData);
+          const balance = Number(creditSummaryData.ClosingData);
+          totalBalance += balance;
+          
+
+           // Calculate daily interest at 12% per annum
+          const interestIncurred = (balance * 0.12) / 365;
       
           // If it's a special day, push all data
           if (isSpecialDay && (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10)) {
               Creditsummarylist.push({
                   'Credit Customer': creditSummaryData.company_name,
-                  'Balance': creditSummaryData.ClosingData
+                  'Balance': creditSummaryData.ClosingData,
+                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
               });
           } 
           // On other days, limit to 3 entries only
           else if ((creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) && count < 3) {
               Creditsummarylist.push({
                   'Credit Customer': creditSummaryData.company_name,
-                  'Balance': creditSummaryData.ClosingData
+                  'Balance': creditSummaryData.ClosingData,
+                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
               });
               count++;
           }
@@ -507,7 +514,8 @@ module.exports = {
               // Add total as the last row
         Creditsummarylist.push({
           'Credit Customer': 'Total(All Customer Balances)',
-          'Balance': totalBalance
+          'Balance': totalBalance,
+          'Interest Incurred (Today)': (totalBalance * 0.12 / 365).toFixed(2)
         });
               
 
