@@ -128,6 +128,13 @@ module.exports = {
             { where: { Person_id: personId } }
         );
     },
+    findPersonByCreditlistId: (creditlist_id) => {
+        return Person.findOne({
+            where: { 
+                creditlist_id: creditlist_id 
+            }
+        });
+    },
 
 
 

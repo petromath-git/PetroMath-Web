@@ -19,7 +19,8 @@ block content
                 each val, index in credits
                     tr(id='credit-' + index)
                         th(scope="row")= index + 1
-                        td= val.name
+                        td
+                            span(title="Username: " + val.username + ", Password: " + val.password) #{val.name}
                         td= val.type
                         td= val.short_name
                         td= val.address
@@ -32,7 +33,6 @@ block content
                             div.align-items-start
                                 button.btn.btn-info(id="disable-credit-"+index, onclick="disableCredit('"+index+"', '"+ val.id +"')")
                                     span.oi.oi-delete
-                                    
                 - var rowCnt = 0
                 while rowCnt < 1
                     +addMasterCredit(rowCnt++)
