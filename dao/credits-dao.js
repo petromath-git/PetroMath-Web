@@ -101,4 +101,28 @@ module.exports = {
             { where: { creditlist_id: creditID } }
         );
     },
+
+    findDigitalCredits: (locationCode) => {
+        const currentDate = new Date();
+        return Credit.findAll({
+            attributes: ['creditlist_id', 'Company_Name', 'type', 'card_flag'],
+            where: {
+                location_code: locationCode,
+                card_flag: 'Y',  // Only digital companies
+                type: 'Credit',
+                effective_start_date: {
+                    [Op.lte]: currentDate
+                },
+                [Op.or]: [
+                    { effective_end_date: null },
+                    {
+                        effective_end_date: {
+                            [Op.gte]: currentDate
+                        }
+                    }
+                ]
+            },
+            order: [Sequelize.literal('Company_Name')],
+        });
+    },
 };

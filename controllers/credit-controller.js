@@ -50,8 +50,7 @@ module.exports = {
                                         gst: credit.gst,
                                         short_name: credit.short_name,
                                         balance: credit.Opening_Balance,
-                                        username: person.User_Name || 'Not Available',   // Use 'N/A' if no username found
-                                        password: person.Password || 'Not Available'    // Use 'N/A' if no password found
+                                        username: person.User_Name || 'Not Available'
                                     });
                                 } else if (!person) {
                                     // If no matching person is found, log and provide fallback values
@@ -65,8 +64,7 @@ module.exports = {
                                         gst: credit.gst,
                                         short_name: credit.short_name,
                                         balance: credit.Opening_Balance,
-                                        username: 'Not Available',  // Fallback value for username
-                                        password: 'Not Available'   // Fallback value for password
+                                        username: 'Not Available'
                                     });
                                 }
                             })
@@ -82,8 +80,7 @@ module.exports = {
                                     gst: credit.gst,
                                     short_name: credit.short_name,
                                     balance: credit.Opening_Balance,
-                                    username: 'N/A',  // Fallback value for username
-                                    password: 'N/A'   // Fallback value for password
+                                    username: 'N/A'
                                 });
                             });
                     });
