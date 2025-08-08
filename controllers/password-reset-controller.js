@@ -3,7 +3,7 @@ const { Person } = require('../db/db-connection');
 const PersonDao = require('../dao/person-dao'); 
 
 // Render the password reset form
-exports.getPasswordResetPage = (req, res) => {
+exports.getPasswordResetPage = (req, res,extraData = {}) => {
     const locationCode = req.user.location_code;  // Get the logged-in user's location code
     const userRole = req.user.Role;  // Get the logged-in user's role
 
@@ -12,7 +12,7 @@ exports.getPasswordResetPage = (req, res) => {
 
     // SuperUser can see all users
     if (userRole === 'SuperUser') {
-        usersQuery = PersonDao.findUsers(locationCode);
+        usersQuery = PersonDao.findUsersAndCreditList(locationCode);
     }
 
     // Admin can see all users except SuperUser
@@ -51,7 +51,8 @@ exports.getPasswordResetPage = (req, res) => {
 
             res.render('reset-password', {
                 title: 'Reset Password',
-                users: formattedUsers  // Pass the formatted list of users to the template
+                users: formattedUsers,
+                ...extraData
             });
         })
         .catch(err => {
@@ -70,7 +71,7 @@ exports.resetPassword = async (req, res) => {
 
     // Validate if the passwords match
     if (newPassword !== confirmPassword) {
-        return res.render('reset-password', { message: 'Passwords do not match.' });
+        return exports.getPasswordResetPage(req, res, { message: 'Passwords do not match.' });
     }
 
     try {

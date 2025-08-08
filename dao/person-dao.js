@@ -157,6 +157,25 @@ module.exports = {
             }
         });
     },
+    findUsersAndCreditList: (locationCode) => {
+        if (locationCode) {
+            return Person.findAll({
+                where: {
+                    [Op.and]: [
+                        { 'location_code': locationCode },
+                        { 'effective_end_date': { [Op.gte]: utils.currentDate() } }
+                    ]
+                },
+                order: [
+                    // Custom ordering: Role 'Customer' should come last
+                    [Sequelize.literal(`CASE WHEN "Role" = 'Customer' THEN 1 ELSE 0 END`), 'ASC'],
+                    ['role', 'ASC']
+                ]
+            });
+        } else {
+            return Person.findAll();
+        }
+    },
 
 
 

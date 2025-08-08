@@ -124,4 +124,36 @@ module.exports = {
             where: { location_code: locationCode }
         });
     },
+
+    findClosingsByCashflowId: (locationCode, cashflowId) => {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    c.closing_id,
+                    c.closing_date,
+                    c.cashier_id,
+                    c.cash,
+                    c.notes,
+                    c.closing_status,
+                    c.cashflow_id,
+                    p.Person_Name as cashier_name,
+                    get_closing_collection(c.closing_id, c.location_code) as total_collection
+                FROM t_closing c
+                LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
+                WHERE c.location_code = ? 
+                AND c.cashflow_id = ?
+                ORDER BY c.closing_date ASC
+            `;
+            
+            db.sequelize.query(query, {
+                replacements: [locationCode, cashflowId],
+                type: db.sequelize.QueryTypes.SELECT
+            }).then(results => {
+                resolve(results);
+            }).catch(err => {
+                console.error('Error fetching closings by cashflow_id:', err);
+                reject(err);
+            });
+        });
+    },
 };

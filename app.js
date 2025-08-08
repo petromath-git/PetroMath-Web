@@ -265,6 +265,11 @@ app.post('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditReport(req, res, next);
 });
 
+app.post('/api/reports-indiv-customer', function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getApiCreditReport(req, res, next);
+});
+
 
 app.get('/logout', function (req, res) {
     req.logout(function (err) {
