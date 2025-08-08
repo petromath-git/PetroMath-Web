@@ -4,6 +4,7 @@ const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
 const dateFormat = require("dateformat");
+const bcrypt = require('bcrypt');
 
 module.exports = {
     findUsers: (locationCode) => {
