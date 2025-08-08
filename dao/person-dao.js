@@ -17,7 +17,7 @@ module.exports = {
 
                     ]
                 }, order: [
-                    ['effective_start_date', 'ASC']
+                    ['role', 'ASC']
                 ]
             });
         } else {
@@ -58,7 +58,24 @@ module.exports = {
         return result;
     },
     create: (user) => {
-        return Person.create(user);
+        return new Promise((resolve, reject) => {
+            // Hash the user's password before saving
+            bcrypt.hash(user.Password, 12, (err, hashedPassword) => {
+                if (err) {
+                    return reject('Error hashing password');
+                }
+
+                // Set the hashed password in the user object
+                user.Password = hashedPassword;
+
+                // Create the new user with the hashed password
+                Person.create(user)
+                    .then(createdUser => {
+                        resolve(createdUser); // Return the created user
+                    })
+                    .catch(reject); // In case of an error during user creation
+            });
+        });
     },
     changePwd: (user, currentPassword) => {
         return new Promise((resolve, reject) => {
@@ -76,6 +93,11 @@ module.exports = {
             });
         });
 
+    },
+    findUserById: (userId) => {
+        return Person.findOne({
+            where: { Person_id: userId }
+        });
     },
     findDrivers: (locationCode) => {
         return Person.findAll({
@@ -134,6 +156,25 @@ module.exports = {
                 creditlist_id: creditlist_id 
             }
         });
+    },
+    findUsersAndCreditList: (locationCode) => {
+        if (locationCode) {
+            return Person.findAll({
+                where: {
+                    [Op.and]: [
+                        { 'location_code': locationCode },
+                        { 'effective_end_date': { [Op.gte]: utils.currentDate() } }
+                    ]
+                },
+                order: [
+                    // Custom ordering: Role 'Customer' should come last
+                    [Sequelize.literal(`CASE WHEN "Role" = 'Customer' THEN 1 ELSE 0 END`), 'ASC'],
+                    ['role', 'ASC']
+                ]
+            });
+        } else {
+            return Person.findAll();
+        }
     },
 
 

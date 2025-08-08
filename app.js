@@ -16,7 +16,8 @@ const fs = require('fs');
 const utils = require("./utils/app-utils");
 const { getPDF } = require('./utils/app-pdf-generator');
 const { getBrowser } = require('./utils/browserHelper');
-
+const MenuAccessDao = require('./dao/menu-access-dao'); 
+const bcrypt = require('bcrypt');
 
 
 // Passport - configuration - start....
@@ -29,36 +30,62 @@ passport.use(new LocalStrategy(
         Person.findOne({ where: { 'User_name': username } })
             .then(async data => {
                 try {
-                    if (data && password === (data.Password)) {
-                        let now = new Date();
-                        const today_date = dateFormat(now, "yyyy-mm-dd");
+                    if (data) {
+                        // Compare password using bcrypt
+                        const isPasswordValid = await bcrypt.compare(password, data.Password);
                         
-                        if (data.effective_end_date > today_date) {
-                            var userInfo = new UserData(data, security.isAdminChk(data));
-                            done(null, userInfo);
+                        if (isPasswordValid) {
+                            let now = new Date();
+                            const today_date = dateFormat(now, "yyyy-mm-dd");
+                            
+                            if (data.effective_end_date > today_date) {
+                                // Fetch menu access from DAO
+                                const role = data.Role;
+                                const location = data.location_code;
+                                const isAdmin = security.isAdminChk(data);
+
+                                const menus = await MenuAccessDao.getAllowedMenusForUser(role, location);
+                                const allowedMenus = menus.map(m => m.menu_code);
+                                const menuDetails = menus;
+
+
+                                console.log("menus:", menus);    
+                                console.log("Allowed Menus for user:", allowedMenus);
+                                console.log("Menu Details for user:", menuDetails);
+
+                                // Construct enriched UserData
+                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails);
+
+                                console.log("User authenticated successfully:", JSON.stringify(userInfo, null, 2));
+
+                                return done(null, userInfo);
+                            } else {
+                                // Account is disabled
+                                done(null, false, { 
+                                    message: `${data.User_Name} Your User Account is Disabled`,
+                                    Person_id: data.Person_id,
+                                    location_code: data.location_code
+                                });
+                            }
                         } else {
-                            // We'll log disabled account in the route handler
+                            // Password mismatch
                             done(null, false, { 
-                                message: `${data.User_Name} Your User Account is Disabled`,
-                                Person_id: data.Person_id,
-                                location_code: data.location_code
+                                message: 'User name or password is incorrect',
+                                Person_id: data ? data.Person_id : null,
+                                location_code: data ? data.location_code : null
                             });
                         }
                     } else {
-                        // We'll log failed login in the route handler
-                        done(null, false, { 
-                            message: 'User name or password is incorrect',
-                            Person_id: data ? data.Person_id : null,
-                            location_code: data ? data.location_code : null
-                        });
+                        // No user found
+                        done(null, false, { message: 'User name or password is incorrect' });
                     }
                 } catch (err) {
-                    console.warn("err in app :::: " + err + err.toString());
+                    console.warn("Error in authentication: " + err);
                     done(null, false, { message: err.toString() });
                 }
             })
             .catch(err => {
-                console.warn("err in app :::: " + err + err.toString());
+                console.warn("Error in app :::: " + err);
                 done(null, false, { message: err.toString() });
             });
     }));
@@ -133,6 +160,7 @@ const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
 const vehicleRoutes = require('./routes/vehicle-routes'); 
+const passwordRoutes = require('./routes/password-reset-routes'); 
 
 
 app.set('views', path.join(__dirname, 'views'));
@@ -147,6 +175,7 @@ app.use(require('express-session')({ secret: 'keyboard cat', resave: false, save
 app.use(passport.initialize());
 app.use(passport.session());
 app.use('/vehicles', vehicleRoutes);
+app.use('/password', passwordRoutes);
 
 // Add method-override here
 const methodOverride = require('method-override');
@@ -160,9 +189,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
 
-app.use((req, res, next) => {
-    // If the user is logged in and has a creditlist_id, set the companyName
-    console.log("User data in middleware:", req.user);
+app.use((req, res, next) => {    
+    
     if (req.user && req.user.creditlist_id) {
         const creditlistId = req.user.creditlist_id;
 
@@ -227,14 +255,19 @@ app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {
     req.body.toClosingDate = toClosingDate;
     
 
-    console.log('reports-indiv-customer: User Role:', req.user.Role);
+    
     reportsController.getCreditReport(req, res, next);
-    console.log('reports-indiv-customer: User Role:', req.user.Role);
+    
 });
 
 app.post('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
     req.body.reportType = 'CreditDetails';
     reportsController.getCreditReport(req, res, next);
+});
+
+app.post('/api/reports-indiv-customer', function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getApiCreditReport(req, res, next);
 });
 
 
@@ -1266,12 +1299,8 @@ app.post('/select-location', isLoginEnsured, function (req, res) {
     if (req.user.Role !== 'SuperUser') {
         return res.redirect('/');
     }
-
-    console.log("User attempting to set location:", req.user);
     // Store the selected location in the session
     req.user.location_code = req.body.location;
-
-    console.log("User selected location:", req.user.location_code);
 
     // Redirect to home or dashboard after selecting the location
     res.redirect('/home');
