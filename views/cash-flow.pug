@@ -13,7 +13,58 @@ block content
     input(type='hidden' id='cashflowId_hiddenId' value=cashflowId)
     input(type='hidden' id='user' value=user)
     input(type='hidden' id='denominationValuesJson_hiddenValue' value= denominationValuesJson)
+    
+    //- NEW: Shift Closings Summary Table
+    if shiftClosings && shiftClosings.length > 0
+        div.row.mb-4
+            div.col-12
+                div.card
+                    div.card-header.text-white.bg-dark Shift Closings Contributing to this Cash Flow
+                    div.card-body
+                        div.table-responsive
+                            table.table
+                                thead.thead-light
+                                    tr
+                                        th.text-center Closing ID
+                                        th.text-center Closing Date
+                                        th.text-center Cashier Name
+                                        th.text-center Total Collection
+                                        th.text-center Status
+                                        th.text-center Notes
+                                tbody
+                                    - var totalCollectionSum = 0;
+                                    each closing in shiftClosings
+                                        tr
+                                            td.text-center= closing.closing_id
+                                            td.text-center= new Date(closing.closing_date).toLocaleDateString('en-IN')
+                                            td.text-center= closing.cashier_name || 'N/A'
+                                            td.text-right ₹ #{parseFloat(closing.total_collection || 0).toFixed(2)}
+                                            td.text-center
+                                                if closing.status === 'CLOSED'
+                                                    span.badge.badge-success #{closing.status}
+                                                else if closing.status === 'DRAFT'
+                                                    span.badge.badge-warning #{closing.status}
+                                                else
+                                                    span.badge.badge-secondary #{closing.status}
+                                            td.text-center= closing.notes || '-'
+                                        - totalCollectionSum += parseFloat(closing.total_collection || 0);
+                                //- Summary Row
+                                tr.bg-info.text-white.font-weight-bold
+                                    td.text-center(colspan="3") 
+                                        strong TOTAL (#{shiftClosings.length} shifts)
+                                    td.text-right
+                                        strong ₹ #{totalCollectionSum.toFixed(2)}
+                                    td(colspan="2") &nbsp;
+    else
+        //- No closings found message
+        div.row.mb-4
+            div.col-12
+                div.alert.alert-warning.text-center
+                    i.fa.fa-info-circle
+                    |  No shift closings found for this cash flow period.
+
     div
+    //- EXISTING: Credit/Debit Tables (unchanged)
     div.row#cashflow-txn-data(class=divClass)
         div.col-6
             div.card

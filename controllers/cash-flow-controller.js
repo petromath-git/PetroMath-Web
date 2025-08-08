@@ -196,15 +196,17 @@ function collectCreditAndDebits(tableJoinData) {
 }
 
 
-function getCashFlowDetailsPromise (cashflowDetails, req, res, next) {
+function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
     Promise.allSettled([
         cashflowDetails,
         cashflowDao.findCashflowTxnById(req.user.location_code, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[0])),
         cashflowDao.findCashflowTxnById(req.user.location_code, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[1])),
-        cashFlowTxnDenominationPromise(req.query.id)
-    ]).then( values => {
+        cashFlowTxnDenominationPromise(req.query.id),
+        getClosingDataForCashflow(req.query.id, req.user.location_code) // Add this new promise
+    ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
+        
         res.render('cash-flow', {
             title: "CashFlow : " + dateFormat(values[0].value.cashflow_date, 'dd-mmm-yyyy'),
             user: req.user,
@@ -215,7 +217,9 @@ function getCashFlowDetailsPromise (cashflowDetails, req, res, next) {
             cashFlowCredits: creditData.data,
             cashFlowDebits: debitData.data,
             creditOptions: creditData.options,
-            debitOptions: debitData.options,});
+            debitOptions: debitData.options,
+            shiftClosings: values[4].value || [] // Add the closing data
+        });
     });
 }
 
@@ -322,3 +326,23 @@ function getDenomTxn(id, denominationTxn) {
     return returnTxn;
 }
 
+function getClosingDataForCashflow(cashflowId, locationCode) {
+    return new Promise((resolve, reject) => {        
+        cashflowDao.findClosingsByCashflowId(locationCode, cashflowId)
+            .then(closings => {                
+                const closingData = closings.map(closing => {
+                    return {
+                        closing_id: closing.closing_id,
+                        closing_date: closing.closing_date,
+                        cashier_name: closing.cashier_name || closing.Person_Name, 
+                        total_collection: parseFloat(closing.total_collection || 0),
+                        cash_amount: closing.cash,
+                        notes: closing.notes,
+                        status: closing.closing_status
+                    };
+                });
+                resolve(closingData);
+            })
+            .catch(err => reject(err));
+    });
+}
