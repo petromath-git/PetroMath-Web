@@ -67,15 +67,33 @@ module.exports = {
     txnClosingPromise: (closingId) => {
         return txnClosingPromise(closingId);
     },
-    closeData: (req, res, next) => {
-        TxnWriteDao.finishClosing(req.query.id).then(
-            (data) => {
-                if(data == 1) {
-                    res.status(200).send({message: 'The closing record is made final.'});
-                } else {
-                    res.status(500).send({error: 'Error while closing the record.'});
-                }
+    closeData: async (req, res, next) => {
+        try {
+            const closingId = req.query.id;
+            
+            // Call the updated async finishClosing function
+            const data = await TxnWriteDao.finishClosing(closingId);
+            
+            // Check if update was successful (data is array [affectedRows])
+            if (data && data[0] >= 1) {
+                res.status(200).send({
+                    message: 'The closing record is made final.',
+                    success: true
+                });
+            } else {
+                res.status(500).send({
+                    error: 'Error while closing the record. No records updated.',
+                    success: false
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error in closeData:', error);
+            res.status(500).send({
+                error: 'Error while closing the record: ' + error.message,
+                success: false
             });
+        }
     },
 }
 
