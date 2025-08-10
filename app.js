@@ -48,15 +48,8 @@ passport.use(new LocalStrategy(
                                 const allowedMenus = menus.map(m => m.menu_code);
                                 const menuDetails = menus;
 
-
-                                console.log("menus:", menus);    
-                                console.log("Allowed Menus for user:", allowedMenus);
-                                console.log("Menu Details for user:", menuDetails);
-
                                 // Construct enriched UserData
-                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails);
-
-                                console.log("User authenticated successfully:", JSON.stringify(userInfo, null, 2));
+                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails);                               
 
                                 return done(null, userInfo);
                             } else {

@@ -5,7 +5,7 @@ const { QueryTypes } = require('sequelize');
 
 
 const getAllowedMenusForUser = async (role, locationCode) => {
-  console.log("Fetching allowed menus for role:", role, "and location code:", locationCode);
+  
   
   const results = await db.sequelize.query(
     `SELECT menu_code, menu_name, url_path, parent_code, sequence
@@ -18,7 +18,7 @@ const getAllowedMenusForUser = async (role, locationCode) => {
     }
   );
   
-  console.log("Query results:", results);
+  
   return results;
 };
 

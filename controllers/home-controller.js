@@ -13,6 +13,7 @@ const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
 const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
+const db = require("../db/db-connection");
 
 module.exports = {
 
@@ -32,7 +33,9 @@ module.exports = {
                     txnController.suspenseDataPromise(locationCode),
                     expenseDataPromise(locationCode),
                     personAttendanceDataPromise(locationCode),
-                    vehicleDataPromise(locationCode)])
+                    vehicleDataPromise(locationCode),
+                //    digitalCompanyDataPromise(locationCode)
+                ])
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
@@ -48,7 +51,8 @@ module.exports = {
                             suspenseValues: values[4].value,
                             expenseValues: values[5].value.expenses,
                             usersList: values[6].value.allUsers,
-                            vehicleData: values[7].value
+                            vehicleData: values[7].value,
+                  //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
                     console.warn("Error while getting data using promises " + err.toString());
@@ -286,96 +290,201 @@ module.exports = {
 };
 
 const getHomeData = (req, res, next) => {
+    let closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
+    let closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
     const locationCode = req.user.location_code;
-    let closingQueryFromDate = req.query.fromClosingDate;
-    let closingQueryToDate = req.query.toClosingDate;
-    if(closingQueryFromDate === undefined) closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    if(closingQueryToDate === undefined) closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
+
+    if(req.query.fromClosingDate) {
+        closingQueryFromDate = req.query.fromClosingDate;
+    }
+    if(req.query.toClosingDate) {
+        closingQueryToDate = req.query.toClosingDate;
+    }
+
     if(req.user.isAdmin) {
-        Promise.allSettled([getClosingDataByDate(locationCode, closingQueryFromDate, closingQueryToDate),
+        Promise.allSettled([
+            getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
             getDraftsCountBeforeDays(locationCode, config.APP_CONFIGS.maxAllowedDraftsDays),
-            getDeadlineWarningMessage(locationCode)])
-            .then(values => {
-                res.render('home', {
-                    title: 'Shift Closing',
-                    user: req.user,
-                    config: config.APP_CONFIGS,
-                    closingValues: values[0].value,
-                    currentDate: utils.currentDate(),
-                    fromClosingDate: closingQueryFromDate,
-                    toClosingDate: closingQueryToDate,
-                    draftsCnt: values[1].value,
-                    draftDaysCnt: values[2].value,
-                    deadlineMessage: values[3].value
-                });
-                
-            });
-    } else {
-        // TODO: fix after person id is added to view
-        getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate)
-            .then(data => {
+            getDeadlineWarningMessage(locationCode),
+            getLocationProductColumns(locationCode)
+        ]).then(values => {
             res.render('home', {
+                title: 'Shift Closing',
                 user: req.user,
                 config: config.APP_CONFIGS,
-                closingValues: data,
+                closingValues: values[0].value,
                 currentDate: utils.currentDate(),
                 fromClosingDate: closingQueryFromDate,
                 toClosingDate: closingQueryToDate,
+                draftsCnt: values[1].value,
+                draftDaysCnt: values[2].value,
+                deadlineMessage: values[3].value,
+                productColumns: values[4].value
             });
+        }).catch(error => {
+            console.error('Error in getHomeData:', error);
+            next(error);
+        });
+    } else {
+        Promise.allSettled([
+            getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate),
+            getLocationProductColumns(locationCode)
+        ]).then(values => {
+            res.render('home', {
+                title: 'Shift Closing',
+                user: req.user,
+                config: config.APP_CONFIGS,
+                closingValues: values[0].value,
+                currentDate: utils.currentDate(),
+                fromClosingDate: closingQueryFromDate,
+                toClosingDate: closingQueryToDate,
+                productColumns: values[1].value
+            });
+        }).catch(error => {
+            console.error('Error in getHomeData for non-admin:', error);
+            next(error);
         });
     }
 };
 
 // Home page: Get closings order by closing  id
-const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDate,closingQueryToDate) => {
+const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDate, closingQueryToDate) => {
     return new Promise((resolve, reject) => {
         let closings = [];
         TxnReadDao.getPersonsClosingDetailsByDate(personName, locationCode, closingQueryFromDate, closingQueryToDate)
             .then(data => {
                 data.forEach((closingData) => {
-                    closings.push({closingId: closingData.closing_id,
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
                         cashierName: closingData.person_name,
                         closingDate: closingData.closing_date_formatted,
-                        msData: closingData.MS,
-                        hsdData: closingData.HSD,
-                        xmsData: closingData.XMS,
-                        l2tData: closingData.l_2t,
-                        p2tData: closingData.p_2t,
-                        expenseData: closingData.ex_short,
                         period: closingData.period,
-                        closingStatus: closingData.closing_status
+                        closingStatus: closingData.closing_status,
+                        expenseData: closingData.ex_short || 0
+                    };
+
+                    // Handle dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose', 'p_2t'].includes(key)) {
+                            dynamicClosingData[key] = closingData[key] || 0;
+                        }
                     });
+
+                    // Handle 2T products
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = closingData.loose || 0;
+                    }
+                    if (closingData.p_2t !== undefined) {
+                        dynamicClosingData['2T_POUCH'] = closingData.p_2t || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
                 });
                 resolve(closings);
-            });
+            })
+            .catch(reject);
     });
 }
 
+const getLocationProductColumns = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        const productQuery = `
+            SELECT DISTINCT product_code 
+            FROM m_pump 
+            WHERE location_code = :locationCode 
+            AND product_code IS NOT NULL 
+            AND effective_end_date > NOW()
+            ORDER BY product_code
+        `;
+        
+        db.sequelize.query(productQuery, {
+            replacements: { locationCode: locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        }).then(pumpProducts => {
+            let productColumns = [];
+            
+            // Add pump products
+            pumpProducts.forEach(product => {
+                productColumns.push({
+                    key: product.product_code,
+                    label: product.product_code,
+                    type: 'pump'
+                });
+            });
+            
+            // UPDATED: Only check for 2T LOOSE
+            const twoTQuery = `
+                SELECT COUNT(*) as count 
+                FROM m_product 
+                WHERE location_code = :locationCode 
+                AND product_name = '2T LOOSE'
+            `;
+            
+            db.sequelize.query(twoTQuery, {
+                replacements: { locationCode: locationCode },
+                type: db.Sequelize.QueryTypes.SELECT
+            }).then(twoTResult => {
+                // UPDATED: Only add 2T Loose if it exists
+                if (twoTResult[0].count > 0) {
+                    productColumns.push({
+                        key: '2T_LOOSE',
+                        label: '2T Loose',
+                        type: '2t'
+                    });
+                }
+                
+                resolve(productColumns);
+            }).catch(() => resolve(productColumns));
+        }).catch(() => resolve([]));
+    });
+};
+
 // Home page: Get closings order by closing  id
-const getClosingDataByDate = (locationCode, closingQueryFromDate,closingQueryToDate) => {
+const getClosingDataByDate = (locationCode, closingQueryFromDate, closingQueryToDate) => {
     return new Promise((resolve, reject) => {
         let closings = [];
-        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate,closingQueryToDate)
+        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
             .then(data => {
                 data.forEach((closingData) => {
-                    closings.push({closingId: closingData.closing_id,
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
                         cashierName: closingData.person_name,
                         closingDate: closingData.closing_date_formatted,
-                        msData: closingData.MS,
-                        hsdData: closingData.HSD,
-                        xmsData: closingData.XMS,
-                        l2tData: closingData.l_2t,
-                        p2tData: closingData.p_2t,
-                        expenseData: closingData.ex_short,
                         period: closingData.period,
-                        closingStatus: closingData.closing_status
+                        closingStatus: closingData.closing_status,
+                        expenseData: closingData.ex_short || 0
+                    };
+
+                    // Handle dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose', 'p_2t'].includes(key)) {
+                            dynamicClosingData[key] = closingData[key] || 0;
+                        }
                     });
+
+                    // Handle 2T products
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = closingData.loose || 0;
+                    }
+                    if (closingData.p_2t !== undefined) {
+                        dynamicClosingData['2T_POUCH'] = closingData.p_2t || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
                 });
                 resolve(closings);
-            });
+            })
+            .catch(reject);
     });
 }
+
+
+
 
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
@@ -525,6 +634,70 @@ const vehicleDataPromise = (locationCode) => {
             });
     });
 };
+
+
+const digitalCompanyDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        let companies = [];
+        CreditDao.findDigitalCredits(locationCode)  // Need to create this DAO method
+            .then(data => {
+                data.forEach((credit) => {
+                    companies.push({
+                        creditorId: credit.creditlist_id, 
+                        creditorName: credit.Company_Name, 
+                        card_flag: credit.card_flag
+                    });
+                });
+                resolve(companies);
+            })
+            .catch(err => {
+                console.error("Error loading digital companies:", err);
+                resolve([]);
+            });
+    });
+};
+
+
+const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) => {
+    return new Promise((resolve, reject) => {
+        let closings = [];
+        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
+            .then(data => {
+                data.forEach((closingData) => {
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
+                        cashierName: closingData.person_name,
+                        closingDate: closingData.closing_date_formatted,
+                        period: closingData.period,
+                        closingStatus: closingData.closing_status,
+                        expenseData: parseFloat(closingData.ex_short) || 0
+                    };
+
+                    // Add dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        // UPDATED: Remove p_2t from the exclusion list since we don't want it
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose'].includes(key)) {
+                            dynamicClosingData[key] = parseFloat(closingData[key]) || 0;
+                        }
+                    });
+
+                    // UPDATED: Only handle 2T Loose, remove 2T Pouch
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = parseFloat(closingData.loose) || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
+                });
+                
+                resolve(closings);
+            })
+            .catch(reject);
+    });
+};
+
+
 
 // Add API endpoint for dynamic vehicle loading
 module.exports.getVehiclesByCreditId = (req, res, next) => {
