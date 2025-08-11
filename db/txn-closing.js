@@ -45,6 +45,10 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING,
             defaultValue: 'DRAFT'
         },
+        ex_short: {
+            field: 'ex_short',
+            type: DataTypes.DECIMAL(20, 3)         
+        },
         created_by: {
             field: 'created_by',
             type: DataTypes.STRING
