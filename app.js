@@ -154,6 +154,8 @@ const serverConfig = require(deploymentConfig);
 const app = express();
 const vehicleRoutes = require('./routes/vehicle-routes'); 
 const passwordRoutes = require('./routes/password-reset-routes'); 
+const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
+//const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
 
 app.set('views', path.join(__dirname, 'views'));
@@ -169,6 +171,8 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
+app.use('/reports-tally-daybook', tallyDaybookRoutes);
+//app.use('/auditing-utilities', auditingUtilitiesRoutes);
 
 // Add method-override here
 const methodOverride = require('method-override');
