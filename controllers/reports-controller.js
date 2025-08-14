@@ -46,6 +46,8 @@ module.exports = {
         let credits = [];
         let OpeningBal;
         let closingBal;
+        let totalDebits = 0;
+        let totalCredits = 0;
         let renderData = {};
 
         CreditDao.findAll(locationCode)
@@ -80,17 +82,19 @@ module.exports = {
               const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
 
               if (reportType == 'Creditledger') {
-                let runningBalance = Number(OpeningBal); // Ensure it's a number
+                let runningBalance = Number(OpeningBal); // Ensure it's a number                
               
                 data1.forEach((creditstmtData) => {
-                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number                  
               
                   if (creditstmtData.product_name !== null) {
                     // Debit transaction (purchases increase the balance)
                     runningBalance += transactionAmount;
+                    totalDebits += transactionAmount;
                   } else {
                     // Credit transaction (payments reduce the balance)
                     runningBalance -= transactionAmount;
+                    totalCredits += transactionAmount;
                   }
 
                   
@@ -107,17 +111,19 @@ module.exports = {
                 });
               }
               else {  
-                let runningBalance = Number(OpeningBal); // Ensure it's a number
-              
+                let runningBalance = Number(OpeningBal); // Ensure it's a number                
                 data1.forEach((creditstmtData) => {
-                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number                      
               
                   if (creditstmtData.product_name !== null) {
                     // Debit transaction (purchases increase the balance)
                     runningBalance += transactionAmount;
+                    totalDebits += transactionAmount;
                   } else {
                     // Credit transaction (payments reduce the balance)
                     runningBalance -= transactionAmount;
+                    totalCredits += transactionAmount;
+                    
                   }
               
                   Creditstmtlist.push({
@@ -153,6 +159,8 @@ module.exports = {
                         openingbalance: OpeningBal,
                         closingbalance: closingBal,
                         cidparam: cid, 
+                        totalDebits: totalDebits,
+                        totalCredits: totalCredits
                       }
 
                     if(caller=='notpdf') {
@@ -190,6 +198,8 @@ module.exports = {
                 // let cname = req.body.company_name;
                  let cid;
                  let route;
+                 let totalDebits = 0;
+                 let totalCredits = 0;
          
              
          
@@ -254,17 +264,20 @@ module.exports = {
                        const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
          
                        if (reportType == 'Creditledger') {
-                         let runningBalance = Number(OpeningBal); // Ensure it's a number
+                         let runningBalance = Number(OpeningBal);                          
                        
                          data1.forEach((creditstmtData) => {
-                           let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                           let transactionAmount = Number(creditstmtData.amount); 
                        
                            if (creditstmtData.product_name !== null) {
-                             // Debit transaction (purchases increase the balance)
-                             runningBalance += transactionAmount;
+                              // Debit transaction (purchases increase the balance)
+                              runningBalance += transactionAmount; 
+                              totalDebits += transactionAmount;
+                             
                            } else {
                              // Credit transaction (payments reduce the balance)
                              runningBalance -= transactionAmount;
+                             totalCredits += transactionAmount;
                            }
          
                            
@@ -282,6 +295,7 @@ module.exports = {
                        }
                        else {  
                          let runningBalance = Number(OpeningBal); // Ensure it's a number
+                          
                        
                          data1.forEach((creditstmtData) => {
                            let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
@@ -289,9 +303,11 @@ module.exports = {
                            if (creditstmtData.product_name !== null) {
                              // Debit transaction (purchases increase the balance)
                              runningBalance += transactionAmount;
+                              totalDebits += transactionAmount;
                            } else {
                              // Credit transaction (payments reduce the balance)
                              runningBalance -= transactionAmount;
+                              totalCredits += transactionAmount;
                            }
                        
                            Creditstmtlist.push({
@@ -327,6 +343,8 @@ module.exports = {
                                  openingbalance: OpeningBal,
                                  closingbalance: closingBal,
                                  cidparam: cid, 
+                                 totalDebits: totalDebits,
+                                 totalCredits: totalCredits 
                                }
          
                              if(caller=='notpdf') {
