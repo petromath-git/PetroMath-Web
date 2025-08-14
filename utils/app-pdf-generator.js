@@ -176,7 +176,8 @@ module.exports = {
                 }
              });
 
-             const alerts = document.querySelectorAll('.alert'); // Select all elements with class 'alert'
+             
+             const alerts = document.querySelectorAll('.alert:not(.period-summary)'); 
              alerts.forEach(alert => alert.remove()); // Remove each alert element 
 
              const element = document.getElementById('petromath-heading'); // Select the element by ID
