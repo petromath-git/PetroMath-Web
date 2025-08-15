@@ -1,12 +1,52 @@
 
 //- Add new page: Summary on pump instances and their sale
-mixin summaryPumpInstancesData(val, tableColor, pumpInstance)
+//- mixin summaryPumpInstancesData(val, tableColor, pumpInstance)
+//-     - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;
+//-     div.sub-header.col-3(id='vis-'+pumpUniqueName+'_sub_header')= val.pumpCode
+//-         span &nbsp;&nbsp;&nbsp;&nbsp;
+//-         span(id='valText-' + pumpUniqueName + '_sub_header_price')
+//-         div.table-responsive
+//-             table.table.table-sm(class=tableColor)
+//-                 tbody
+//-                     tr
+//-                         td
+//-                             span Closing
+//-                         td
+//-                             span(id='val-' + pumpUniqueName + 'pump_closing')
+//-                     tr
+//-                         td
+//-                             span Opening
+//-                         td
+//-                             span(id='val-'+pumpUniqueName+'pump_opening')
+//-                     tr
+//-                         td
+//-                             span Testing
+//-                         td
+//-                             span(id='val-' + pumpUniqueName + 'pump_testing')
+//-                     tr
+//-                         td
+//-                             span Sale
+//-                         td
+//-                             span(id='val-'+pumpUniqueName+'pump_sale')
+//-                     tr
+//-                         td
+//-                             span
+//-                                 b Amount
+//-                         td
+//-                             span
+//-                                 b(id='val-' + pumpUniqueName + 'pump_amount')
+
+mixin summaryPumpInstancesData(val, productValuesData, pumpInstance)
+    //- Find the product that matches this pump's productCode
+    - var matchingProduct = productValuesData.find(p => p.productName === val.productCode);
+    - var rgbColor = matchingProduct ? matchingProduct.rgbColor : '200,200,200'; // fallback to gray
+    
     - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;
     div.sub-header.col-3(id='vis-'+pumpUniqueName+'_sub_header')= val.pumpCode
         span &nbsp;&nbsp;&nbsp;&nbsp;
         span(id='valText-' + pumpUniqueName + '_sub_header_price')
         div.table-responsive
-            table.table.table-sm(class=tableColor)
+            table.table.table-sm(style=`background-color: rgb(${rgbColor})`)
                 tbody
                     tr
                         td
@@ -35,6 +75,8 @@ mixin summaryPumpInstancesData(val, tableColor, pumpInstance)
                         td
                             span
                                 b(id='val-' + pumpUniqueName + 'pump_amount')
+
+
 //- Add new page: Summary on 2T sales
 mixin summary2TSalesData(product2TName)
     div.table-responsive
