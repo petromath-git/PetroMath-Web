@@ -41,8 +41,8 @@ function updateReadingPumps(obj) {
 // Add new flow: Update price(from first tab) to each pump instance reading.
 function updateProductPrices(obj) {
     trackMenu(obj);
-    //updatePriceOnReadingTab();
-    updatePriceOnReadingTabv1();
+    updatePriceOnReadingTab();
+    //updatePriceOnReadingTabv1();
 }
 
 // Add new/edit flow: Update default expense amount on select.
@@ -90,26 +90,65 @@ function hideAndDeleteReadingPump(elementId) {
     deleteAjax('remove-reading', deleteObj.value, elementId, 'col-3 d-md-none');
 }
 
-function updatePriceOnReadingTab(isOnLoad) {
-    // Get the select element and its current value
-    const pumpSelect = document.getElementById("reading-pump-name");
-    const pumpName = pumpSelect.value;
+// function updatePriceOnReadingTab(isOnLoad) {
+//     // Get the select element and its current value
+//     const pumpSelect = document.getElementById("reading-pump-name");
+//     const pumpName = pumpSelect.value;
 
-    if (pumpName.startsWith("HSD")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_hsdrate").value;
-    } else if (pumpName.startsWith("XMS")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_xmsrate").value;
-    } else if (pumpName.startsWith("MS")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_msrate").value;
+//     if (pumpName.startsWith("HSD")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_hsdrate").value;
+//     } else if (pumpName.startsWith("XMS")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_xmsrate").value;
+//     } else if (pumpName.startsWith("MS")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_msrate").value;
+//     } else {
+//         document.getElementById("reading-price").value = "";
+//     }
+
+//     // Reset the selection to the first option if onLoad is true
+//     if (isOnLoad) {
+//         pumpSelect.selectedIndex = 0;
+//     }
+// }
+
+function updatePriceOnReadingTab(isOnLoad) {
+    const pumpSelect = document.getElementById("reading-pump-name");
+    const pumpCode = pumpSelect.value;
+    const priceInput = document.getElementById("reading-price");
+
+    // Find the pump in pumpsData to get its product_code
+    const pump = window.pumpsData.find(p => p.pumpCode === pumpCode);
+    
+    if (pump && pump.productCode) {
+        // Find the product in productValuesData that matches this product_code
+        const product = window.productValuesData.find(p => p.productName === pump.productCode);
+        
+        if (product) {
+            // Build the rate field ID using the product's textName
+            const rateFieldId = 'rate_' + product.textName;
+            const rateElement = document.getElementById(rateFieldId);
+            
+            if (rateElement) {
+                priceInput.value = rateElement.value;
+            } else {
+                console.warn(`Rate field ${rateFieldId} not found`);
+                priceInput.value = "";
+            }
+        } else {
+            console.warn(`No product found for product_code: ${pump.productCode}`);
+            priceInput.value = "";
+        }
     } else {
-        document.getElementById("reading-price").value = "";
+        console.warn(`No pump found or missing product_code for: ${pumpCode}`);
+        priceInput.value = "";
     }
 
-    // Reset the selection to the first option if onLoad is true
+    // Reset selection if on load
     if (isOnLoad) {
         pumpSelect.selectedIndex = 0;
     }
 }
+
 
 
 

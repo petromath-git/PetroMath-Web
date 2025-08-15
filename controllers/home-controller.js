@@ -28,6 +28,7 @@ module.exports = {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
                     productDataPromise(locationCode),
+                    pumpProductDataPromise(locationCode),
                     txnController.pumpDataPromise(locationCode),
                     txnController.creditCompanyDataPromise(locationCode),
                     txnController.suspenseDataPromise(locationCode),
@@ -42,16 +43,18 @@ module.exports = {
                             config: config.APP_CONFIGS,
                             cashiers: values[0].value.cashiers,
                             minDateForNewClosing: utils.restrictToPastDate(config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing),
-                            currentDate: utils.currentDate(), productValues: values[1].value.products,
+                            currentDate: utils.currentDate(),
+                            productValues: values[1].value.products,                            
                             product2TValues: values[1].value.products2T,
                             testingValues: values[1].value.products,
                             productIdAliasMapping: JSON.stringify(values[1].value.productIdAliasMapping),
-                            pumps: values[2].value,
-                            creditCompanyValues: values[3].value,
-                            suspenseValues: values[4].value,
-                            expenseValues: values[5].value.expenses,
-                            usersList: values[6].value.allUsers,
-                            vehicleData: values[7].value,
+                            pumpProductValues: values[2].value.products,
+                            pumps: values[3].value,
+                            creditCompanyValues: values[4].value,
+                            suspenseValues: values[5].value,
+                            expenseValues: values[6].value.expenses,
+                            usersList: values[7].value.allUsers,
+                            vehicleData: values[8].value,
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -270,6 +273,10 @@ module.exports = {
 
     productDataPromise: (locationCode, productNames) => {
         return productDataPromise(locationCode, productNames);
+    },
+
+    pumpProductDataPromise: (locationCode) => {
+        return pumpProductDataPromise(locationCode);
     },
 
     personDataPromise: (locationCode) => {
@@ -557,6 +564,46 @@ const productDataPromise = (locationCode) => {
     });
 }
 
+
+// Get pump-specific product data only
+const pumpProductDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        // First get pump product codes for this location in correct order
+        db.sequelize.query(
+            `SELECT product_code, MIN(display_order) as min_order 
+                FROM m_pump 
+                WHERE location_code = :locationCode 
+                GROUP BY product_code 
+                ORDER BY min_order`,
+            {
+                replacements: { locationCode },
+                type: db.sequelize.QueryTypes.SELECT,
+            }
+        ).then(pumpProductCodes => {
+            // Get products and maintain the pump order
+            ProductDao.findProducts(locationCode)
+                .then(data => {
+                    let products = [], productIdAliasMapping = [];
+                    const productMap = config.PRODUCT_DETAILS_MAPPING;
+                    
+                    // Process products in pump order, not product table order
+                    pumpProductCodes.forEach((pumpProduct) => {
+                        const product = data.find(p => p.product_name === pumpProduct.product_code);
+                        if (product) {
+                            const mapData = productMap.get(product.product_name);
+                            const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
+                            const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
+                            products.push(formProductData(product, productAlias, textName));
+                            productIdAliasMapping.push(formProductAliasMap(product, productAlias));
+                        }
+                    });
+                    
+                    resolve({products: products, productIdAliasMapping: productIdAliasMapping});
+                }).catch(reject);
+        }).catch(reject);
+    });
+}
+
 function formProductData(product, productAlias, textName) {
     return {
         productId: product.product_id,
@@ -564,6 +611,7 @@ function formProductData(product, productAlias, textName) {
         textName: textName,
         productPrice: product.price,
         productName: product.product_name,
+        rgbColor: product.rgb_color,
         returnedQty: 0,
         givenQty: 0
     };
