@@ -339,39 +339,120 @@ function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
     }
 }
 
+
 // Add new page: Internally & externally for both cash and credit sale to show/hide of specific product price(s)
 // Calls calculation of sale amount too
 function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName) {
-    let productPrice = document.getElementById("rate_" + productId).value;
-    if (productName === 'MS' || productName === 'HSD' || productName === 'XMS') {
-        productPrice = document.getElementById("rate_" + productName.toLowerCase() + 'rate').value;
-        let pumpNames = document.getElementById('reading-pump-name');
-        for (let i = 0; i < pumpNames.length; i++) {
-            let currentOption = pumpNames.options[i].value;
-            if (currentOption.startsWith(productName)) {
-                let readingData = document.getElementById('f_' + currentOption + '_price');
-                if (readingData) {
-                    if (readingData.parentNode.className.indexOf('d-md-block') > -1) {
-                        productPrice = readingData.value;
-                        break;
-                    }
+    // Validate productId first
+    if (!productId) {
+        console.error('ProductId is null or undefined');
+        return;
+    }
+
+    let productPrice = 0;
+
+    // NEW DYNAMIC APPROACH: Find product using productValuesData
+    if (window.productValuesData) {
+        // Find the product by productId
+        const product = window.productValuesData.find(p => p.productId == productId);
+        
+        if (product) {
+            // Check if this product has pumps (is a fuel/pump product)
+            const hasPumps = window.pumpsData && window.pumpsData.some(pump => pump.productCode === product.productName);
+            
+            if (hasPumps) {
+                // For pump products: try to find rate element, fallback to DB price
+                productPrice = product.productPrice || 0; // Start with DB price
+                
+                let rateElement = null;
+                
+                // Try with productId (most common for hidden fields)
+                const productIdRateField = 'rate_' + productId;
+                rateElement = document.getElementById(productIdRateField);
+                
+                if (!rateElement && product.textName) {
+                    // Try with textName (for visible rate fields like rate_msrate)
+                    const rateFieldId = 'rate_' + product.textName;
+                    rateElement = document.getElementById(rateFieldId);
+                }
+                
+                // If we found a rate element, use its value; otherwise keep the DB price
+                if (rateElement && rateElement.value !== undefined) {
+                    productPrice = rateElement.value;
+                    console.log(`Found rate element ${rateElement.id} with price: ${productPrice}`);
                 } else {
-                    readingData = document.getElementById('s_' + currentOption + '_price');
-                    if (readingData.parentNode.className.indexOf('d-md-block') > -1) {
-                        productPrice = readingData.value;
-                        break;
+                    console.log(`No rate element found for pump product ${product.productName}, using DB price: ${productPrice}`);
+                }
+            } else {
+                // For non-pump products: directly use database price
+                productPrice = product.productPrice || 0;
+                console.log(`Non-pump product ${product.productName}, using DB price: ${productPrice}`);
+            }
+            
+            // Check for dynamic pump readings if this is a pump product
+            if (hasPumps) {
+                const pumpNames = document.getElementById('reading-pump-name');
+                if (pumpNames && pumpNames.length) {
+                    for (let i = 0; i < pumpNames.length; i++) {
+                        let currentOption = pumpNames.options[i].value;
+                        
+                        // Find pump data for this option
+                        const pumpData = window.pumpsData.find(p => p.pumpCode === currentOption);
+                        if (pumpData && pumpData.productCode === product.productName) {
+                            let readingData = document.getElementById('f_' + currentOption + '_price');
+                            if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
+                                productPrice = readingData.value;
+                                console.log(`Using pump reading price: ${productPrice}`);
+                                break;
+                            } else {
+                                readingData = document.getElementById('s_' + currentOption + '_price');
+                                if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
+                                    productPrice = readingData.value;
+                                    console.log(`Using pump reading price: ${productPrice}`);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
-
             }
+        } else {
+            console.warn('Product not found in productValuesData for productId:', productId);
         }
-        document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).readOnly = false;
     } else {
-        document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).readOnly = true;
+        console.warn('window.productValuesData not available, falling back to old approach');
+        
+        // FALLBACK: Try to find rate element by productId
+        const rateElement = document.getElementById("rate_" + productId);
+        if (rateElement && rateElement.value !== undefined) {
+            productPrice = rateElement.value;
+        } else {
+            console.warn('Rate element not found for productId:', productId);
+            productPrice = 0;
+        }
     }
-    document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).value = productPrice
-    calculateCashOrCreditSale(cashOrCreditRowPrefix, rowNo)
+
+    // Update the price field if it exists
+    const priceFieldId = cashOrCreditRowPrefix + "price-" + rowNo;
+    const priceField = document.getElementById(priceFieldId);
+    
+    if (priceField) {
+        // All products are readonly in cash/credit sales
+        let isReadonly = true;
+        
+        priceField.readOnly = isReadonly;
+        priceField.value = productPrice;
+        
+        // Calculate the sale amount
+        if (typeof calculateCashOrCreditSale === 'function') {
+            calculateCashOrCreditSale(cashOrCreditRowPrefix, rowNo);
+        }
+    } else {
+        console.error('Price field not found:', priceFieldId);
+    }
 }
+
+
 
 // Add new page: Calculate cash/credit Quantity
 function calculateCashOrCreditQuantity(prefix, rowNo) {
