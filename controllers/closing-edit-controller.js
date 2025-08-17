@@ -32,8 +32,7 @@ module.exports = {
                 txnController.txnDenominationPromise(closingId),
                 txnController.txnAttendanceDataPromise(closingId),
                 homeController.personAttendanceDataPromise(locationCode),
-                vehicleDataPromise(locationCode),
-                homeController.pumpProductDataPromise(locationCode)])
+                vehicleDataPromise(locationCode)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -55,8 +54,7 @@ module.exports = {
                         t_denoms: values[12].value,
                         attendanceData: values[13].value,
                         usersList: values[14].value.allUsers,
-                        vehicleData: values[15].value,
-                        pumpProductValues: values[16].value.products, 
+                        vehicleData: values[15].value
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
@@ -149,7 +147,6 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
-                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: t_pump_readings,
@@ -159,7 +156,6 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
-                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: [],
