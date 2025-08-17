@@ -69,6 +69,11 @@ module.exports = function(sequelize, DataTypes) {
         hsn_code: {
             type: DataTypes.STRING(50),
             allowNull: true
+        },
+        rgb_color: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+            defaultValue: '200,200,200'
         }
     }, {
         timestamps: false,

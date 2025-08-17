@@ -1,27 +1,95 @@
-
-//- Add new page: Dom elements to enter prices for products
-mixin listProductNames(productValues, prefix)
-    each val in productValues
-        if(val.textName.startsWith("ms"))
-            div.col.bg-success
-                label= `${val.productAlias} Rate`
-                input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
-                div &nbsp;
-        // Price for HSD
-        if(val.textName.startsWith("hsd"))
-            div.col.bg-primary
-                label= `${val.productAlias} Rate`
-                input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
-        // Price for XMS
-        if(val.textName.startsWith("xms"))
-            div.col.table-warning
-                label= `${val.productAlias} Rate`
-                input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
-
+mixin listProductNames(pumpProductValues, prefix)
+    each val in pumpProductValues
+        div.col(style=`background-color: rgb(${val.rgbColor}); margin: 0 10px;`)
+            label= `${val.productAlias} Rate`
+            input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
+            div &nbsp;
+        
         input.form-control(type='hidden', id=prefix+`${val.productId}`, name=prefix+`${val.productId}`, value= val.productPrice)
 
+
+//- Add new page: Dom elements to enter prices for products
+//- mixin listProductNames(productValues, prefix)
+//-     each val in productValues
+//-         if(val.textName.startsWith("ms"))
+//-             div.col.bg-success
+//-                 label= `${val.productAlias} Rate`
+//-                 input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
+//-                 div &nbsp;
+//-         // Price for HSD
+//-         if(val.textName.startsWith("hsd"))
+//-             div.col.bg-primary
+//-                 label= `${val.productAlias} Rate`
+//-                 input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
+//-         // Price for XMS
+//-         if(val.textName.startsWith("xms"))
+//-             div.col.table-warning
+//-                 label= `${val.productAlias} Rate`
+//-                 input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
+
+//-         input.form-control(type='hidden', id=prefix+`${val.productId}`, name=prefix+`${val.productId}`, value= val.productPrice)
+
 //- Add/edit page: Dom elements to display pricing for selected pumps
-mixin addProductCodesAsSelected(val, tableColor, pumpInstance, reading)
+//- mixin addProductCodesAsSelected(val, tableColor, pumpInstance, reading)
+//-     - console.log('Pump val:', val);
+//-     - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;
+//-     - var hideCls = 'col-3 d-md-none'
+//-     - var price = reading ? reading.price : val.productPrice
+//-     - var readingId = reading ? reading.readingId : "";
+//-     - var pumpClosing = reading ? reading.pumpClosing : val.pumpOpening;
+//-     - var pumpOpening = reading ? reading.pumpOpening : val.pumpOpening;
+//-     - var pumpTesting = reading ? reading.pumpTesting : 0;
+//-     if (reading)
+//-         - hideCls = 'col-3 d-md-block'
+//-     div(id=pumpUniqueName+`_sub_header` style="padding:0 10px" class=hideCls)
+//-         input(type='hidden' id=pumpUniqueName + '_hiddenId' value=readingId)
+//-         input(type='hidden' id=pumpUniqueName + '_price' value=price)
+//-         input(type='hidden' id=pumpUniqueName + '_pumpId' value=val.pumpId)
+//-         div
+//-             span= val.pumpCode
+//-             span &nbsp;&nbsp;&nbsp;&nbsp;
+//-             if price > 0
+//-                 span(id=pumpUniqueName + `_sub_header_price`) Rs. #{price}
+//-             else
+//-                 span(id=pumpUniqueName + `_sub_header_price`) [price]
+//-             span(align="right")
+//-                 button.close(type="button" aria-label="Close" onclick='hideAndDeleteReadingPump(\'' + pumpUniqueName + `_sub_header` + '\')')
+//-                     span(aria-hidden="true") &times;
+//-         div.table-responsive(id=pumpUniqueName+`_readings`)
+//-             table.table.table-sm(class=tableColor)
+//-                 tbody
+//-                     tr
+//-                         td
+//-                             label(for=pumpUniqueName + `pump_closing`) Closing
+//-                         td
+//-                             input.form-control(type="number", name=pumpUniqueName + `pump_closing`, id=pumpUniqueName + `pump_closing`, value= pumpClosing, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")')
+//-                     tr
+//-                         td
+//-                             label(for=pumpUniqueName + `pump_opening`) Opening
+//-                         td
+//-                             input.form-control(type='number', name=pumpUniqueName + `pump_opening`, id=pumpUniqueName + `pump_opening`, value= pumpOpening, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")')
+//-                     tr
+//-                         td
+//-                             label(for=pumpUniqueName + `pump_testing`) Testing
+//-                         td
+//-                             input.form-control(type='number', name=pumpUniqueName + `pump_testing`, id=pumpUniqueName + `pump_testing`, value= pumpTesting, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")' )
+//-                     tr
+//-                         td
+//-                             label(for=pumpUniqueName+`pump_sale`) Sale
+//-                         td
+//-                             input.form-control(type='text' name=pumpUniqueName+`pump_sale` id=pumpUniqueName+`pump_sale` readonly value=0)
+//-                     tr
+//-                         td
+//-                             span Amount
+//-                         td
+//-                             input.form-control(type='text' name=pumpUniqueName+`pump_amount` id=pumpUniqueName+`pump_amount` readonly value=0)
+
+
+mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
+    //- Find the product that matches this pump's productCode
+    - var matchingProduct = productValuesData.find(p => p.productName === val.productCode);
+    - var rgbColor = matchingProduct ? matchingProduct.rgbColor : '200,200,200'; // fallback to gray
+    
     - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;
     - var hideCls = 'col-3 d-md-none'
     - var price = reading ? reading.price : val.productPrice
@@ -46,7 +114,7 @@ mixin addProductCodesAsSelected(val, tableColor, pumpInstance, reading)
                 button.close(type="button" aria-label="Close" onclick='hideAndDeleteReadingPump(\'' + pumpUniqueName + `_sub_header` + '\')')
                     span(aria-hidden="true") &times;
         div.table-responsive(id=pumpUniqueName+`_readings`)
-            table.table.table-sm(class=tableColor)
+            table.table.table-sm(style=`background-color: rgb(${rgbColor})`)
                 tbody
                     tr
                         td
@@ -73,8 +141,7 @@ mixin addProductCodesAsSelected(val, tableColor, pumpInstance, reading)
                             span Amount
                         td
                             input.form-control(type='text' name=pumpUniqueName+`pump_amount` id=pumpUniqueName+`pump_amount` readonly value=0)
-
-
+                            
 //- Add new page: Dom elements to enter prices for 2T products
 mixin list2TProductNames(val)
     div.col-6

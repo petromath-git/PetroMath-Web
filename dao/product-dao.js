@@ -28,7 +28,8 @@ module.exports = {
                 'sgst_percent',
                 'sku_name',
                 'sku_number',
-                'hsn_code'
+                'hsn_code',
+                'rgb_color'
             ],
             order: [
                 // Dynamic ordering based on location-specific pump products
