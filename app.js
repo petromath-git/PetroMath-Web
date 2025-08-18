@@ -113,6 +113,7 @@ var CreditDao = require("./dao/credits-dao");
 const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 const LocationDao = require("./dao/location-dao");
+const VersionRoutingDao = require('./dao/version-routing-dao');
 
 db.sequelize.sync();
 // ORM DB - end
@@ -174,6 +175,13 @@ app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
+app.use((req, res, next) => {
+    res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
+    res.locals.SERVER_PORT = process.env.SERVER_PORT;
+    next();
+});
+
+
 
 // Add method-override here
 const methodOverride = require('method-override');
@@ -895,6 +903,17 @@ app.post('/login', function(req, res, next) {
                 console.error("Error logging login:", error);
             }
 
+                try {
+                    const version = await VersionRoutingDao.getCurrentVersion(user.location_code);
+                    console.log(`Version routing for ${user.location_code}: ${version}`);
+                    if (version === 'canary') {
+                        req.session.canaryAuth = user.Person_id;
+                        return res.redirect('http://dev.petromath.co.in/canary/');
+                    }
+                } catch (error) {
+                    console.error("Error checking version routing:", error);
+                    // Continue with stable version on error
+                }    
 
              // Check if the user is a superuser
              if (user.Role === 'SuperUser') {
