@@ -21,8 +21,8 @@ block content
                 thead(class="thead-light")
                     tr
                         th Date
-                        th Cashier
-                        th Morning/Evening
+                        th Closing ID
+                        th Cashier                        
                         // Dynamic product column headers
                         if productColumns && productColumns.length > 0
                             each column in productColumns
@@ -43,9 +43,9 @@ block content
                             td
                                 span= val.closingDate
                             td
-                                span= val.cashierName
+                                span= val.closingId
                             td
-                                span= val.period
+                                span= val.cashierName                            
                             // Dynamic product column data
                             if productColumns && productColumns.length > 0
                                 each column in productColumns

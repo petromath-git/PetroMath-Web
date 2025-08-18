@@ -109,6 +109,61 @@ block content
 
                 // ----------------------- New reading details ----------------------------
                 div.tab-pane.fade#new_readings
+                    div.row.bg-light.p-3.mb-3
+                        div.col-md-4
+                            label(for="closeReadingTime").font-weight-bold Closing Reading Time *
+                            select#closeReadingTime.form-control(name="close_reading_time" required)
+                                option(value="") -- Select Reading Time --
+                                option(value="00:00:00") 12:00 AM
+                                option(value="00:30:00") 12:30 AM
+                                option(value="01:00:00") 1:00 AM
+                                option(value="01:30:00") 1:30 AM
+                                option(value="02:00:00") 2:00 AM
+                                option(value="02:30:00") 2:30 AM
+                                option(value="03:00:00") 3:00 AM
+                                option(value="03:30:00") 3:30 AM
+                                option(value="04:00:00") 4:00 AM
+                                option(value="04:30:00") 4:30 AM
+                                option(value="05:00:00") 5:00 AM
+                                option(value="05:30:00") 5:30 AM
+                                option(value="06:00:00") 6:00 AM
+                                option(value="06:30:00") 6:30 AM
+                                option(value="07:00:00") 7:00 AM
+                                option(value="07:30:00") 7:30 AM
+                                option(value="08:00:00") 8:00 AM
+                                option(value="08:30:00") 8:30 AM
+                                option(value="09:00:00") 9:00 AM
+                                option(value="09:30:00") 9:30 AM
+                                option(value="10:00:00") 10:00 AM
+                                option(value="10:30:00") 10:30 AM
+                                option(value="11:00:00") 11:00 AM
+                                option(value="11:30:00") 11:30 AM
+                                option(value="12:00:00") 12:00 PM
+                                option(value="12:30:00") 12:30 PM
+                                option(value="13:00:00") 1:00 PM
+                                option(value="13:30:00") 1:30 PM
+                                option(value="14:00:00") 2:00 PM
+                                option(value="14:30:00") 2:30 PM
+                                option(value="15:00:00") 3:00 PM
+                                option(value="15:30:00") 3:30 PM
+                                option(value="16:00:00") 4:00 PM
+                                option(value="16:30:00") 4:30 PM
+                                option(value="17:00:00") 5:00 PM
+                                option(value="17:30:00") 5:30 PM
+                                option(value="18:00:00") 6:00 PM
+                                option(value="18:30:00") 6:30 PM
+                                option(value="19:00:00") 7:00 PM
+                                option(value="19:30:00") 7:30 PM
+                                option(value="20:00:00") 8:00 PM
+                                option(value="20:30:00") 8:30 PM
+                                option(value="21:00:00") 9:00 PM
+                                option(value="21:30:00") 9:30 PM
+                                option(value="22:00:00") 10:00 PM
+                                option(value="22:30:00") 10:30 PM
+                                option(value="23:00:00") 11:00 PM
+                                option(value="23:30:00") 11:30 PM
+                        div.col-md-8
+                            small.text-muted Select the time when pump readings were taken for this shift closure
                     div.row &nbsp;
                     if pumps &&  pumps.length > 0
                         div.row                            

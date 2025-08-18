@@ -778,6 +778,7 @@ function formClosing(closingId, user) {
         'cashier_id': document.getElementById('cashierId').value,
         'location_code': user.location_code,
         'closing_date': document.getElementById('cashierDate').value,
+        'close_reading_time': document.getElementById('closeReadingTime').value,
         'cash': document.getElementById('cashGiven').value,
         'notes': document.getElementById('notes').value,
         'created_by': user.User_Name,
@@ -785,7 +786,8 @@ function formClosing(closingId, user) {
     };
 }
 
-// Add new page - add readings to DB via ajax
+
+
 function saveReadings() {
     return new Promise((resolve, reject) => {
         const readingTag = '_readings';
@@ -794,33 +796,103 @@ function saveReadings() {
         const pumps = document.getElementById(currentDiv).querySelectorAll('[id$=' + readingTag + ']:not([type="hidden"])');
         let newReadings = [], updateReadings = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
+        const closeReadingTime = document.getElementById('closeReadingTime').value;
+        
+        // Check if any readings have actually been modified
+        let hasActualReadings = false;
         pumps.forEach((pump) => {
             const pumpId = pump.id.replace(readingTag, '');
             const headerObj = document.getElementById(pumpId + '_sub_header');
             if (headerObj.className.includes('-block')) {
-                const saleObj = document.getElementById(pumpId + 'pump_sale');
+                const closingReading = parseFloat(document.getElementById(pumpId + 'pump_closing').value) || 0;
+                const openingReading = parseFloat(document.getElementById(pumpId + 'pump_opening').value) || 0;
+                
+                // Check if readings were actually modified
+                if (closingReading !== openingReading && closingReading > 0) {
+                    hasActualReadings = true;
+                }
+                
                 const hiddenIdObj = document.getElementById(pumpId + '_hiddenId');
                 if (hiddenIdObj.value && parseInt(hiddenIdObj.value) > 0) {
-                    // Scenario: Where user clears the value to '0', so just update the data in DB
                     updateReadings.push(formReading(hiddenIdObj.value, pumpId, user));
                 } else {
-                    // ignore sale as 0, still record the data
                     newReadings.push(formReading(undefined, pumpId, user));
                     newHiddenFieldsArr.push(pumpId);
                 }
             }
         });
-        console.log('New readingData ' + JSON.stringify(newReadings));
-        console.log('Update readingData ' + JSON.stringify(updateReadings));
+        
+        // Smart validation: Only require reading time if actual readings were entered
+        if (hasActualReadings && !closeReadingTime) {
+            alert('Please select a Reading Time before saving readings with actual values.');
+            resolve(false);
+            return;
+        }
+        
+      
+        
         postAjaxNew('new-readings', newReadings, updateReadings, tabToActivate, currentDiv, newHiddenFieldsArr, 'reading_id')
             .then((data) => {
-                resolve(data);
+                if (data && closeReadingTime) {
+                    updateClosingWithReadingTime(closeReadingTime, user).then((closingUpdateResult) => {
+                        resolve(data);
+                    });
+                } else {
+                    resolve(data);
+                }
             });
-        if (newReadings.length == 0 && updateReadings.length == 0) {
-            resolve(true);      // tab click handled in trackMenu()
+            
+        if (newReadings.length == 0 && updateReadings.length == 0 && closeReadingTime) {
+            updateClosingWithReadingTime(closeReadingTime, user).then((closingUpdateResult) => {
+                resolve(true);
+            });
+        } else if (newReadings.length == 0 && updateReadings.length == 0) {
+            resolve(true);
         }
     });
 }
+
+
+function updateClosingWithReadingTime(closeReadingTime, user) {
+    return new Promise((resolve, reject) => {
+        const closingId = document.getElementById('closing_hiddenId').value;
+        
+        if (!closingId || !parseInt(closingId) > 0) {
+            console.error('No valid closing ID found');
+            resolve(false);
+            return;
+        }
+        
+        const closingUpdateData = [{
+            'closing_id': closingId,
+            'close_reading_time': closeReadingTime,
+            'updated_by': user.User_Name
+        }];     
+        
+        
+        // Use the existing AJAX infrastructure to update closing
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    const result = JSON.parse(xhr.responseText);
+                    console.log('Closing reading time update response:', result);
+                    resolve(true);
+                } else {
+                    console.error('Failed to update closing reading time:', xhr.responseText);
+                    resolve(false);
+                }
+            }
+        };
+        
+        xhr.open('POST', 'update-closing-reading-time', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({
+            updateData: closingUpdateData
+        }));
+    });
+}
+
 
 function formReading(readingId, pumpId, user) {
     return {

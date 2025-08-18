@@ -72,6 +72,28 @@ module.exports = {
     closeData: async (req, res, next) => {
         try {
             const closingId = req.query.id;
+
+            // First, validate that close_reading_time exists
+                const closingDetails = await TxnReadDao.getClosingDetails(closingId);
+                
+                if (!closingDetails) {
+                    return res.status(404).send({
+                        error: 'Closing record not found.',
+                        success: false
+                    });
+                }
+                
+                // Check if close_reading_time is missing
+                if (!closingDetails.close_reading_time) {
+                    return res.status(400).send({
+                        error: 'Cannot finalize closing: Reading Time is required. Please go to the Reading tab and select when the pump readings were taken.',
+                        success: false
+                    });
+                }
+
+
+
+
             
             // Call the updated async finishClosing function
             const data = await TxnWriteDao.finishClosing(closingId);
@@ -107,11 +129,17 @@ const txnClosingPromise = (closingId) => {
                 if (data) {
                     txnController.getNamesPromise(data.closer_id, data.cashier_id).then((result) => {
                         resolve({
-                            closingId: data.closing_id, closingDate: data.closing_date_fmt1,
+                            closingId: data.closing_id, 
+                            closingDate: data.closing_date_fmt1,
                             h_closingDate: data.closing_date_fmt2,
-                            cash: data.cash, closerName: result.closerName, closerId: data.closer_id,
-                            cashierName: result.cashierName, cashierId: data.cashier_id, notes: data.notes,
-                            closingStatus: data.closing_status
+                            cash: data.cash, 
+                            closerName: result.closerName, 
+                            closerId: data.closer_id,
+                            cashierName: result.cashierName, 
+                            cashierId: data.cashier_id, 
+                            notes: data.notes,
+                            closingStatus: data.closing_status,
+                            closeReadingTime: data.close_reading_time
                         });
                     });
                 } else {

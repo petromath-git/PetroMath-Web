@@ -363,6 +363,7 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
                     'closing_status',
                     'notes',
                     'cash',
+                    'close_reading_time',
                     [Sequelize.fn('date_format', Sequelize.col('closing_date'), '%Y-%m-%d'), 'closing_date_fmt1'],
                     [Sequelize.fn('date_format', Sequelize.col('closing_date'), '%d-%b-%Y'), 'closing_date_fmt2'],
                 ]

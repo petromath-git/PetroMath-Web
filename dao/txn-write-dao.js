@@ -14,7 +14,7 @@ module.exports = {
         const closingTxn = TxnClosing.bulkCreate(data, {
             returning: true,
             updateOnDuplicate: ["closer_id", "cashier_id", "closing_date",
-                "cash", "notes", "updated_by", "updation_date"]
+                "close_reading_time","cash", "notes", "updated_by", "updation_date"]
         });
         return closingTxn;
     },
@@ -29,6 +29,18 @@ module.exports = {
     deleteReadingById: (readingId) => {
         const readingTxn = TxnReading.destroy({ where: { reading_id: readingId } });
         return readingTxn;
+    },
+    updateClosingReadingTime: (closingId, readingTime, updatedBy) => {
+    return TxnClosing.update(
+        { 
+            close_reading_time: readingTime,
+            updated_by: updatedBy,
+            updation_date: new Date()
+        },
+        { 
+            where: { closing_id: closingId }
+        }
+    );
     },
     save2TSales: (data) => {
         const saleTxn = Txn2TOil.bulkCreate(data, {
