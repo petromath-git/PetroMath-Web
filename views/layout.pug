@@ -75,6 +75,8 @@ html
               a.nav-link(href='/logout') Logout
             li.nav-item.navbar-text.text-white
               b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'
+              if APP_VERSION === 'canary'
+                span(style='background-color: orange; color: white; font-size: 0.7rem; padding: 2px 4px; margin-left: 5px; border-radius: 3px;') CANARY
 
     if messages.error
       div &nbsp;
