@@ -10,6 +10,9 @@ module.exports = {
     txnWriteReadingPromise: (readingDataArr) => {
         return txnWriteReadingPromise(readingDataArr);
     },
+    txnUpdateClosingReadingTimePromise: (closingId, readingTime, updatedBy) => {
+        return txnUpdateClosingReadingTimePromise(closingId, readingTime, updatedBy);
+    },
     txnWrite2TSalesPromise: (saleDataArr) => {
         return txnWrite2TSalesPromise(saleDataArr);
     },
@@ -57,6 +60,22 @@ const txnWriteReadingPromise = (readingDataArr) => {
             console.error("Error while saving readings " + err.toString());
             resolve({error: err.toString()});
         });
+    });
+}
+
+const txnUpdateClosingReadingTimePromise = (closingId, readingTime, updatedBy) => {
+        console.log('Controller METHOD CALLED - closingId:', closingId, 'type:', typeof closingId);
+        console.log('Controller - readingTime:', readingTime);
+        console.log('Controller - updatedBy:', updatedBy);
+
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.updateClosingReadingTime(closingId, readingTime, updatedBy)
+            .then(data => {
+                resolve(data);
+            }).catch((err) => {
+                console.error("Error while updating closing reading time " + err.toString());
+                resolve({error: err.toString()});
+            });
     });
 }
 

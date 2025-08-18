@@ -142,6 +142,7 @@ const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
 const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
 const supplierController = require("./controllers/supplier-controller");
+const closingSaveController = require("./controllers/closing-save-controller");
 
 
 const flash = require('express-flash');
@@ -745,6 +746,33 @@ app.post('/new-readings', isLoginEnsured, function (req, res, next) {
 
 app.delete('/remove-reading', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     HomeController.deleteTxnReading(req, res, next);  // response returned inside controller
+});
+
+app.post('/update-closing-reading-time', isLoginEnsured, function(req, res, next) {    
+    const updateData = req.body.updateData[0];
+
+    console.log('Route - About to call controller with:', {
+        closingId: updateData.closing_id,
+        readingTime: updateData.close_reading_time, 
+        updatedBy: updateData.updated_by
+    });
+    
+
+    closingSaveController.txnUpdateClosingReadingTimePromise(
+        updateData.closing_id, 
+        updateData.close_reading_time, 
+        updateData.updated_by
+    ).then(data => {
+        if (data.error) {
+            res.status(500).send({error: data.error});
+        } else {
+            res.status(200).send({message: 'Reading time updated successfully.', rowsData: data});
+        }
+    }).catch(err => {
+        res.status(500).send({error: 'Error updating reading time: ' + err.toString()});
+    });
+    
+   
 });
 
 app.post('/new-2t-sales', isLoginEnsured, function (req, res, next) {
