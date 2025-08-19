@@ -113,7 +113,7 @@ var CreditDao = require("./dao/credits-dao");
 const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 const LocationDao = require("./dao/location-dao");
-const VersionRoutingDao = require('./dao/version-routing-dao');
+const { handleVersionRouting } = require('./utils/version-routing');
 
 db.sequelize.sync();
 // ORM DB - end
@@ -903,17 +903,11 @@ app.post('/login', function(req, res, next) {
                 console.error("Error logging login:", error);
             }
 
-                try {
-                    const version = await VersionRoutingDao.getCurrentVersion(user.location_code);
-                    console.log(`Version routing for ${user.location_code}: ${version}`);
-                    if (version === 'canary') {
-                        req.session.canaryAuth = user.Person_id;
-                        return res.redirect('http://dev.petromath.co.in/canary/');
-                    }
-                } catch (error) {
-                    console.error("Error checking version routing:", error);
-                    // Continue with stable version on error
-                }    
+                 const shouldRedirect = await handleVersionRouting(user, req, res);
+		        if (shouldRedirect) {
+		                 return; // Redirect happened, stop processing
+		            }	
+
 
              // Check if the user is a superuser
              if (user.Role === 'SuperUser') {
