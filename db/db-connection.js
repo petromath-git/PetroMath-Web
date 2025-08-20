@@ -62,6 +62,8 @@ db.t_lubes_inv_hdr = require("./txn-lubes-header")(sequelize, Sequelize);
 db.t_lubes_inv_lines = require("./txn-lubes-lines")(sequelize, Sequelize);
 db.m_supplier = require("./suppliers")(sequelize, Sequelize);
 db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  // Import the creditlistvehicle model
+db.location_config = require('./location-config')(sequelize, Sequelize);
+db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});

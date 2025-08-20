@@ -147,6 +147,21 @@ module.exports = {
         }
     },
 
+    saveDigitalSalesData: (req, res, next) => {
+    const salesData = req.body;
+    if (salesData) {
+        saveController.txnWriteDigitalSalesPromise(salesData).then((result) => {
+            if (!result.error) {
+                res.status(200).send({message: 'Saved digital sales data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    }
+},
+
+
+
     saveExpensesData: (req, res, next) => {
         const expensesData = req.body;
         if (expensesData) {
@@ -236,6 +251,23 @@ module.exports = {
             res.status(302).send();
         }
     }),
+
+deleteTxnDigitalSale: ((req, res, next) => {
+    const saleId = req.query.id;
+    if (saleId) {
+        deleteController.txnDeleteDigitalSalePromise(saleId).then((result) => {
+            if (!result.error) {
+                res.status(200).send({
+                    message: result.message
+                });
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    } else {
+        res.status(302).send();
+    }
+}),
 
     deleteTxnExpense: ((req, res, next) => {
         const expenseId = req.query.id;

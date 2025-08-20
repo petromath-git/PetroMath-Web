@@ -221,6 +221,36 @@ mixin addCashSales(cashSaleRowNo, rowData)
             button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-cash-sale", calculateCashSaleTotal)')
                 span(aria-hidden="true") &times;
 
+
+//- Digital Sales: Dom elements to show digital sales details
+mixin addDigitalSales(digitalSalesRowNo, rowData)
+    - var prefix = 'digital-sales-';
+    - var trId = prefix + 'table-row-'+digitalSalesRowNo;
+    - var trClass = 'd-md-none';
+    if(!rowData)
+        - rowData = {amount:0, transactionDate: '', vendorId: null, notes: ''};
+    if(rowData.digitalSalesId && parseInt(rowData.digitalSalesId) > 0)
+        - trClass = ''
+    tr(class=trClass id=trId)
+        input(type='hidden' id=prefix + digitalSalesRowNo + '_hiddenId' value=rowData.digitalSalesId)
+        td
+            select.form-control(name=prefix + 'vendor-' + digitalSalesRowNo id=prefix + 'vendor-' + digitalSalesRowNo required)
+                option(value='') Select Digital Vendor
+                if creditCompanyValues
+                    each vendor in creditCompanyValues
+                        if vendor.card_flag === 'Y'
+                            option(value=`${vendor.creditorId}` selected= vendor.creditorId === rowData.vendorId)= vendor.creditorName
+        td
+            input.form-control(type='number' name=prefix + 'amount-' + digitalSalesRowNo id=prefix + 'amt-' + digitalSalesRowNo min=0.01 step=0.01 required value=rowData.amount onchange='calculateDigitalSalesTotal()' oninput='validity.valid||(value="")')
+        td
+            input.form-control(type='date' name=prefix + 'transaction-date-' + digitalSalesRowNo id=prefix + 'transaction-date-' + digitalSalesRowNo required value=rowData.transactionDate)
+        td
+            textarea.form-control(name=prefix + 'notes-' + digitalSalesRowNo id=prefix + 'notes-' + digitalSalesRowNo style="height:36px")= rowData.notes
+        if(!freezedRecord)
+            td
+                button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-digital-sales", calculateDigitalSalesTotal)')
+                    span(aria-hidden="true") &times;
+
 //- Add new page: used by addCredits & addCashSales - a separate fn will populate product rates
 mixin optionsForProductRates(cashOrCreditSalePrefix)
     if productValues
@@ -265,14 +295,16 @@ mixin addCredits(creditRowNo, rowData)
             select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo, class = displayType1Class, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
                 if creditCompanyValues
                     each val in creditCompanyValues
-                        option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
+                        if val.card_flag !== 'Y'
+                            option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
             - var displayType2Class = 'd-md-none'
             if rowData.creditType === config.creditTypes[1]
                 - displayType2Class = 'd-md-block'
             select.form-control(name=prefix + config.creditTypes[1] + '-' + creditRowNo id=prefix + config.creditTypes[1] + '-' + creditRowNo, class = displayType2Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')')
                 if suspenseValues
                     each val in suspenseValues
-                        option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
+                        if val.card_flag !== 'Y'
+                            option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
         td
             select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
                 option(value='') Select Vehicle

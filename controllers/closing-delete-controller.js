@@ -26,6 +26,9 @@ module.exports = {
     txnDeleteAttendancePromise: (attendanceId) => {
         return txnDeleteAttendancePromise(attendanceId);
     },
+    txnDeleteDigitalSalePromise: (digitalSalesId) => {
+    return txnDeleteDigitalSalePromise(digitalSalesId);
+    },
 }
 
 // Add new flow: Delete one reading data
@@ -115,3 +118,19 @@ const txnDeleteAttendancePromise = (attendanceId) => {
     });
 }
 
+// Add new flow: Delete one digital sale data
+const txnDeleteDigitalSalePromise = (digitalSalesId) => {
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.deleteDigitalSaleById(digitalSalesId)
+            .then(status => {
+                if (status > 0) {
+                    resolve({message: 'Data deletion success.'});
+                } else {
+                    resolve({error: 'Data deletion failed.'});
+                }
+            }).catch((err) => {
+            console.error("Error while deleting digital sale " + err.toString());
+            resolve({error: err.toString()});
+        });
+    });
+}

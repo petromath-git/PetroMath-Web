@@ -53,7 +53,7 @@ module.exports = {
     queryToDate.setDate(queryToDate.getDate() + 3);
 
     // Get extended data for reconciliation
-    const data1 = await ReportDao.getCreditStmt(
+    const data1 = await ReportDao.getDigitalStmt(
       locationCode,
       dateFormat(queryFromDate, "yyyy-mm-dd"),
       dateFormat(queryToDate, "yyyy-mm-dd"),

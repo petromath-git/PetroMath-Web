@@ -159,6 +159,21 @@ mixin summaryCreditsData(creditRowNo)
         td
             label(id='val-' + prefix + 'amt-' + creditRowNo)
 
+
+//- Add new page: Summary on digital sales' details
+mixin summaryDigitalSalesData(digitalSaleRowNo)
+    - var prefix = 'digital-sales-';  // Changed from 'digital-sale-' to 'digital-sales-'
+    - var trClass = 'd-md-none';
+    tr(class=trClass id='vis-' + prefix + 'table-row-' + digitalSaleRowNo)
+        td
+            span(id='valText-' + prefix + 'vendor-' + digitalSaleRowNo)
+        td
+            span(id='val-' + prefix + 'amt-' + digitalSaleRowNo)  // Changed from 'amount' to 'amt'
+        td
+            span(id='val-' + prefix + 'transaction-date-' + digitalSaleRowNo)
+        td
+            span(id='val-' + prefix + 'notes-' + digitalSaleRowNo)
+            
 //- Add new page: Summary on expenses data
 mixin showExpensesData(rowNo, val)
     - var trClass = 'd-md-none';

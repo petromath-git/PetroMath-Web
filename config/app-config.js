@@ -31,6 +31,7 @@ const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 
 // config related to sales
 const MAX_CREDITS_ROW_CNT = 300;
+const MAX_DIGITAL_ROW_CNT = 20;
 const MAX_CASH_SALES_ROW_CNT = 25;
 const MAX_EXPENSES_ROW_CNT = 25;
 const MAX_CASHFLOWS_ROW_CNT = 30;
@@ -158,10 +159,12 @@ module.exports = {
   LOGIN_LOG_TABLE: "t_login_log",
   LUBES_INVOICE_HDR_TABLE: "t_lubes_inv_hdr",
   LUBES_INVOICE_LINES_TABLE: "t_lubes_inv_lines",
+  TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
 
   // config related to sales
   APP_CONFIGS: {
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,
+      maxDigitalSalesRowCnt:MAX_DIGITAL_ROW_CNT,
       maxCashSalesRowCnt: MAX_CASH_SALES_ROW_CNT,
       maxExpensesRowCnt: MAX_EXPENSES_ROW_CNT,
       maxCashFlowRowsCnt: MAX_CASHFLOWS_ROW_CNT,

@@ -608,7 +608,20 @@ function populateSummary(obj) {
             const labels = elements[i].querySelectorAll('[id^=val-]');
             for (let j = 0; j < labels.length; j++) {
                 const getValueFromLabelId = labels[j].id.replace("val-", "");
+
+                  if (getValueFromLabelId.includes('digital-sales-transaction-date-')) {
+                        const dateElement = document.getElementById(getValueFromLabelId);
+                        if (dateElement && dateElement.value) {
+                            const date = new Date(dateElement.value);
+                            const options = { day: '2-digit', month: 'short', year: 'numeric' };
+                            labels[j].textContent = date.toLocaleDateString('en-GB', options);
+                        } else {
+                            labels[j].textContent = '';
+                        }
+                    } else {   
+
                 labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+                    }
 
                 if (getValueFromLabelId.endsWith("pump_amount")) {
                     let value = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : 0;
@@ -1045,6 +1058,10 @@ function saveCreditSales() {
     });
 }
 
+
+
+
+
 function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
     return {
         'tcredit_id': salesId,
@@ -1062,6 +1079,103 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'updated_by': user.User_Name
     };
 }
+
+
+// Add new page - add digital sales to DB via ajax
+// Add new page - add digital sales to DB via ajax
+function saveDigitalSales() {
+    return new Promise((resolve, reject) => {
+        const digitalSalesTag = 'digital-sales-';
+        const digitalSalesRow = digitalSalesTag + 'table-row-';
+        const tabToActivate = 'expenses_tab';
+        const currentTabId = 'new_digital_sales';
+        const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + digitalSalesRow + ']:not([type="hidden"])');
+        let newSales = [], updateSales = [], newHiddenFieldsArr = [];
+        const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+        
+        salesObj.forEach((saleObj) => {
+            if (!saleObj.className.includes('d-md-none')) {
+                const saleObjRowNum = saleObj.id.replace(digitalSalesRow, '');
+                const vendorField = document.getElementById(digitalSalesTag + 'vendor-' + saleObjRowNum);
+                const saleField = document.getElementById(digitalSalesTag + 'amt-' + saleObjRowNum);
+                const dateField = document.getElementById(digitalSalesTag + 'transaction-date-' + saleObjRowNum);
+                const hiddenField = document.getElementById(digitalSalesTag + saleObjRowNum + '_hiddenId');
+                
+                // Check if this row has any data (vendor, amount, or is an existing record)
+                const hasVendor = vendorField.value;
+                const hasAmount = parseFloat(saleField.value) > 0;
+                const hasDate = dateField.value;
+                const isExistingRecord = hiddenField.value && parseInt(hiddenField.value) > 0;
+                
+                // If any field is filled or it's an existing record, validate all required fields
+                if (hasVendor || hasAmount || hasDate || isExistingRecord) {
+                    
+                    // Validate vendor is selected
+                    if (!hasVendor) {
+                        alert('Please select a vendor for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Validate amount is entered and greater than 0
+                    if (!hasAmount) {
+                        alert('Please enter an amount greater than 0 for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Validate transaction date is provided
+                    if (!hasDate) {
+                        alert('Please provide transaction date for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // If validation passes, add to save arrays
+                    if (isExistingRecord) {
+                        updateSales.push(formDigitalSales(hiddenField.value, digitalSalesTag, saleObjRowNum, user));
+                    } else {
+                        newHiddenFieldsArr.push(digitalSalesTag + saleObjRowNum);
+                        newSales.push(formDigitalSales(undefined, digitalSalesTag, saleObjRowNum, user));
+                    }
+                }
+            }
+        });
+        
+        // If validation failed, stop here
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+        
+        console.log("New Digital sales data " + JSON.stringify(newSales));
+        console.log("Update Digital sales data " + JSON.stringify(updateSales));
+        
+        postAjaxNew('new-digital-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'digital_sales_id')
+            .then((data) => {
+                resolve(data);
+            });
+            
+        if (newSales.length === 0 && updateSales.length === 0) {
+            resolve(true);      // tab click handled in trackMenu()
+        }
+    });
+}
+
+function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) {
+    return {
+        'digital_sales_id': digitalSalesId,
+        'closing_id': document.getElementById('closing_hiddenId').value,
+        'vendor_id': document.getElementById(digitalSalesTag + 'vendor-' + saleObjRowNum).value,
+        'amount': document.getElementById(digitalSalesTag + 'amt-' + saleObjRowNum).value,
+        'transaction_date': document.getElementById(digitalSalesTag + 'transaction-date-' + saleObjRowNum).value,
+        'notes': document.getElementById(digitalSalesTag + 'notes-' + saleObjRowNum).value,
+        'created_by': user.User_Name,
+        'updated_by': user.User_Name
+    };
+}
+
 
 function getCreditType(creditSaleTag, creditObjRowNum) {
     const creditTypeObj = document.getElementById(creditSaleTag + 'type-' + creditObjRowNum);
@@ -2105,6 +2219,10 @@ function onVehicleSelect(vehicleSelect) {
             updateHiddenCreditId(creditPartySelect, prefix, rowNo);
         }
     }
+}
+
+function showAddedDigitalSalesRow(prefix) {
+    showAddedRow(prefix, calculateDigitalSalesTotal);
 }
 
 // Create a wrapper function that calls showAddedRow and then initializes vehicle select2
