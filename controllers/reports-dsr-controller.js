@@ -77,8 +77,7 @@ module.exports = {
       const salesSummaryPromise = DsrReportDao.getsalessummary(locationCode, fromDate);
       const collectionPromise = DsrReportDao.getcollection(locationCode, fromDate);
       const oilCollectionPromise =  DsrReportDao.getOilcollection(locationCode, fromDate);
-      const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);
-      const cardSalesPromise = DsrReportDao.getcardsales(locationCode, fromDate);
+      const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);      
       const cardSalesSummaryPromise = DsrReportDao.getcardsalesSummary(locationCode, fromDate);
       const cashSalesSummaryPromise = DsrReportDao.getCashsales(locationCode, fromDate);
       const expensesPromise = DsrReportDao.getexpenses(locationCode, fromDate);
@@ -98,13 +97,12 @@ module.exports = {
 
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
-             cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
+             cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
              cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 oilCollectionPromise,
-                                                                                                creditSalesPromise,
-                                                                                                cardSalesPromise,
+                                                                                                creditSalesPromise,                                                                                                
                                                                                                 cardSalesSummaryPromise,
                                                                                                 cashSalesSummaryPromise,
                                                                                                 expensesPromise,
@@ -325,32 +323,7 @@ module.exports = {
         Amount: totalCreditSales 
       });
 
-      let totalCardSales = 0;
-
-      // Process Card Sales data
-      cardSalesData.forEach((cardSales) => {
-
-        totalCardSales += parseFloat(cardSales.amt);
-
-        CardSalelist.push({
-          'Bill No': cardSales.bill_no,
-          'Card': cardSales.name,
-           Product: cardSales.product_name,
-           Rate: cardSales.price,
-           Quantity: cardSales.qty,
-           Amount: cardSales.amt
-        });
-      });
-
-       // Push the total amount after the loop
-       CardSalelist.push({
-        'Bill No': 'Total',
-        'Credit Party': '-',
-        Product: '-',
-        Rate: '-',
-        Quantity: '-',
-        Amount: totalCardSales 
-      });
+     
     
       let totalCardSummarySales = 0;
 

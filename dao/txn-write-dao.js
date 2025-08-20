@@ -8,6 +8,7 @@ const TxnCreditSales = db.txn_credits;
 const TxnExpenses = db.txn_expense;
 const TxnDenoms = db.txn_denom;
 const TxnAttendance = db.txn_attendance;
+const TxnDigitalSales = db.txn_digital_sales;
 
 module.exports = {
     saveClosingData: (data) => {
@@ -66,9 +67,20 @@ module.exports = {
                 "product_id", "price", "price_discount", "qty", "amount", "notes", "updated_by", "updation_date"]});
         return salesTxn;
     },
+    saveDigitalSales: (data) => {
+    const salesTxn = TxnDigitalSales.bulkCreate(data, {
+        returning: true,
+        updateOnDuplicate: ["vendor_id", "amount", "transaction_date", "notes", "updated_by", "updation_date"]
+    });
+    return salesTxn;
+    },
     deleteCreditSaleById: (saleId) => {
         const saleTxn = TxnCreditSales.destroy({ where: { tcredit_id: saleId } });
         return saleTxn;
+    },
+    deleteDigitalSaleById: (digitalSalesId) => {
+    const salesTxn = TxnDigitalSales.destroy({ where: { digital_sales_id: digitalSalesId } });
+    return salesTxn;
     },
     saveExpenses: (data) => {
         const expenseTxn = TxnExpenses.bulkCreate(data, {returning: true,

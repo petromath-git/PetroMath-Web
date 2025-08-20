@@ -807,6 +807,10 @@ app.post('/new-digital-sales', isLoginEnsured, function (req, res, next) {
     HomeController.saveDigitalSalesData(req, res, next);  // response returned inside controller
 });
 
+app.delete('/remove-digital-sales', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
+});
+
 app.delete('/remove-digital-sale', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
 });

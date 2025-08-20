@@ -6,6 +6,7 @@ block content
     - var maxCreditsRowCnt = config.maxCreditsRowCnt;
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
+    - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
     - var currency = config.currency;
     - var denominationValues = config.denominationValues;
     - var denominationValuesJson = config.denominationValuesJson;
@@ -59,6 +60,8 @@ block content
                     li.nav-item.col-md
                         a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
                     li.nav-item.col-md
+                        a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesTotal()`) Digital Sales    
+                    li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`calculateExpensesAndDenoms(this)`) Expenses
                     if(user.isAdmin)
                         li.nav-item.col-md
@@ -78,6 +81,8 @@ block content
                         a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Cash Sales
                     li.nav-item.col-md
                         a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
+                    li.nav-item.col-md
+                        a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesTotal()`) Digital Sales
                     li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses") Expenses
                     if(user.isAdmin)
@@ -347,8 +352,48 @@ block content
                         div.col &nbsp;
                     div.row(align="center")
                         div.col
-                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('digital_sales_tab')") Next &raquo;
 
+                // ----------------------- New digital sales details ----------------------------
+                div.tab-pane.fade#new_digital_sales(class= divDisableClass)
+                    div
+                        div.col-16
+                            div.table-responsive
+                                table.table#digital-sales-table
+                                    tbody.w-100
+                                        thead(class="thead-light")
+                                            tr
+                                                th(scope="col") Vendor
+                                                th(scope="col") Amount
+                                                th(scope="col") Transaction Date
+                                                th(scope="col") Notes
+                                                if(!freezedRecord)
+                                                    th(scope="col")
+
+                                                - var rowCnt = 0
+                                                - var maxDigitalSalesRowCnt = 10
+                                                while rowCnt < maxDigitalSalesRowCnt
+                                                    +addDigitalSales(rowCnt, digitalSalesData ? digitalSalesData[rowCnt] : null)
+                                                    - rowCnt++
+                                            tr
+                                                td(colspan=2)
+                                                td Total
+                                                td
+                                                    input.form-control#digital-sales-total(type='text' name='digital-sales-total' readonly value='0')
+                                                td
+                    div.row
+                        div.col &nbsp;
+                    div.row
+                        div.col(align="center")
+                            button.btn.btn-info(type="button", onClick="showAddedDigitalSalesRow('digital-sales')") Add Digital Sales
+
+                    div.row
+                        div.col &nbsp;
+                    div.row(align="center")
+                        div.col
+                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+                                
+                                
                 // ----------------------- New expenses & denominations details ----------------------------
                 div.tab-pane.container.fade#new_expenses(class= divDisableClass)
                     div.row
@@ -499,7 +544,32 @@ block content
                                                             td
                                                                 span
                                                                     b#val-credit-total= 0
-
+                                    div.row
+                                        // Summary: Digital sales
+                                        div.col-6#v-digital-sales
+                                            h6.sub-header Digital Sales
+                                            div.table-responsive#vis-digital-sales-table
+                                                table.table.table-sm
+                                                    thead.thead-light
+                                                        tr
+                                                            th(scope="col") Vendor
+                                                            th(scope="col") Amount
+                                                            th(scope="col") Transaction Date
+                                                            th(scope="col") Notes
+                                                        - var rowCnt = 0
+                                                        - var maxDigitalSalesRowCnt = 10
+                                                        while rowCnt < maxDigitalSalesRowCnt
+                                                            +summaryDigitalSalesData(rowCnt++)
+                                                        tr
+                                                            td(colspan=1)
+                                                            td
+                                                                span
+                                                                    b Total
+                                                            td
+                                                                span
+                                                                    b#val-digital-sales-total= 0
+                                                            td                                           
+                                        div.col-6
                                 div.row
                                     // 2T loose details
                                     div.col-3#v-2TLoose-sales

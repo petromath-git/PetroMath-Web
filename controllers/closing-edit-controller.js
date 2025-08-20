@@ -33,7 +33,8 @@ module.exports = {
                 txnController.txnAttendanceDataPromise(closingId),
                 homeController.personAttendanceDataPromise(locationCode),
                 vehicleDataPromise(locationCode),
-                homeController.pumpProductDataPromise(locationCode)])
+                homeController.pumpProductDataPromise(locationCode),
+                txnController.txnDigitalSalesPromise(closingId),])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -57,6 +58,7 @@ module.exports = {
                         usersList: values[14].value.allUsers,
                         vehicleData: values[15].value,
                         pumpProductValues: values[16].value.products, 
+                        digitalSalesData: values[17].value
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());

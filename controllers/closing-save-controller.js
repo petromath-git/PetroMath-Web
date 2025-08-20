@@ -33,7 +33,10 @@ module.exports = {
     },
     txnWriteAttendancePromise: (attendanceDataArr) => {
         return txnWriteAttendancePromise(attendanceDataArr);
-    }
+    },
+    txnWriteDigitalSalesPromise: (saleDataArr) => {
+    return txnWriteDigitalSalesPromise(saleDataArr);
+    },
 }
 
 
@@ -167,3 +170,19 @@ const txnWriteAttendancePromise = (attendanceDataArr) => {
         });
     });
 }
+
+// Add new flow: Add digital sales data
+const txnWriteDigitalSalesPromise = (digitalSalesArr) => {
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.saveDigitalSales(digitalSalesArr)
+            .then(data => {
+                resolve(data);
+            }).catch((err) => {
+            console.error("Error while saving digital sales " + err.toString());
+            resolve({error: err.toString()});
+        });
+    });
+}
+
+
+

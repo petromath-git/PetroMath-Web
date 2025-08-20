@@ -23,6 +23,9 @@ module.exports = {
     txnCreditsPromise: (closingId) => {
         return txnCreditsPromise(closingId);
     },
+    txnDigitalSalesPromise: (closingId) => {
+    return txnDigitalSalesPromise(closingId);
+    },
     txnDenominationPromise: (closingId) => {
         return txnDenominationPromise(closingId);
     },
@@ -266,3 +269,26 @@ const txnAttendanceDataPromise = (closingId) => {
     });
 }
 
+// Show closing records flow: Getting txn digital sales data based on closing id
+const txnDigitalSalesPromise = (closingId) => {
+    return new Promise((resolve, reject) => {
+        TxnReadDao.getDigitalSalesByClosingId(closingId)
+            .then(data => {
+                if (data && data.length > 0) {
+                    let digitalSalesData = [];
+                    data.forEach((sale) => {
+                        digitalSalesData.push({
+                            digitalSalesId: sale.digital_sales_id,
+                            vendorId: sale.vendor_id,
+                            amount: sale.amount,
+                            transactionDate: sale.transaction_date,
+                            notes: sale.notes
+                        });
+                    });
+                    resolve(digitalSalesData);
+                } else {
+                    resolve([]);
+                }
+            });
+    });
+}

@@ -60,6 +60,56 @@ module.exports = {
 
         }
     },
+
+    // In dao/report-dao.js
+getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
+    const result = await db.sequelize.query(
+        `SELECT 
+            tds.transaction_date as tran_date,
+            CONCAT('DS-', tds.digital_sales_id) as bill_no,
+            tds.notes,
+            mcl.company_name,
+            'Digital Sale' as product_name,  -- Indicates this is a digital sale (debit)
+            tds.amount
+         FROM t_digital_sales tds
+         INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
+         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
+         WHERE tc.location_code = :locationCode
+           AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
+           AND tds.vendor_id = :vendorId
+         
+         UNION ALL
+         
+         SELECT 
+            tr.receipt_date as tran_date,
+            tr.receipt_no as bill_no,
+            tr.notes,
+            mcl.company_name,
+            NULL as product_name,  -- NULL indicates this is a payment (credit)
+            tr.amount
+         FROM t_receipts tr
+         INNER JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
+         WHERE tr.location_code = :locationCode
+           AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
+           AND tr.creditlist_id = :vendorId
+           AND mcl.card_flag = 'Y'
+         
+         ORDER BY tran_date, bill_no`,
+        {
+            replacements: { 
+                locationCode: locationCode, 
+                fromDate: fromDate, 
+                toDate: toDate, 
+                vendorId: vendorId 
+            },
+            type: db.sequelize.QueryTypes.SELECT
+        }
+    );
+    return result;
+},
+
+
+
     getLocationDetails: (location_code) => {
         return db.sequelize.query(
             `SELECT location_name, address,location_id,location_code
