@@ -62,7 +62,7 @@ module.exports = {
 
     // Create full dataset for reconciliation
     const fullDataset = data1.map((creditstmtData) => ({
-      Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
+      Date: creditstmtData.tran_date,
       Narration: [creditstmtData.bill_no, creditstmtData.notes]
     .filter(Boolean) // Remove null/undefined values
     .join(" - "), // Concatenate bill_no and notes with a separator
@@ -172,6 +172,9 @@ module.exports = {
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
     const formattedToDate = moment(toDate).format('DD/MM/YYYY');
+
+     
+    
 
     // Prepare the render data
     renderData = {
