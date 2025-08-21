@@ -180,7 +180,7 @@ getDeadline: async (locationCode, reportDate) => {
     const closing_id = data.map(item => item.closing_id);
     
     const result = await db.sequelize.query(
-        `select product_code,
+        `select 
                 sum(round(total_amt,2)) totalsalamt,
                 COALESCE((
                     SELECT SUM(ROUND(amount, 2)) 
@@ -218,8 +218,7 @@ getDeadline: async (locationCode, reportDate) => {
                  where 1=1
                  and   tr.pump_id = mp.pump_id 
                  and   tr.closing_id in (:closing_id)
-                 group by  mp.pump_code,mp.product_code) a 
-         group by product_code`,
+                 group by  mp.pump_code,mp.product_code) a `,
         {
             replacements: { closing_id: closing_id}, 
             type: Sequelize.QueryTypes.SELECT

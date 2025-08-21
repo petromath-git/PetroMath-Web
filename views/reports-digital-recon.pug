@@ -131,10 +131,8 @@ block content
             div
                 h6.font-weight-bold.text-center Digital Reconciliation Report
                 h6.font-weight-bold.text-center.text-uppercase= companyName                 
-                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
-                h6.font-weight-bold.text-right Opening Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
-                div#creditstmt-table-container
-                h6.font-weight-bold.text-right Closing Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`                 
+                div#creditstmt-table-container               
         else
             div.row &nbsp;
             div.row.bg-light No Transactions.  
