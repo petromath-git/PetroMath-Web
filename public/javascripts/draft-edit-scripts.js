@@ -65,6 +65,14 @@ function calculateExpensesAndDenoms(obj) {
     calculateDenominations()
 }
 
+function calculateDigitalSalesAndTrackMenu(obj) {
+    if(obj) {
+        trackMenu(obj);
+    }
+    calculateDigitalSalesTotal();
+}
+
+
 function trackMenuWithName(tabName) {
     trackMenu(document.getElementById(tabName));
 }
