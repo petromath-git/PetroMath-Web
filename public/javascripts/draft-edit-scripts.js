@@ -66,10 +66,14 @@ function calculateExpensesAndDenoms(obj) {
 }
 
 function calculateDigitalSalesAndTrackMenu(obj) {
-    if(obj) {
+    // if(obj) {
+    //     trackMenu(obj);
+    // }
+    // calculateDigitalSalesTotal();
+     setTimeout(() => {
         trackMenu(obj);
-    }
-    calculateDigitalSalesTotal();
+        calculateDigitalSalesTotal();
+    }, 100);
 }
 
 
@@ -78,26 +82,50 @@ function trackMenuWithName(tabName) {
 }
 
 function trackMenu(obj) {
-    const previousSaveFun = document.getElementById('currentTabForSave').value;
-    if(minimumRequirementForTabbing() || previousSaveFun === 'saveClosing' || previousSaveFun ==='saveDecantHeader') {
-        const callSaveFunctionForMenu = getSaveFunction(obj.id);
-        console.log("Previous save: " + previousSaveFun + ", current click(fn): " + callSaveFunctionForMenu);
+    const previousSaveFun = document.getElementById('currentTabForSave').value;   
+
+    if(minimumRequirementForTabbing() || previousSaveFun === 'saveClosing' || previousSaveFun ==='saveDecantHeader') {        
+        const callSaveFunctionForMenu = getSaveFunction(obj.id);        
         if (previousSaveFun === callSaveFunctionForMenu) {
+            setSaveFunction(obj.id);
             return;
         }
         if (previousSaveFun === 'NoSaveClick') {
             document.getElementById('currentTabForSave').value = callSaveFunctionForMenu;
-        } else {
+        } else {            
             ajaxLoading('d-md-block');
             window[previousSaveFun]().then((data) => {
                 if (data) {
                     setSaveFunction(obj.id);
-                    obj.click();
+                    activateTabDirectly(obj);
+                    //obj.click();
                 }
                 ajaxLoading('d-md-none');
             });
         }
     }
+}
+
+
+// Add this helper function
+function activateTabDirectly(tabElement) {
+    // Remove active from all tab panes and nav links
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active', 'show');
+    });
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Activate target tab pane
+    const targetId = tabElement.getAttribute('href');
+    const targetPane = document.querySelector(targetId);
+    if (targetPane) {
+        targetPane.classList.add('active', 'show');
+    }
+    
+    // Activate nav link
+    tabElement.classList.add('active');
 }
 
 function setSaveFunction(clickedTab) {

@@ -1148,10 +1148,6 @@ function saveDigitalSales() {
             resolve(false);
             return;
         }
-        
-        console.log("New Digital sales data " + JSON.stringify(newSales));
-        console.log("Update Digital sales data " + JSON.stringify(updateSales));
-        
         postAjaxNew('new-digital-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'digital_sales_id')
             .then((data) => {
                 resolve(data);
