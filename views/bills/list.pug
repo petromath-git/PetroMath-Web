@@ -9,6 +9,41 @@ block content
                 button.btn.btn-primary(onclick="window.location.href='/bills/new'")
                     i.bi.bi-plus
                     |  Create New Bill
+        .card-body.border-bottom.pb-3.mb-0
+            .row.g-3
+                .col-md-4
+                    .form-group
+                        label(for='quickSearch') Quick Search
+                        input#quickSearch.form-control(type='text' placeholder='Search bill no, customer, product, vehicle, amount...')
+                .col-md-2
+                    .form-group
+                        label(for='filterType') Bill Type
+                        select#filterType.form-control
+                            option(value='') All Types
+                            option(value='CASH') Cash
+                            option(value='CREDIT') Credit
+                            option(value='DIGITAL') Digital
+                .col-md-2
+                    .form-group
+                        label(for='filterStatus') Status
+                        select#filterStatus.form-control
+                            option(value='') All Status
+                            option(value='DRAFT') Draft
+                            option(value='ACTIVE') Active
+                            option(value='CANCELLED') Cancelled
+                .col-md-2
+                    .form-group
+                        label(for='filterDateFrom') From Date
+                        input#filterDateFrom.form-control(type='date')
+                .col-md-2
+                    .form-group
+                        label(for='filterDateTo') To Date
+                        input#filterDateTo.form-control(type='date')
+            .row.mt-3
+                .col-12.text-end
+                    button#clearBtn.btn.btn-outline-secondary(type='button')
+                        i.bi.bi-x-circle
+                        |  Clear
         
         .card-body
             .table-responsive
@@ -151,5 +186,95 @@ block content
                 });
             });
 
+            const $table = $('.table tbody');
+        const $rows = $table.find('tr:not(.bill-details)'); // Exclude detail rows
+        
+        // Set default dates to today
+        const today = new Date().toISOString().split('T')[0];
+        $('#filterDateFrom').val(today);
+        $('#filterDateTo').val(today);
+        
+        // Real-time filters - all filters apply immediately
+        $('#quickSearch').on('input', function() {
+            applyAllFilters();
+        });
+        
+        $('#filterType, #filterStatus, #filterDateFrom, #filterDateTo').on('change', function() {
+            applyAllFilters();
+        });
+        
+        // Clear button
+        $('#clearBtn').click(function() {
+            $('#quickSearch, #filterType, #filterStatus').val('');
+            // Reset dates to today
+            $('#filterDateFrom').val(today);
+            $('#filterDateTo').val(today);
+            $rows.show(); // Show all rows
+        });
+        
+        function applyAllFilters() {
+            const quickSearch = $('#quickSearch').val().toLowerCase();
+            const type = $('#filterType').val();
+            const status = $('#filterStatus').val();
+            const dateFrom = $('#filterDateFrom').val();
+            const dateTo = $('#filterDateTo').val();
+            
+            $rows.each(function() {
+                const $row = $(this);
+                let show = true;
+                
+                // Apply quick search filter
+                if (quickSearch) {
+                    const billNo = $row.find('td:nth-child(2)').text().toLowerCase();
+                    const customer = $row.find('td:nth-child(4)').text().toLowerCase();
+                    const amount = $row.find('td:nth-child(5)').text().toLowerCase();
+                    
+                    const matches = billNo.includes(quickSearch) || 
+                                   customer.includes(quickSearch) || 
+                                   amount.includes(quickSearch);
+                    
+                    if (!matches) {
+                        show = false;
+                    }
+                }
+                
+                // Apply type filter
+                if (show && type && $row.find('td:nth-child(3)').text() !== type) {
+                    show = false;
+                }
+                
+                // Apply status filter  
+                if (show && status && $row.find('td:nth-child(6)').text() !== status) {
+                    show = false;
+                }
+                
+                // Apply date range filter
+                if (show && (dateFrom || dateTo)) {
+                    const rowDateText = $row.find('td:nth-child(9)').text();
+                    const dateParts = rowDateText.split('/');
+                    if (dateParts.length === 3) {
+                        const rowDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+                        
+                        if (dateFrom && rowDate < new Date(dateFrom)) {
+                            show = false;
+                        }
+                        if (dateTo && rowDate > new Date(dateTo)) {
+                            show = false;
+                        }
+                    }
+                }
+                
+                if (show) {
+                    $row.show();
+                } else {
+                    $row.hide();
+                    const billId = $row.find('.expand-row').data('bill-id');
+                    $(`#details-${billId}`).hide();
+                }
+            });
+        }
+        
+        // Apply default date filter on page load
+        applyAllFilters();
               
         });

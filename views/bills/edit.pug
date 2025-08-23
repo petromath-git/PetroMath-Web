@@ -5,9 +5,15 @@ block content
         .card
             .card-header
                 .d-flex.justify-content-between.align-items-center
-                    h5.card-title.mb-0 Edit Bill
-                        span.text-muted  ##{bill.bill_no}
-                    .float-right
+                    .d-flex.align-items-center.gap-3
+                        button.btn.btn-outline-secondary(onclick="window.location.href='/bills'")
+                            i.bi.bi-arrow-left.me-1
+                            | Back to Bills
+                        h5.card-title.mb-0 Edit Bill #{bill.bill_no}
+                    .d-flex.gap-2
+                        button.btn.btn-info#addRowDesktop(type='button')
+                            i.bi.bi-plus.me-1
+                            |  Add Item
 
             .card-body              
                 
@@ -53,6 +59,9 @@ block content
                                     th.text-right Price
                                     th.text-right Quantity
                                     th.text-right Discount
+                                    th.text-right Subtotal
+                                    th.text-right CGST
+                                    th.text-right SGST
                                     th.text-right Amount
                                     th Notes
                                     th.text-center Actions
@@ -63,10 +72,16 @@ block content
                                             select.form-control.product-select(name=`items[${index}][product_id]` required)
                                                 option(value='') Select Product
                                                 each product in products
-                                                    option(value=product.product_id 
+                                                    option(
+                                                        value=product.product_id 
                                                         selected=product.product_id === item.product_id 
                                                         data-product-name=product.product_name 
-                                                        data-price=product.price) #{product.product_name}
+                                                        data-price=product.price
+                                                        data-cgst-percent=product.cgst_percent || 0
+                                                        data-sgst-percent=product.sgst_percent || 0
+                                                        data-unit=product.unit
+                                                        data-hsn-code=product.hsn_code || ''
+                                                    ) #{product.product_name}
                                         td
                                             input.form-control.price-input.text-right(
                                                 type='number' 
@@ -92,6 +107,17 @@ block content
                                                 value=item.price_discount 
                                                 min='0'
                                             )
+                                        td.text-right
+                                            span.subtotal-display 0.00
+                                            input.subtotal-hidden(type='hidden' name=`items[${index}][base_amount]`)
+                                        td.text-right
+                                            span.cgst-display 0.00
+                                            input.cgst-hidden(type='hidden' name=`items[${index}][cgst_amount]`)
+                                            input(type='hidden' name=`items[${index}][cgst_percent]`)
+                                        td.text-right
+                                            span.sgst-display 0.00
+                                            input.sgst-hidden(type='hidden' name=`items[${index}][sgst_amount]`)
+                                            input(type='hidden' name=`items[${index}][sgst_percent]`)    
                                         td
                                             input.form-control.amount-input.text-right(
                                                 type='number' 
