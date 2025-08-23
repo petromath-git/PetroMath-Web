@@ -42,15 +42,18 @@ module.exports = {
             next(error);
         }
     },
-
- // In bill-controller.js, update the createBill method:
-
-// In bill-controller.js, update the createBill method:
-
     createBill: async (req, res, next) => {
         const transaction = await db.sequelize.transaction();
+
+          try {
+        // Validate bill items FIRST
+            const validation = await validateBillItems(req.body.items, req.user.location_code);
+            if (!validation.valid) {
+                req.flash('error', validation.errors.join('. '));
+                return res.redirect('/bills/new');
+        }
         
-        try {
+        
             // First validate closing status
             const closing = await db.sequelize.query(`
                 SELECT closing_status 
@@ -118,66 +121,83 @@ module.exports = {
             // Create bill items
             for (const item of req.body.items) {
                 if (req.body.bill_type === 'CREDIT') {
-                    await db.sequelize.query(`
-                        INSERT INTO t_credits (
-                            closing_id, bill_no, bill_id, creditlist_id,
-                            product_id, price, price_discount, qty, amount,
-                            notes, created_by, creation_date
-                        ) VALUES (
-                            :closingId, :billNo, :billId, :creditlistId,
-                            :productId, :price, :discount, :qty, :amount,
-                            :notes, :createdBy, NOW()
-                        )
-                    `, {
-                        replacements: {
-                            closingId: req.body.closing_id,
-                            billNo: nextBillNo,
-                            billId: billId,
-                            creditlistId: req.body.creditlist_id,
-                            productId: parseInt(item.product_id),
-                            price: parseFloat(item.price),
-                            discount: parseFloat(item.price_discount || 0),
-                            qty: parseFloat(item.qty),
-                            amount: parseFloat(item.amount),
-                            notes: item.notes || '',  // Add default empty string for notes
-                            createdBy: req.user.Person_id
-                        },
-                        type: Sequelize.QueryTypes.INSERT,
-                        transaction
-                    });
+                        await db.sequelize.query(`
+                            INSERT INTO t_credits (
+                                closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
+                                product_id, price, price_discount, qty, amount,
+                                base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                                notes, created_by, creation_date
+                            ) VALUES (
+                                :closingId, :billNo, :billId, :creditlistId, :vehicleId,
+                                :productId, :price, :discount, :qty, :amount,
+                                :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                                :notes, :createdBy, NOW()
+                            )
+                        `, {
+                            replacements: {
+                                closingId: req.body.closing_id,
+                                billNo: nextBillNo,
+                                billId: billId,
+                                creditlistId: req.body.creditlist_id,
+                                vehicleId: req.body.vehicle_id || null,
+                                productId: parseInt(item.product_id),
+                                price: parseFloat(item.price),
+                                discount: parseFloat(item.price_discount || 0),
+                                qty: parseFloat(item.qty),
+                                amount: parseFloat(item.amount),
+                                baseAmount: parseFloat(item.base_amount),
+                                cgstPercent: parseFloat(item.cgst_percent || 0),
+                                sgstPercent: parseFloat(item.sgst_percent || 0),
+                                cgstAmount: parseFloat(item.cgst_amount || 0),
+                                sgstAmount: parseFloat(item.sgst_amount || 0),
+                                notes: item.notes || '',
+                                createdBy: req.user.Person_id
+                            },
+                            type: Sequelize.QueryTypes.INSERT,
+                            transaction
+                        });
                 } else {
-                    await db.sequelize.query(`
-                        INSERT INTO t_cashsales (
-                            closing_id, bill_no, bill_id,
-                            product_id, price, price_discount, qty, amount,
-                            notes, created_by, creation_date
-                        ) VALUES (
-                            :closingId, :billNo, :billId,
-                            :productId, :price, :discount, :qty, :amount,
-                            :notes, :createdBy, NOW()
-                        )
-                    `, {
-                        replacements: {
-                            closingId: req.body.closing_id,
-                            billNo: nextBillNo,
-                            billId: billId,
-                            productId: parseInt(item.product_id),
-                            price: parseFloat(item.price),
-                            discount: parseFloat(item.price_discount || 0),
-                            qty: parseFloat(item.qty),
-                            amount: parseFloat(item.amount),
-                            notes: item.notes || '',  // Add default empty string for notes
-                            createdBy: req.user.Person_id
-                        },
-                        type: Sequelize.QueryTypes.INSERT,
-                        transaction
-                    });
-                }
+                        // For CASH bills
+                        await db.sequelize.query(`
+                            INSERT INTO t_cashsales (
+                                closing_id, bill_no, bill_id,
+                                product_id, price, price_discount, qty, amount,
+                                base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                                notes, created_by, creation_date
+                            ) VALUES (
+                                :closingId, :billNo, :billId,
+                                :productId, :price, :discount, :qty, :amount,
+                                :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                                :notes, :createdBy, NOW()
+                            )
+                        `, {
+                            replacements: {
+                                closingId: req.body.closing_id,
+                                billNo: nextBillNo,
+                                billId: billId,
+                                productId: parseInt(item.product_id),
+                                price: parseFloat(item.price),
+                                discount: parseFloat(item.price_discount || 0),
+                                qty: parseFloat(item.qty),
+                                amount: parseFloat(item.amount),
+                                baseAmount: parseFloat(item.base_amount),
+                                cgstPercent: parseFloat(item.cgst_percent || 0),
+                                sgstPercent: parseFloat(item.sgst_percent || 0),
+                                cgstAmount: parseFloat(item.cgst_amount || 0),
+                                sgstAmount: parseFloat(item.sgst_amount || 0),
+                                notes: item.notes || '',
+                                createdBy: req.user.Person_id
+                            },
+                            type: Sequelize.QueryTypes.INSERT,
+                            transaction
+                        });
+                    }
             }
 
             await transaction.commit();
             req.flash('success', `Bill ${nextBillNo} created successfully`);
             res.redirect('/bills');
+            
         } catch (error) {
             await transaction.rollback();
             console.error('Bill creation error details:', {
@@ -190,37 +210,86 @@ module.exports = {
         }
     },
 
-    getBills: async (req, res, next) => {
-        try {
-            const bills = await db.sequelize.query(`
-                SELECT b.*, 
-                    CASE 
-                        WHEN b.bill_type = 'CREDIT' THEN c.Company_Name
-                        ELSE NULL
-                    END as customer_name,
-                    p.Person_Name as cashier_name
-                FROM t_bills b
-                LEFT JOIN t_credits tc ON b.bill_id = tc.bill_id
-                LEFT JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id
-                LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
-                LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
-                WHERE b.location_code = :locationCode
-                ORDER BY b.creation_date DESC
-            `, {
-                replacements: { locationCode: req.user.location_code },
-                type: Sequelize.QueryTypes.SELECT
-            });
+    // getBills: async (req, res, next) => {
+    //     try {
+    //         const bills = await db.sequelize.query(`
+    //             SELECT b.*, 
+    //                 CASE 
+    //                     WHEN b.bill_type = 'CREDIT' THEN c.Company_Name
+    //                     ELSE NULL
+    //                 END as customer_name,
+    //                 p.Person_Name as cashier_name
+    //             FROM t_bills b
+    //             LEFT JOIN t_credits tc ON b.bill_id = tc.bill_id
+    //             LEFT JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id
+    //             LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+    //             LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+    //             WHERE b.location_code = :locationCode
+    //             ORDER BY b.creation_date DESC
+    //         `, {
+    //             replacements: { locationCode: req.user.location_code },
+    //             type: Sequelize.QueryTypes.SELECT
+    //         });
     
-            res.render('bills/list', {
-                title: 'Bills',
-                user: req.user,
-                bills: bills,
-                messages: req.flash()
-            });
-        } catch (error) {
-            next(error);
-        }
-    },
+    //         res.render('bills/list', {
+    //             title: 'Bills',
+    //             user: req.user,
+    //             bills: bills,
+    //             messages: req.flash()
+    //         });
+    //     } catch (error) {
+    //         next(error);
+    //     }
+    // },
+
+// Replace the getBills query in your bill-controller.js with this:
+
+getBills: async (req, res, next) => {
+    try {
+        const bills = await db.sequelize.query(`
+            SELECT DISTINCT
+                b.bill_id,
+                b.location_code,
+                b.bill_no,
+                b.bill_type,
+                b.closing_id,
+                b.bill_status,
+                b.print_count,
+                b.total_amount,
+                b.creation_date,
+                b.updation_date,
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT c.Company_Name 
+                        FROM t_credits tc 
+                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        LIMIT 1
+                    )
+                    ELSE NULL
+                END as customer_name,
+                p.Person_Name as cashier_name
+            FROM t_bills b
+            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+            WHERE b.location_code = :locationCode
+            ORDER BY b.creation_date DESC
+        `, {
+            replacements: { locationCode: req.user.location_code },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        res.render('bills/list', {
+            title: 'Bills',
+            user: req.user,
+            bills: bills,
+            messages: req.flash()
+        });
+    } catch (error) {
+        next(error);
+    }
+},
+
 
     cancelBill: async (req, res, next) => {
         const transaction = await db.sequelize.transaction();
@@ -385,15 +454,7 @@ module.exports = {
             const products = await ProductDao.findProducts(req.user.location_code);
             const credits = await CreditDao.findCredits(req.user.location_code);
 
-            console.log('Bill details:', {
-                bill_type: bill[0].bill_type,
-                creditlist_id: bill[0].creditlist_id
-            });
             
-            console.log('Credits:', credits.map(c => ({
-                creditlist_id: c.creditlist_id,
-                Company_Name: c.Company_Name
-            })));
     
             res.render('bills/edit', {  // Change this to 'bills/edit'
                 title: 'Edit Bill',
@@ -413,8 +474,16 @@ module.exports = {
     updateBill: async (req, res, next) => {
         const transaction = await db.sequelize.transaction();
     
-        try {
-            const billId = req.params.billId;
+         try {
+                const billId = req.params.billId;
+                
+                // Validate bill items FIRST
+                const validation = await validateBillItems(req.body.items, req.user.location_code);
+                if (!validation.valid) {
+                    req.flash('error', validation.errors.join('. '));
+                    return res.redirect(`/bills/edit/${billId}`);
+        }
+            
     
             // Validate the bill exists and is editable
             const bill = await db.sequelize.query(`
@@ -501,35 +570,45 @@ module.exports = {
             for (const item of req.body.items) {
                 const insertQuery = req.body.bill_type === 'CREDIT'
                     ? `INSERT INTO t_credits (
-                        closing_id, bill_no, bill_id, creditlist_id,
+                        closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                         product_id, price, price_discount, qty, amount,
+                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
                         notes, created_by, creation_date
                     ) VALUES (
-                        :closingId, :billNo, :billId, :creditlistId,
+                        :closingId, :billNo, :billId, :creditlistId, :vehicleId,
                         :productId, :price, :discount, :qty, :amount,
+                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
                         :notes, :createdBy, NOW()
                     )`
                     : `INSERT INTO t_cashsales (
                         closing_id, bill_no, bill_id,
                         product_id, price, price_discount, qty, amount,
+                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
                         notes, created_by, creation_date
                     ) VALUES (
                         :closingId, :billNo, :billId,
                         :productId, :price, :discount, :qty, :amount,
+                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
                         :notes, :createdBy, NOW()
                     )`;
-    
+
                 await db.sequelize.query(insertQuery, {
                     replacements: {
                         closingId: req.body.closing_id,
                         billNo: bill[0].bill_no,
                         billId: billId,
                         creditlistId: req.body.bill_type === 'CREDIT' ? req.body.creditlist_id : null,
+                        vehicleId: req.body.bill_type === 'CREDIT' ? (req.body.vehicle_id || null) : null,
                         productId: parseInt(item.product_id),
                         price: parseFloat(item.price),
                         discount: parseFloat(item.price_discount || 0),
                         qty: parseFloat(item.qty),
                         amount: parseFloat(item.amount),
+                        baseAmount: parseFloat(item.base_amount),
+                        cgstPercent: parseFloat(item.cgst_percent || 0),
+                        sgstPercent: parseFloat(item.sgst_percent || 0),
+                        cgstAmount: parseFloat(item.cgst_amount || 0),
+                        sgstAmount: parseFloat(item.sgst_amount || 0),
                         notes: item.notes || '',
                         createdBy: req.user.Person_id
                     },
@@ -596,4 +675,104 @@ module.exports = {
         }
     },
     
+};
+
+
+const validateBillItems = async (items, locationCode) => {
+    const errors = [];
+    
+    if (!items || items.length === 0) {
+        errors.push('At least one item is required');
+        return { valid: false, errors };
+    }
+    
+    // Get products with units for validation
+    const products = await db.sequelize.query(`
+        SELECT product_id, product_name, unit, price, cgst_percent, sgst_percent
+        FROM m_product 
+        WHERE location_code = :locationCode
+    `, {
+        replacements: { locationCode },
+        type: Sequelize.QueryTypes.SELECT
+    });
+    
+    const productMap = {};
+    products.forEach(p => {
+        productMap[p.product_id] = p;
+    });
+    
+    let hasValidItems = false;
+    
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const product = productMap[item.product_id];
+        
+        if (!item.product_id) {
+            continue; // Skip empty rows
+        }
+        
+        if (!product) {
+            errors.push(`Invalid product selected in row ${i + 1}`);
+            continue;
+        }
+        
+        // Validate quantity
+        const qty = parseFloat(item.qty || 0);
+        if (qty <= 0) {
+            errors.push(`Quantity must be greater than 0 for ${product.product_name}`);
+            continue;
+        }
+        
+        // Validate unit-based products (whole numbers only)
+        const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS'];
+        if (unitBasedProducts.includes(product.unit.toUpperCase()) && qty % 1 !== 0) {
+            errors.push(`${product.product_name} must be sold in whole units only`);
+            continue;
+        }
+        
+        // Validate price
+        const price = parseFloat(item.price || 0);
+        if (price <= 0) {
+            errors.push(`Price must be greater than 0 for ${product.product_name}`);
+            continue;
+        }
+        
+        // Validate discount
+        const discount = parseFloat(item.price_discount || 0);
+        const lineTotal = price * qty;
+        if (discount < 0) {
+            errors.push(`Discount cannot be negative for ${product.product_name}`);
+            continue;
+        }
+        if (discount >= lineTotal) {
+            errors.push(`Discount cannot be equal to or greater than line total for ${product.product_name}`);
+            continue;
+        }
+        
+        // Validate final amount
+        const amount = parseFloat(item.amount || 0);
+        if (amount <= 0) {
+            errors.push(`Final amount must be greater than 0 for ${product.product_name}`);
+            continue;
+        }
+        
+        // Validate tax calculations (optional - ensures data integrity)
+        const afterDiscount = lineTotal - discount;
+        const totalTaxPercent = (product.cgst_percent || 0) + (product.sgst_percent || 0);
+        const expectedBaseAmount = totalTaxPercent > 0 ? afterDiscount / (1 + totalTaxPercent / 100) : afterDiscount;
+        const expectedAmount = Math.round(afterDiscount * 100) / 100; // Round to 2 decimal places
+        
+        if (Math.abs(amount - expectedAmount) > 0.02) { // Allow small rounding differences
+            errors.push(`Amount calculation error for ${product.product_name}`);
+            continue;
+        }
+        
+        hasValidItems = true;
+    }
+    
+    if (!hasValidItems) {
+        errors.push('At least one valid item is required');
+    }
+    
+    return { valid: errors.length === 0, errors };
 };

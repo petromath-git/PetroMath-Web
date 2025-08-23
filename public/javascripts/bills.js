@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 qtyInput.value = qty;
             }
             
-            updateTotalAmount();
+            calculateGrandTotal();
         });
 
         // Remove row functionality
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const rows = billItemsTable.querySelectorAll('.item-row');
             if (rows.length > 1) {
                 row.remove();
-                updateTotalAmount();
+                calculateGrandTotal();
             }
         });
     }
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             amountInput.value = calculatedAmount.toFixed(3);
         }
 
-        updateTotalAmount();
+        calculateGrandTotal();
     }
 
     // Update total amount
@@ -92,6 +92,75 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         totalAmountDisplay.textContent = `₹ ${total.toFixed(2)}`;
     }
+
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('product-select')) {
+        const row = e.target.closest('.item-row');
+        const selectedOption = e.target.options[e.target.selectedIndex];
+        
+        // Auto-fill price
+        const price = selectedOption.dataset.price;
+        const priceInput = row.querySelector('.price-input');
+        if (price && priceInput) {
+            priceInput.value = parseFloat(price).toFixed(2);
+        }
+        
+        // Set quantity step for unit-based products
+        const qtyInput = row.querySelector('.qty-input');
+        const unit = selectedOption.dataset.unit || '';
+        const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS'];
+        
+        if (unitBasedProducts.includes(unit.toUpperCase())) {
+            qtyInput.step = '1';
+            qtyInput.setAttribute('title', 'This product can only be sold in whole units');
+        } else {
+            qtyInput.step = '0.001';
+            qtyInput.setAttribute('title', 'Quantity can have decimals');
+        }
+        
+        // NEW: Set amount field readonly state
+        setAmountFieldState(row);
+        
+        calculateRowTax(row);
+    }
+});
+    
+
+
+    document.addEventListener('input', function(e) {
+    if (e.target.classList.contains('qty-input') || 
+        e.target.classList.contains('price-input') || 
+        e.target.classList.contains('discount-input')) {
+        
+        // Prevent negative values
+        if (parseFloat(e.target.value) < 0) {
+            e.target.value = 0;
+        }
+        
+        const row = e.target.closest('.item-row');
+        validateRow(row);
+        calculateRowTax(row);
+    }
+
+     if (e.target.classList.contains('amount-input')) {
+        // Prevent negative values
+        if (parseFloat(e.target.value) < 0) {
+            e.target.value = 0;
+        }
+        
+        const row = e.target.closest('.item-row');
+        validateRow(row);
+        reverseCalculateTax(row);
+    }
+});
+
+
+
+
+
+
+
 
     // Add new row for desktop
     addRowDesktopBtn.addEventListener('click', function() {
@@ -116,6 +185,11 @@ document.addEventListener('DOMContentLoaded', function() {
         newRow.querySelector('.discount-input').name = `items[${rowIndex}][price_discount]`;
         newRow.querySelector('.amount-input').name = `items[${rowIndex}][amount]`;
         newRow.querySelector('.notes-input').name = `items[${rowIndex}][notes]`;
+        newRow.querySelector('.subtotal-hidden').name = `items[${rowIndex}][base_amount]`;
+        newRow.querySelector('.cgst-hidden').name = `items[${rowIndex}][cgst_amount]`;
+        newRow.querySelector('.sgst-hidden').name = `items[${rowIndex}][sgst_amount]`;
+        newRow.querySelector('input[name*="[cgst_percent]"]').name = `items[${rowIndex}][cgst_percent]`;
+        newRow.querySelector('input[name*="[sgst_percent]"]').name = `items[${rowIndex}][sgst_percent]`;
 
         // Enable remove button
         const removeBtn = newRow.querySelector('.remove-row');
@@ -183,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
             mobileQty.value = '';
             mobileDiscount.value = '';
 
-            updateTotalAmount();
+            calculateGrandTotal();
         });
     }
 
@@ -191,7 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (e.target.closest('.delete-mobile-item')) {
             e.target.closest('.list-group-item').remove();
-            updateTotalAmount();
+            calculateGrandTotal();
         }
     });
 
@@ -218,33 +292,67 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Form validation
     billForm.addEventListener('submit', function(e) {
-        const shift = document.getElementById('shift').value;
-        const billType = document.getElementById('billType').value;
-        const creditCustomer = billType === 'CREDIT' ? document.getElementById('creditCustomer').value : null;
+    const shift = document.getElementById('shift').value;
+    const billType = document.getElementById('billType').value;
+    const creditCustomer = billType === 'CREDIT' ? document.getElementById('creditCustomer').value : null;
 
-        if (!shift) {
-            alert('Please select a shift');
+    if (!shift) {
+        alert('Please select a shift');
+        e.preventDefault();
+        return false;
+    }
+
+    if (billType === 'CREDIT' && !creditCustomer) {
+        alert('Please select a customer for credit bill');
+        e.preventDefault();
+        return false;
+    }
+
+    // Check if there are any items (either desktop or mobile)
+    const desktopItems = document.querySelectorAll('.item-row');
+    const mobileItems = document.querySelectorAll('#mobileItemsList .list-group-item');
+    const hasDesktopItems = desktopItems.length > 0 && desktopItems[0].querySelector('.product-select').value;
+    const hasMobileItems = mobileItems.length > 0;
+
+    if (!hasDesktopItems && !hasMobileItems) {
+        alert('Please add at least one item');
+        e.preventDefault();
+        return false;
+    }
+
+    // NEW: Add detailed item validation for desktop items
+    if (hasDesktopItems) {
+        let hasValidItems = false;
+        let allRowsValid = true;
+        
+        for (let row of desktopItems) {
+            const productSelect = row.querySelector('.product-select');
+            
+            // Skip empty rows
+            if (!productSelect.value) {
+                continue;
+            }
+            
+            const validation = validateRow(row);
+            if (!validation.valid) {
+                allRowsValid = false;
+                alert(validation.message);
+                e.preventDefault();
+                return false;
+            } else {
+                hasValidItems = true;
+            }
+        }
+        
+        if (!hasValidItems) {
+            alert('Please add at least one valid item to the bill');
             e.preventDefault();
             return false;
         }
+    }
 
-        if (billType === 'CREDIT' && !creditCustomer) {
-            alert('Please select a customer for credit bill');
-            e.preventDefault();
-            return false;
-        }
-
-        // Check if there are any items (either desktop or mobile)
-        const desktopItems = document.querySelectorAll('.item-row');
-        const mobileItems = document.querySelectorAll('#mobileItemsList .list-group-item');
-        const hasDesktopItems = desktopItems.length > 0 && desktopItems[0].querySelector('.product-select').value;
-        const hasMobileItems = mobileItems.length > 0;
-
-        if (!hasDesktopItems && !hasMobileItems) {
-            alert('Please add at least one item');
-            e.preventDefault();
-            return false;
-        }
+    // If we reach here, all validations passed
+    return true;
     });
 
 
@@ -259,3 +367,296 @@ document.addEventListener('DOMContentLoaded', function() {
         window.open(`/bills/${billId}/print`, '_blank');
     });
 });
+
+
+// Auto-calculate tax with RSP-inclusive logic
+function calculateRowTax(row) {
+    const productSelect = row.querySelector('.product-select');
+    const qtyInput = row.querySelector('.qty-input');
+    const priceInput = row.querySelector('.price-input');
+    const discountInput = row.querySelector('.discount-input');
+    
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const cgstPercent = parseFloat(selectedOption.dataset.cgstPercent || 0);
+    const sgstPercent = parseFloat(selectedOption.dataset.sgstPercent || 0);
+    
+    const rspPrice = parseFloat(priceInput.value || 0);
+    const qty = parseFloat(qtyInput.value || 0);
+    const discount = parseFloat(discountInput.value || 0);
+    
+    // Calculate line total after discount (RSP inclusive)
+    const lineTotalRSP = (rspPrice * qty) - discount;
+    
+    // Calculate tax amounts using RSP-inclusive logic
+    const totalTaxPercent = cgstPercent + sgstPercent;
+    let baseAmount = 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    
+    if (totalTaxPercent > 0) {
+        baseAmount = lineTotalRSP / (1 + (totalTaxPercent / 100));
+        cgstAmount = baseAmount * (cgstPercent / 100);
+        sgstAmount = baseAmount * (sgstPercent / 100);
+    } else {
+        baseAmount = lineTotalRSP;
+    }
+    
+    const finalAmount = baseAmount + cgstAmount + sgstAmount;
+    
+    // Update displays
+    const subtotalDisplay = row.querySelector('.subtotal-display');
+    const cgstDisplay = row.querySelector('.cgst-display');
+    const sgstDisplay = row.querySelector('.sgst-display');
+    const amountInput = row.querySelector('.amount-input');
+    
+    if (subtotalDisplay) subtotalDisplay.textContent = baseAmount.toFixed(2);
+    if (cgstDisplay) cgstDisplay.textContent = cgstAmount.toFixed(2);
+    if (sgstDisplay) sgstDisplay.textContent = sgstAmount.toFixed(2);
+    if (amountInput) amountInput.value = finalAmount.toFixed(2);
+    
+    // Update hidden fields
+    const subtotalHidden = row.querySelector('.subtotal-hidden');
+    const cgstHidden = row.querySelector('.cgst-hidden');
+    const sgstHidden = row.querySelector('.sgst-hidden');
+    const cgstPercentInput = row.querySelector('input[name*="[cgst_percent]"]');
+    const sgstPercentInput = row.querySelector('input[name*="[sgst_percent]"]');
+    const baseAmountInput = row.querySelector('input[name*="[base_amount]"]');
+    const cgstAmountInput = row.querySelector('input[name*="[cgst_amount]"]');
+    const sgstAmountInput = row.querySelector('input[name*="[sgst_amount]"]');
+    
+    if (subtotalHidden) subtotalHidden.value = baseAmount.toFixed(2);
+    if (cgstHidden) cgstHidden.value = cgstAmount.toFixed(2);
+    if (sgstHidden) sgstHidden.value = sgstAmount.toFixed(2);
+    if (cgstPercentInput) cgstPercentInput.value = cgstPercent.toFixed(2);
+    if (sgstPercentInput) sgstPercentInput.value = sgstPercent.toFixed(2);
+    if (baseAmountInput) baseAmountInput.value = baseAmount.toFixed(2);
+    if (cgstAmountInput) cgstAmountInput.value = cgstAmount.toFixed(2);
+    if (sgstAmountInput) sgstAmountInput.value = sgstAmount.toFixed(2);
+    
+    calculateGrandTotal();
+}
+
+// Calculate grand total and tax summary
+function calculateGrandTotal() {
+    let grandTotal = 0;
+    const itemRows = document.querySelectorAll('#billItems .item-row');
+    itemRows.forEach(function(row) {
+        const amountInput = row.querySelector('.amount-input');
+        const amount = parseFloat(amountInput?.value || 0);
+        grandTotal += amount;
+    });
+    
+    const grandTotalElement = document.getElementById('totalAmount');
+    if (grandTotalElement) {
+        grandTotalElement.textContent = '₹ ' + grandTotal.toFixed(2);
+    }
+}
+
+function validateRow(row) {
+    const productSelect = row.querySelector('.product-select');
+    const qtyInput = row.querySelector('.qty-input');
+    const priceInput = row.querySelector('.price-input');
+    const discountInput = row.querySelector('.discount-input');
+    const amountInput = row.querySelector('.amount-input');
+    
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const unit = selectedOption.dataset.unit || '';
+    
+    let isValid = true;
+    let errorMessage = '';
+    
+    if (!productSelect.value) {
+        return { valid: true }; // Empty row is okay
+    }
+    
+    // Validate quantity
+    const qty = parseFloat(qtyInput.value || 0);
+    if (qty <= 0) {
+        isValid = false;
+        errorMessage = 'Quantity must be greater than 0';
+        qtyInput.style.borderColor = 'red';
+    } else {
+        // Check unit-based products
+        const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS'];
+        if (unitBasedProducts.includes(unit.toUpperCase()) && qty % 1 !== 0) {
+            isValid = false;
+            errorMessage = `${selectedOption.text} must be sold in whole units only`;
+            qtyInput.style.borderColor = 'red';
+        } else {
+            qtyInput.style.borderColor = '';
+        }
+    }
+    
+    // Validate price
+    const price = parseFloat(priceInput.value || 0);
+    if (price <= 0) {
+        isValid = false;
+        errorMessage = 'Price must be greater than 0';
+        priceInput.style.borderColor = 'red';
+    } else {
+        priceInput.style.borderColor = '';
+    }
+    
+    // Validate discount
+    const discount = parseFloat(discountInput.value || 0);
+    const lineTotal = price * qty;
+    if (discount < 0) {
+        isValid = false;
+        errorMessage = 'Discount cannot be negative';
+        discountInput.style.borderColor = 'red';
+    } else if (discount >= lineTotal) {
+        isValid = false;
+        errorMessage = 'Discount cannot be equal to or greater than line total';
+        discountInput.style.borderColor = 'red';
+    } else {
+        discountInput.style.borderColor = '';
+    }
+    
+    // Validate final amount
+    const amount = parseFloat(amountInput.value || 0);
+    if (amount <= 0) {
+        isValid = false;
+        errorMessage = 'Final amount must be greater than 0';
+        amountInput.style.borderColor = 'red';
+    } else {
+        amountInput.style.borderColor = '';
+    }
+    
+    return { valid: isValid, message: errorMessage };
+}
+
+function validateBillForm() {
+    let hasValidItems = false;
+    let allRowsValid = true;
+    const rows = document.querySelectorAll('.item-row');
+    
+    for (let row of rows) {
+        const productSelect = row.querySelector('.product-select');
+        
+        if (!productSelect.value) {
+            continue;
+        }
+        
+        const validation = validateRow(row);
+        if (!validation.valid) {
+            allRowsValid = false;
+            alert(validation.message);
+            break;
+        } else {
+            hasValidItems = true;
+        }
+    }
+    
+    if (!hasValidItems) {
+        alert('Please add at least one valid item to the bill');
+        return false;
+    }
+    
+    return allRowsValid;
+}
+
+
+function reverseCalculateTax(row) {
+    const productSelect = row.querySelector('.product-select');
+    const qtyInput = row.querySelector('.qty-input');
+    const priceInput = row.querySelector('.price-input');
+    const discountInput = row.querySelector('.discount-input');
+    const amountInput = row.querySelector('.amount-input');
+    
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const unit = selectedOption.dataset.unit || '';
+    const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS']; // TODO: Make this configurable
+    
+    // Only allow manual amount entry for non-unit-based products (fuels, oils by volume)
+    if (unitBasedProducts.includes(unit.toUpperCase())) {
+        // For unit-based products, recalculate normally (qty -> amount)
+        calculateRowTax(row);
+        return;
+    }
+    
+    const cgstPercent = parseFloat(selectedOption.dataset.cgstPercent || 0);
+    const sgstPercent = parseFloat(selectedOption.dataset.sgstPercent || 0);
+    
+    const manualAmount = parseFloat(amountInput.value || 0);
+    const unitPrice = parseFloat(priceInput.value || 0);
+    const discount = parseFloat(discountInput.value || 0);
+    
+    if (manualAmount <= 0 || unitPrice <= 0) {
+        return;
+    }
+    
+    // Calculate tax breakdown from manual amount (reverse of RSP-inclusive)
+    const totalTaxPercent = cgstPercent + sgstPercent;
+    let baseAmount = 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    
+    if (totalTaxPercent > 0) {
+        // Base amount = Manual Amount / (1 + total tax rate)
+        baseAmount = manualAmount / (1 + (totalTaxPercent / 100));
+        cgstAmount = baseAmount * (cgstPercent / 100);
+        sgstAmount = baseAmount * (sgstPercent / 100);
+    } else {
+        baseAmount = manualAmount;
+    }
+    
+    // Calculate quantity from amount and price
+    // Amount after discount = (unitPrice × qty) - discount
+    // So: qty = (baseAmount + discount) / unitPrice
+    const calculatedQty = (manualAmount + discount) / unitPrice;
+    
+    // Update quantity field
+    qtyInput.value = calculatedQty.toFixed(3);
+    
+    // Update tax displays
+    const subtotalDisplay = row.querySelector('.subtotal-display');
+    const cgstDisplay = row.querySelector('.cgst-display');
+    const sgstDisplay = row.querySelector('.sgst-display');
+    
+    if (subtotalDisplay) subtotalDisplay.textContent = baseAmount.toFixed(2);
+    if (cgstDisplay) cgstDisplay.textContent = cgstAmount.toFixed(2);
+    if (sgstDisplay) sgstDisplay.textContent = sgstAmount.toFixed(2);
+    
+    // Update hidden fields
+    const subtotalHidden = row.querySelector('.subtotal-hidden');
+    const cgstHidden = row.querySelector('.cgst-hidden');
+    const sgstHidden = row.querySelector('.sgst-hidden');
+    const cgstPercentInput = row.querySelector('input[name*="[cgst_percent]"]');
+    const sgstPercentInput = row.querySelector('input[name*="[sgst_percent]"]');
+    const baseAmountInput = row.querySelector('input[name*="[base_amount]"]');
+    const cgstAmountInput = row.querySelector('input[name*="[cgst_amount]"]');
+    const sgstAmountInput = row.querySelector('input[name*="[sgst_amount]"]');
+    
+    if (subtotalHidden) subtotalHidden.value = baseAmount.toFixed(2);
+    if (cgstHidden) cgstHidden.value = cgstAmount.toFixed(2);
+    if (sgstHidden) sgstHidden.value = sgstAmount.toFixed(2);
+    if (cgstPercentInput) cgstPercentInput.value = cgstPercent.toFixed(2);
+    if (sgstPercentInput) sgstPercentInput.value = sgstPercent.toFixed(2);
+    if (baseAmountInput) baseAmountInput.value = baseAmount.toFixed(2);
+    if (cgstAmountInput) cgstAmountInput.value = cgstAmount.toFixed(2);
+    if (sgstAmountInput) sgstAmountInput.value = sgstAmount.toFixed(2);
+    
+    calculateGrandTotal();
+}
+
+
+// Add this function to handle readonly state for amount field
+function setAmountFieldState(row) {
+    const productSelect = row.querySelector('.product-select');
+    const amountInput = row.querySelector('.amount-input');
+    const selectedOption = productSelect.options[productSelect.selectedIndex];
+    const unit = selectedOption.dataset.unit || '';
+    const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS'];
+    
+    if (unitBasedProducts.includes(unit.toUpperCase())) {
+        // Unit-based products: Amount is calculated, not manually entered
+        amountInput.readOnly = true;
+        amountInput.style.backgroundColor = '#f8f9fa';
+        amountInput.title = "Amount is calculated automatically for this product (Qty × Price)";
+    } else {
+        // Volume-based products: Allow manual amount entry
+        amountInput.readOnly = false;
+        amountInput.style.backgroundColor = '#ffffff';
+        amountInput.title = "You can enter amount directly or it will be calculated from quantity";
+    }
+}
