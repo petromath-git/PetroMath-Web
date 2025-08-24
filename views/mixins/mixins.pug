@@ -274,22 +274,33 @@ mixin addMasterProduct(rowCnt)
             )
                 span(aria-hidden="true") &times;
 
-//- add new user
-mixin addNewUser(rowCnt)
+//- add new user with role-based restrictions and auto-username
+mixin addNewUser(rowCnt, userRole)
     - let id = 'users-table-row-' + rowCnt;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
-            input.form-control(type='text', name='m_user_name_'+ rowCnt, id='m_user_name_'+ rowCnt, required)
+            input.form-control(type='text', name='m_user_name_'+ rowCnt, id='m_user_name_'+ rowCnt, required, oninput='validateAndGenerateUsername(' + rowCnt + ')', placeholder='Enter full name (CAPS only)', maxlength='20', title='Only capital letters and spaces allowed')
         td(scope="row")
-            input.form-control(type='text', name='m_user_username_'+ rowCnt, id='m_user_username_'+ rowCnt,  required)
+            input.form-control(type='text', name='m_user_username_'+ rowCnt, id='m_user_username_'+ rowCnt, placeholder='Auto-generated from name', readonly)
+            small.text-muted Username will be generated automatically
         td(scope="row")
             select.form-control(name='m_user_role_' + rowCnt, id='m_user_role_' + rowCnt, required)
-                option Cashier
-                option Manager
-                option Admin
-                option Driver
-                option Helper
+                if userRole === 'SuperUser'
+                    option Admin
+                    option Manager
+                    option Cashier
+                    option Driver
+                    option Helper
+                else if userRole === 'Admin'
+                    option Manager
+                    option Cashier
+                    option Driver
+                    option Helper
+                else if userRole === 'Manager'
+                    option Cashier
+                    option Driver
+                    option Helper                
         td(scope="row")
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'users\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;

@@ -16,24 +16,32 @@ exports.getPasswordResetPage = (req, res,extraData = {}) => {
     }
 
     // Admin can see all users except SuperUser
-    else if (userRole === 'Admin') {
+   else if (userRole === 'Admin') {
         usersQuery = PersonDao.findUsers(locationCode).then(users => {
-            return users.filter(user => user.Role !== 'SuperUser'); // Exclude SuperUser
+            return users.filter(user => 
+                user.Role === 'Manager' ||
+                user.Role === 'Cashier' ||
+                user.Role === 'Driver' ||
+                user.Role === 'Helper' ||
+                user.Role === 'Customer' ||
+                (user.Role === 'Admin' && user.Person_id === req.user.Person_id) // Only their own Admin account
+            ); 
         });
     }
 
    // Manager can see all Cashiers in the same location
    else if (userRole === 'Manager') {
     usersQuery = PersonDao.findUsers(locationCode).then(users => {
-        // Filter out SuperUser, Admin, and Auditor, and include Manager, Cashier, and Customer
+        // Manager can reset: their own password + Cashier, Driver, Helper, Customer passwords
         return users.filter(user =>             
-            user.Role !== 'SuperUser' && 
-            user.Role !== 'Admin' && 
-            user.Role !== 'Auditor'
+            user.Role === 'Cashier' || 
+            user.Role === 'Driver' || 
+            user.Role === 'Helper' ||
+            user.Role === 'Customer' ||
+            (user.Role === 'Manager' && user.Person_id === req.user.Person_id) // Only their own Manager account
             );
         });
-    }   
-
+    }
     else {
         usersQuery = PersonDao.findUsers(locationCode).then(users => {
             return users.filter(user => user.Person_id === req.user.Person_id); // Only logged-in user
@@ -57,7 +65,11 @@ exports.getPasswordResetPage = (req, res,extraData = {}) => {
         })
         .catch(err => {
             console.error('Error fetching users:', err);
-            res.render('reset-password', { message: 'Error fetching users.' });
+            res.render('reset-password', { 
+                title: 'Reset Password',
+                users: [],  // Provide empty array to prevent undefined error
+                message: 'Error fetching users. Please try again.' 
+            });
         });
 };
 
@@ -80,7 +92,7 @@ exports.resetPassword = async (req, res) => {
         
 
         if (!userToReset) {
-            return res.render('reset-password', { message: 'User not found.' });
+            return exports.getPasswordResetPage(req, res, { message: 'User not found.' });
         }
 
         // Check if the requesting user has the right role to reset passwords
@@ -97,7 +109,7 @@ exports.resetPassword = async (req, res) => {
                     await updatePassword(userToReset, newPassword);
                     return res.render('login', { message: 'Password reset successfully. Please log in with your new password.' });
                 } else {
-                    return res.render('reset-password', { message: 'Permission denied: User from different location.' });
+                    return exports.getPasswordResetPage(req, res, { message: 'Permission denied: User from different location.' });
                 }
             }
         }
@@ -109,17 +121,17 @@ exports.resetPassword = async (req, res) => {
                     await updatePassword(userToReset, newPassword);
                     return res.render('login', { message: 'Password reset successfully. Please log in with your new password.' });
                 } else {
-                    return res.render('reset-password', { message: 'Permission denied: User from different location.' });
+                    return exports.getPasswordResetPage(req, res, { message: 'Permission denied: User from different location.' });
                 }
             }
         }
 
         // If the user is not authorized to reset the password
-        return res.render('reset-password', { message: 'You do not have permission to reset this user\'s password.' });
+        return exports.getPasswordResetPage(req, res, { message: 'You do not have permission to reset this user\'s password.' });
 
     } catch (error) {
         console.error('Error resetting password:', error);
-        return res.render('reset-password', { message: 'An error occurred while resetting the password.' });
+        return exports.getPasswordResetPage(req, res, { message: 'An error occurred while resetting the password.' });
     }
 };
 

@@ -551,25 +551,9 @@ app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     });
 });
 
+
 app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const newUser = dbMapping.newUser(req);
-    PersonDao.findUserByName(newUser.Person_Name, newUser.User_Name, newUser.location_code).then(
-        (data) => {
-            if (data && data.length > 0) {
-                masterController.findUsers(newUser.location_code).then((data) => {
-                    res.status(400).render('users', {
-                        title: 'Users',
-                        user: req.user,
-                        users: data,
-                        messages: { warning: msg.WARN_USER_DUPLICATE }
-                    });
-                });
-            } else {
-                PersonDao.create(dbMapping.newUser(req));
-                res.redirect('/users');
-            }
-        }
-    )
+    masterController.createUser(req, res);
 });
 
 app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {

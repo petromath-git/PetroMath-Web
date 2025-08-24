@@ -95,6 +95,15 @@ module.exports = {
         });
 
     },
+     usernameExists: async (username) => {
+        try {
+            const user = await Person.findOne({ where: { User_Name: username } });
+            return user !== null;
+        } catch (error) {
+            console.error('Error checking username existence:', error);
+            return false;
+        }
+    },
     findUserById: (userId) => {
         return Person.findOne({
             where: { Person_id: userId }
