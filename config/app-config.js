@@ -22,7 +22,7 @@ cashSaleTypeCodes.set(cashSaleTypes[1], 'OUT');
 
 const CASHIER_ROLES = ["Cashier"];
 const MANAGER_ROLES = ["Manager"];
-const ADMIN_ROLES = ["admin"];
+const ADMIN_ROLES = ["Admin"];
 const SUPERUSER_ROLES = ["SuperUser"];
 
 const PRODUCT_PUMPS = [MS_DESC, HSD_DESC, XMS_DESC];
