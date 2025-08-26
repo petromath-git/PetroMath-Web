@@ -76,6 +76,7 @@ module.exports = {
       const readingsPromise = DsrReportDao.getreadings(locationCode, fromDate);
       const salesSummaryPromise = DsrReportDao.getsalessummary(locationCode, fromDate);
       const collectionPromise = DsrReportDao.getcollection(locationCode, fromDate);
+      const digitalcollectionPromise = DsrReportDao.getDigitalSales(locationCode, fromDate);
       const oilCollectionPromise =  DsrReportDao.getOilcollection(locationCode, fromDate);
       const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);      
       const cardSalesSummaryPromise = DsrReportDao.getcardsalesSummary(locationCode, fromDate);
@@ -96,11 +97,12 @@ module.exports = {
 
 
       // Wait for all promises to resolve
-      const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
+      const [readingsData, salesSummaryData,collectionData,digitalData,oilCollectionData,creditSalesData,
              cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
              cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
+                                                                                                digitalcollectionPromise,
                                                                                                 oilCollectionPromise,
                                                                                                 creditSalesPromise,                                                                                                
                                                                                                 cardSalesSummaryPromise,
@@ -251,18 +253,24 @@ module.exports = {
        // Process sales Collection data
        collectionData.forEach((salesCollection) => {
 
-        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc)-parseFloat(salesCollection.cardsales);
-        const creditAmount = parseFloat(salesCollection.crsaleamt);       
-        const cardAmount = parseFloat(salesCollection.cardsales);
+        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc);
+        const creditAmount = parseFloat(salesCollection.crsaleamt); 
 
-        
-
+     
         // Accumulate totals
         totalCash += cashAmount;
         totalCredit += creditAmount;
-        totalCard += cardAmount;
+        
         
       });
+
+
+      if (digitalData && digitalData.digital_sales) {
+          totalCard = parseFloat(digitalData.digital_sales);
+      } 
+
+      // Adjust totalCash to exclude digital sales
+      totalCash = totalCash - totalCard;
 
 
       // Accumalate Oil collection
