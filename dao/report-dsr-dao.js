@@ -180,45 +180,45 @@ getDeadline: async (locationCode, reportDate) => {
     const closing_id = data.map(item => item.closing_id);
     
     const result = await db.sequelize.query(
-        `select 
-                sum(round(total_amt,2)) totalsalamt,
-                COALESCE((
-                    SELECT SUM(ROUND(amount, 2)) 
-                    FROM t_credits tcr
-                    JOIN m_product mp ON tcr.product_id = mp.product_id
-                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
-                    WHERE tcr.closing_id IN (:closing_id)
-                    AND mp.product_name = a.product_code
-                    AND COALESCE(mcl.card_flag,'N') != 'Y'
-                    GROUP BY mp.product_name
-                ), 0) AS crsaleamt,
-                COALESCE((
-                    SELECT SUM(ROUND(tcr.qty * tcr.price, 2)) 
-                    FROM t_credits tcr
-                    JOIN m_product mp ON tcr.product_id = mp.product_id
-                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
-                    WHERE tcr.closing_id IN (:closing_id)
-                    AND mp.product_name = a.product_code
-                    AND COALESCE(mcl.card_flag,'N') != 'Y'
-                    GROUP BY mp.product_name
-                ), 0) AS crsaleamtwithoutdisc,
-                -- UPDATED: Digital sales now from t_digital_sales table
-                COALESCE((
-                    SELECT SUM(ROUND(tds.amount, 2))
-                    FROM t_digital_sales tds
-                    JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
-                    WHERE tds.closing_id IN (:closing_id)
-                    AND COALESCE(mcl.card_flag,'N') = 'Y'
-                ), 0) AS cardsales
-         from
-          (select mp.pump_code,
-                mp.product_code,
-               sum( (tr.closing_reading - tr.opening_reading - tr.testing)*price) total_amt
-                from t_reading tr,m_pump mp
-                 where 1=1
-                 and   tr.pump_id = mp.pump_id 
-                 and   tr.closing_id in (:closing_id)
-                 group by  mp.pump_code,mp.product_code) a `,
+                        `select 
+                    sum(round(total_amt,2)) as totalsalamt,
+                    sum(crsaleamtwithoutdisc) as crsaleamtwithoutdisc,
+                    sum(crsaleamt) as crsaleamt
+                from (
+                    select 
+                        a.product_code,
+                        sum(round(total_amt,2)) as total_amt,
+                        COALESCE((
+                            SELECT SUM(ROUND(tcr.qty * tcr.price, 2))
+                            FROM t_credits tcr
+                            JOIN m_product mp ON tcr.product_id = mp.product_id
+                            JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
+                            WHERE tcr.closing_id IN (:closing_id)
+                            AND mp.product_name = a.product_code
+                            AND COALESCE(mcl.card_flag,'N') != 'Y'
+                            GROUP BY mp.product_name
+                        ), 0) as crsaleamtwithoutdisc,
+                        COALESCE((
+                            SELECT SUM(ROUND(tcr.qty * (tcr.price-tcr.price_discount), 2))
+                            FROM t_credits tcr
+                            JOIN m_product mp ON tcr.product_id = mp.product_id
+                            JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
+                            WHERE tcr.closing_id IN (:closing_id)
+                            AND mp.product_name = a.product_code
+                            AND COALESCE(mcl.card_flag,'N') != 'Y'
+                            GROUP BY mp.product_name
+                        ), 0) as crsaleamt
+                    from (
+                        select 
+                            mp.product_code,
+                            sum((tr.closing_reading - tr.opening_reading - tr.testing)*price) total_amt
+                        from t_reading tr
+                        join m_pump mp on tr.pump_id = mp.pump_id
+                        where tr.closing_id in (:closing_id)
+                        group by mp.product_code
+                    ) a
+                    group by a.product_code
+                ) x; `,
         {
             replacements: { closing_id: closing_id}, 
             type: Sequelize.QueryTypes.SELECT
@@ -226,6 +226,27 @@ getDeadline: async (locationCode, reportDate) => {
     );
     
     return result;
+},
+getDigitalSales: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
+    const closing_id = data.map(item => item.closing_id);
+
+    const result = await db.sequelize.query(
+        `SELECT 
+             COALESCE(SUM(ROUND(tds.amount, 2)), 0) AS digital_sales
+         FROM t_digital_sales tds
+         JOIN m_credit_list mcl 
+           ON tds.vendor_id = mcl.creditlist_id
+         WHERE tds.closing_id IN (:closing_id)
+           AND COALESCE(mcl.card_flag, 'N') = 'Y'`,
+        {
+            replacements: { closing_id: closing_id },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+
+    // result will be [{ digital_sales: 12345.67 }]
+    return result[0];
 },
     getOilcollection: async (locationCode, reportDate) => {
       const data =  await module.exports.getclosingid(locationCode,reportDate);
@@ -248,7 +269,7 @@ getDeadline: async (locationCode, reportDate) => {
                             UNION ALL
                             -- Subquery 2: Calculate cash_amt for '2T POUCH'
                             SELECT 
-                                (tc.given_qty - tc.returned_qty) * mp.price AS cash_amt,
+                                (tc.given_qty - tc.returned_qty) * tc.price AS cash_amt,
                                 0 AS credit_amt
                             FROM
                                 t_2toil tc
@@ -371,7 +392,7 @@ const result = await db.sequelize.query(
                                             and tc.closing_id in (:closing_id)
                                             group by mp.product_name,price
                                             union all
-                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,mp.price,0,sum((given_qty-returned_qty)*mp.price) amt 
+                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,tc.price,0,sum((given_qty-returned_qty)*tc.price) amt 
                                                from t_2toil tc,
                                                     m_product mp
                                               where tc.product_id = mp.product_id
