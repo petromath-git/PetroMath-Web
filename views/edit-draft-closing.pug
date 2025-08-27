@@ -118,7 +118,7 @@ block content
                         div.col &nbsp;
                     div.row#gasoline-prices
                         if productValues
-                            +listProductNames(pumpProductValues, 'rate_')
+                            +listProductNames(productValues, 'rate_')
                     div.row
                         div.col &nbsp;
                     div.row(align="center")
@@ -218,12 +218,19 @@ block content
                                         
                     div.row &nbsp;
                     if pumps && pumps.length > 0
-                        div.row                            
-                            each val in pumps                                
+                        div.row
+                            each val in pumps
+                                - var pumpColor;
+                                if val.pumpCode.startsWith("MS")
+                                    - pumpColor = "bg-success";
+                                if val.pumpCode.startsWith("HSD")
+                                    - pumpColor = "bg-primary"
+                                if val.pumpCode.startsWith("XMS")
+                                    - pumpColor = "table-warning"
                                 td
-                                    +addProductCodesAsSelected(val, productValues, 'f_', (val.pumpReadings && val.pumpReadings[0] ? val.pumpReadings[0] : null))
+                                    +addProductCodesAsSelected(val, pumpColor, 'f_', (val.pumpReadings && val.pumpReadings[0] ? val.pumpReadings[0] : null))
                                 td
-                                    +addProductCodesAsSelected(val, productValues, 's_', (val.pumpReadings && val.pumpReadings[1] ? val.pumpReadings[1] : null))
+                                    +addProductCodesAsSelected(val, pumpColor, 's_', (val.pumpReadings && val.pumpReadings[1] ? val.pumpReadings[1] : null))
                         div.row
                             table.table
                                 tbody
@@ -486,8 +493,16 @@ block content
                                         div &nbsp;
                                         div.row
                                             each val in pumps
-                                                +summaryPumpInstancesData(val, productValues, 'f_')
-                                                +summaryPumpInstancesData(val, productValues, 's_')
+                                                - var pumpColor;
+                                                if val.pumpCode.startsWith("MS")
+                                                    - pumpColor = "bg-success";
+                                                if val.pumpCode.startsWith("HSD")
+                                                    - pumpColor = "bg-primary"
+                                                if val.pumpCode.startsWith("XMS")
+                                                    - pumpColor = "table-warning"
+
+                                                +summaryPumpInstancesData(val, pumpColor, 'f_')
+                                                +summaryPumpInstancesData(val, pumpColor, 's_')
 
                                     div.row
                                         // Summary: Cash sales
@@ -622,7 +637,6 @@ block content
                                 span
                                     button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home_tab\')') CLOSE &raquo;
     script.    
-        var vehicleData = !{JSON.stringify(vehicleData || {})};        
-        window.pumpsData = !{JSON.stringify(pumps)};
-        window.productValuesData = !{JSON.stringify(productValues)}; 
+        var vehicleData = !{JSON.stringify(vehicleData || {})};
+        console.log('Vehicle data from backend:', vehicleData);    
 

@@ -179,7 +179,6 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
-                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: t_pump_readings,
@@ -189,7 +188,6 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
-                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: [],
