@@ -33,6 +33,7 @@ module.exports = {
             getTransactionTypePromise(),
             getBankTransactionByDate(locationCode,fromDate,toDate,bankid),
             geAccountingTypePromise(),
+            getLedgerNamePromise(locationCode)  // 👈 new
             //getAccountingTypeMapPromise()
             ])
         .then((values) => {
@@ -49,15 +50,50 @@ module.exports = {
             TxnTypes:values[2].value,
             transactionList:values[3].value.transactionlist,
             AcctTypes: values[4].value,
+            ledgerList: values[5].value
             //AccntTransMap: values[5].value
             });
         });
     },
 
     saveTransactionData: (req, res, next) => {
-        BankAcctDao.create(dbMapping.newBankTransaction(req));
-        res.redirect('/bank-transaction?tbankfromDate=' + req.body.tbank_fromDate_hiddenValue +
-            '&tbanktoDate=' + req.body.tbank_toDate_hiddenValue);
+                const transactions = [];
+                   // Extract all keys that match trans_date_*
+                const usedIndices = Object.keys(req.body)
+                .filter(key => key.startsWith('trans_date_'))
+                .map(key => key.replace('trans_date_', ''));
+
+                 // Loop through only valid indices
+                for (const index of usedIndices) {
+
+                    const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
+                    const debit = parseFloat(req.body[`debitamount_${index}`] || 0);
+                    
+                    if (credit === 0 && debit === 0) {
+                        return res.status(400).send({
+                            error: `Row ${parseInt(index) + 1} is incomplete. Please enter Credit or Debit amount or delete the row before submitting.`
+                        });
+                    }
+
+                    const txn = dbMapping.newBankTransaction(req, index);
+                    if (txn) transactions.push(txn);  // optional check
+                }
+
+                if (transactions.length === 0) {
+                    return res.status(400).send({ error: 'No transactions submitted.' });
+                }
+
+                Promise.all(
+                    transactions.map(txn => BankAcctDao.create(txn))
+                )
+                .then(() => {
+                    res.redirect('/bank-transaction?tbankfromDate=' + req.body.tbank_fromDate_hiddenValue +
+                        '&tbanktoDate=' + req.body.tbank_toDate_hiddenValue);
+                })
+                .catch(err => {
+                    console.error('Error saving transactions:', err);
+                    res.status(500).send({ error: 'Transaction save failed.', details: err });
+                });
     },
     
     deleteTransaction: (req, res, next) => {
@@ -110,6 +146,21 @@ const getLocationId = (locationCode) => {
                 resolve({location_id:location_id});
             });
 
+    });
+}
+
+const getLedgerNamePromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        BankAcctDao.getLedgerNames(locationCode)
+            .then(data => {
+                const ledgerList = data.map(row => ({
+                    id: row.id,
+                    name: row.ledger_name,
+                    source: row.source_type
+                }));
+                resolve(ledgerList);
+            })
+            .catch(err => reject(err));
     });
 }
 
@@ -183,6 +234,7 @@ const getBankTransactionByDate = (locationCode, fromDate,toDate,bankid) => {
                         closing_balance: transData.closing_bal,
                         transaction_type:transData.transaction_type,
                         accounting_type: transData.accounting_type,
+                        ledger_name: transData.ledger_name,
                         remarks:transData.remarks,
                         closed_flag: transData.closed_flag
                     });

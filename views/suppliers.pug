@@ -1,0 +1,33 @@
+extends layout
+include mixins/mixins
+
+block content
+    form(method='POST' action='/suppliers')
+        table(class="table" id="suppliers-table")
+            thead(class="thead-light")
+                tr
+                    th(scope="col") #
+                    th(scope="col") Name
+                    th(scope="col") Short Name
+                    th(scope="col") Start Date
+                    th(scope="col") Disable Supplier
+            tbody
+                each val, index in suppliers
+                    tr(id='supplier-' + index)
+                        th(scope="row")= index + 1
+                        td= val.name
+                        td= val.shortName
+                        td= val.effective_start_date
+                        td
+                            div.align-items-start
+                                button.btn.btn-info(id="disable-supplier-"+index, onclick="disableSupplier('"+index+"', '"+ val.id +"')")
+                                    span.oi.oi-delete
+                - var rowCnt = 0
+                while rowCnt < 1
+                    +addNewSupplier(rowCnt++)
+        div(align="center")
+            button.btn.btn-primary(type="button", onClick="window.location.href='/enable-supplier'", id="enable-supplier", title="Enable Supplier") Enable Supplier
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-info(type="button", onClick="showSupplierMasterEntryRow(this, 'suppliers')", id='suppliers-add-new', title="Only one can be added at a time.") Add New
+            span &nbsp;&nbsp;&nbsp;&nbsp;
+            button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='suppliers-save') Save

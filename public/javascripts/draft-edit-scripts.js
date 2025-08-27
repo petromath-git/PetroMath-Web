@@ -49,6 +49,9 @@ function calculateCashSaleTotal() {
 function calculateCreditTotal() {
     calculateTotal('credit-');
 }
+function calculateDigitalSalesTotal() {
+    calculateTotal('digital-sales-');
+}
 
 function calculateExpenseTotal() {
     calculateTotal('exp-');
@@ -62,31 +65,67 @@ function calculateExpensesAndDenoms(obj) {
     calculateDenominations()
 }
 
+function calculateDigitalSalesAndTrackMenu(obj) {
+    // if(obj) {
+    //     trackMenu(obj);
+    // }
+    // calculateDigitalSalesTotal();
+     setTimeout(() => {
+        trackMenu(obj);
+        calculateDigitalSalesTotal();
+    }, 100);
+}
+
+
 function trackMenuWithName(tabName) {
     trackMenu(document.getElementById(tabName));
 }
 
 function trackMenu(obj) {
-    const previousSaveFun = document.getElementById('currentTabForSave').value;
-    if(minimumRequirementForTabbing() || previousSaveFun === 'saveClosing' || previousSaveFun ==='saveDecantHeader') {
-        const callSaveFunctionForMenu = getSaveFunction(obj.id);
-        console.log("Previous save: " + previousSaveFun + ", current click(fn): " + callSaveFunctionForMenu);
+    const previousSaveFun = document.getElementById('currentTabForSave').value;   
+
+    if(minimumRequirementForTabbing() || previousSaveFun === 'saveClosing' || previousSaveFun ==='saveDecantHeader') {        
+        const callSaveFunctionForMenu = getSaveFunction(obj.id);        
         if (previousSaveFun === callSaveFunctionForMenu) {
+            setSaveFunction(obj.id);
             return;
         }
         if (previousSaveFun === 'NoSaveClick') {
             document.getElementById('currentTabForSave').value = callSaveFunctionForMenu;
-        } else {
+        } else {            
             ajaxLoading('d-md-block');
             window[previousSaveFun]().then((data) => {
                 if (data) {
                     setSaveFunction(obj.id);
-                    obj.click();
+                    activateTabDirectly(obj);
+                    //obj.click();
                 }
                 ajaxLoading('d-md-none');
             });
         }
     }
+}
+
+
+// Add this helper function
+function activateTabDirectly(tabElement) {
+    // Remove active from all tab panes and nav links
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active', 'show');
+    });
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Activate target tab pane
+    const targetId = tabElement.getAttribute('href');
+    const targetPane = document.querySelector(targetId);
+    if (targetPane) {
+        targetPane.classList.add('active', 'show');
+    }
+    
+    // Activate nav link
+    tabElement.classList.add('active');
 }
 
 function setSaveFunction(clickedTab) {
@@ -103,6 +142,7 @@ function getSaveFunction(clickedTab) {
         switch (clickedTab) {
             case 'cash_sales_tab':
             case 'credit_sales_tab':
+            case 'digital_sales_tab':
             case 'closing_tab':
             case 'reading_tab':
             case 'sales_2t_tab':
@@ -131,6 +171,9 @@ function getSaveFunction(clickedTab) {
             case 'credit_sales_tab':
                 saveFunctionName = 'saveCreditSales';
                 break;
+            case 'digital_sales_tab':
+                saveFunctionName = 'saveDigitalSales';
+                break;    
             case 'expenses_tab':
                 saveFunctionName = 'saveExpensesAndDenoms';
                 break;
@@ -183,6 +226,7 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('sales_2t_tab'));
             disableLink(document.getElementById('cash_sales_tab'));
             disableLink(document.getElementById('credit_sales_tab'));
+            disableLink(document.getElementById('digital_sales_tab'));
             disableLink(document.getElementById('expenses_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
@@ -193,6 +237,7 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('sales_2t_tab'));
             disableLink(document.getElementById('cash_sales_tab'));
             disableLink(document.getElementById('credit_sales_tab'));
+            disableLink(document.getElementById('digital_sales_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
             break;
@@ -210,6 +255,7 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('sales_2t_tab'));
             enableLink(document.getElementById('cash_sales_tab'));
             enableLink(document.getElementById('credit_sales_tab'));
+            enableLink(document.getElementById('digital_sales_tab'));
             enableLink(document.getElementById('expenses_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
@@ -220,6 +266,7 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('sales_2t_tab'));
             enableLink(document.getElementById('cash_sales_tab'));
             enableLink(document.getElementById('credit_sales_tab'));
+            enableLink(document.getElementById('digital_sales_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
             break;
@@ -251,35 +298,42 @@ function changeHaltflag(){
 
 }
 
-function disableDebitInput(rowNum){
-    const amount=document.getElementById('creditamount_'+rowNum).value;
-    if(amount>0){
-        document.getElementById('debitamount_'+rowNum).disabled=true;
-        document.getElementById('banktransaction-save').disabled = false;
-    }
-    if(amount==0 || amount== '')
-        document.getElementById('debitamount_'+rowNum).disabled=false;
-}
-
 function disableCreditInput(rowNum){
-    const amount=document.getElementById('debitamount_'+rowNum).value;
-    if(amount>0){
-        document.getElementById('banktransaction-save').disabled = false;
-        document.getElementById('creditamount_'+rowNum).disabled=true;
-    }
-        
-    if(amount==0 || amount== '')
-        document.getElementById('creditamount_'+rowNum).disabled=false;
+    const debitVal = parseFloat(document.getElementById('debitamount_' + rowNum).value || 0);
+    const creditField = document.getElementById('creditamount_' + rowNum);
+    creditField.disabled = debitVal > 0;
 }
 
-function validCreditDebit(){
-    const cramount=document.getElementById('creditamount_'+0).value;
-    const dbamount=document.getElementById('debitamount_'+0).value;
-    if(cramount == 0 && dbamount == 0){
-        document.getElementById('banktransaction-save').disabled = true;
-        window.alert("Please enter Credit or Debit Amount");
-    }
+function disableDebitInput(rowNum){
+    const creditVal = parseFloat(document.getElementById('creditamount_' + rowNum).value || 0);
+    const debitField = document.getElementById('debitamount_' + rowNum);
+    debitField.disabled = creditVal > 0;
 }
+
+function validCreditDebit() {
+   
+
+    for (let i = 0; i < rowCounter; i++) {
+        const creditField = document.getElementById(`creditamount_${i}`);
+        const debitField = document.getElementById(`debitamount_${i}`);
+        const row = document.getElementById(`banktransaction-table-row-${i}`);
+
+        // Skip rows that don't exist (e.g., deleted ones)
+        if (!creditField || !debitField) continue;
+
+        const cr = parseFloat(creditField.value || 0);
+        const dr = parseFloat(debitField.value || 0);
+
+        if (cr === 0 && dr === 0) {
+            alert(`Row ${i + 1} is incomplete. Enter credit or debit, or remove the row.`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+        }
+    }
+
+    return true;
+    }
+
 
 function changeCheckValue(prefix,rownum){
 

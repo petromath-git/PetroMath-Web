@@ -1,124 +1,96 @@
 doctype html
 html
-    head
-        title PetroMath:#{title}
-        //- meta(name="viewport" content="width=device-width, initial-scale=1.0")
-        link(rel='stylesheet', href='/stylesheets/style.css')
-        script(src='/javascripts/app-scripts.js')
-        script(src='/javascripts/app-master-page-scripts.js')
-        script(src='/javascripts/draft-edit-scripts.js')
-        script(src='/javascripts/app-validator.js')
-        script(src='/javascripts/app-generate-pdf.js',defer)
-        script(src='/javascripts/app-report-date.js',defer)
-        script(src='/javascripts/app-report-table-generator.js')
-        link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
-        script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
-        script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
-        script(src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js')
-        script(src='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js')
-        script(src ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')
-        script(src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js')
-        link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
-        link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
-        link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpeg" src="/images/mc_logo.jpeg")
-        link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
-        //- script.
-        //-     function formatIndianCurrency(number) {
-        //-         const [integer, decimal] = number.toFixed(2).split('.');
-        //-         const formattedInteger = integer.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-        //-         return formattedInteger + '.' + decimal;
-        //-     }
-        style.
-            @media print {
-            table.table-bordered {
-                border-collapse: collapse !important;
-            }
-            table.table-bordered,
-            table.table-bordered th,
-            table.table-bordered td {
-                border: 1px solid #000 !important; /* Increase thickness if needed */
-            }
-            }
+  head
+    title PetroMath:#{title}
+    link(rel='stylesheet', href='/stylesheets/style.css')        
+    link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
+    link(rel="stylesheet",href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
+    link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
+    link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
+    link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpg" src="/images/mc_logo.jpg")
+    link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
+    script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
+    script(src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")        
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js')
+    script(src='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js')
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js')
+    script(src='/javascripts/app-validator.js')
+    script(src='/javascripts/app-scripts.js')
+    script(src='/javascripts/app-master-page-scripts.js')
+    script(src='/javascripts/draft-edit-scripts.js')        
+    script(src='/javascripts/app-generate-pdf.js', defer)
+    script(src='/javascripts/app-report-date.js', defer)
+    script(src='/javascripts/app-report-table-generator.js')
+    style.
+      @media print {
+        table.table-bordered {
+          border-collapse: collapse !important;
+        }
+        table.table-bordered,
+        table.table-bordered th,
+        table.table-bordered td {
+          border: 1px solid #000 !important;
+        }
+      }
 
-        
-    - var isFreezedRecord = false;    
-    if(closingData && closingData.closingStatus === 'CLOSED')
-        - isFreezedRecord = true;
-    body(onload='populateSummaryFn(' + isFreezedRecord +');')
-        h1.text-center(id='petromath-heading')  PetroMath
-        if (user)
-            div#ajax-loading(class='d-sm-none')
-                img#loading-image(src="images/ajax-loader.gif" alt="Loading..." width="300px" height="300px")
-            div
-                div
-                    nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top                        
-                        button.navbar-toggler(type='button', data-toggle='collapse', data-target='#navbarNav', aria-controls='navbarNav', aria-expanded='false', aria-label='Toggle navigation')
-                            span.navbar-toggler-icon
-                        .collapse.navbar-collapse#navbarNav
-                            ul.navbar-nav.mr-auto
-                                // Admin-specific links
-                                if user.isAdmin
-                                    li.nav-item(class=(title === 'Shift Closing' ? 'active' : ''))
-                                        a.nav-link(href='/home') Shift Closing
-                                    li.nav-item(class=(title === 'Credit Receipts' ? 'active' : ''))
-                                        a.nav-link(href='/creditreceipts') Credit Receipts
-                                    li.nav-item(class=(title === 'Tank Receipts' ? 'active' : ''))
-                                        a.nav-link(href='/tankreceipts') Tank Receipts
-                                    li.nav-item(class=(title === 'Tank Dip Entry' ? 'active' : ''))
-                                        a.nav-link(href='/tank-dip') Tank Dip Entry    
-                                    li.nav-item(class=(title === 'Bank Transaction' ? 'active' : ''))
-                                        a.nav-link(href='/bank-transaction') Bank Transaction    
-                                    li.nav-item(class=(title === 'CashFlow:Home' || title === 'CashFlow' ? 'active' : ''))
-                                        a.nav-link(href='/cashflowhome') Day Close
-                                    li.nav-item.dropdown
-                                        a.nav-link.dropdown-toggle(href='#', id='reportsDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Reports
-                                        .dropdown-menu(aria-labelledby='reportsDropdown')
-                                            a.dropdown-item(href='/reports-dsr') Day-Close Report                                            
-                                            a.dropdown-item(href='/reports-credit-ledger') Credit Ledger Account
-                                            a.dropdown-item(href='/reports') Credit Customer Detail Report
-                                            a.dropdown-item(href='/reports-digital-recon') Digital Reconciliation Report
-                                            a.dropdown-item(href='/reports-creditsummary') Credit Customer Balance Report 
-                                            a.dropdown-item(href='/reports-gst-summary') GST Summary Report 
-                                            a.dropdown-item(href='/reports-sales-summary') Sales Summary Report                                                                               
-                                    li.nav-item(class=(title === 'Deadline Manager' ? 'active' : ''))
-                                        a.nav-link(href='/deadline') Deadline Manager
-                                    li.nav-item.dropdown
-                                        a.nav-link.dropdown-toggle(href='#', id='truckDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Truck Management
-                                        .dropdown-menu(aria-labelledby='truckDropdown')
-                                            a.dropdown-item(href='/truck-load') Truck Load
-                                            a.dropdown-item(href='/truck-expense') Truck Expense                                    
-                                    li.nav-item.dropdown
-                                        a.nav-link.dropdown-toggle(href='#', id='mastersDropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false') Masters
-                                        .dropdown-menu(aria-labelledby='mastersDropdown')
-                                            a.dropdown-item(href='/users') Create Users
-                                            a.dropdown-item(href='/products') Create Products
-                                            a.dropdown-item(href='/credits') Create Credit Party
-                                    li.nav-item(class=(title === 'Utilities' ? 'active' : ''))
-                                        a.nav-link(href='/utilities') Utilities
-                            // Right-aligned user details and logout
-                            ul.navbar-nav.ml-auto                                
-                                li.nav-item
-                                    a.nav-link(href='/changepwd') Change Password
-                                li.nav-item
-                                    a.nav-link(href='/logout') Logout
-                                li.nav-item.navbar-text.text-white
-                                    b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'    
+  - var isFreezedRecord = false;
+  if (closingData && closingData.closingStatus === 'CLOSED')
+    - isFreezedRecord = true;
 
-                        // Centered title
-                        //- if title
-                        //-     h5.text-center.text-light.mt-2 #{title}
-                        //- else
-                        //-     h5.text-center.text-light.mt-2 &nbsp;
-        if messages.error
-            div &nbsp;
-            div(class='alert alert-danger' required="false") #{messages.error}
-        if messages.success
-            div &nbsp;
-            div(class='alert alert-success' required="false") #{messages.success}
-        if messages.warning
-            div &nbsp;
-            div(class='alert alert-warning' required="false") #{messages.warning}
-        div &nbsp;
-        div#static-snackbar(class='alert alert-danger d-md-none')
-        div#snackbar
-        block content
+  body(onload='populateSummaryFn(' + isFreezedRecord +');')
+    h1.text-center#petromath-heading PetroMath
+
+    if user
+      div#ajax-loading.d-sm-none
+        img#loading-image(src="/images/ajax-loader.gif", alt="Loading...", width="300px", height="300px")
+
+      nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
+        button.navbar-toggler(type='button', data-toggle='collapse', data-target='#navbarNav', aria-controls='navbarNav', aria-expanded='false', aria-label='Toggle navigation')
+          span.navbar-toggler-icon
+        .collapse.navbar-collapse#navbarNav
+          ul.navbar-nav.mr-auto
+            - var dropdownGroups = {}
+            each m in user.menuDetails
+              if m.parent_code
+                - dropdownGroups[m.parent_code] = dropdownGroups[m.parent_code] || []
+                - dropdownGroups[m.parent_code].push(m)
+
+            each menu in user.menuDetails
+              if !menu.parent_code
+                - var children = dropdownGroups[menu.menu_code] || []
+                if children.length
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle(href='#', id=menu.menu_code + '-dropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false')= menu.menu_name
+                    .dropdown-menu(aria-labelledby=menu.menu_code + '-dropdown')
+                      each child in children
+                        a.dropdown-item(href=child.url_path)= child.menu_name
+                else
+                  li.nav-item(class=(title === menu.menu_name ? 'active' : ''))
+                    a.nav-link(href=menu.url_path)= menu.menu_name
+
+          ul.navbar-nav.ml-auto            
+            li.nav-item
+              a.nav-link(href='/logout') Logout
+            li.nav-item.navbar-text.text-white
+              b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'
+              if APP_VERSION === 'canary'
+                span(style='background-color: orange; color: white; font-size: 0.7rem; padding: 2px 4px; margin-left: 5px; border-radius: 3px;') CANARY
+
+    if messages.error
+      div &nbsp;
+      div.alert.alert-danger #{messages.error}
+
+    if messages.success
+      div &nbsp;
+      div.alert.alert-success #{messages.success}
+
+    if messages.warning
+      div &nbsp;
+      div.alert.alert-warning #{messages.warning}
+
+    div &nbsp;
+    div#static-snackbar.alert.alert-danger.d-md-none
+    div#snackbar
+    block content

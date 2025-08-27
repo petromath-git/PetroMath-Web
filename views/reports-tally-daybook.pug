@@ -1,0 +1,169 @@
+//- views/reports-tally-daybook.pug
+extends layout
+
+block content
+    script.
+
+        // Live search functionality
+        function searchTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById('tallyDaybookTable');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) { // Start from 1 to skip header
+                const row = tr[i];
+                let shouldShow = false;
+                const td = row.getElementsByTagName('td');
+                
+                for (let j = 0; j < td.length; j++) {
+                    if (td[j]) {
+                        const txtValue = td[j].textContent || td[j].innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                            shouldShow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                row.style.display = shouldShow ? '' : 'none';
+            }
+        }
+
+        // Summary calculations - simplified to only count transactions
+        function updateSummary() {
+            const table = document.getElementById('tallyDaybookTable');
+            const rows = table.getElementsByTagName('tr');
+            let visibleRows = 0;
+
+            for (let i = 1; i < rows.length; i++) { // Skip header
+                const row = rows[i];
+                if (row.style.display !== 'none') {
+                    visibleRows++;
+                }
+            }
+
+            document.getElementById('totalTransactions').textContent = visibleRows;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSummary();
+        });
+
+    form(method='POST' action='/reports-tally-daybook' id='reportForm')
+        .card.shadow.mb-4
+            .card-header.py-3
+                h6.m-0.font-weight-bold.text-primary Tally Daybook Report Filters
+            .card-body
+                .row
+                    .col-md-2
+                        label(for='dateRange') Date Range:
+                        select#dateRange.form-control(onchange="updateDateRange()")
+                            option(value='this_month') This Month
+                            option(value='last_month') Last Month
+                            option(value='this_financial_year') This Financial Year
+                            option(value='last_financial_year') Last Financial Year
+                            option(value='custom', selected=true) Custom Date
+                    .col-md-2
+                        label(for='fromclosingDate') From Date:
+                        input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                    .col-md-2
+                        label(for='toclosingDate') To Date:
+                        input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                    .col-md-2
+                        label(for='searchInput') Search:
+                        input#searchInput.form-control(type='text', placeholder='Search transactions...', onkeyup='searchTable()')   
+                    .col-md-4.d-flex.align-items-end
+                        include report-print-download.pug
+
+    // Summary Section - Only Total Transactions
+    .row.mb-4
+        .col-md-12
+            .card.border-left-info
+                .card-body
+                    .text-xs.font-weight-bold.text-info.text-uppercase.mb-1 Total Transactions
+                    .h5.mb-0.font-weight-bold.text-gray-800#totalTransactions 0
+
+    // Voucher Type Breakdown - Removed for now
+    // .row.mb-4#voucherTypeBreakdown
+    //     // Will be populated by JavaScript when needed
+
+    // Main Report Table
+    if tallyDaybookData && tallyDaybookData.length > 0
+        .card.shadow.mb-4
+            .card-header.py-3.d-flex.flex-row.align-items-center.justify-content-between
+                h6.m-0.font-weight-bold.text-primary= "Tally Daybook Report"
+                small.text-muted= `${formattedFromDate} to ${formattedToDate}`
+            .card-body
+                .table-responsive
+                    table.table.table-bordered.table-hover.table-sm#tallyDaybookTable
+                        thead(class="thead-dark")
+                            tr
+                                th.text-center Date
+                                th.text-center Voucher Type
+                                th.text-center Ledger From
+                                th.text-center Ledger To
+                                th.text-center Amount (₹)
+                                th.text-center Narration
+                        tbody
+                            each transaction in tallyDaybookData
+                                tr
+                                    td.text-center= transaction.transaction_date
+                                    td.text-center
+                                        span.badge(class=`badge-${transaction.voucher_type === 'Credit' ? 'success' : transaction.voucher_type === 'Cash' ? 'primary' : transaction.voucher_type === 'Purchase' ? 'warning' : 'info'}`)= transaction.voucher_type
+                                    td= transaction.ledger_from
+                                    td= transaction.ledger_to
+                                    td.text-right(data-amount=transaction.amount)= transaction.formatted_amount
+                                    td= transaction.narration || '-'
+    else
+        .card.shadow.mb-4
+            .card-body.text-center
+                .row.bg-light
+                    .col-md-12
+                        h5.text-muted No transactions found for the selected date range.
+                        p Please adjust your date range and try again.
+
+    // Include overlay for loading states if available
+    // include overlay.pug
+
+    style.
+        @media print {
+            .card-header, .btn, form, .no-print {
+                display: none !important;
+            }
+            .card {
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .table {
+                font-size: 12px;
+            }
+        }
+        
+        .badge-Credit { background-color: #28a745; }
+        .badge-Cash { background-color: #007bff; }
+        .badge-Purchase { background-color: #ffc107; color: #212529; }
+        .badge-Bank { background-color: #17a2b8; }
+        .badge-Expenses { background-color: #dc3545; }
+        
+        .card {
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .border-left-primary {
+            border-left: 0.25rem solid #4e73df !important;
+        }
+        
+        .border-left-success {
+            border-left: 0.25rem solid #1cc88a !important;
+        }
+        
+        .border-left-info {
+            border-left: 0.25rem solid #36b9cc !important;
+        }

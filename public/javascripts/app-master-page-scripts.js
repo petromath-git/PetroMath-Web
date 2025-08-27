@@ -64,12 +64,187 @@ function showMasterEntryRow(obj, prefix) {
     showAddedRow(prefix);
 }
 
+let rowCounter = 0;
+
+        function showMultipleMasterRow(btn, prefix) {
+            const template = document.getElementById('banktransaction-template-row');
+            const clone = template.cloneNode(true);
+            clone.classList.remove('d-none');
+
+            const newRowId = `${prefix}-table-row-${rowCounter}`;
+            clone.id = newRowId;
+
+            // Update all input/select/textarea IDs and names inside the row
+            clone.querySelectorAll('[id]').forEach(el => {
+                el.id = el.id.replace('template', rowCounter);
+            });
+
+            clone.querySelectorAll('[name]').forEach(el => {
+                el.name = el.name.replace('template', rowCounter);
+            });
+
+            clone.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = false;
+            });
+
+            clone.querySelectorAll('[onchange]').forEach(el => {
+                const oldAttr = el.getAttribute('onchange');
+                if (oldAttr && oldAttr.includes('updateLedgerFields(')) {
+                    el.setAttribute('onchange', `updateLedgerFields(${rowCounter})`);
+                }
+            });
+
+            clone.querySelectorAll('[onclick]').forEach(el => {
+                const oldAttr = el.getAttribute('onclick');
+                if (oldAttr && oldAttr.includes('removeBankTxnRow')) {
+                    el.setAttribute('onclick', `removeBankTxnRow('banktransaction-table-row-${rowCounter}')`);
+                }
+            });
+
+            clone.querySelectorAll('[oninput]').forEach(el => {
+                const oldAttr = el.getAttribute('oninput');
+            
+                if (oldAttr && oldAttr.includes('disableCreditInput(')) {
+                    el.setAttribute('oninput', `disableCreditInput(${rowCounter})`);
+                }
+            
+                if (oldAttr && oldAttr.includes('disableDebitInput(')) {
+                    el.setAttribute('oninput', `disableDebitInput(${rowCounter})`);
+                }
+            });
+
+            document.getElementById('banktransaction-rows').appendChild(clone);
+            document.getElementById(`${prefix}-save`).disabled = false;
+            rowCounter++;
+        }
+
+function removeBankTxnRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) {
+        row.remove();
+    }
+}
+
 function hideMasterEntryRow(prefix, rowId) {
     document.getElementById(prefix + '-add-new').disabled = false;
     document.getElementById(prefix + '-save').disabled = true;
     reloadPage(rowId);
     hideRow(rowId);
+
+    // Add only this line for product master
+    if (rowId.includes('product-master')) {
+        hideRow(rowId.replace('product-master-table-row', 'details') + '-row');
+    }
 }
+
+// Suppliers - scripts - start
+
+function showSupplierMasterEntryRow(button) {
+    const rowId = 'suppliers-table-row-0';
+    const row = document.getElementById(rowId);
+    const saveButton = document.getElementById('suppliers-save');
+    if (row && saveButton) {
+        row.classList.remove('d-md-none');
+        button.disabled = true;
+        saveButton.disabled = false;
+    }
+}
+
+function hideMasterEntryRow(prefix, rowId) {
+    const row = document.getElementById(rowId);
+    const addButton = document.getElementById(prefix + '-add-new');
+    const saveButton = document.getElementById(prefix + '-save');
+    if (row && addButton && saveButton) {
+        row.classList.add('d-md-none');
+        addButton.disabled = false;
+        saveButton.disabled = true;
+        // Clear input fields
+        const inputs = row.getElementsByTagName('input');
+        for (let input of inputs) {
+            input.value = '';
+        }
+    }
+}
+
+function disableSupplier(index, supplierId) {
+    if (confirm('Are you sure you want to disable this supplier?')) {
+        fetch('/suppliers/disable/' + supplierId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('supplier-' + index);
+                if (row) {
+                    row.remove();
+                }
+                alert('Supplier disabled successfully');
+            } else {
+                alert('Error disabling supplier');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error disabling supplier');
+        });
+    }
+}
+
+function enableSupplier(index, supplierId) {
+    if (confirm('Are you sure you want to enable this supplier?')) {
+        fetch('/suppliers/enable/' + supplierId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('supplier-' + index);
+                if (row) {
+                    row.remove();
+                }
+                alert('Supplier enabled successfully');
+            } else {
+                alert('Error enabling supplier');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error enabling supplier');
+        });
+    }
+}
+
+// Suppliers - scripts - End
+
+// New function specific to product master
+function showProductMasterRow(obj, prefix) {
+    // Call the original function to maintain existing behavior
+    showMasterEntryRow(obj, prefix);
+    
+    // Additional handling for expandable details
+    let rowId = prefix + '-table-row-0';
+    let detailsRowId = 'details-0-row';
+    
+    // Show the details row
+    document.getElementById(detailsRowId).style.display = '';
+    
+    // Expand the details section
+    document.getElementById('details-0').classList.add('show');
+    
+    // Update chevron icon
+    let chevronButton = document.querySelector(`#${rowId} .oi-chevron-right`);
+    if (chevronButton) {
+        chevronButton.classList.remove('oi-chevron-right');
+        chevronButton.classList.add('oi-chevron-bottom');
+    }
+}
+
 
 // Users - scripts - end
 

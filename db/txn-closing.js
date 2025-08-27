@@ -24,6 +24,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'closing_date',
             type: DataTypes.DATE
         },
+        close_reading_time: {
+            field: 'close_reading_time',
+            type: DataTypes.TIME
+        },
         closing_date_fmt1: {
             field: 'closing_date',
             type: DataTypes.DATE        // Dummy fields for UI date formats (closing tab)
@@ -44,6 +48,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'closing_status',
             type: DataTypes.STRING,
             defaultValue: 'DRAFT'
+        },
+        ex_short: {
+            field: 'ex_short',
+            type: DataTypes.DECIMAL(20, 3)         
         },
         created_by: {
             field: 'created_by',

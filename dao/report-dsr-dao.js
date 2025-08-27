@@ -28,7 +28,11 @@ module.exports = {
     const result = await db.sequelize.query(`SELECT closing_id
                                                 FROM   t_closing tc
                                                 WHERE  tc.location_code = :locationCode
-                                                    AND Date(tc.closing_date) = :reportDate`,                                                   
+                                                    AND cashflow_id in (SELECT cashflow_id
+                                                    FROM   t_cashflow_closing tc
+                                                    WHERE  tc.location_code = :locationCode
+                                                        AND Date(tc.cashflow_date) = :reportDate
+                                                        AND closing_status = 'CLOSED')`,                                                   
                                                     {
                                                         replacements: { locationCode: locationCode, reportDate: reportDate },
                                                         type: Sequelize.QueryTypes.SELECT
@@ -132,6 +136,7 @@ getDeadline: async (locationCode, reportDate) => {
     
     const result = await db.sequelize.query(
         `select a.product_code,
+               count(distinct a.pump_code) as nozzle_count, 
                COALESCE(round(sum(a.sales),2),0) nozzle_sales,
                COALESCE(c.test_qty,0) nozzle_test,
                COALESCE(round(sum(a.sales)-c.test_qty,2),0) total_sales,
@@ -170,65 +175,79 @@ getDeadline: async (locationCode, reportDate) => {
       return result;
 
    },
-   getcollection: async (locationCode, reportDate) => {
-    const data =  await module.exports.getclosingid(locationCode,reportDate);
+  getcollection: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
     const closing_id = data.map(item => item.closing_id);
     
-   const result = await db.sequelize.query(
-    `select product_code,
-                                                sum(round(total_amt,2))totalsalamt,
-                                               COALESCE((
-                                                    SELECT SUM(ROUND(amount, 2)) 
-                                                    FROM t_credits tcr
-                                                    JOIN m_product mp ON tcr.product_id = mp.product_id
-                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
-                                                    WHERE tcr.closing_id IN (:closing_id)
-                                                    AND mp.product_name = a.product_code
-                                                    AND COALESCE(mcl.card_flag,'N') != 'Y'
-                                                    GROUP BY mp.product_name
-                                                ), 0) AS crsaleamt,
-                                                COALESCE((
-                                                    SELECT SUM(ROUND(tcr.qty * tcr.price, 2)) 
-                                                    FROM t_credits tcr
-                                                    JOIN m_product mp ON tcr.product_id = mp.product_id
-                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
-                                                    WHERE tcr.closing_id IN (:closing_id)
-                                                    AND mp.product_name = a.product_code
-                                                    AND COALESCE(mcl.card_flag,'N') != 'Y'
-                                                    GROUP BY mp.product_name
-                                                ), 0) AS crsaleamtwithoutdisc,
-                                                 COALESCE((
-                                                    SELECT SUM(ROUND(tcr.qty * tcr.price, 2)) 
-                                                    FROM t_credits tcr
-                                                    JOIN m_product mp ON tcr.product_id = mp.product_id
-                                                    JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
-                                                    WHERE tcr.closing_id IN (:closing_id)
-                                                    AND mp.product_name = a.product_code
-                                                    AND COALESCE(mcl.card_flag,'N') = 'Y'
-                                                    GROUP BY mp.product_name
-                                                ), 0) AS cardsales
-                                         from
-                                          (select mp.pump_code,
-                                                mp.product_code ,
-                                               sum( (tr.closing_reading - tr.opening_reading - tr.testing)*price) total_amt
-                                                from t_reading tr,m_pump mp
-                                                 where 1=1
-                                                 and   tr.pump_id = mp.pump_id 
-												 and   tr.closing_id in (:closing_id)
-                                                 group by  mp.pump_code,mp.product_code) a 
-                                         group by product_code`,
-    {
-      replacements: { closing_id: closing_id}, 
-      type: Sequelize.QueryTypes.SELECT
-    }
-
-
+    const result = await db.sequelize.query(
+                        `select 
+                    sum(round(total_amt,2)) as totalsalamt,
+                    sum(crsaleamtwithoutdisc) as crsaleamtwithoutdisc,
+                    sum(crsaleamt) as crsaleamt
+                from (
+                    select 
+                        a.product_code,
+                        sum(round(total_amt,2)) as total_amt,
+                        COALESCE((
+                            SELECT SUM(ROUND(tcr.qty * tcr.price, 2))
+                            FROM t_credits tcr
+                            JOIN m_product mp ON tcr.product_id = mp.product_id
+                            JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
+                            WHERE tcr.closing_id IN (:closing_id)
+                            AND mp.product_name = a.product_code
+                            AND COALESCE(mcl.card_flag,'N') != 'Y'
+                            GROUP BY mp.product_name
+                        ), 0) as crsaleamtwithoutdisc,
+                        COALESCE((
+                            SELECT SUM(ROUND(tcr.qty * (tcr.price-tcr.price_discount), 2))
+                            FROM t_credits tcr
+                            JOIN m_product mp ON tcr.product_id = mp.product_id
+                            JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
+                            WHERE tcr.closing_id IN (:closing_id)
+                            AND mp.product_name = a.product_code
+                            AND COALESCE(mcl.card_flag,'N') != 'Y'
+                            GROUP BY mp.product_name
+                        ), 0) as crsaleamt
+                    from (
+                        select 
+                            mp.product_code,
+                            sum((tr.closing_reading - tr.opening_reading - tr.testing)*price) total_amt
+                        from t_reading tr
+                        join m_pump mp on tr.pump_id = mp.pump_id
+                        where tr.closing_id in (:closing_id)
+                        group by mp.product_code
+                    ) a
+                    group by a.product_code
+                ) x; `,
+        {
+            replacements: { closing_id: closing_id}, 
+            type: Sequelize.QueryTypes.SELECT
+        }
     );
     
-    
     return result;
+},
+getDigitalSales: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
+    const closing_id = data.map(item => item.closing_id);
 
-    },
+    const result = await db.sequelize.query(
+        `SELECT 
+             COALESCE(SUM(ROUND(tds.amount, 2)), 0) AS digital_sales
+         FROM t_digital_sales tds
+         JOIN m_credit_list mcl 
+           ON tds.vendor_id = mcl.creditlist_id
+         WHERE tds.closing_id IN (:closing_id)
+           AND COALESCE(mcl.card_flag, 'N') = 'Y'`,
+        {
+            replacements: { closing_id: closing_id },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+
+    // result will be [{ digital_sales: 12345.67 }]
+    return result[0];
+},
     getOilcollection: async (locationCode, reportDate) => {
       const data =  await module.exports.getclosingid(locationCode,reportDate);
       const closing_id = data.map(item => item.closing_id);
@@ -250,7 +269,7 @@ getDeadline: async (locationCode, reportDate) => {
                             UNION ALL
                             -- Subquery 2: Calculate cash_amt for '2T POUCH'
                             SELECT 
-                                (tc.given_qty - tc.returned_qty) * mp.price AS cash_amt,
+                                (tc.given_qty - tc.returned_qty) * tc.price AS cash_amt,
                                 0 AS credit_amt
                             FROM
                                 t_2toil tc
@@ -332,53 +351,27 @@ getDeadline: async (locationCode, reportDate) => {
     return result;
 
     },
-    getcardsales: async (locationCode, reportDate) => {
-        const data =  await module.exports.getclosingid(locationCode,reportDate);
-        const closing_id = data.map(item => item.closing_id);
-        
+ getcardsalesSummary: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
+    const closing_id = data.map(item => item.closing_id);
+    
     const result = await db.sequelize.query(
-        `select tc.bill_no,COALESCE (mcl.short_name,mcl.company_name) name,mp.product_name,tc.price,tc.qty,round(tc.amount,2) amt
-                                              from t_credits tc,m_credit_list mcl,m_product mp 
-                                              where tc.creditlist_id = mcl.creditlist_id
-                                              and   tc.product_id = mp.product_id
-											                        and   COALESCE(mcl.card_flag,'N') = 'Y'
-                                              and   tc.closing_id in (:closing_id)
-                                              order by tc.bill_no`,
+        `select tds.vendor_id as creditlist_id,
+                COALESCE(mcl.short_name, mcl.company_name) name,
+                round(sum(tds.amount), 2) amt
+         from t_digital_sales tds
+         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id                                           
+         where mcl.card_flag = 'Y'
+           and tds.closing_id in (:closing_id)
+         group by tds.vendor_id, COALESCE(mcl.short_name, mcl.company_name)`,
         {
-        replacements: { closing_id: closing_id}, 
-        type: Sequelize.QueryTypes.SELECT
+            replacements: { closing_id: closing_id}, 
+            type: Sequelize.QueryTypes.SELECT
         }
-
-
     );
-    
-    
+
     return result;
-
-    },
-    getcardsalesSummary: async (locationCode, reportDate) => {
-      const data =  await module.exports.getclosingid(locationCode,reportDate);
-      const closing_id = data.map(item => item.closing_id);
-      
-  const result = await db.sequelize.query(
-      `select tc.creditlist_id,COALESCE (mcl.short_name,mcl.company_name) name,round(sum(tc.amount),2) amt
-                                            from t_credits tc,m_credit_list mcl 
-                                            where tc.creditlist_id = mcl.creditlist_id                                           
-                                            and   mcl.card_flag = 'Y'
-                                            and   tc.closing_id in (:closing_id)
-                                            group by tc.creditlist_id,COALESCE (mcl.short_name,mcl.company_name)`,
-      {
-      replacements: { closing_id: closing_id}, 
-      type: Sequelize.QueryTypes.SELECT
-      }
-
-
-  );
-  
-  
-  return result;
-
-  },
+},
   getCashsales: async (locationCode, reportDate) => {
     const data =  await module.exports.getclosingid(locationCode,reportDate);
     const closing_id = data.map(item => item.closing_id);
@@ -399,7 +392,7 @@ const result = await db.sequelize.query(
                                             and tc.closing_id in (:closing_id)
                                             group by mp.product_name,price
                                             union all
-                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,mp.price,0,sum((given_qty-returned_qty)*mp.price) amt 
+                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,tc.price,0,sum((given_qty-returned_qty)*tc.price) amt 
                                                from t_2toil tc,
                                                     m_product mp
                                               where tc.product_id = mp.product_id
@@ -507,6 +500,7 @@ return result;
                                             where 1=1
                                             and tr.creditlist_id = mcl.creditlist_id
                                             and tr.location_code = :location_code
+                                            and coalesce(card_flag,'N') <> 'Y'
                                             and   DATE(tr.cashflow_date) = :cashflow_date`,
             {
             replacements: {location_code:locationCode,cashflow_date: reportDate}, 

@@ -22,14 +22,77 @@ block content
                         td= val.effective_start_date
                         td
                             div.align-items-start
-                                button.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
-                                    span.oi.oi-delete
+                                - var canDisable = false
+                                - if (user.Role === 'SuperUser')
+                                    - canDisable = true
+                                - else if (user.Role === 'Admin' && val.role !== 'SuperUser' && val.role !== 'Admin')
+                                    - canDisable = true
+                                - else if (user.Role === 'Manager' && (val.role === 'Cashier' || val.role === 'Driver' || val.role === 'Helper'))
+                                    - canDisable = true
+                                
+                                if canDisable
+                                    button.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
+                                        span.oi.oi-delete
+                                else
+                                    span.text-muted No permission
                 - var rowCnt = 0
                 while rowCnt < 1
-                    +addNewUser(rowCnt++)
+                    +addNewUser(rowCnt++, user.Role)
         div(align="center")
             button.btn.btn-primary(type="button", onClick="window.location.href='/enable_user'", id="enable-user", title="Enable User") Enable User
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'users')", id='users-add-new', title="Only one can be added at a time.") Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='users-save') Save
+
+    script.                
+        function validateAndGenerateUsername(rowCnt) {
+            const nameField = document.getElementById('m_user_name_' + rowCnt);
+            const usernameField = document.getElementById('m_user_username_' + rowCnt);
+            const locationCode = '#{user.location_code}';
+            
+            let value = nameField.value;
+            
+            // Only do minimal cleaning - don't trim during typing
+            let cleaned = value.toUpperCase().replace(/[^A-Z\s]/g, '');
+            
+            // Update field only if it actually changed
+            if (cleaned !== value) {
+                nameField.value = cleaned;
+            }
+            
+            // Generate username from trimmed version (for username only)
+            const trimmed = cleaned.trim();
+            if (trimmed.length > 0) {
+                usernameField.value = createSmartUsername(trimmed, locationCode);
+                nameField.classList.remove('is-invalid');
+                nameField.classList.add('is-valid');
+            } else {
+                usernameField.value = '';
+                nameField.classList.remove('is-valid');
+                nameField.classList.add('is-invalid');
+            }
+        }
+    
+        function createSmartUsername(fullName, locationCode) {
+            let shortName = fullName.replace(/\s+/g, '');
+            return shortName.length <= 6 ? shortName + '-' + locationCode : shortName.substring(0, 6) + '-' + locationCode;
+        }
+        
+        // Add form validation before submit
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form[action="/users"]');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    const nameFields = document.querySelectorAll('input[name^="m_user_name_"]');
+                    for (let field of nameFields) {
+                        if (field.offsetParent !== null && field.value.trim() === '') {
+                            e.preventDefault();
+                            alert('Name cannot be empty or just spaces');
+                            field.focus();
+                            return false;
+                        }
+                    }
+                });
+            }
+            });

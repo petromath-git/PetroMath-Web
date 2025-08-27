@@ -43,60 +43,107 @@ block content
                 h5.font-weight-bold.text-center.text-uppercase= companyName                 
                 h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
             h4.font-weight-bold.text-success.text-center
-            table.table.table-bordered.border.table-sm
-                thead(class="thead-light")
-                    tr
-                        th.text-center Date                        
-                        th.text-center Particulars                      
-                        th.text-center Product Name
-                        th.text-center Price (Rs.)
-                        if showPriceDiscountColumn
-                            th.text-center PriceDiscount (Rs.)
-                        th.text-center Quantity
-                        th.text-center Debit (Rs.)
-                        th.text-center Credit (Rs.)
-                        th.text-center Balance (Rs.)
-                        th.text-center Narration
-                tbody
-                    if(cidparam != -1)
-                        tr                              
-                            td &nbsp;
-                            td.text-left Opening Balance                           
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
-                    each val in creditstmt
-                        tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                            td(scope="row")= val.Date                            
-                            td(scope="row")= val.Particulars                           
-                            td(scope="row")= val.Product
-                            td.text-right(scope="row")= val.Price
-                            if showPriceDiscountColumn
-                                td.text-right(scope="row")= val['Price Discount']
-                            td.text-right(scope="row")= val.Qty
-                            td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
-                            td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
-                            td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
-                            td(scope="row")= val.Narration
-                    if(cidparam != -1)
-                        tr  
-                            td &nbsp;                           
-                            td.text-left Closing Balance                                                   
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
-            div.col-12.text-right E &amp; OE
-            div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
+            
+            .container
+                .row.justify-content-center
+                    .col-12
+                        // Period Summary Section
+                        if(cidparam != -1 && typeof totalDebits !== 'undefined' && typeof totalCredits !== 'undefined')
+                            .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                                div(style="font-size: 1.1em; color: #495057; line-height: 1.6;")
+                                    div(style="text-align: center; margin-bottom: 15px;")
+                                        strong(style="font-size: 1.2em; color: #212529;") Period Summary
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Opening:
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Debits:
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Credits:
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Closing:
+                                        span(style="color: #495057;font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+
+                        // Detailed Transaction Table
+                        table.table.table-bordered.border.table-sm
+                            thead(class="thead-light")
+                                tr
+                                    th.text-center Date                        
+                                    th.text-center Particulars                      
+                                    th.text-center Product Name
+                                    th.text-center Price (Rs.)
+                                    if showPriceDiscountColumn
+                                        th.text-center PriceDiscount (Rs.)
+                                    th.text-center Quantity
+                                    th.text-center Debit (Rs.)
+                                    th.text-center Credit (Rs.)
+                                    th.text-center Balance (Rs.)
+                                    th.text-center Narration
+                            tbody
+                                if(cidparam != -1)
+                                    tr  
+                                        td &nbsp;
+                                        td.text-left.font-weight-bold Opening Balance
+                                        td &nbsp;
+                                        td &nbsp;
+                                        if showPriceDiscountColumn
+                                            td &nbsp;
+                                        td &nbsp;
+                                        td &nbsp;
+                                        td &nbsp;                           
+                                        td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                                        td &nbsp;                      
+                                each val in creditstmt
+                                    tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
+                                        td.text-center(scope="row")= val.Date                            
+                                        td.text-left(scope="row")= val.Particulars
+                                        td.text-left(scope="row")= val.Product
+                                        td.text-right(scope="row") #{val.Price !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Price) : ''}
+                                        if showPriceDiscountColumn
+                                            td.text-right(scope="row") #{val['Price Discount'] !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val['Price Discount']) : ''}
+                                        td.text-right(scope="row") #{val.Qty !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(val.Qty) : ''}                                                        
+                                        td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
+                                        td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
+                                        td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
+                                        td(scope="row")= val.Narration
+                                
+                                // Totals Row
+                                if(totalDebits > 0 || totalCredits > 0)
+                                    tr.bg-light.font-weight-bold
+                                        td &nbsp;
+                                        td.text-left Total
+                                        td &nbsp;
+                                        td &nbsp;
+                                        if showPriceDiscountColumn
+                                            td &nbsp;
+                                        td &nbsp;
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                        td &nbsp;
+                                        td &nbsp;
+                                
+                                // Closing Balance Row
+                                if(cidparam != -1)
+                                    tr
+                                        td &nbsp;                                     
+                                        td.text-left.font-weight-bold Closing Balance
+                                        td &nbsp;
+                                        td &nbsp;
+                                        if showPriceDiscountColumn
+                                            td &nbsp;
+                                        td &nbsp;
+                                        td &nbsp;
+                                        td &nbsp;                                                  
+                                        td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+                                        td &nbsp;                      
+                        
+                        div.col-12.text-right E &amp; OE
+                        div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                
         else
             div.row &nbsp;
             div.row.bg-light No Transactions.  
 
         // Include the overlay
         include overlay.pug
-

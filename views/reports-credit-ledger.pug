@@ -45,6 +45,23 @@ block content
             .container
                 .row.justify-content-center
                     .col-12
+                        if(cidparam != -1 && typeof totalDebits !== 'undefined' && typeof totalCredits !== 'undefined')
+                            .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                                div(style="font-size: 1.1em; color: #495057; line-height: 1.6;")
+                                    div(style="text-align: center; margin-bottom: 15px;")
+                                        strong(style="font-size: 1.2em; color: #212529;") Period Summary
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Opening: 
+                                        span(style="font-weight: 600;")  #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Debits: 
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Credits: 
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Closing: 
+                                        span(style="color: #495057;font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
                         table.table.table-bordered.border.table-sm
                             thead(class="thead-light")
                                 tr
@@ -70,6 +87,14 @@ block content
                                         td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
                                         td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
                                         td(scope="row")= val.Narration                                                        
+                                if(totalDebits > 0 || totalCredits > 0)
+                                    tr.bg-light.font-weight-bold
+                                        td &nbsp;
+                                        td.text-left Total
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                        td &nbsp;
+                                        td &nbsp;
                                 if(cidparam != -1)
                                     tr
                                         td &nbsp;                                     

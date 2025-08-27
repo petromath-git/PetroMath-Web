@@ -14,7 +14,7 @@ module.exports = {
     const result = await db.sequelize.query(
                                         `SELECT 
                                         p.product_name Product,
-                                        tr.invoice_date "Date",
+                                        DATE_FORMAT(tr.invoice_date, '%d-%b-%Y') "Date",
                                         tr.invoice_number "Invoice-Number",
                                         trd.quantity*1000  "Quantity",                                       
                                         trd.amount Amount

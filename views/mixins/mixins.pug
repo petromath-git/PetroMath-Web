@@ -23,98 +23,321 @@ mixin addMasterCredit(rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'credit-master\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
 
-//- add txn receipt
+
+
+mixin addMasterDigital(index)
+    tr(id='digital-master-table-row-' + index, class='d-md-none')
+        th(scope="row") New
+        td
+            input.form-control(type='text', name='m_digital_name', placeholder='Company Name', required)
+        td
+            input.form-control(type='tel', name='m_digital_phoneno', placeholder='Phone Number')
+        td
+            input.form-control(type='text', name='m_digital_gst', placeholder='GST Number')
+        td
+            button.close(type="button" aria-label="Close" onclick='hideMasterEntryRow(\'digital-master\', \'digital-master-table-row-' + index + '\')')
+                span(aria-hidden="true") &times;
+
 mixin addTxnReceipt(rowCnt)
     - let id = 'creditReceipts-table-row-' + rowCnt;
     - const prefix = 'cr_';
     - var creditId = undefined, creditType = config.creditTypes[0];
-    if(creditCompanyValues && creditCompanyValues[0])
-        - creditId = creditCompanyValues[0].creditorId;
+    if(activeCreditCompanyValues && activeCreditCompanyValues[0])
+        - creditId = activeCreditCompanyValues[0].creditorId;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
-            input.form-control(type='date', name='txn_receipt_date_'+ rowCnt, id='txn_receipt_date_'+ rowCnt, value= currentDate required max=currentDate min=minDateForNewReceipts)
+            input.form-control(
+                type='date', 
+                name='txn_receipt_date_'+ rowCnt, 
+                id='txn_receipt_date_'+ rowCnt, 
+                value=currentDate, 
+                required, 
+                max=currentDate, 
+                min=minDateForNewReceipts
+            )
         td(scope="row")
-            input.form-control(type='number', name='creditreceiptno_' + rowCnt, id='creditreceiptno_' + rowCnt, required)
+            input.form-control(
+                type='number', 
+                name='creditreceiptno_' + rowCnt, 
+                id='creditreceiptno_' + rowCnt, 
+                required
+            )
         td(scope="row")
-            select.form-control(name=prefix + 'receiptType_' + rowCnt, id=prefix + 'receiptType_' + rowCnt)
+            select.form-control(
+                name=prefix + 'receiptType_' + rowCnt, 
+                id=prefix + 'receiptType_' + rowCnt,
+                onChange='toggleReceiptRelatedDropdowns(this,' + rowCnt + ', "' + prefix + '", ' + JSON.stringify(config.creditTypes) + ')'
+            )
                 if config.receiptTypes
                     each val in config.receiptTypes
-                        option(value=`${val.label}`)= val.label
+                        if val.allow_manual_entry
+                            option(value=val.label)= val.label
         td(scope="row")
-            input(type='hidden' id=prefix + 'companyId_' + rowCnt, name=prefix + 'companyId_' + rowCnt, value = creditId)
-            select.form-control(name=prefix + 'type-' + rowCnt, id=prefix + 'type-' + rowCnt, onChange='toggleCreditTypes(this, ' + rowCnt + ', \'' + prefix + '\', ' + JSON.stringify(config.creditTypes) + ')')
+            input(type='hidden', id=prefix + 'companyId_' + rowCnt, name=prefix + 'companyId_' + rowCnt, value=creditId)
+            select.form-control(
+                name=prefix + 'type-' + rowCnt, 
+                id=prefix + 'type-' + rowCnt, 
+                onChange='toggleReceiptRelatedDropdowns(this,' + rowCnt + ', "' + prefix + '", ' + JSON.stringify(config.creditTypes) + ')'
+            )
                 if config.creditTypes
                     each val in config.creditTypes
-                        option(value=`${val}`)= val
+                        if val === 'Credit'
+                            // Only show Credit option if activeCreditCompanyValues exist
+                            if activeCreditCompanyValues && activeCreditCompanyValues.length > 0
+                                option(value=val)= val
+                        else if val === 'Suspense'
+                            // Only show Suspense option if suspenseValues exist
+                            if suspenseValues && suspenseValues.length > 0
+                                option(value=val)= val
+                        else
+                            // Show other credit types without condition (if any)
+                            option(value=val)= val
+        
+        // Credit Party column - TWO SEPARATE DROPDOWNS like the original working code
         td(scope="row")
+            // Credit dropdown (first credit type)
             - var displayType1Class = 'd-md-none'
             if creditType === config.creditTypes[0]
                 - displayType1Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[0] + '-' + rowCnt id=prefix + config.creditTypes[0] + '-' + rowCnt, class = displayType1Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + rowCnt + ')')
-                if creditCompanyValues
-                    each val in creditCompanyValues
-                        option(value=`${val.creditorId}`)= val.creditorName
-            - var displayType2Class = 'd-md-none'
+            select.form-control(
+                name=prefix + config.creditTypes[0] + '-' + rowCnt, 
+                id=prefix + config.creditTypes[0] + '-' + rowCnt, 
+                class=displayType1Class, 
+                onChange='updateHiddenCreditId(this, "' + prefix + '", ' + rowCnt + ')'
+            )
+                option(value="") Select Credit Party
+                if activeCreditCompanyValues
+                    each val in activeCreditCompanyValues
+                        option(value=val.creditorId)= val.creditorName
+            
+            // Suspense dropdown (second credit type)
+            - var displayType2Class = 'd-md-none'  
             if creditType === config.creditTypes[1]
                 - displayType2Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[1] + '-' + rowCnt id=prefix + config.creditTypes[1] + '-' + rowCnt, class = displayType2Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + rowCnt + ')')
+            select.form-control(
+                name=prefix + config.creditTypes[1] + '-' + rowCnt, 
+                id=prefix + config.creditTypes[1] + '-' + rowCnt, 
+                class=displayType2Class, 
+                onChange='updateHiddenCreditId(this, "' + prefix + '", ' + rowCnt + ')'
+            )
+                option(value="") Select Suspense Account
                 if suspenseValues
                     each val in suspenseValues
-                        option(value=`${val.creditorId}`)= val.creditorName
+                        option(value=val.creditorId)= val.creditorName
+        
+        // Digital Vendor column - new separate column
         td(scope="row")
-            input.form-control(type='number', name='cramount_' + rowCnt, id='cramount_' + rowCnt, required, step=0.01)
+            select.form-control(
+                name=prefix + 'digitalcreditparty_' + rowCnt,
+                id=prefix + 'digitalcreditparty_' + rowCnt,                
+                disabled
+            )
+                option(value="") Select Digital Vendor
+                if digActiveCreditCompanyValues
+                    each val in digActiveCreditCompanyValues
+                        option(value=val.creditorId)= val.creditorName
+        
         td(scope="row")
-            input.form-control(type='text', name='crnotes_' + rowCnt, id='crnotes_' + rowCnt, required)
+            input.form-control(
+                type='number', 
+                name='cramount_' + rowCnt, 
+                id='cramount_' + rowCnt, 
+                required, 
+                step=0.01
+            )
         td(scope="row")
-            button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'creditReceipts\', \'' + id + '\')', id = id + '_close')
+            input.form-control(
+                type='text', 
+                name='crnotes_' + rowCnt, 
+                id='crnotes_' + rowCnt, 
+                required
+            )
+        td(scope="row")
+            button.close(
+                type="button",
+                aria-label="Close",
+                onclick='hideMasterEntryRow("creditReceipts", "' + id + '")',
+                id=id + '_close'
+            )
                 span(aria-hidden="true") &times;
 
-//- add new product
 mixin addMasterProduct(rowCnt)
     - let id = 'product-master-table-row-' + rowCnt;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
-            input.form-control(type='text', name='m_product_name_'+ rowCnt, id='m_product_name_'+ rowCnt, required)
+            // Product Name: allow user to type and then convert after a delay
+            input.form-control(
+                type='text', 
+                name='m_product_name_'+ rowCnt, 
+                id='m_product_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter Product Name", 
+                oninput="delayedUpperCase(this)"
+            )
+            //- Hidden qty field with default value 1
+            input(type='hidden', name='m_product_qty_'+ rowCnt, id='m_product_qty_'+ rowCnt, value="1")
         td(scope="row")
-            input.form-control(type='number', name='m_product_qty_'+ rowCnt, id='m_product_qty_'+ rowCnt, min=0 oninput='validity.valid||(value="")', value=0 , required, step=0.001)
+            // SKU Name: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_sku_name_'+ rowCnt, 
+                id='m_product_sku_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter SKU Name", 
+                oninput="delayedUpperCase(this)"
+            )
         td(scope="row")
-            select.form-control(id='m_product_unit_'+ rowCnt, name='m_product_unit_'+ rowCnt, required)
+            // SKU Number: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_sku_number_'+ rowCnt, 
+                id='m_product_sku_number_'+ rowCnt, 
+                required, 
+                placeholder="Enter SKU Number", 
+                oninput="delayedUpperCase(this)"
+            )
+        td(scope="row")
+            // HSN Code: allow user to type then convert
+            input.form-control(
+                type='text', 
+                name='m_product_hsn_code_'+ rowCnt, 
+                id='m_product_hsn_code_'+ rowCnt, 
+                placeholder="Enter HSN Code", 
+                oninput="delayedUpperCase(this)"
+            )
+        td(scope="row")
+            select.form-control(
+                id='m_product_unit_'+ rowCnt, 
+                name='m_product_unit_'+ rowCnt, 
+                required
+            )
+                option(value="" disabled selected) Select Unit
                 if config.productUnits
                     each val in config.productUnits
-                        option(value=`${val}`)=val
+                        option(value=`${val}`)= val
         td(scope="row")
-            input.form-control(type='number', name='m_product_price_' + rowCnt, id='m_product_price_' + rowCnt, min=0 oninput='validity.valid||(value="")', value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_price_' + rowCnt, 
+                    id='m_product_price_' + rowCnt, 
+                    min=0, 
+                    oninput='validity.valid||(value="")', 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text Price (₹)
         td(scope="row")
-            input.form-control(type='text', name='m_product_ledger_name_'+ rowCnt, id='m_product_ledger_name_'+ rowCnt, required)
+            input.form-control(
+                type='text', 
+                name='m_product_ledger_name_'+ rowCnt, 
+                id='m_product_ledger_name_'+ rowCnt, 
+                required, 
+                placeholder="Enter Ledger Name"
+            )
         td(scope="row")
-            input.form-control(type='number', name='m_product_cgst_'+ rowCnt, id='m_product_cgst_'+ rowCnt, min=0 , value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_cgst_'+ rowCnt, 
+                    id='m_product_cgst_'+ rowCnt, 
+                    min=0, 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text CGST %
         td(scope="row")
-            input.form-control(type='number', name='m_product_sgst_'+ rowCnt, id='m_product_sgst_'+ rowCnt, min=0 , value=0 , required, step=0.01)
+            .input-group
+                input.form-control(
+                    type='number', 
+                    name='m_product_sgst_'+ rowCnt, 
+                    id='m_product_sgst_'+ rowCnt, 
+                    min=0, 
+                    value=0, 
+                    required, 
+                    step=0.01
+                )
+                .input-group-append
+                    span.input-group-text SGST %
         td(scope="row")
-            button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'product-master\', \'' + id + '\')', id = id + '_close')
+            button.close(
+                type="button", 
+                aria-label="Close", 
+                onclick='hideMasterEntryRow("product-master", "' + id + '")', 
+                id=id + '_close'
+            )
                 span(aria-hidden="true") &times;
 
-//- add new user
-mixin addNewUser(rowCnt)
+//- add new user with role-based restrictions and auto-username
+mixin addNewUser(rowCnt, userRole)
     - let id = 'users-table-row-' + rowCnt;
     tr(class='d-md-none' id=id)
         th(scope="row")
         td(scope="row")
-            input.form-control(type='text', name='m_user_name_'+ rowCnt, id='m_user_name_'+ rowCnt, required)
+            input.form-control(type='text', name='m_user_name_'+ rowCnt, id='m_user_name_'+ rowCnt, required, oninput='validateAndGenerateUsername(' + rowCnt + ')', placeholder='Enter full name (CAPS only)', maxlength='20', title='Only capital letters and spaces allowed')
         td(scope="row")
-            input.form-control(type='text', name='m_user_username_'+ rowCnt, id='m_user_username_'+ rowCnt,  required)
+            input.form-control(type='text', name='m_user_username_'+ rowCnt, id='m_user_username_'+ rowCnt, placeholder='Auto-generated from name', readonly)
+            small.text-muted Username will be generated automatically
         td(scope="row")
             select.form-control(name='m_user_role_' + rowCnt, id='m_user_role_' + rowCnt, required)
-                option Cashier
-                option Manager
-                option Admin
-                option Driver
-                option Helper
+                if userRole === 'SuperUser'
+                    option Admin
+                    option Manager
+                    option Cashier
+                    option Driver
+                    option Helper
+                else if userRole === 'Admin'
+                    option Manager
+                    option Cashier
+                    option Driver
+                    option Helper
+                else if userRole === 'Manager'
+                    option Cashier
+                    option Driver
+                    option Helper                
         td(scope="row")
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'users\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
+
+mixin addNewVehicle(rowCnt)
+    tr(id='vehicles-table-row-' + rowCnt, class='d-md-none')
+        th(scope="row") #
+        td
+            input.form-control(type='text', name='m_vehicle_number_' + rowCnt, id='m_vehicle_number_' + rowCnt, placeholder='Enter vehicle number', required)
+        td
+            select.form-control(name='m_vehicle_type_' + rowCnt, id='m_vehicle_type_' + rowCnt, required)
+                option(value='') Select Vehicle Type
+                option(value='Truck') Truck
+                option(value='Tanker') Tanker
+                option(value='Trailer') Trailer
+                option(value='Car') Car
+                option(value='Bike') Bike
+                option(value='Bus') Bus
+                option(value='Other') Other
+        td
+            button.btn.btn-danger.btn-sm(type='button', onclick='hideRow("vehicles-table-row-' + rowCnt + '", "", "")', title='Remove this row')
+                span.oi.oi-x
+        input(type='hidden', name='vehicles_' + rowCnt + '_hiddenId', id='vehicles_' + rowCnt + '_hiddenId')
+
+
+mixin addNewSupplier(rowCnt)
+    - let id = 'suppliers-table-row-' + rowCnt;
+    tr(class='d-md-none' id=id)
+        th(scope="row")
+        td(scope="row")
+            input.form-control(type='text', name='supplier_name_'+ rowCnt, id='supplier_name_'+ rowCnt, placeholder="Supplier Name", required)
+        td(scope="row")
+            input.form-control(type='text', name='supplier_short_name_'+ rowCnt, id='supplier_short_name_'+ rowCnt, placeholder="Short Name", required)
+        td(scope="row")
+            button.close(type="button" aria-label="Close" onclick='hideMasterEntryRow(\'suppliers\', \'' + id + '\')', id = id + '_close')
+                span(aria-hidden="true") &times;
+
 //- cash flow header
 mixin addCashFlowHeader()
     tr
@@ -324,40 +547,50 @@ mixin addTxnTruckExpense(rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'truckexpense\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
 
-mixin addTxnAccount(rowCnt)
-    - let id = 'banktransaction-table-row-' + rowCnt;
-    - const prefix = 'tl_';
-    tr(class='d-md-none' id=id)
-        //th(scope="row")
-        
+mixin addTxnAccount(rowCnt) 
+    - const isTemplate = rowCnt === 'template';   
         td(scope="row")
-            input.form-control(type='date', name='trans_date_'+ rowCnt, id='trans_date_'+ rowCnt, value= currentDate required max=currentDate)
+            input.form-control(type='date', name='trans_date_'+ rowCnt, id='trans_date_'+ rowCnt, value= currentDate required max=currentDate  disabled=isTemplate)
         td(scope="row")
-            select.form-control(name= 'acctno_' + rowCnt id='acctno_' + rowCnt required)
+            select.form-control(name= 'acctno_' + rowCnt id='acctno_' + rowCnt required  disabled=isTemplate)
                 if accountList
                     each val in accountList
                         option(value=`${val.bank_id}`)= val.nickname
         td(scope="row")
-            select.form-control(name= 'trans_type_' + rowCnt id='trans_type_'+ rowCnt required onChange="populateAccountType('"+rowCnt+"')")
+            select.form-control(name= 'trans_type_' + rowCnt id='trans_type_'+ rowCnt required  disabled=isTemplate)
                 if TxnTypes
                     each val in TxnTypes
-                        option(value=`${val.id}`)= val.txntype
+                        option(value=`${val.id}`)= val.txntype        
         td(scope="row")
-            input(type='hidden' name='h_acct_type' id='h_acct_type')
-            select.form-control(name= 'accnt_type_' + rowCnt id='accnt_type_'+ rowCnt required)
-                if AcctTypes
-                    each val in AcctTypes
-                        option(value=`${val.attr}`)= val.attr
+            select.form-control(
+                name="ledger_selector_" + rowCnt, 
+                id="ledger_selector_" + rowCnt,
+                required,
+                onChange="updateLedgerFields(" + rowCnt + ")",
+                disabled=isTemplate
+            )
+                option(value='') Select Ledger
+                if ledgerList
+                    each ledger in ledgerList
+                        option(
+                            value=ledger.id,
+                            data-source=ledger.source,
+                            data-name=ledger.name
+                        )= ledger.name + ' (' + ledger.source + ')'
+
+            // Separate hidden fields for clean mapping
+            input(type="hidden", name="external_id_" + rowCnt, id="external_id_" + rowCnt)
+            input(type="hidden", name="external_source_" + rowCnt, id="external_source_" + rowCnt)
+            input(type="hidden", name="ledgername_" + rowCnt, id="ledgername_" + rowCnt)            
         td(scope="row")
-            input.form-control(type='number', name='debitamount_' + rowCnt, id='debitamount_' + rowCnt, min=0 step=0.01 onChange="disableCreditInput('"+rowCnt+"')" disabled=false)
+            input.form-control(type='number', name='debitamount_' + rowCnt, id='debitamount_' + rowCnt, min=0 max=10000000 step=0.01 oninput="disableCreditInput('"+rowCnt+"')" disabled=false)
         td(scope="row")
-            input.form-control(type='number', name='creditamount_' + rowCnt, id='creditamount_' + rowCnt, min=0 step=0.01 onChange="disableDebitInput('"+rowCnt+"')" disabled=false)
+            input.form-control(type='number', name='creditamount_' + rowCnt, id='creditamount_' + rowCnt, min=0 max=10000000  step=0.01 oninput="disableDebitInput('"+rowCnt+"')" disabled=false)        
+        td(scope="row")
+            textarea.form-control(name="banknotes_" + rowCnt id="banknotes_"+ rowCnt style="height:36px")        
         td(scope="row")
         td(scope="row")
-            textarea.form-control(name="banknotes_" + rowCnt id="banknotes_"+ rowCnt style="height:36px")
-        td(scope="row")
-        td(scope="row")
-            button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'banktransaction\', \'' + id + '\')', id = id + '_close')
+            button.btn.btn-danger(type="button" onclick="removeBankTxnRow('banktransaction-table-row-" + rowCnt + "')") ×
                 span(aria-hidden="true") &times;
 //- add new product
 mixin addMasterDeadline(rowCnt)

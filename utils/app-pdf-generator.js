@@ -6,6 +6,7 @@ const cashflowReportsController = require("../controllers/reports-cashflow-contr
 const dsrReportsController = require("../controllers/reports-dsr-controller");
 const gstReportsController = require("../controllers/reports-gst-summary-controller");
 const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
+const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 const { getBrowser } = require('./browserHelper');
@@ -56,6 +57,9 @@ module.exports = {
         {
             htmlContent = await reportsController.getSalesSummaryReport(req, res, next);
         }
+        else if (req.body.reportType == 'TallyDaybook') {    
+            htmlContent = await tallyDaybookReportsController.getTallyDaybookReport(req, res, next);
+       }
 
         const contentEnd = performance.now();
         console.log(`HTML content generation took: ${contentEnd - contentStart}ms`);
@@ -172,7 +176,8 @@ module.exports = {
                 }
              });
 
-             const alerts = document.querySelectorAll('.alert'); // Select all elements with class 'alert'
+             
+             const alerts = document.querySelectorAll('.alert:not(.period-summary)'); 
              alerts.forEach(alert => alert.remove()); // Remove each alert element 
 
              const element = document.getElementById('petromath-heading'); // Select the element by ID

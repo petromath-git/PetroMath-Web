@@ -12,6 +12,8 @@ const dateFormat = require('dateformat');
 const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
 const security = require("../utils/app-security");
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
+const db = require("../db/db-connection");
 
 module.exports = {
 
@@ -26,26 +28,34 @@ module.exports = {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
                     productDataPromise(locationCode),
+                    pumpProductDataPromise(locationCode),
                     txnController.pumpDataPromise(locationCode),
                     txnController.creditCompanyDataPromise(locationCode),
                     txnController.suspenseDataPromise(locationCode),
                     expenseDataPromise(locationCode),
-                    personAttendanceDataPromise(locationCode)])
+                    personAttendanceDataPromise(locationCode),
+                    vehicleDataPromise(locationCode),
+                //    digitalCompanyDataPromise(locationCode)
+                ])
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
                             config: config.APP_CONFIGS,
                             cashiers: values[0].value.cashiers,
                             minDateForNewClosing: utils.restrictToPastDate(config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing),
-                            currentDate: utils.currentDate(), productValues: values[1].value.products,
+                            currentDate: utils.currentDate(),
+                            productValues: values[1].value.products,                            
                             product2TValues: values[1].value.products2T,
                             testingValues: values[1].value.products,
                             productIdAliasMapping: JSON.stringify(values[1].value.productIdAliasMapping),
-                            pumps: values[2].value,
-                            creditCompanyValues: values[3].value,
-                            suspenseValues: values[4].value,
-                            expenseValues: values[5].value.expenses,
-                            usersList: values[6].value.allUsers
+                            pumpProductValues: values[2].value.products,
+                            pumps: values[3].value,
+                            creditCompanyValues: values[4].value,
+                            suspenseValues: values[5].value,
+                            expenseValues: values[6].value.expenses,
+                            usersList: values[7].value.allUsers,
+                            vehicleData: values[8].value,
+                  //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
                     console.warn("Error while getting data using promises " + err.toString());
@@ -137,6 +147,21 @@ module.exports = {
         }
     },
 
+    saveDigitalSalesData: (req, res, next) => {
+    const salesData = req.body;
+    if (salesData) {
+        saveController.txnWriteDigitalSalesPromise(salesData).then((result) => {
+            if (!result.error) {
+                res.status(200).send({message: 'Saved digital sales data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    }
+},
+
+
+
     saveExpensesData: (req, res, next) => {
         const expensesData = req.body;
         if (expensesData) {
@@ -227,6 +252,23 @@ module.exports = {
         }
     }),
 
+deleteTxnDigitalSale: ((req, res, next) => {
+    const saleId = req.query.id;
+    if (saleId) {
+        deleteController.txnDeleteDigitalSalePromise(saleId).then((result) => {
+            if (!result.error) {
+                res.status(200).send({
+                    message: result.message
+                });
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    } else {
+        res.status(302).send();
+    }
+}),
+
     deleteTxnExpense: ((req, res, next) => {
         const expenseId = req.query.id;
         if (expenseId) {
@@ -265,6 +307,10 @@ module.exports = {
         return productDataPromise(locationCode, productNames);
     },
 
+    pumpProductDataPromise: (locationCode) => {
+        return pumpProductDataPromise(locationCode);
+    },
+
     personDataPromise: (locationCode) => {
         return personDataPromise(locationCode);
     },
@@ -283,96 +329,201 @@ module.exports = {
 };
 
 const getHomeData = (req, res, next) => {
+    let closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
+    let closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
     const locationCode = req.user.location_code;
-    let closingQueryFromDate = req.query.fromClosingDate;
-    let closingQueryToDate = req.query.toClosingDate;
-    if(closingQueryFromDate === undefined) closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    if(closingQueryToDate === undefined) closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
+
+    if(req.query.fromClosingDate) {
+        closingQueryFromDate = req.query.fromClosingDate;
+    }
+    if(req.query.toClosingDate) {
+        closingQueryToDate = req.query.toClosingDate;
+    }
+
     if(req.user.isAdmin) {
-        Promise.allSettled([getClosingDataByDate(locationCode, closingQueryFromDate, closingQueryToDate),
+        Promise.allSettled([
+            getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
             getDraftsCountBeforeDays(locationCode, config.APP_CONFIGS.maxAllowedDraftsDays),
-            getDeadlineWarningMessage(locationCode)])
-            .then(values => {
-                res.render('home', {
-                    title: 'Shift Closing',
-                    user: req.user,
-                    config: config.APP_CONFIGS,
-                    closingValues: values[0].value,
-                    currentDate: utils.currentDate(),
-                    fromClosingDate: closingQueryFromDate,
-                    toClosingDate: closingQueryToDate,
-                    draftsCnt: values[1].value,
-                    draftDaysCnt: values[2].value,
-                    deadlineMessage: values[3].value
-                });
-                
-            });
-    } else {
-        // TODO: fix after person id is added to view
-        getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate)
-            .then(data => {
+            getDeadlineWarningMessage(locationCode),
+            getLocationProductColumns(locationCode)
+        ]).then(values => {
             res.render('home', {
+                title: 'Shift Closing',
                 user: req.user,
                 config: config.APP_CONFIGS,
-                closingValues: data,
+                closingValues: values[0].value,
                 currentDate: utils.currentDate(),
                 fromClosingDate: closingQueryFromDate,
                 toClosingDate: closingQueryToDate,
+                draftsCnt: values[1].value,
+                draftDaysCnt: values[2].value,
+                deadlineMessage: values[3].value,
+                productColumns: values[4].value
             });
+        }).catch(error => {
+            console.error('Error in getHomeData:', error);
+            next(error);
+        });
+    } else {
+        Promise.allSettled([
+            getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate),
+            getLocationProductColumns(locationCode)
+        ]).then(values => {
+            res.render('home', {
+                title: 'Shift Closing',
+                user: req.user,
+                config: config.APP_CONFIGS,
+                closingValues: values[0].value,
+                currentDate: utils.currentDate(),
+                fromClosingDate: closingQueryFromDate,
+                toClosingDate: closingQueryToDate,
+                productColumns: values[1].value
+            });
+        }).catch(error => {
+            console.error('Error in getHomeData for non-admin:', error);
+            next(error);
         });
     }
 };
 
 // Home page: Get closings order by closing  id
-const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDate,closingQueryToDate) => {
+const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDate, closingQueryToDate) => {
     return new Promise((resolve, reject) => {
         let closings = [];
         TxnReadDao.getPersonsClosingDetailsByDate(personName, locationCode, closingQueryFromDate, closingQueryToDate)
             .then(data => {
                 data.forEach((closingData) => {
-                    closings.push({closingId: closingData.closing_id,
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
                         cashierName: closingData.person_name,
                         closingDate: closingData.closing_date_formatted,
-                        msData: closingData.MS,
-                        hsdData: closingData.HSD,
-                        xmsData: closingData.XMS,
-                        l2tData: closingData.l_2t,
-                        p2tData: closingData.p_2t,
-                        expenseData: closingData.ex_short,
                         period: closingData.period,
-                        closingStatus: closingData.closing_status
+                        closingStatus: closingData.closing_status,
+                        expenseData: closingData.ex_short || 0
+                    };
+
+                    // Handle dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose', 'p_2t'].includes(key)) {
+                            dynamicClosingData[key] = closingData[key] || 0;
+                        }
                     });
+
+                    // Handle 2T products
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = closingData.loose || 0;
+                    }
+                    if (closingData.p_2t !== undefined) {
+                        dynamicClosingData['2T_POUCH'] = closingData.p_2t || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
                 });
                 resolve(closings);
-            });
+            })
+            .catch(reject);
     });
 }
 
+const getLocationProductColumns = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        const productQuery = `
+            SELECT DISTINCT product_code 
+            FROM m_pump 
+            WHERE location_code = :locationCode 
+            AND product_code IS NOT NULL 
+            AND effective_end_date > NOW()
+            ORDER BY product_code
+        `;
+        
+        db.sequelize.query(productQuery, {
+            replacements: { locationCode: locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        }).then(pumpProducts => {
+            let productColumns = [];
+            
+            // Add pump products
+            pumpProducts.forEach(product => {
+                productColumns.push({
+                    key: product.product_code,
+                    label: product.product_code,
+                    type: 'pump'
+                });
+            });
+            
+            // UPDATED: Only check for 2T LOOSE
+            const twoTQuery = `
+                SELECT COUNT(*) as count 
+                FROM m_product 
+                WHERE location_code = :locationCode 
+                AND product_name = '2T LOOSE'
+            `;
+            
+            db.sequelize.query(twoTQuery, {
+                replacements: { locationCode: locationCode },
+                type: db.Sequelize.QueryTypes.SELECT
+            }).then(twoTResult => {
+                // UPDATED: Only add 2T Loose if it exists
+                if (twoTResult[0].count > 0) {
+                    productColumns.push({
+                        key: '2T_LOOSE',
+                        label: '2T Loose',
+                        type: '2t'
+                    });
+                }
+                
+                resolve(productColumns);
+            }).catch(() => resolve(productColumns));
+        }).catch(() => resolve([]));
+    });
+};
+
 // Home page: Get closings order by closing  id
-const getClosingDataByDate = (locationCode, closingQueryFromDate,closingQueryToDate) => {
+const getClosingDataByDate = (locationCode, closingQueryFromDate, closingQueryToDate) => {
     return new Promise((resolve, reject) => {
         let closings = [];
-        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate,closingQueryToDate)
+        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
             .then(data => {
                 data.forEach((closingData) => {
-                    closings.push({closingId: closingData.closing_id,
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
                         cashierName: closingData.person_name,
                         closingDate: closingData.closing_date_formatted,
-                        msData: closingData.MS,
-                        hsdData: closingData.HSD,
-                        xmsData: closingData.XMS,
-                        l2tData: closingData.l_2t,
-                        p2tData: closingData.p_2t,
-                        expenseData: closingData.ex_short,
                         period: closingData.period,
-                        closingStatus: closingData.closing_status
+                        closingStatus: closingData.closing_status,
+                        expenseData: closingData.ex_short || 0
+                    };
+
+                    // Handle dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose', 'p_2t'].includes(key)) {
+                            dynamicClosingData[key] = closingData[key] || 0;
+                        }
                     });
+
+                    // Handle 2T products
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = closingData.loose || 0;
+                    }
+                    if (closingData.p_2t !== undefined) {
+                        dynamicClosingData['2T_POUCH'] = closingData.p_2t || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
                 });
                 resolve(closings);
-            });
+            })
+            .catch(reject);
     });
 }
+
+
+
 
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
@@ -445,6 +596,46 @@ const productDataPromise = (locationCode) => {
     });
 }
 
+
+// Get pump-specific product data only
+const pumpProductDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        // First get pump product codes for this location in correct order
+        db.sequelize.query(
+            `SELECT product_code, MIN(display_order) as min_order 
+                FROM m_pump 
+                WHERE location_code = :locationCode 
+                GROUP BY product_code 
+                ORDER BY min_order`,
+            {
+                replacements: { locationCode },
+                type: db.sequelize.QueryTypes.SELECT,
+            }
+        ).then(pumpProductCodes => {
+            // Get products and maintain the pump order
+            ProductDao.findProducts(locationCode)
+                .then(data => {
+                    let products = [], productIdAliasMapping = [];
+                    const productMap = config.PRODUCT_DETAILS_MAPPING;
+                    
+                    // Process products in pump order, not product table order
+                    pumpProductCodes.forEach((pumpProduct) => {
+                        const product = data.find(p => p.product_name === pumpProduct.product_code);
+                        if (product) {
+                            const mapData = productMap.get(product.product_name);
+                            const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
+                            const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
+                            products.push(formProductData(product, productAlias, textName));
+                            productIdAliasMapping.push(formProductAliasMap(product, productAlias));
+                        }
+                    });
+                    
+                    resolve({products: products, productIdAliasMapping: productIdAliasMapping});
+                }).catch(reject);
+        }).catch(reject);
+    });
+}
+
 function formProductData(product, productAlias, textName) {
     return {
         productId: product.product_id,
@@ -452,6 +643,7 @@ function formProductData(product, productAlias, textName) {
         textName: textName,
         productPrice: product.price,
         productName: product.product_name,
+        rgbColor: product.rgb_color,
         returnedQty: 0,
         givenQty: 0
     };
@@ -496,3 +688,110 @@ const personAttendanceDataPromise = (locationCode) => {
             });
     });
 }
+
+const vehicleDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        CreditVehicleDao.findAllVehiclesForLocation(locationCode)
+            .then(data => {
+                // Group vehicles by creditlist_id for easier access
+                const vehiclesByCredit = {};
+                data.forEach(vehicle => {
+                    if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                        vehiclesByCredit[vehicle.creditlist_id] = [];
+                    }
+                    vehiclesByCredit[vehicle.creditlist_id].push({
+                        vehicleId: vehicle.vehicle_id,
+                        vehicleNumber: vehicle.vehicle_number,
+                        vehicleType: vehicle.vehicle_type,
+                        companyName: vehicle.company_name
+                    });
+                });
+                resolve(vehiclesByCredit);
+            })
+            .catch(err => {
+                console.error("Error loading vehicles:", err);
+                resolve({});
+            });
+    });
+};
+
+
+const digitalCompanyDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        let companies = [];
+        CreditDao.findDigitalCredits(locationCode)  // Need to create this DAO method
+            .then(data => {
+                data.forEach((credit) => {
+                    companies.push({
+                        creditorId: credit.creditlist_id, 
+                        creditorName: credit.Company_Name, 
+                        card_flag: credit.card_flag
+                    });
+                });
+                resolve(companies);
+            })
+            .catch(err => {
+                console.error("Error loading digital companies:", err);
+                resolve([]);
+            });
+    });
+};
+
+
+const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) => {
+    return new Promise((resolve, reject) => {
+        let closings = [];
+        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
+            .then(data => {
+                data.forEach((closingData) => {
+                    const dynamicClosingData = {
+                        closingId: closingData.closing_id,
+                        cashierName: closingData.person_name,
+                        closingDate: closingData.closing_date_formatted,
+                        period: closingData.period,
+                        closingStatus: closingData.closing_status,
+                        expenseData: parseFloat(closingData.ex_short) || 0
+                    };
+
+                    // Add dynamic product columns
+                    Object.keys(closingData).forEach((key) => {
+                        // UPDATED: Remove p_2t from the exclusion list since we don't want it
+                        if (!['closing_id', 'person_name', 'closing_date_formatted', 
+                              'closing_date', 'period', 'closing_status', 'ex_short', 
+                              'notes', 'location_code', 'loose'].includes(key)) {
+                            dynamicClosingData[key] = parseFloat(closingData[key]) || 0;
+                        }
+                    });
+
+                    // UPDATED: Only handle 2T Loose, remove 2T Pouch
+                    if (closingData.loose !== undefined) {
+                        dynamicClosingData['2T_LOOSE'] = parseFloat(closingData.loose) || 0;
+                    }
+
+                    closings.push(dynamicClosingData);
+                });
+                
+                resolve(closings);
+            })
+            .catch(reject);
+    });
+};
+
+
+
+// Add API endpoint for dynamic vehicle loading
+module.exports.getVehiclesByCreditId = (req, res, next) => {
+    const creditListId = req.params.creditListId;
+    CreditVehicleDao.findAll(creditListId)
+        .then(data => {
+            const vehicles = data.map(v => ({
+                vehicleId: v.vehicle_id,
+                vehicleNumber: v.vehicle_number,
+                vehicleType: v.vehicle_type
+            }));
+            res.json({ success: true, vehicles });
+        })
+        .catch(err => {
+            res.status(500).json({ success: false, error: err.toString() });
+        });
+};

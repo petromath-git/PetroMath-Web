@@ -41,8 +41,8 @@ function updateReadingPumps(obj) {
 // Add new flow: Update price(from first tab) to each pump instance reading.
 function updateProductPrices(obj) {
     trackMenu(obj);
-    //updatePriceOnReadingTab();
-    updatePriceOnReadingTabv1();
+    updatePriceOnReadingTab();
+    //updatePriceOnReadingTabv1();
 }
 
 // Add new/edit flow: Update default expense amount on select.
@@ -90,26 +90,65 @@ function hideAndDeleteReadingPump(elementId) {
     deleteAjax('remove-reading', deleteObj.value, elementId, 'col-3 d-md-none');
 }
 
-function updatePriceOnReadingTab(isOnLoad) {
-    // Get the select element and its current value
-    const pumpSelect = document.getElementById("reading-pump-name");
-    const pumpName = pumpSelect.value;
+// function updatePriceOnReadingTab(isOnLoad) {
+//     // Get the select element and its current value
+//     const pumpSelect = document.getElementById("reading-pump-name");
+//     const pumpName = pumpSelect.value;
 
-    if (pumpName.startsWith("HSD")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_hsdrate").value;
-    } else if (pumpName.startsWith("XMS")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_xmsrate").value;
-    } else if (pumpName.startsWith("MS")) {
-        document.getElementById("reading-price").value = document.getElementById("rate_msrate").value;
+//     if (pumpName.startsWith("HSD")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_hsdrate").value;
+//     } else if (pumpName.startsWith("XMS")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_xmsrate").value;
+//     } else if (pumpName.startsWith("MS")) {
+//         document.getElementById("reading-price").value = document.getElementById("rate_msrate").value;
+//     } else {
+//         document.getElementById("reading-price").value = "";
+//     }
+
+//     // Reset the selection to the first option if onLoad is true
+//     if (isOnLoad) {
+//         pumpSelect.selectedIndex = 0;
+//     }
+// }
+
+function updatePriceOnReadingTab(isOnLoad) {
+    const pumpSelect = document.getElementById("reading-pump-name");
+    const pumpCode = pumpSelect.value;
+    const priceInput = document.getElementById("reading-price");
+
+    // Find the pump in pumpsData to get its product_code
+    const pump = window.pumpsData.find(p => p.pumpCode === pumpCode);
+    
+    if (pump && pump.productCode) {
+        // Find the product in productValuesData that matches this product_code
+        const product = window.productValuesData.find(p => p.productName === pump.productCode);
+        
+        if (product) {
+            // Build the rate field ID using the product's textName
+            const rateFieldId = 'rate_' + product.textName;
+            const rateElement = document.getElementById(rateFieldId);
+            
+            if (rateElement) {
+                priceInput.value = rateElement.value;
+            } else {
+                console.warn(`Rate field ${rateFieldId} not found`);
+                priceInput.value = "";
+            }
+        } else {
+            console.warn(`No product found for product_code: ${pump.productCode}`);
+            priceInput.value = "";
+        }
     } else {
-        document.getElementById("reading-price").value = "";
+        console.warn(`No pump found or missing product_code for: ${pumpCode}`);
+        priceInput.value = "";
     }
 
-    // Reset the selection to the first option if onLoad is true
+    // Reset selection if on load
     if (isOnLoad) {
         pumpSelect.selectedIndex = 0;
     }
 }
+
 
 
 
@@ -208,6 +247,87 @@ function toggleCreditTypes(obj, rowNo, creditRowPrefix, creditTypes) {
     });
 }
 
+
+function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, creditTypes) {
+    console.log('toggleReceiptRelatedDropdowns called for row:', rowNo);
+    console.log('creditRowPrefix:', creditRowPrefix);
+    console.log('creditTypes:', creditTypes);
+    console.log('changedElement:', changedElement);
+
+    // Define CSS classes for show/hide states
+    const showClassName = 'd-md-block';
+    const hideClassName = 'd-md-none';
+
+    const receiptTypeEl = document.getElementById(`${creditRowPrefix}receiptType_${rowNo}`);
+    const creditTypeEl = document.getElementById(`${creditRowPrefix}type-${rowNo}`);
+    const digitalDropdown = document.getElementById(`${creditRowPrefix}digitalcreditparty_${rowNo}`);
+
+    // Early return if essential elements are missing
+    if (!receiptTypeEl || !creditTypeEl) {
+        console.warn('Essential elements not found for row:', rowNo);
+        return;
+    }
+
+    // Get values - use changedElement value if it's one of our target elements
+    let receiptType, creditType;
+    
+    if (changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
+        receiptType = changedElement.value?.toLowerCase();
+        creditType = creditTypeEl.value;
+    } else if (changedElement.id === `${creditRowPrefix}type-${rowNo}`) {
+        receiptType = receiptTypeEl.value?.toLowerCase();
+        creditType = changedElement.value;
+    } else {
+        // Fallback to reading from DOM
+        receiptType = receiptTypeEl.value?.toLowerCase();
+        creditType = creditTypeEl.value;
+    }
+
+    console.log('receiptType:', receiptType);
+    console.log('creditType:', creditType);
+
+    // Handle digital vendor dropdown - enable/disable based on receipt type ONLY
+    if (digitalDropdown) {
+        console.log('Digital dropdown found, current disabled state:', digitalDropdown.disabled);
+        
+        // Only change digital vendor state when receipt type changes, not credit type
+        if (changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
+            if (receiptType === 'digital') {
+                console.log('Digital receipt type selected - enabling digital vendor dropdown');
+                digitalDropdown.disabled = false;
+            } else {
+                console.log('Non-digital receipt type - disabling digital vendor dropdown');
+                digitalDropdown.disabled = true;
+                digitalDropdown.selectedIndex = 0; // Reset to first option
+            }
+        }
+        // If credit type changed, don't touch the digital vendor dropdown state
+        else {
+            console.log('Credit type changed - leaving digital vendor dropdown state unchanged');
+        }
+    }
+
+    // Handle Credit Party dropdowns - original working logic (show/hide with CSS classes)
+    creditTypes.forEach((type) => {
+        const creditTypeSelect = document.getElementById(`${creditRowPrefix}${type}-${rowNo}`);
+        if (creditTypeSelect) {
+            if (type === creditType) {
+                console.log(`Showing dropdown for credit type: ${type}`);
+                creditTypeSelect.className = `form-control ${showClassName}`;
+                updateHiddenCreditId(creditTypeSelect, creditRowPrefix, rowNo);
+            } else {
+                console.log(`Hiding dropdown for credit type: ${type}`);
+                creditTypeSelect.className = `form-control ${hideClassName}`;
+            }
+        } else {
+            console.log(`Dropdown not found for credit type: ${type}, expected ID: ${creditRowPrefix}${type}-${rowNo}`);
+        }
+    });
+}
+// Note: This function uses the existing updateHiddenCreditId function
+// which updates both companyName_ and companyId_ hidden fields
+// Note: This function uses the existing updateHiddenCreditId function
+// which updates both companyName_ and companyId_ hidden fields
 function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
     let hiddenObj = document.getElementById(creditRowPrefix + 'companyName_' + rowNo);
     if (hiddenObj) {
@@ -219,39 +339,120 @@ function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
     }
 }
 
+
 // Add new page: Internally & externally for both cash and credit sale to show/hide of specific product price(s)
 // Calls calculation of sale amount too
 function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName) {
-    let productPrice = document.getElementById("rate_" + productId).value;
-    if (productName === 'MS' || productName === 'HSD' || productName === 'XMS') {
-        productPrice = document.getElementById("rate_" + productName.toLowerCase() + 'rate').value;
-        let pumpNames = document.getElementById('reading-pump-name');
-        for (let i = 0; i < pumpNames.length; i++) {
-            let currentOption = pumpNames.options[i].value;
-            if (currentOption.startsWith(productName)) {
-                let readingData = document.getElementById('f_' + currentOption + '_price');
-                if (readingData) {
-                    if (readingData.parentNode.className.indexOf('d-md-block') > -1) {
-                        productPrice = readingData.value;
-                        break;
-                    }
+    // Validate productId first
+    if (!productId) {
+        console.error('ProductId is null or undefined');
+        return;
+    }
+
+    let productPrice = 0;
+
+    // NEW DYNAMIC APPROACH: Find product using productValuesData
+    if (window.productValuesData) {
+        // Find the product by productId
+        const product = window.productValuesData.find(p => p.productId == productId);
+        
+        if (product) {
+            // Check if this product has pumps (is a fuel/pump product)
+            const hasPumps = window.pumpsData && window.pumpsData.some(pump => pump.productCode === product.productName);
+            
+            if (hasPumps) {
+                // For pump products: try to find rate element, fallback to DB price
+                productPrice = product.productPrice || 0; // Start with DB price
+                
+                let rateElement = null;
+                
+                // Try with productId (most common for hidden fields)
+                const productIdRateField = 'rate_' + productId;
+                rateElement = document.getElementById(productIdRateField);
+                
+                if (!rateElement && product.textName) {
+                    // Try with textName (for visible rate fields like rate_msrate)
+                    const rateFieldId = 'rate_' + product.textName;
+                    rateElement = document.getElementById(rateFieldId);
+                }
+                
+                // If we found a rate element, use its value; otherwise keep the DB price
+                if (rateElement && rateElement.value !== undefined) {
+                    productPrice = rateElement.value;
+                    console.log(`Found rate element ${rateElement.id} with price: ${productPrice}`);
                 } else {
-                    readingData = document.getElementById('s_' + currentOption + '_price');
-                    if (readingData.parentNode.className.indexOf('d-md-block') > -1) {
-                        productPrice = readingData.value;
-                        break;
+                    console.log(`No rate element found for pump product ${product.productName}, using DB price: ${productPrice}`);
+                }
+            } else {
+                // For non-pump products: directly use database price
+                productPrice = product.productPrice || 0;
+                console.log(`Non-pump product ${product.productName}, using DB price: ${productPrice}`);
+            }
+            
+            // Check for dynamic pump readings if this is a pump product
+            if (hasPumps) {
+                const pumpNames = document.getElementById('reading-pump-name');
+                if (pumpNames && pumpNames.length) {
+                    for (let i = 0; i < pumpNames.length; i++) {
+                        let currentOption = pumpNames.options[i].value;
+                        
+                        // Find pump data for this option
+                        const pumpData = window.pumpsData.find(p => p.pumpCode === currentOption);
+                        if (pumpData && pumpData.productCode === product.productName) {
+                            let readingData = document.getElementById('f_' + currentOption + '_price');
+                            if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
+                                productPrice = readingData.value;
+                                console.log(`Using pump reading price: ${productPrice}`);
+                                break;
+                            } else {
+                                readingData = document.getElementById('s_' + currentOption + '_price');
+                                if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
+                                    productPrice = readingData.value;
+                                    console.log(`Using pump reading price: ${productPrice}`);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
-
             }
+        } else {
+            console.warn('Product not found in productValuesData for productId:', productId);
         }
-        document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).readOnly = false;
     } else {
-        document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).readOnly = true;
+        console.warn('window.productValuesData not available, falling back to old approach');
+        
+        // FALLBACK: Try to find rate element by productId
+        const rateElement = document.getElementById("rate_" + productId);
+        if (rateElement && rateElement.value !== undefined) {
+            productPrice = rateElement.value;
+        } else {
+            console.warn('Rate element not found for productId:', productId);
+            productPrice = 0;
+        }
     }
-    document.getElementById(cashOrCreditRowPrefix + "price-" + rowNo).value = productPrice
-    calculateCashOrCreditSale(cashOrCreditRowPrefix, rowNo)
+
+    // Update the price field if it exists
+    const priceFieldId = cashOrCreditRowPrefix + "price-" + rowNo;
+    const priceField = document.getElementById(priceFieldId);
+    
+    if (priceField) {
+        // All products are readonly in cash/credit sales
+        let isReadonly = true;
+        
+        priceField.readOnly = isReadonly;
+        priceField.value = productPrice;
+        
+        // Calculate the sale amount
+        if (typeof calculateCashOrCreditSale === 'function') {
+            calculateCashOrCreditSale(cashOrCreditRowPrefix, rowNo);
+        }
+    } else {
+        console.error('Price field not found:', priceFieldId);
+    }
 }
+
+
 
 // Add new page: Calculate cash/credit Quantity
 function calculateCashOrCreditQuantity(prefix, rowNo) {
@@ -407,7 +608,20 @@ function populateSummary(obj) {
             const labels = elements[i].querySelectorAll('[id^=val-]');
             for (let j = 0; j < labels.length; j++) {
                 const getValueFromLabelId = labels[j].id.replace("val-", "");
+
+                  if (getValueFromLabelId.includes('digital-sales-transaction-date-')) {
+                        const dateElement = document.getElementById(getValueFromLabelId);
+                        if (dateElement && dateElement.value) {
+                            const date = new Date(dateElement.value);
+                            const options = { day: '2-digit', month: 'short', year: 'numeric' };
+                            labels[j].textContent = date.toLocaleDateString('en-GB', options);
+                        } else {
+                            labels[j].textContent = '';
+                        }
+                    } else {   
+
                 labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+                    }
 
                 if (getValueFromLabelId.endsWith("pump_amount")) {
                     let value = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : 0;
@@ -577,6 +791,7 @@ function formClosing(closingId, user) {
         'cashier_id': document.getElementById('cashierId').value,
         'location_code': user.location_code,
         'closing_date': document.getElementById('cashierDate').value,
+        'close_reading_time': document.getElementById('closeReadingTime').value,
         'cash': document.getElementById('cashGiven').value,
         'notes': document.getElementById('notes').value,
         'created_by': user.User_Name,
@@ -584,7 +799,8 @@ function formClosing(closingId, user) {
     };
 }
 
-// Add new page - add readings to DB via ajax
+
+
 function saveReadings() {
     return new Promise((resolve, reject) => {
         const readingTag = '_readings';
@@ -593,33 +809,103 @@ function saveReadings() {
         const pumps = document.getElementById(currentDiv).querySelectorAll('[id$=' + readingTag + ']:not([type="hidden"])');
         let newReadings = [], updateReadings = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
+        const closeReadingTime = document.getElementById('closeReadingTime').value;
+        
+        // Check if any readings have actually been modified
+        let hasActualReadings = false;
         pumps.forEach((pump) => {
             const pumpId = pump.id.replace(readingTag, '');
             const headerObj = document.getElementById(pumpId + '_sub_header');
             if (headerObj.className.includes('-block')) {
-                const saleObj = document.getElementById(pumpId + 'pump_sale');
+                const closingReading = parseFloat(document.getElementById(pumpId + 'pump_closing').value) || 0;
+                const openingReading = parseFloat(document.getElementById(pumpId + 'pump_opening').value) || 0;
+                
+                // Check if readings were actually modified
+                if (closingReading !== openingReading && closingReading > 0) {
+                    hasActualReadings = true;
+                }
+                
                 const hiddenIdObj = document.getElementById(pumpId + '_hiddenId');
                 if (hiddenIdObj.value && parseInt(hiddenIdObj.value) > 0) {
-                    // Scenario: Where user clears the value to '0', so just update the data in DB
                     updateReadings.push(formReading(hiddenIdObj.value, pumpId, user));
                 } else {
-                    // ignore sale as 0, still record the data
                     newReadings.push(formReading(undefined, pumpId, user));
                     newHiddenFieldsArr.push(pumpId);
                 }
             }
         });
-        console.log('New readingData ' + JSON.stringify(newReadings));
-        console.log('Update readingData ' + JSON.stringify(updateReadings));
+        
+        // Smart validation: Only require reading time if actual readings were entered
+        if (hasActualReadings && !closeReadingTime) {
+            alert('Please select a Reading Time before saving readings with actual values.');
+            resolve(false);
+            return;
+        }
+        
+      
+        
         postAjaxNew('new-readings', newReadings, updateReadings, tabToActivate, currentDiv, newHiddenFieldsArr, 'reading_id')
             .then((data) => {
-                resolve(data);
+                if (data && closeReadingTime) {
+                    updateClosingWithReadingTime(closeReadingTime, user).then((closingUpdateResult) => {
+                        resolve(data);
+                    });
+                } else {
+                    resolve(data);
+                }
             });
-        if (newReadings.length == 0 && updateReadings.length == 0) {
-            resolve(true);      // tab click handled in trackMenu()
+            
+        if (newReadings.length == 0 && updateReadings.length == 0 && closeReadingTime) {
+            updateClosingWithReadingTime(closeReadingTime, user).then((closingUpdateResult) => {
+                resolve(true);
+            });
+        } else if (newReadings.length == 0 && updateReadings.length == 0) {
+            resolve(true);
         }
     });
 }
+
+
+function updateClosingWithReadingTime(closeReadingTime, user) {
+    return new Promise((resolve, reject) => {
+        const closingId = document.getElementById('closing_hiddenId').value;
+        
+        if (!closingId || !parseInt(closingId) > 0) {
+            console.error('No valid closing ID found');
+            resolve(false);
+            return;
+        }
+        
+        const closingUpdateData = [{
+            'closing_id': closingId,
+            'close_reading_time': closeReadingTime,
+            'updated_by': user.User_Name
+        }];     
+        
+        
+        // Use the existing AJAX infrastructure to update closing
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    const result = JSON.parse(xhr.responseText);
+                    console.log('Closing reading time update response:', result);
+                    resolve(true);
+                } else {
+                    console.error('Failed to update closing reading time:', xhr.responseText);
+                    resolve(false);
+                }
+            }
+        };
+        
+        xhr.open('POST', 'update-closing-reading-time', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({
+            updateData: closingUpdateData
+        }));
+    });
+}
+
 
 function formReading(readingId, pumpId, user) {
     return {
@@ -772,12 +1058,17 @@ function saveCreditSales() {
     });
 }
 
+
+
+
+
 function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
     return {
         'tcredit_id': salesId,
         'closing_id': document.getElementById('closing_hiddenId').value,
         'bill_no': document.getElementById(creditSaleTag + 'billno-' + creditObjRowNum).value,
         'creditlist_id': getCreditType(creditSaleTag, creditObjRowNum),
+        'vehicle_id': document.getElementById(creditSaleTag + 'vehicle-' + creditObjRowNum).value,  // ADD THIS
         'product_id': document.getElementById(creditSaleTag + 'product-' + creditObjRowNum).value,
         'price': document.getElementById(creditSaleTag + 'price-' + creditObjRowNum).value,
         'price_discount': document.getElementById(creditSaleTag + 'discount-' + creditObjRowNum).value,
@@ -788,6 +1079,99 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'updated_by': user.User_Name
     };
 }
+
+
+// Add new page - add digital sales to DB via ajax
+// Add new page - add digital sales to DB via ajax
+function saveDigitalSales() {
+    return new Promise((resolve, reject) => {
+        const digitalSalesTag = 'digital-sales-';
+        const digitalSalesRow = digitalSalesTag + 'table-row-';
+        const tabToActivate = 'expenses_tab';
+        const currentTabId = 'new_digital_sales';
+        const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + digitalSalesRow + ']:not([type="hidden"])');
+        let newSales = [], updateSales = [], newHiddenFieldsArr = [];
+        const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+        
+        salesObj.forEach((saleObj) => {
+            if (!saleObj.className.includes('d-md-none')) {
+                const saleObjRowNum = saleObj.id.replace(digitalSalesRow, '');
+                const vendorField = document.getElementById(digitalSalesTag + 'vendor-' + saleObjRowNum);
+                const saleField = document.getElementById(digitalSalesTag + 'amt-' + saleObjRowNum);
+                const dateField = document.getElementById(digitalSalesTag + 'transaction-date-' + saleObjRowNum);
+                const hiddenField = document.getElementById(digitalSalesTag + saleObjRowNum + '_hiddenId');
+                
+                // Check if this row has any data (vendor, amount, or is an existing record)
+                const hasVendor = vendorField.value;
+                const hasAmount = parseFloat(saleField.value) > 0;
+                const hasDate = dateField.value;
+                const isExistingRecord = hiddenField.value && parseInt(hiddenField.value) > 0;
+                
+                // If any field is filled or it's an existing record, validate all required fields
+                if (hasVendor || hasAmount || hasDate || isExistingRecord) {
+                    
+                    // Validate vendor is selected
+                    if (!hasVendor) {
+                        alert('Please select a vendor for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Validate amount is entered and greater than 0
+                    if (!hasAmount) {
+                        alert('Please enter an amount greater than 0 for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // Validate transaction date is provided
+                    if (!hasDate) {
+                        alert('Please provide transaction date for all digital sales entries');
+                        hasValidationError = true;
+                        return;
+                    }
+                    
+                    // If validation passes, add to save arrays
+                    if (isExistingRecord) {
+                        updateSales.push(formDigitalSales(hiddenField.value, digitalSalesTag, saleObjRowNum, user));
+                    } else {
+                        newHiddenFieldsArr.push(digitalSalesTag + saleObjRowNum);
+                        newSales.push(formDigitalSales(undefined, digitalSalesTag, saleObjRowNum, user));
+                    }
+                }
+            }
+        });
+        
+        // If validation failed, stop here
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+        postAjaxNew('new-digital-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'digital_sales_id')
+            .then((data) => {
+                resolve(data);
+            });
+            
+        if (newSales.length === 0 && updateSales.length === 0) {
+            resolve(true);      // tab click handled in trackMenu()
+        }
+    });
+}
+
+function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) {
+    return {
+        'digital_sales_id': digitalSalesId,
+        'closing_id': document.getElementById('closing_hiddenId').value,
+        'vendor_id': document.getElementById(digitalSalesTag + 'vendor-' + saleObjRowNum).value,
+        'amount': document.getElementById(digitalSalesTag + 'amt-' + saleObjRowNum).value,
+        'transaction_date': document.getElementById(digitalSalesTag + 'transaction-date-' + saleObjRowNum).value,
+        'notes': document.getElementById(digitalSalesTag + 'notes-' + saleObjRowNum).value,
+        'created_by': user.User_Name,
+        'updated_by': user.User_Name
+    };
+}
+
 
 function getCreditType(creditSaleTag, creditObjRowNum) {
     const creditTypeObj = document.getElementById(creditSaleTag + 'type-' + creditObjRowNum);
@@ -1102,11 +1486,34 @@ function disableCredit(index, creditID) {
 
 function enableCredit(index, creditID) {
     console.log("Enable Credit" + creditID);
-    const r = confirm("Please confirm if you want to enable the user?");
+    const r = confirm("Please confirm if you want to enable the Credit?");
     if (r == true) {
         putAjax('enable-credit/' + creditID, {}).then(success => {
             if (success) {
-                document.getElementById('user-' + index).className = 'd-md-none';
+                document.getElementById('credit-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+function disableVehicle(index, vehicleId) {
+    const r = confirm("Please confirm if you want to disable the Vehicle?");
+    if (r == true) {
+        putAjax('disable-vehicle/' + vehicleId, {}).then(success => {
+            if (success) {
+                document.getElementById('vehicle-' + index).className = 'd-md-none';
+            }
+        });
+    }
+}
+
+function enableVehicle(index, vehicleId) {
+    console.log("Enable Vehicle" + vehicleId);
+    const r = confirm("Please confirm if you want to enable the Vehicle?");
+    if (r == true) {
+        putAjax('enable-vehicle/' + creditID, {}).then(success => {
+            if (success) {
+                document.getElementById('vehicle-' + index).className = 'd-md-none';
             }
         });
     }
@@ -1115,8 +1522,7 @@ function enableCredit(index, creditID) {
 
 
 function editProduct(id, productId) {
-    document.getElementById("product-price-" + id).readOnly = false;
-    document.getElementById("product-unit-" + id).disabled = false;
+    document.getElementById("product-price-" + id).readOnly = false;   
     document.getElementById("product-ledger-name-" + id).readOnly = false;
     document.getElementById("product-cgst-" + id).readOnly = false;
     document.getElementById("product-sgst-" + id).readOnly = false;
@@ -1130,15 +1536,37 @@ function saveProduct(id, productId) {
     const ledgerName = document.getElementById("product-ledger-name-" + id);
     const cgst = document.getElementById("product-cgst-" + id);
     const sgst = document.getElementById("product-sgst-" + id);
+    const skuName = document.getElementById("product-sku-name-" + id);
+    const skuNumber = document.getElementById("product-sku-number-" + id);
+    const hsnCode = document.getElementById("product-hsn-code-" + id);
+
     if (productPrice.value && parseInt(productPrice.value) > 0) {
         if (putAjax('product/' + productId, {
             m_product_price: productPrice.value,
             m_product_unit: productUnit.value,
             m_product_ledger_name: ledgerName.value,
             m_product_cgst: cgst.value,
-            m_product_sgst: sgst.value
+            m_product_sgst: sgst.value,
+            m_product_sku_name: skuName.value,
+            m_product_sku_number: skuNumber.value,
+            m_product_hsn_code: hsnCode.value
         })) {
-            postProductEdit(id);
+            // Make fields readonly
+            productPrice.readOnly = true;
+            productUnit.disabled = true;
+            ledgerName.readOnly = true;
+            cgst.readOnly = true;
+            sgst.readOnly = true;
+            skuName.readOnly = true;
+            skuNumber.readOnly = true;
+            hsnCode.readOnly = true;
+
+            // Update button visibility
+            document.getElementById("product-edit-" + id).className = showClassName;
+            document.getElementById("product-save-" + id).className = "btn btn-info " + hideClassName;
+
+            // Show success message
+            showAlert('Product saved successfully!');
         }
     }
 }
@@ -1152,6 +1580,18 @@ function postProductEdit(id) {
     document.getElementById("product-edit-" + id).className = "btn btn-info";
     document.getElementById("product-save-" + id).className = "btn-info " + hideClassName;
 }
+
+
+function delayedUpperCase(element) {
+    // Clear any previous timer for this element (if using a property on the element)
+    if (element.delayTimer) {
+      clearTimeout(element.delayTimer);
+    }
+    // Set a new timer to convert the text to uppercase after 1 second (1000 ms)
+    element.delayTimer = setTimeout(function() {
+      element.value = element.value.toUpperCase();
+    }, 200);
+  }
 
 function putAjax(uri, data) {
     return new Promise((resolve, reject) => {
@@ -1662,3 +2102,211 @@ function postDeadlineEdit(id) {
 function getcurrencyformatter (plainnumber) {
  return new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(plainnumber)
 };
+
+
+function updateLedgerFields(rowCnt) {
+    const selector = document.getElementById("ledger_selector_" + rowCnt);
+    const selectedOption = selector.options[selector.selectedIndex];
+
+    document.getElementById("external_id_" + rowCnt).value = selectedOption.value || '';
+    document.getElementById("external_source_" + rowCnt).value = selectedOption.getAttribute("data-source") || '';
+    document.getElementById("ledgername_" + rowCnt).value = selectedOption.getAttribute("data-name") || '';
+}
+
+
+// ==================== VEHICLE FUNCTIONALITY - ADD AT END OF app-scripts.js ====================
+
+// Global variable to store vehicle data
+let vehicleDataByCredit = {};
+
+// Initialize vehicle data on page load using jQuery
+$(document).ready(function() {
+    // Store vehicle data passed from backend
+    console.log('Checking for vehicleData:', typeof vehicleData !== 'undefined' ? 'Found' : 'Not found');
+
+    if (typeof vehicleData !== 'undefined') {
+        vehicleDataByCredit = vehicleData;
+    }
+    
+    // Initialize Select2 for existing rows
+    initializeVehicleSelect2();
+});
+
+// Initialize Select2 for vehicle dropdowns
+function initializeVehicleSelect2() {
+    $('.select2-vehicle').select2({
+        placeholder: 'Search vehicle number...',
+        allowClear: true,
+        width: '100%',
+        minimumInputLength: 0,
+        theme: 'default' // or 'bootstrap4' if you're using Bootstrap 4 theme
+    });
+    
+    // Add change event handler for vehicle selection
+    $('.select2-vehicle').on('change', function() {
+        onVehicleSelect(this);
+    });
+}
+
+// Updated function to handle credit selection and load vehicles
+function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
+
+    console.log('updateCreditAndLoadVehicles called with:', {
+        creditListId: obj.value,
+        creditRowPrefix: creditRowPrefix,
+        rowNo: rowNo
+    });
+
+    // First update the hidden credit ID
+    updateHiddenCreditId(obj, creditRowPrefix, rowNo);
+    
+    // Then load vehicles for the selected credit party
+    const creditListId = obj.value;
+    const vehicleSelect = document.getElementById(creditRowPrefix + 'vehicle-' + rowNo);
+
+    console.log('Looking for vehicles for creditListId:', creditListId);
+    console.log('Available vehicle data:', vehicleDataByCredit);
+    
+    // Clear existing options
+    $(vehicleSelect).empty().append('<option value="">Select Vehicle</option>');
+    
+    if (creditListId && vehicleDataByCredit[creditListId]) {
+        // Populate with vehicles for this credit party
+        vehicleDataByCredit[creditListId].forEach(vehicle => {
+            const option = new Option(
+                `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
+                vehicle.vehicleId
+            );
+            $(vehicleSelect).append(option);
+        });
+    }
+    
+    // Trigger Select2 update
+    $(vehicleSelect).trigger('change');
+}
+
+// Function to handle vehicle selection and auto-populate credit party
+function onVehicleSelect(vehicleSelect) {
+    const rowNo = $(vehicleSelect).data('row');
+    const selectedVehicleId = vehicleSelect.value;
+    const prefix = 'credit-';
+    
+    if (!selectedVehicleId) return;
+    
+    // Find which credit party this vehicle belongs to
+    let creditListId = null;
+    for (const [creditId, vehicles] of Object.entries(vehicleDataByCredit)) {
+        if (vehicles.some(v => v.vehicleId == selectedVehicleId)) {
+            creditListId = creditId;
+            break;
+        }
+    }
+    
+    if (creditListId) {
+        // Get the current credit type
+        const creditTypeSelect = document.getElementById(prefix + 'type-' + rowNo);
+        const creditType = creditTypeSelect.value;
+        
+        // Set the credit party dropdown
+        const creditPartySelect = document.getElementById(prefix + creditType + '-' + rowNo);
+        if (creditPartySelect) {
+            creditPartySelect.value = creditListId;
+            // Update hidden credit ID
+            updateHiddenCreditId(creditPartySelect, prefix, rowNo);
+        }
+    }
+}
+
+function showAddedDigitalSalesRow(prefix) {
+    showAddedRow(prefix, calculateDigitalSalesTotal);
+}
+
+// Create a wrapper function that calls showAddedRow and then initializes vehicle select2
+function showAddedCreditRow() {
+    // First call the existing showAddedRow function
+    showAddedRow('credit', calculateCreditTotal);
+    
+    // Then initialize Select2 for any new vehicle dropdowns
+    initializeNewVehicleSelects();
+}
+
+// Function to initialize Select2 for newly added rows
+function initializeNewVehicleSelects() {
+    const prefix = 'credit-';
+    const userRowsCnt = document.getElementById(prefix + 'table').rows.length;
+    
+    // Check each row to find newly visible ones that need Select2 initialization
+    for (let i = 0; i < userRowsCnt; i++) {
+        const vehicleSelectId = prefix + 'vehicle-' + i;
+        const vehicleSelect = document.getElementById(vehicleSelectId);
+        
+        if (vehicleSelect && !$(vehicleSelect).hasClass('select2-hidden-accessible')) {
+            // This select hasn't been initialized with Select2 yet
+            $(vehicleSelect).select2({
+                placeholder: 'Search vehicle number...',
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 0,
+                theme: 'default'
+            });
+            
+            // Add change event handler
+            $(vehicleSelect).on('change', function() {
+                onVehicleSelect(this);
+            });
+        }
+    }
+}
+
+// Optional: Validate that selected vehicle belongs to selected credit party
+function validateVehicleSelection(rowNo) {
+    const prefix = 'credit-';
+    const creditListId = getCreditType(prefix, rowNo);
+    const vehicleId = document.getElementById(prefix + 'vehicle-' + rowNo).value;
+    
+    if (vehicleId && creditListId) {
+        const validVehicles = vehicleDataByCredit[creditListId] || [];
+        const isValid = validVehicles.some(v => v.vehicleId == vehicleId);
+        
+        if (!isValid) {
+            showToastMessage({error: 'Selected vehicle does not belong to the credit party'});
+            return false;
+        }
+    }
+    return true;
+}
+
+// Optional: Load vehicles dynamically via AJAX (if you prefer this approach over preloading)
+function loadVehiclesDynamically(creditListId, vehicleSelectId) {
+    const vehicleSelect = $('#' + vehicleSelectId);
+    
+    // Show loading state
+    vehicleSelect.empty().append('<option value="">Loading vehicles...</option>');
+    vehicleSelect.prop('disabled', true);
+    
+    $.ajax({
+        url: '/api/vehicles/' + creditListId,
+        method: 'GET',
+        success: function(response) {
+            vehicleSelect.prop('disabled', false);
+            vehicleSelect.empty().append('<option value="">Select Vehicle</option>');
+            
+            if (response.success && response.vehicles) {
+                response.vehicles.forEach(vehicle => {
+                    vehicleSelect.append(new Option(
+                        `${vehicle.vehicleNumber} (${vehicle.vehicleType})`,
+                        vehicle.vehicleId
+                    ));
+                });
+            }
+            
+            vehicleSelect.trigger('change');
+        },
+        error: function(err) {
+            console.error('Error loading vehicles:', err);
+            vehicleSelect.prop('disabled', false);
+            vehicleSelect.empty().append('<option value="">Error loading vehicles</option>');
+            showToastMessage({error: 'Failed to load vehicles. Please try again.'});
+        }
+    });
+}

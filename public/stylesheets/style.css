@@ -56,15 +56,35 @@ a {
 }
 
 .bgImage {
-  /* The image used */
-   background-image: url("../images/homepage.jpg");
-
-   height:550px;
-
-  /* Full height */
+  position: relative;
+  background-image: url("../images/gibli_Petromath_comp.jpg");
   background-position: center;
   background-size: cover;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow: hidden;
 }
+
+.bgImage::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.4); /* adjust opacity and color here */
+  z-index: 0;
+}
+
+.bgImage > * {
+  position: relative;
+  z-index: 1;
+}
+
 
 /*
 Snackbar toast message - start

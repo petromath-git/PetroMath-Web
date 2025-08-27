@@ -1,0 +1,146 @@
+//- Mixins for Lubes Invoice
+
+//- Add header for invoice lines table
+mixin addInvoiceLineHeader()
+  tr
+    th #
+    th Product
+    th Unit
+    th Price
+    th Quantity
+    th Amount
+    th Notes
+    th Action
+
+//- Add existing invoice line entry
+mixin addInvoiceLineEntry(line, products, index)
+  - const product = products.find(p => p.product_id === line.product_id) || {}
+  tr.invoice-line-row
+    td= index + 1
+    td
+      select.form-control.product-select(name=`items[${index}][product_id]` required)
+        option(value='') Select Product
+        each product in products
+            option(
+                value=product.product_id,
+                'data-unit': product.unit,
+                'data-price': product.price,
+                selected=line.product_id == product.product_id
+            )= product.product_name
+    td.product-unit= product.unit || ''
+    td.product-price= product.price ? parseFloat(product.price).toFixed(2) : '0.00'
+    td
+      input.form-control.quantity(type='number' 
+            name=`items[${index}][qty]` 
+            value=line.qty 
+            step='0.01' min='0.01' required)
+    td
+      input.form-control.amount(type='number' 
+            name=`items[${index}][amount]` 
+            value=line.amount 
+            readonly)
+    td
+      input.form-control.notes(type='text' 
+            name=`items[${index}][notes]` 
+            value=line.notes || '')
+    td
+      if invoiceStatus !== 'CLOSED'
+        button.btn.btn-danger.remove-row(type='button') Remove
+      else
+        span -
+
+//- Add new empty invoice line entry
+mixin newInvoiceLineEntry(products, rowCnt)
+  - var defaultProduct = (products && products.length > 0) ? products[0] : null
+  - var defaultPrice = defaultProduct && defaultProduct.price ? parseFloat(defaultProduct.price) : 0;
+  tr
+    td #{rowCnt + 1}
+    td
+      select.form-control.product-select(name='items['+rowCnt+'][product_id]' required)
+        if !defaultProduct
+          option(value='') Select Product
+        else
+          each product in products
+            if product.product_id === defaultProduct.product_id
+              option(
+                value=product.product_id, 
+                data-unit=product.unit, 
+                data-price=product.price, 
+                selected
+              )= product.product_name
+            else
+              option(
+                value=product.product_id, 
+                data-unit=product.unit, 
+                data-price=product.price
+              )= product.product_name
+    td.product-unit #{ defaultProduct ? defaultProduct.unit : '' }
+    // Use defaultPrice here instead of defaultProduct.price
+    td.product-price #{ defaultPrice.toFixed(2) }
+    td
+      input.form-control.quantity(
+        type='number', 
+        name='items['+rowCnt+'][qty]', 
+        step='0.01', 
+        min='0.01', 
+        required
+      )
+    td
+      input.form-control.amount(
+        type='number', 
+        name='items['+rowCnt+'][amount]', 
+        readonly
+      )
+    td
+      input.form-control.notes(type='text', name='items['+rowCnt+'][notes]')
+    td
+      button.btn.btn-danger.remove-row(type='button') Remove
+
+//- Supplier details display
+mixin supplierDetails(supplier)
+  if supplier
+    .supplier-details
+      p.mb-1= supplier.supplier_name
+      p.mb-1= supplier.address
+      p.mb-1 GSTIN: #{supplier.gstin || 'N/A'}
+      p.mb-1 Phone: #{supplier.phone || 'N/A'}
+  else
+    p.text-muted No supplier selected
+
+//- Invoice summary
+mixin invoiceSummary(invoice)
+  .card.mt-3
+    .card-header.bg-light Summary
+    .card-body
+      .row
+        .col-md-4
+          p
+            strong Invoice Number: 
+            span= invoice.invoice_number
+        .col-md-4
+          p
+            strong Date: 
+            span= dateFormat(invoice.invoice_date, 'dd-mmm-yyyy')
+        .col-md-4
+          p
+            strong Status: 
+            span(class=invoice.closing_status === 'CLOSED' ? 'text-success' : 'text-warning')= invoice.closing_status
+      .row
+        .col-md-4
+          p
+            strong Location: 
+            span= invoice.location_code
+        .col-md-4
+          p
+            strong Created by: 
+            span= invoice.created_by
+        .col-md-4
+          p
+            strong Total Amount: 
+            span.font-weight-bold= invoice.invoice_amount.toFixed(2)
+      if invoice.notes
+        .row
+          .col-12
+            p
+              strong Notes: 
+              span= invoice.notes

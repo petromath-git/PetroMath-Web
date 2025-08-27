@@ -1,3 +1,5 @@
+//closing-edit-controller.js
+
 const TxnReadDao = require("../dao/txn-read-dao");
 const TxnWriteDao = require("../dao/txn-write-dao");
 const ProductDao = require("../dao/product-dao");
@@ -6,6 +8,7 @@ const homeController = require("./home-controller");
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const security = require("../utils/app-security");
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 
 // Edit flow: This controller takes care of all joins to get data for editing.
 
@@ -28,7 +31,10 @@ module.exports = {
                 txnExpensesPromise(closingId, locationCode),
                 txnController.txnDenominationPromise(closingId),
                 txnController.txnAttendanceDataPromise(closingId),
-                homeController.personAttendanceDataPromise(locationCode)])
+                homeController.personAttendanceDataPromise(locationCode),
+                vehicleDataPromise(locationCode),
+                homeController.pumpProductDataPromise(locationCode),
+                txnController.txnDigitalSalesPromise(closingId),])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -49,7 +55,10 @@ module.exports = {
                         t_expenses: values[11].value.t_expenses,
                         t_denoms: values[12].value,
                         attendanceData: values[13].value,
-                        usersList: values[14].value.allUsers
+                        usersList: values[14].value.allUsers,
+                        vehicleData: values[15].value,
+                        pumpProductValues: values[16].value.products, 
+                        digitalSalesData: values[17].value
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
@@ -62,15 +71,55 @@ module.exports = {
     txnClosingPromise: (closingId) => {
         return txnClosingPromise(closingId);
     },
-    closeData: (req, res, next) => {
-        TxnWriteDao.finishClosing(req.query.id).then(
-            (data) => {
-                if(data == 1) {
-                    res.status(200).send({message: 'The closing record is made final.'});
-                } else {
-                    res.status(500).send({error: 'Error while closing the record.'});
+    closeData: async (req, res, next) => {
+        try {
+            const closingId = req.query.id;
+
+            // First, validate that close_reading_time exists
+                const closingDetails = await TxnReadDao.getClosingDetails(closingId);
+                
+                if (!closingDetails) {
+                    return res.status(404).send({
+                        error: 'Closing record not found.',
+                        success: false
+                    });
                 }
+                
+                // Check if close_reading_time is missing
+                if (!closingDetails.close_reading_time) {
+                    return res.status(400).send({
+                        error: 'Cannot finalize closing: Reading Time is required. Please go to the Reading tab and select when the pump readings were taken.',
+                        success: false
+                    });
+                }
+
+
+
+
+            
+            // Call the updated async finishClosing function
+            const data = await TxnWriteDao.finishClosing(closingId);
+            
+            // Check if update was successful (data is array [affectedRows])
+            if (data && data[0] >= 1) {
+                res.status(200).send({
+                    message: 'The closing record is made final.',
+                    success: true
+                });
+            } else {
+                res.status(500).send({
+                    error: 'Error while closing the record. No records updated.',
+                    success: false
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error in closeData:', error);
+            res.status(500).send({
+                error: 'Error while closing the record: ' + error.message,
+                success: false
             });
+        }
     },
 }
 
@@ -82,11 +131,17 @@ const txnClosingPromise = (closingId) => {
                 if (data) {
                     txnController.getNamesPromise(data.closer_id, data.cashier_id).then((result) => {
                         resolve({
-                            closingId: data.closing_id, closingDate: data.closing_date_fmt1,
+                            closingId: data.closing_id, 
+                            closingDate: data.closing_date_fmt1,
                             h_closingDate: data.closing_date_fmt2,
-                            cash: data.cash, closerName: result.closerName, closerId: data.closer_id,
-                            cashierName: result.cashierName, cashierId: data.cashier_id, notes: data.notes,
-                            closingStatus: data.closing_status
+                            cash: data.cash, 
+                            closerName: result.closerName, 
+                            closerId: data.closer_id,
+                            cashierName: result.cashierName, 
+                            cashierId: data.cashier_id, 
+                            notes: data.notes,
+                            closingStatus: data.closing_status,
+                            closeReadingTime: data.close_reading_time
                         });
                     });
                 } else {
@@ -124,6 +179,7 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: t_pump_readings,
@@ -133,6 +189,7 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productCode: t_pump.product_code,
                                         productPrice: product.price,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: [],
@@ -224,3 +281,30 @@ const txnExpensesPromise = (closingId, locationCode) => {
             });
     });
 }
+
+
+const vehicleDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        CreditVehicleDao.findAllVehiclesForLocation(locationCode)
+            .then(data => {
+                // Group vehicles by creditlist_id for easier access
+                const vehiclesByCredit = {};
+                data.forEach(vehicle => {
+                    if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                        vehiclesByCredit[vehicle.creditlist_id] = [];
+                    }
+                    vehiclesByCredit[vehicle.creditlist_id].push({
+                        vehicleId: vehicle.vehicle_id,
+                        vehicleNumber: vehicle.vehicle_number,
+                        vehicleType: vehicle.vehicle_type,
+                        companyName: vehicle.company_name
+                    });
+                });
+                resolve(vehiclesByCredit);
+            })
+            .catch(err => {
+                console.error("Error loading vehicles:", err);
+                resolve({});
+            });
+    });
+};

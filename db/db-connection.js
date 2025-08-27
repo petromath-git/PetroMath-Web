@@ -58,6 +58,12 @@ db.txn_attendance = require("./txn-attendance")(sequelize, Sequelize);
 db.txn_deadline = require("./txn-deadline")(sequelize, Sequelize);
 db.txn_deadline_views = require("./txn-deadline-views")(sequelize, Sequelize);
 db.loginLog = require("./login-log")(sequelize, Sequelize);
+db.t_lubes_inv_hdr = require("./txn-lubes-header")(sequelize, Sequelize);
+db.t_lubes_inv_lines = require("./txn-lubes-lines")(sequelize, Sequelize);
+db.m_supplier = require("./suppliers")(sequelize, Sequelize);
+db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  // Import the creditlistvehicle model
+db.location_config = require('./location-config')(sequelize, Sequelize);
+db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -72,6 +78,8 @@ db.credit.belongsTo(db.credit_receipts, {foreignKey: 'creditlist_id', targetKey:
 //db.cashflowClosing.belongsTo(db.txn_closing, {foreignKey: 'closing_date', sourceKey: 'cashflow_date'});
 db.txn_closing.belongsTo(db.cashflow_closing, {foreignKey: 'closing_date', targetKey: 'cashflow_date'});
 db.cashflow_closing.hasMany(db.txn_closing, {foreignKey: 'closing_date', sourceKey: 'cashflow_date'});
+db.credit.hasMany(db.creditlistvehicle, {foreignKey: 'creditlist_id'});
+db.creditlistvehicle.belongsTo(db.credit, {foreignKey: 'creditlist_id'});
 
 db.lookup.hasMany(db.txn_cashflow, {sourceKey: 'description', foreignKey: 'type', constraints: false});
 db.txn_cashflow.belongsTo(db.lookup, {foreignKey: 'description', constraints: false});
@@ -117,5 +125,35 @@ db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
 
 db.txn_credits.belongsTo(db.credit, {foreignKey: 'creditlist_id', sourceKey: 'creditlist_id'});
 db.credit.hasMany(db.txn_credits, {foreignKey: 'creditlist_id', targetKey: 'creditlist_id'});
+
+// Assuming you have db.t_lubes_inv_lines and db.product or db.m_product
+db.t_lubes_inv_lines.belongsTo(db.product, {
+    foreignKey: 'product_id',
+    targetKey: 'product_id'
+});
+
+db.product.hasMany(db.t_lubes_inv_lines, {
+    foreignKey: 'product_id',
+    sourceKey: 'product_id'
+});
+
+db.t_lubes_inv_hdr.hasMany(db.t_lubes_inv_lines, {
+    foreignKey: 'lubes_hdr_id',
+    sourceKey: 'lubes_hdr_id',
+    as: 'LubesInvoiceLines'
+});
+
+db.t_lubes_inv_lines.belongsTo(db.t_lubes_inv_hdr, {
+    foreignKey: 'lubes_hdr_id',
+    targetKey: 'lubes_hdr_id',
+    as: 'InvoiceHeader'
+});
+
+db.t_lubes_inv_hdr.belongsTo(db.m_supplier, {
+    foreignKey: 'supplier_id',
+    targetKey: 'supplier_id',
+    as: 'Supplier'
+});
+
 
 module.exports = db;

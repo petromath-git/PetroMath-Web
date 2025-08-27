@@ -8,13 +8,14 @@ const TxnCreditSales = db.txn_credits;
 const TxnExpenses = db.txn_expense;
 const TxnDenoms = db.txn_denom;
 const TxnAttendance = db.txn_attendance;
+const TxnDigitalSales = db.txn_digital_sales;
 
 module.exports = {
     saveClosingData: (data) => {
         const closingTxn = TxnClosing.bulkCreate(data, {
             returning: true,
             updateOnDuplicate: ["closer_id", "cashier_id", "closing_date",
-                "cash", "notes", "updated_by", "updation_date"]
+                "close_reading_time","cash", "notes", "updated_by", "updation_date"]
         });
         return closingTxn;
     },
@@ -29,6 +30,18 @@ module.exports = {
     deleteReadingById: (readingId) => {
         const readingTxn = TxnReading.destroy({ where: { reading_id: readingId } });
         return readingTxn;
+    },
+    updateClosingReadingTime: (closingId, readingTime, updatedBy) => {
+    return TxnClosing.update(
+        { 
+            close_reading_time: readingTime,
+            updated_by: updatedBy,
+            updation_date: new Date()
+        },
+        { 
+            where: { closing_id: closingId }
+        }
+    );
     },
     save2TSales: (data) => {
         const saleTxn = Txn2TOil.bulkCreate(data, {
@@ -50,13 +63,24 @@ module.exports = {
     },
     saveCreditSales: (data) => {
         const salesTxn = TxnCreditSales.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["bill_no", "creditlist_id",
+            updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
                 "product_id", "price", "price_discount", "qty", "amount", "notes", "updated_by", "updation_date"]});
         return salesTxn;
+    },
+    saveDigitalSales: (data) => {
+    const salesTxn = TxnDigitalSales.bulkCreate(data, {
+        returning: true,
+        updateOnDuplicate: ["vendor_id", "amount", "transaction_date", "notes", "updated_by", "updation_date"]
+    });
+    return salesTxn;
     },
     deleteCreditSaleById: (saleId) => {
         const saleTxn = TxnCreditSales.destroy({ where: { tcredit_id: saleId } });
         return saleTxn;
+    },
+    deleteDigitalSaleById: (digitalSalesId) => {
+    const salesTxn = TxnDigitalSales.destroy({ where: { digital_sales_id: digitalSalesId } });
+    return salesTxn;
     },
     saveExpenses: (data) => {
         const expenseTxn = TxnExpenses.bulkCreate(data, {returning: true,
@@ -72,12 +96,43 @@ module.exports = {
             updateOnDuplicate: ["denomcount", "updated_by", "updation_date"]});
         return denomTxn;
     },
-    finishClosing: (closingId) => {
-        const closingTxn = TxnClosing.update(
-            { closing_status: 'CLOSED' },
-            { where: { closing_id: closingId } }
-        );
-        return closingTxn;
+    finishClosing: async (closingId) => {
+        const transaction = await db.sequelize.transaction();
+        
+        try {
+            // Step 1: Calculate excess/shortage using the stored procedure
+            const shortageResult = await db.sequelize.query(`
+                SELECT calculate_exshortage(?) as excess_shortage
+            `, {
+                replacements: [closingId],
+                type: db.Sequelize.QueryTypes.SELECT,
+                transaction
+            });
+    
+            const excessShortage = shortageResult[0]?.excess_shortage || 0;
+    
+            // Step 2: Update closing status and populate ex_short field
+            const closingTxn = await TxnClosing.update(
+                { 
+                    closing_status: 'CLOSED',
+                    ex_short: excessShortage,
+                    updated_by: 'system', // or you can pass this as parameter
+                    updation_date: new Date()
+                },
+                { 
+                    where: { closing_id: closingId },
+                    transaction 
+                }
+            );
+    
+            await transaction.commit();
+            return closingTxn;
+    
+        } catch (error) {
+            await transaction.rollback();
+            console.error('Error in finishClosing:', error);
+            throw error;
+        }
     },
     deleteClosing: (closingId) => {
         const closingTxn = db.sequelize.query(

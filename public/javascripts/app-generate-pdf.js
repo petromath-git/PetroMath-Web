@@ -1,4 +1,3 @@
-const { request } = require("express");
 
 function generatePDF(currentPage,isPrint = 'N') { 
 
@@ -45,12 +44,18 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.reportType = 'SalesSummary';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;        
-    }else if (currentPage.includes('reports')) {
+    }else if (currentPage.includes('reports-tally-daybook')) {
+    requestBody.reportType = 'TallyDaybook';
+    requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
+    requestBody.toClosingDate = document.getElementById('toclosingDate').value;
+    }
+    else if (currentPage.includes('reports')) {
         requestBody.reportType = 'CreditDetails';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;
         requestBody.company_id = document.getElementById('company_id').value;
-    } else {
+    }    
+    else {
         requestBody.reportType = 'GeneralReport';
     }
 

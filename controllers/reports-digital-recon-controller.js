@@ -53,7 +53,7 @@ module.exports = {
     queryToDate.setDate(queryToDate.getDate() + 3);
 
     // Get extended data for reconciliation
-    const data1 = await ReportDao.getCreditStmt(
+    const data1 = await ReportDao.getDigitalStmt(
       locationCode,
       dateFormat(queryFromDate, "yyyy-mm-dd"),
       dateFormat(queryToDate, "yyyy-mm-dd"),
@@ -62,12 +62,13 @@ module.exports = {
 
     // Create full dataset for reconciliation
     const fullDataset = data1.map((creditstmtData) => ({
-      Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
-      "Bill No/Receipt No.": creditstmtData.bill_no,
+      Date: creditstmtData.tran_date,
+      Narration: [creditstmtData.bill_no, creditstmtData.notes]
+    .filter(Boolean) // Remove null/undefined values
+    .join(" - "), // Concatenate bill_no and notes with a separator
       companyName: creditstmtData.company_name,
       Debit: creditstmtData.product_name !== null ? creditstmtData.amount : null,
-      Credit: creditstmtData.product_name === null ? creditstmtData.amount : null,
-      Narration: creditstmtData.notes
+      Credit: creditstmtData.product_name === null ? creditstmtData.amount : null     
     }));
 
     function findMatchingTransactions(transactions) {
@@ -171,6 +172,9 @@ module.exports = {
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
     const formattedToDate = moment(toDate).format('DD/MM/YYYY');
+
+     
+    
 
     // Prepare the render data
     renderData = {

@@ -13,10 +13,23 @@ module.exports = {
         let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
        // let cname = req.body.company_name;
-        let cid = req.body.company_id;
+        let cid;
+        let route;
+
+        console.log('getCreditReport: User Role:', req.user.Role);
+        console.log('getCreditReport: User Creditlist ID:', req.user.creditlist_id);
+
+        if(req.user.Role === 'Customer'){
+          cid = req.user.creditlist_id;
+          route = 'reports-customer-facing';
+        }
+        else{
+          cid = req.body.company_id;
+          route = 'reports';
+        }
         let caller = req.body.caller;
         let reportType = req.body.reportType;
-        let route = 'reports';
+        
 
         if (reportType == 'Creditledger'){
           route = 'reports-credit-ledger';
@@ -33,19 +46,33 @@ module.exports = {
         let credits = [];
         let OpeningBal;
         let closingBal;
+        let totalDebits = 0;
+        let totalCredits = 0;
         let renderData = {};
 
-         CreditDao.findAll(locationCode)
-              .then(data => {
-                data.forEach((credit) => {
-                  if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
-                    credits.push({
-                      id: credit.creditlist_id,
-                      name: credit.Company_Name
-                    });
-                  }
-                });
-              });
+        CreditDao.findAll(locationCode)
+        .then(data => {
+            // If the user is a Customer, filter credits based on their `creditlist_id`
+            data.forEach((credit) => {
+                if (req.user.Role === 'Customer') {
+                    // Only include credit data that matches the logged-in user's creditlist_id
+                    if (credit.creditlist_id === cid) {  // Exclude Digital (card_flag === 'Y')
+                        credits.push({
+                            id: credit.creditlist_id,
+                            name: credit.Company_Name
+                        });
+                    }
+                } else {
+                    // For non-Customer roles, you can apply other filters or show data differently
+                    if (!(credit.card_flag === 'Y')) {  // Exclude Digital (card_flag === 'Y')
+                        credits.push({
+                            id: credit.creditlist_id,
+                            name: credit.Company_Name
+                        });
+                    }
+                }
+            })
+          });
                 
               const data = await  ReportDao.getBalance(cid, fromDate,toDate);
               OpeningBal = data[0].OpeningData;
@@ -55,17 +82,19 @@ module.exports = {
               const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
 
               if (reportType == 'Creditledger') {
-                let runningBalance = Number(OpeningBal); // Ensure it's a number
+                let runningBalance = Number(OpeningBal); // Ensure it's a number                
               
                 data1.forEach((creditstmtData) => {
-                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number                  
               
                   if (creditstmtData.product_name !== null) {
                     // Debit transaction (purchases increase the balance)
                     runningBalance += transactionAmount;
+                    totalDebits += transactionAmount;
                   } else {
                     // Credit transaction (payments reduce the balance)
                     runningBalance -= transactionAmount;
+                    totalCredits += transactionAmount;
                   }
 
                   
@@ -82,17 +111,19 @@ module.exports = {
                 });
               }
               else {  
-                let runningBalance = Number(OpeningBal); // Ensure it's a number
-              
+                let runningBalance = Number(OpeningBal); // Ensure it's a number                
                 data1.forEach((creditstmtData) => {
-                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                  let transactionAmount = Number(creditstmtData.amount); // Convert amount to number                      
               
                   if (creditstmtData.product_name !== null) {
                     // Debit transaction (purchases increase the balance)
                     runningBalance += transactionAmount;
+                    totalDebits += transactionAmount;
                   } else {
                     // Credit transaction (payments reduce the balance)
                     runningBalance -= transactionAmount;
+                    totalCredits += transactionAmount;
+                    
                   }
               
                   Creditstmtlist.push({
@@ -128,6 +159,8 @@ module.exports = {
                         openingbalance: OpeningBal,
                         closingbalance: closingBal,
                         cidparam: cid, 
+                        totalDebits: totalDebits,
+                        totalCredits: totalCredits
                       }
 
                     if(caller=='notpdf') {
@@ -139,10 +172,10 @@ module.exports = {
                         res.render(route,renderData,
                            (err, html) => {
                             if (err) {
-                              console.error('getCreditSummaryReport: Error in res.render:', err);
+                              console.error('getCreditReport: Error in res.render:', err);
                               reject(err); // Reject the promise if there's an error
                             } else {
-                              console.log('getCreditSummaryReport: Successfully rendered HTML');
+                              console.log('getCreditReport: Successfully rendered HTML');
                               resolve(html); // Resolve the promise with the HTML content
                             }
                         });
@@ -154,6 +187,178 @@ module.exports = {
     
     
               },
+    getApiCreditReport: async(req, res) => {
+                console.log(req);
+
+                
+
+                 let locationCode = req.body.location_code;
+                 let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+                 let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+                // let cname = req.body.company_name;
+                 let cid;
+                 let route;
+                 let totalDebits = 0;
+                 let totalCredits = 0;
+         
+             
+         
+                 if(req.body.Role === 'Customer'){
+                   cid = req.body.creditlist_id;
+                   route = 'reports-customer-facing';
+                 }
+                 else{
+                   cid = req.body.company_id;
+                   route = 'reports';
+                 }
+                 let caller = req.body.caller;
+                 let reportType = req.body.reportType;
+                 
+         
+                 if (reportType == 'Creditledger'){
+                   route = 'reports-credit-ledger';
+                 }
+         
+                 
+                 if(req.body.fromClosingDate) {
+                   fromDate =req.body.fromClosingDate;
+                 }
+                 if(req.body.toClosingDate) {
+                   toDate = req.body.toClosingDate;
+                 }
+                 let Creditstmtlist=[];
+                 let credits = [];
+                 let OpeningBal;
+                 let closingBal;
+                 let renderData = {};
+         
+                 CreditDao.findAll(locationCode)
+                 .then(data => {
+                     // If the user is a Customer, filter credits based on their `creditlist_id`
+                     data.forEach((credit) => {
+                         if (req.user.Role === 'Customer') {
+                             // Only include credit data that matches the logged-in user's creditlist_id
+                             if (credit.creditlist_id === cid) {  // Exclude Digital (card_flag === 'Y')
+                                 credits.push({
+                                     id: credit.creditlist_id,
+                                     name: credit.Company_Name
+                                 });
+                             }
+                         } else {
+                             // For non-Customer roles, you can apply other filters or show data differently
+                             if (!(credit.card_flag === 'Y')) {  // Exclude Digital (card_flag === 'Y')
+                                 credits.push({
+                                     id: credit.creditlist_id,
+                                     name: credit.Company_Name
+                                 });
+                             }
+                         }
+                     })
+                   });
+                         
+                       const data = await  ReportDao.getBalance(cid, fromDate,toDate);
+                       OpeningBal = data[0].OpeningData;
+                       closingBal = data[0].ClosingData;
+         
+         
+                       const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
+         
+                       if (reportType == 'Creditledger') {
+                         let runningBalance = Number(OpeningBal);                          
+                       
+                         data1.forEach((creditstmtData) => {
+                           let transactionAmount = Number(creditstmtData.amount); 
+                       
+                           if (creditstmtData.product_name !== null) {
+                              // Debit transaction (purchases increase the balance)
+                              runningBalance += transactionAmount; 
+                              totalDebits += transactionAmount;
+                             
+                           } else {
+                             // Credit transaction (payments reduce the balance)
+                             runningBalance -= transactionAmount;
+                             totalCredits += transactionAmount;
+                           }
+         
+                           
+                       
+                           Creditstmtlist.push({
+                             Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
+                             Particulars: creditstmtData.bill_no,
+                             companyName: creditstmtData.company_name,
+                             Debit: creditstmtData.product_name !== null ? transactionAmount : null,
+                             Credit: creditstmtData.product_name === null ? transactionAmount : null,
+                             Narration: creditstmtData.notes,
+                             Balance: runningBalance, // Updated balance calculation
+                           });
+                         });
+                       }
+                       else {  
+                         let runningBalance = Number(OpeningBal); // Ensure it's a number
+                          
+                       
+                         data1.forEach((creditstmtData) => {
+                           let transactionAmount = Number(creditstmtData.amount); // Convert amount to number
+                       
+                           if (creditstmtData.product_name !== null) {
+                             // Debit transaction (purchases increase the balance)
+                             runningBalance += transactionAmount;
+                              totalDebits += transactionAmount;
+                           } else {
+                             // Credit transaction (payments reduce the balance)
+                             runningBalance -= transactionAmount;
+                              totalCredits += transactionAmount;
+                           }
+                       
+                           Creditstmtlist.push({
+                             Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),                                
+                             Particulars: creditstmtData.bill_no,
+                             companyName: creditstmtData.company_name,
+                             Product: creditstmtData.product_name,
+                             Price: creditstmtData.price,
+                             "Price Discount": creditstmtData.price_discount,
+                             Qty: creditstmtData.qty,
+                             Debit: creditstmtData.product_name !== null ? transactionAmount : null,
+                             Credit: creditstmtData.product_name === null ? transactionAmount : null, 
+                             Narration: creditstmtData.notes,
+                             Balance: runningBalance // Updated balance
+                           });
+                         });
+                       }
+                       
+                                 const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
+                                 const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
+                                 
+                                   // Prepare the render data
+                               renderData ={
+                                 title: 'Reports', 
+                                 user: req.user, 
+                                 fromClosingDate: fromDate,
+                                 toClosingDate: toDate, 
+                                 formattedFromDate: formattedFromDate,
+                                 formattedToDate: formattedToDate,
+                                 credits: credits, 
+                                 company_id: cid,
+                                 creditstmt: Creditstmtlist,
+                                 openingbalance: OpeningBal,
+                                 closingbalance: closingBal,
+                                 cidparam: cid, 
+                                 totalDebits: totalDebits,
+                                 totalCredits: totalCredits 
+                               }
+         
+                             if(caller=='notpdf') {
+                              res.status(200).json({renderData})                            
+                             }else
+                             {                
+                         
+                                 res.status(200).json({renderData})                                 
+                              
+                         }
+             
+             
+             
+                       },          
     getCreditSummaryReport: async(req, res) => {
        
        let locationCode = req.user.location_code;  

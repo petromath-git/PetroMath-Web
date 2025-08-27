@@ -22,7 +22,8 @@ cashSaleTypeCodes.set(cashSaleTypes[1], 'OUT');
 
 const CASHIER_ROLES = ["Cashier"];
 const MANAGER_ROLES = ["Manager"];
-const ADMIN_ROLES = ["admin"];
+const ADMIN_ROLES = ["Admin"];
+const SUPERUSER_ROLES = ["SuperUser"];
 
 const PRODUCT_PUMPS = [MS_DESC, HSD_DESC, XMS_DESC];
 const PRODUCT_2T = [POUCH_DESC, LOOSE_DESC];
@@ -30,6 +31,7 @@ const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 
 // config related to sales
 const MAX_CREDITS_ROW_CNT = 300;
+const MAX_DIGITAL_ROW_CNT = 20;
 const MAX_CASH_SALES_ROW_CNT = 25;
 const MAX_EXPENSES_ROW_CNT = 25;
 const MAX_CASHFLOWS_ROW_CNT = 30;
@@ -60,13 +62,14 @@ const CASH_FLOW_DENOMINATION_VALUES = [
 const MAX_ALLOWED_DRAFTS_PER_LOCATION = 10;
 const MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION = 5;
 const CREDIT_RECEIPT_EDIT_DELETE_ALLOWED_DAYS = 1;
-const RECEIPT_TYPES = [
-  {id:'cash', label: 'Cash'},
-  {id:'cheque', label: 'Cheque'},
-  {id:'online_txn', label: 'RTGS/NEFT'},
-  {id:'bank_deposit', label: 'Bank Deposit'},
-  {id:'fleet_card', label: 'Fleet Card'},
-  {id:'others', label: 'Others'},
+const RECEIPT_TYPES = [ 
+  { id: 'cash', label: 'Cash', allow_manual_entry: true },
+  { id: 'cheque', label: 'Cheque', allow_manual_entry: false },
+  { id: 'online_txn', label: 'RTGS/NEFT', allow_manual_entry: false },
+  { id: 'bank_deposit', label: 'Bank Deposit', allow_manual_entry: false },
+  { id: 'fleet_card', label: 'Fleet Card', allow_manual_entry: true },
+  { id: 'others', label: 'others', allow_manual_entry: true },
+  { id: 'digital', label: 'Digital', allow_manual_entry: true }
 ];
 
 module.exports = {
@@ -112,6 +115,7 @@ module.exports = {
   PUMP_TANK_TABLE: "m_pump_tank",
   TXN_TANK_DIP: "t_tank_dip",
   TXN_TANK_READING: "t_tank_reading",
+  CREDIT_LIST_VEHICLE_TABLE: "m_creditlist_vehicles", // Table for credit list vehicles
 
 
 
@@ -153,10 +157,14 @@ module.exports = {
   TXN_DEADLINE: "t_deadline",
   TXN_DEADLINE_VIEWS: "t_deadline_v",
   LOGIN_LOG_TABLE: "t_login_log",
+  LUBES_INVOICE_HDR_TABLE: "t_lubes_inv_hdr",
+  LUBES_INVOICE_LINES_TABLE: "t_lubes_inv_lines",
+  TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
 
   // config related to sales
   APP_CONFIGS: {
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,
+      maxDigitalSalesRowCnt:MAX_DIGITAL_ROW_CNT,
       maxCashSalesRowCnt: MAX_CASH_SALES_ROW_CNT,
       maxExpensesRowCnt: MAX_EXPENSES_ROW_CNT,
       maxCashFlowRowsCnt: MAX_CASHFLOWS_ROW_CNT,
@@ -174,7 +182,7 @@ module.exports = {
       cashSaleTypes: cashSaleTypes,
       cashSaleTypeCodes: cashSaleTypeCodes,
       receiptTypes: RECEIPT_TYPES,
-      adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES], 
+      adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES, ...SUPERUSER_ROLES], 
       tankQuantity: ['4','8','12','5','10'],
       productUnits: ['LIT', 'NOS'],
       decantTimelists: ['0.00','0.30','1.00','1.30','2.00','2.30','3.00','3.30','4.00','4.30','5.00','5.30','6.00','6.30','7.00','7.30',

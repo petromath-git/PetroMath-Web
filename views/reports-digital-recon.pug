@@ -15,7 +15,7 @@ block content
                     if (array.length > 0 && typeof array[0] === 'object') {
                         result += "<thead class='thead-light'><tr>";
                         Object.keys(array[0]).forEach(key => {
-                            if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                            if (key !== 'companyName' && key !== 'reconciled') {
                                 result += "<th style='border: 1px solid #000;' class='text-center'>" + key + "</th>";
                             }
                         });
@@ -42,8 +42,8 @@ block content
                     result += `<tr class='${rowClass}'>`;
 
                     Object.keys(array[i]).forEach(key => {
-                        // Skip 'narration', 'companyName', and 'reconciled' columns
-                        if (key !== 'Narration' && key !== 'companyName' && key !== 'reconciled') {
+                        // Skip 'companyName', and 'reconciled' columns
+                        if (key !== 'companyName' && key !== 'reconciled') {
                             let dataValue = array[i][key];
 
                             if (numberColumns.includes(key) && dataValue !== "" && !isNaN(dataValue)) {
@@ -131,10 +131,8 @@ block content
             div
                 h6.font-weight-bold.text-center Digital Reconciliation Report
                 h6.font-weight-bold.text-center.text-uppercase= companyName                 
-                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
-                h6.font-weight-bold.text-right Opening Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
-                div#creditstmt-table-container
-                h6.font-weight-bold.text-right Closing Balance #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`                 
+                div#creditstmt-table-container               
         else
             div.row &nbsp;
             div.row.bg-light No Transactions.  

@@ -16,7 +16,8 @@ const fs = require('fs');
 const utils = require("./utils/app-utils");
 const { getPDF } = require('./utils/app-pdf-generator');
 const { getBrowser } = require('./utils/browserHelper');
-
+const MenuAccessDao = require('./dao/menu-access-dao'); 
+const bcrypt = require('bcrypt');
 
 
 // Passport - configuration - start....
@@ -29,36 +30,55 @@ passport.use(new LocalStrategy(
         Person.findOne({ where: { 'User_name': username } })
             .then(async data => {
                 try {
-                    if (data && password === (data.Password)) {
-                        let now = new Date();
-                        const today_date = dateFormat(now, "yyyy-mm-dd");
+                    if (data) {
+                        // Compare password using bcrypt
+                        const isPasswordValid = await bcrypt.compare(password, data.Password);
                         
-                        if (data.effective_end_date > today_date) {
-                            var userInfo = new UserData(data, security.isAdminChk(data));
-                            done(null, userInfo);
+                        if (isPasswordValid) {
+                            let now = new Date();
+                            const today_date = dateFormat(now, "yyyy-mm-dd");
+                            
+                            if (data.effective_end_date > today_date) {
+                                // Fetch menu access from DAO
+                                const role = data.Role;
+                                const location = data.location_code;
+                                const isAdmin = security.isAdminChk(data);
+
+                                const menus = await MenuAccessDao.getAllowedMenusForUser(role, location);
+                                const allowedMenus = menus.map(m => m.menu_code);
+                                const menuDetails = menus;
+
+                                // Construct enriched UserData
+                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails);                               
+
+                                return done(null, userInfo);
+                            } else {
+                                // Account is disabled
+                                done(null, false, { 
+                                    message: `${data.User_Name} Your User Account is Disabled`,
+                                    Person_id: data.Person_id,
+                                    location_code: data.location_code
+                                });
+                            }
                         } else {
-                            // We'll log disabled account in the route handler
+                            // Password mismatch
                             done(null, false, { 
-                                message: `${data.User_Name} Your User Account is Disabled`,
-                                Person_id: data.Person_id,
-                                location_code: data.location_code
+                                message: 'User name or password is incorrect',
+                                Person_id: data ? data.Person_id : null,
+                                location_code: data ? data.location_code : null
                             });
                         }
                     } else {
-                        // We'll log failed login in the route handler
-                        done(null, false, { 
-                            message: 'User name or password is incorrect',
-                            Person_id: data ? data.Person_id : null,
-                            location_code: data ? data.location_code : null
-                        });
+                        // No user found
+                        done(null, false, { message: 'User name or password is incorrect' });
                     }
                 } catch (err) {
-                    console.warn("err in app :::: " + err + err.toString());
+                    console.warn("Error in authentication: " + err);
                     done(null, false, { message: err.toString() });
                 }
             })
             .catch(err => {
-                console.warn("err in app :::: " + err + err.toString());
+                console.warn("Error in app :::: " + err);
                 done(null, false, { message: err.toString() });
             });
     }));
@@ -90,7 +110,10 @@ const Person = db.person;
 const ProductDao = require("./dao/product-dao");
 const PersonDao = require("./dao/person-dao");
 var CreditDao = require("./dao/credits-dao");
+const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
+const LocationDao = require("./dao/location-dao");
+const { handleVersionRouting } = require('./utils/version-routing');
 
 db.sequelize.sync();
 // ORM DB - end
@@ -118,6 +141,9 @@ const creditController = require("./controllers/credit-controller");
 const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
+const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
+const supplierController = require("./controllers/supplier-controller");
+const closingSaveController = require("./controllers/closing-save-controller");
 
 
 const flash = require('express-flash');
@@ -128,6 +154,11 @@ const { log } = require('console');
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
+const vehicleRoutes = require('./routes/vehicle-routes'); 
+const passwordRoutes = require('./routes/password-reset-routes'); 
+const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
+//const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
+
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
@@ -140,6 +171,17 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+app.use('/vehicles', vehicleRoutes);
+app.use('/password', passwordRoutes);
+app.use('/reports-tally-daybook', tallyDaybookRoutes);
+//app.use('/auditing-utilities', auditingUtilitiesRoutes);
+app.use((req, res, next) => {
+    res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
+    res.locals.SERVER_PORT = process.env.SERVER_PORT;
+    next();
+});
+
+
 
 // Add method-override here
 const methodOverride = require('method-override');
@@ -153,9 +195,133 @@ app.use(express.static(path.join(__dirname, 'public')));
 const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
 
+app.use((req, res, next) => {    
+    
+    if (req.user && req.user.creditlist_id) {
+        const creditlistId = req.user.creditlist_id;
+
+        // Query the `m_creditlist` table to get the customer name (Company_Name)
+        CreditDao.findCreditDetails(creditlistId)
+            .then(creditDetails => {
+                if (creditDetails && creditDetails.length > 0) {
+                    // Set the companyName globally in res.locals
+                    res.locals.companyName = creditDetails[0].Company_Name;
+                } else {
+                    res.locals.companyName = 'Guest';  // Fallback if no details found
+                }
+                next();
+            })
+            .catch(err => {
+                console.error('Error fetching customer details:', err);
+                res.locals.companyName = 'Guest';  // Fallback in case of error
+                next();
+            });
+    } else {
+        // If the user is not logged in, set a default guest name
+        res.locals.companyName = 'Guest';
+        next();
+    }
+});
+
+
+
+
+app.get('/login', function (req, res) {
+    res.render('login', { title: 'Login' });
+});
+
 // Routes - start
 app.get('/', isLoginEnsured, function (req, res) {
+    if(req.user.Role === 'Customer') {
+        res.redirect('/home-customer');    
+    }
     res.redirect('/home');
+});
+
+
+app.get('/home-customer',isLoginEnsured, function (req, res) { 
+    res.redirect('/reports-indiv-customer');   
+});
+
+app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) { 
+    const today = new Date();
+    
+    // Get the first day of the current month
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Get the last day of the current month
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    // Format the dates to 'yyyy-mm-dd' format for consistency
+    const fromClosingDate = firstDay.toISOString().split('T')[0];
+    const toClosingDate = lastDay.toISOString().split('T')[0];
+    req.body.reportType = 'CreditDetails';
+    req.body.caller = 'notpdf';
+    req.body.fromClosingDate = fromClosingDate;
+    req.body.toClosingDate = toClosingDate;
+    
+
+    
+    reportsController.getCreditReport(req, res, next);
+    
+});
+
+app.post('/reports-indiv-customer', isLoginEnsured, function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getCreditReport(req, res, next);
+});
+
+app.post('/api/reports-indiv-customer', function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getApiCreditReport(req, res, next);
+});
+
+
+app.get('/logout', function (req, res) {
+    req.logout(function (err) {
+        if (err) { return next(err); }
+        res.redirect('/login');
+    });
+});
+
+
+app.get('/changepwd', isLoginEnsured, function (req, res) {
+    res.render('change-pwd', { title: 'Change Password', user: req.user });
+});
+
+app.post('/changepwd', isLoginEnsured, function (req, res) {
+    const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
+    promiseResponse.then((result) => {
+        if (result === true) {
+            req.flash('success', 'Password changed successfully');
+            res.redirect('/');
+            
+            // Redirect to the home page
+            // res.render('change-pwd', {
+            //     title: 'Change Password',
+            //     user: req.user,
+            //     messages: { success: "Password changed successfully" }
+            //});
+        
+        } else {
+            res.render('change-pwd', {
+                title: 'Change Password',
+                user: req.user,
+                messages: { error: "Error while changing password." }
+            });
+        }
+    });
+});
+
+
+app.post('/generate-pdf', isLoginEnsured,getPDF);
+
+app.use(security.isNotCustomer());
+
+
+app.post('/reports-customer', isLoginEnsured, function (req, res, next) {    
+    req.body.reportType = 'CreditDetails';
+    reportsController.getCreditReport(req, res, next);
 });
 
 app.post('/creditreceipts', [isLoginEnsured, security.isAdmin()], function (req, res) {
@@ -188,7 +354,10 @@ app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
                     price: product.price,
                     ledger_name: product.ledger_name,
                     cgst_percent: product.cgst_percent,
-                    sgst_percent: product.sgst_percent
+                    sgst_percent: product.sgst_percent,
+                    sku_name: product.sku_name,
+                    sku_number: product.sku_number,
+                    hsn_code: product.hsn_code                   
                 });
             });
             res.render('products', { title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS, });
@@ -251,7 +420,7 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
 });
 
 app.get('/enable_credit', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findDisableCredits(req.user.location_code)
+    creditController.findDisableCreditCustomersOnly(req.user.location_code)
         .then(data => {
             res.render('enable_credit', {
                 title: 'Disabled Credits',
@@ -301,35 +470,94 @@ app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (r
     })
 });
 
+
+
+app.get('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findDigitalCustomers(req.user.location_code).then(data => {
+        res.render('digital', { 
+            title: 'Digital Master', 
+            user: req.user, 
+            digitalCustomers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching digital customers:', err);
+        res.status(500).send('Error loading digital customers');
+    });
+});
+
+
+// Digital Master - POST route (for saving new digital customers)
+app.post('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    // Set card_flag to 'Y' for digital customers
+    req.body.card_flag = 'Y';
+    CreditDao.create(dbMapping.newDigitalCustomer(req));
+    res.redirect('/digital');
+});
+
+
+// Enable Digital Customer page
+app.get('/enable_digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    creditController.findDisableDigitalCustomers(req.user.location_code)
+        .then(data => {
+            res.render('enable_digital', {
+                title: 'Disabled Digital Customers',
+                user: req.user,
+                digitalCustomers: data
+            });
+        })
+        .catch(err => {
+            console.error("Error fetching disabled digital customers:", err);
+            res.status(500).send("An error occurred.");
+        });
+});
+
+// Enable specific digital customer
+app.put('/enable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const digitalId = req.params.id;
+    CreditDao.enableCredit(digitalId)
+        .then(data => {
+            if (data == 1) {
+                res.status(200).send({ success: true, message: 'Digital customer enabled successfully.' });
+            } else {
+                res.status(400).send({ success: false, error: 'Error enabling digital customer.' });
+            }
+        })
+        .catch(err => {
+            console.error('Error enabling digital customer:', err);
+            res.status(500).send({ success: false, error: 'Error enabling digital customer.' });
+        });
+});
+
+// Disable specific digital customer
+app.put('/disable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const digitalId = req.params.id;
+    CreditDao.disableCredit(digitalId).then(data => {
+        if (data == 1) {
+            res.status(200).send({ message: 'Digital customer disabled successfully.' });
+        } else {
+            res.status(500).send({ error: 'Error disabling digital customer.' });
+        }
+    })
+    .catch(err => {
+        console.error('Error disabling digital customer:', err);
+        res.status(500).send({ error: 'Error disabling digital customer.' });
+    });
+});
+
+
 app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     masterController.findUsers(req.user.location_code).then(data => {
         res.render('users', { title: 'Users', user: req.user, users: data });
     });
 });
 
+
 app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const newUser = dbMapping.newUser(req);
-    PersonDao.findUserByName(newUser.Person_Name, newUser.User_Name, newUser.location_code).then(
-        (data) => {
-            if (data && data.length > 0) {
-                masterController.findUsers(newUser.location_code).then((data) => {
-                    res.status(400).render('users', {
-                        title: 'Users',
-                        user: req.user,
-                        users: data,
-                        messages: { warning: msg.WARN_USER_DUPLICATE }
-                    });
-                });
-            } else {
-                PersonDao.create(dbMapping.newUser(req));
-                res.redirect('/users');
-            }
-        }
-    )
+    masterController.createUser(req, res);
 });
 
 app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findCredits(req.user.location_code).then(data => {
+    creditController.findCreditCustomersOnly(req.user.location_code).then(data => {
         res.render('credits', { title: 'Credits', user: req.user, credits: data });
     });
 });
@@ -485,7 +713,7 @@ app.post('/reports-dsr', isLoginEnsured, function (req, res, next) {
     dsrReportsController.getdsrReport(req, res, next);
 });
 
-app.post('/generate-pdf', isLoginEnsured,getPDF);
+
 
 
 app.get('/new-closing', isLoginEnsured, function (req, res, next) {
@@ -512,6 +740,33 @@ app.delete('/remove-reading', [isLoginEnsured, security.isAdmin()], function (re
     HomeController.deleteTxnReading(req, res, next);  // response returned inside controller
 });
 
+app.post('/update-closing-reading-time', isLoginEnsured, function(req, res, next) {    
+    const updateData = req.body.updateData[0];
+
+    console.log('Route - About to call controller with:', {
+        closingId: updateData.closing_id,
+        readingTime: updateData.close_reading_time, 
+        updatedBy: updateData.updated_by
+    });
+    
+
+    closingSaveController.txnUpdateClosingReadingTimePromise(
+        updateData.closing_id, 
+        updateData.close_reading_time, 
+        updateData.updated_by
+    ).then(data => {
+        if (data.error) {
+            res.status(500).send({error: data.error});
+        } else {
+            res.status(200).send({message: 'Reading time updated successfully.', rowsData: data});
+        }
+    }).catch(err => {
+        res.status(500).send({error: 'Error updating reading time: ' + err.toString()});
+    });
+    
+   
+});
+
 app.post('/new-2t-sales', isLoginEnsured, function (req, res, next) {
     HomeController.save2TSalesData(req, res, next);  // response returned inside controller
 });
@@ -534,6 +789,10 @@ app.delete('/remove-credit-sale', isLoginEnsured, function (req, res, next) {
 
 app.post('/new-digital-sales', isLoginEnsured, function (req, res, next) {
     HomeController.saveDigitalSalesData(req, res, next);  // response returned inside controller
+});
+
+app.delete('/remove-digital-sales', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
 });
 
 app.delete('/remove-digital-sale', isLoginEnsured, function (req, res, next) {
@@ -568,9 +827,7 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
-app.get('/login', function (req, res) {
-    res.render('login', { title: 'Login' });
-});
+
 
 // app.post('/login', function (req, res, next) {
 //     passport.authenticate('local', {
@@ -634,40 +891,28 @@ app.post('/login', function(req, res, next) {
                 console.error("Error logging login:", error);
             }
 
-            return res.redirect('/home');
+                 const shouldRedirect = await handleVersionRouting(user, req, res);
+		        if (shouldRedirect) {
+		                 return; // Redirect happened, stop processing
+		            }	
+
+
+             // Check if the user is a superuser
+             if (user.Role === 'SuperUser') {
+                // Redirect to location selection page if superuser
+                return res.redirect('/select-location');
+            }
+
+            if(user.Role === 'Customer') {              
+                return res.redirect('/home-customer');
+                        }
+                else{
+                    return res.redirect('/home');}            
         });
     })(req, res, next);
 });
 
-app.get('/changepwd', isLoginEnsured, function (req, res) {
-    res.render('change-pwd', { title: 'Change Password', user: req.user });
-});
 
-app.post('/changepwd', isLoginEnsured, function (req, res) {
-    const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
-    promiseResponse.then((result) => {
-        if (result === true) {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { success: "Password changed successfully" }
-            });
-        } else {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { error: "Error while changing password." }
-            });
-        }
-    });
-});
-
-app.get('/logout', function (req, res) {
-    req.logout(function (err) {
-        if (err) { return next(err); }
-        res.redirect('/login');
-    });
-});
 
 app.get('/cashflow', isLoginEnsured, function (req, res, next) {
     cashflowController.getCashFlowEntry(req, res, next);
@@ -826,14 +1071,19 @@ app.delete('/tank-dip', [isLoginEnsured, security.isAdmin()], function(req, res,
     tankDipController.deleteTankDip(req, res, next);
 });
 
-app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
-    tankDipController.searchDips(req, res, next);
-});
+// app.get('/tank-dip/search', isLoginEnsured, function(req, res, next) {
+//     tankDipController.searchDips(req, res, next);
+// });
 
 app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
     tankDipController.validateDip(req, res);
 });
 
+// Tank Dip Search Page
+app.get('/tank-dip/search', [isLoginEnsured], tankDipController.searchDipPage);
+
+// Tank Dip Search Results
+app.post('/tank-dip/search', [isLoginEnsured], tankDipController.searchDipResults)
 
 
 app.post('/pumps', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
@@ -898,6 +1148,188 @@ app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
 
 app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
     billController.deleteBill(req, res, next);
+});
+
+// Lubes Invoice routes
+app.get('/lubes-invoice-home', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceHome(req, res, next);
+});
+
+app.get('/lubes-invoice/new', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.createNewInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceEntry(req, res, next);
+});
+
+app.post('/lubes-invoice/save', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.saveLubesInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice/delete', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.deleteLubesInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice/close', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.finishInvoice(req, res, next);
+});
+
+app.get('/lubes-invoice/lines', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getLubesInvoiceLines(req, res, next);
+});
+
+app.get('/lubes-invoice/historical-data', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getHistoricalData(req, res, next);
+});
+
+// Get suppliers with effective dates for client-side filtering
+app.get('/lubes-invoice/suppliers-with-dates', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getSuppliersWithDates(req, res, next);
+});
+
+// Get suppliers active on a specific date (alternative server-side approach)
+app.get('/lubes-invoice/suppliers-active-on-date', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getSuppliersActiveOnDate(req, res, next);
+});
+
+
+// Get suppliers list
+app.get('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    supplierController.findSuppliers(req.user.location_code).then(data => {
+        res.render('suppliers', { 
+            title: 'Suppliers', 
+            user: req.user, 
+            suppliers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching suppliers:', err);
+        res.status(500).render('error', { 
+            message: 'Error fetching suppliers' 
+        });
+    });
+});
+
+// Create new supplier
+app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    const newSupplier = dbMapping.newSupplier(req);
+    
+    SupplierDao.findSupplierByName(newSupplier.supplier_name, newSupplier.location_code).then(
+        (data) => {
+            if (data && data.length > 0) {
+                supplierController.findSuppliers(newSupplier.location_code).then((data) => {
+                    res.status(400).render('suppliers', {
+                        title: 'Suppliers',
+                        user: req.user,
+                        suppliers: data,
+                        messages: { warning: msg.WARN_SUPPLIER_DUPLICATE }
+                    });
+                });
+            } else {
+                SupplierDao.create(newSupplier).then(() => {
+                    res.redirect('/suppliers');
+                }).catch(err => {
+                    console.error('Error creating supplier:', err);
+                    res.status(500).render('error', { 
+                        message: 'Error creating supplier' 
+                    });
+                });
+            }
+        }
+    ).catch(err => {
+        console.error('Error checking supplier existence:', err);
+        res.status(500).render('error', { 
+            message: 'Error processing supplier creation' 
+        });
+    });
+});
+
+// Enable/disable supplier routes
+app.post('/suppliers/disable/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    SupplierDao.disableSupplier(req.params.id, req.user.username)
+        .then(() => {
+            res.json({ success: true });
+        })
+        .catch(err => {
+            console.error('Error disabling supplier:', err);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error disabling supplier' 
+            });
+        });
+});
+
+app.post('/suppliers/enable/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    SupplierDao.enableSupplier(req.params.id, req.user.username)
+        .then(() => {
+            res.json({ success: true });
+        })
+        .catch(err => {
+            console.error('Error enabling supplier:', err);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Error enabling supplier' 
+            });
+        });
+});
+
+// View disabled suppliers
+app.get('/enable-supplier', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    supplierController.findDisabledSuppliers(req.user.location_code).then(data => {
+        res.render('enable-supplier', { 
+            title: 'Enable Supplier', 
+            user: req.user, 
+            suppliers: data 
+        });
+    }).catch(err => {
+        console.error('Error fetching disabled suppliers:', err);
+        res.status(500).render('error', { 
+            message: 'Error fetching disabled suppliers' 
+        });
+    });
+});
+
+app.get('/api/vehicles/:creditListId', HomeController.getVehiclesByCreditId);
+
+
+app.get('/select-location', isLoginEnsured, async function (req, res) {
+    
+    
+    
+    // Ensure only superusers can access this route
+    if (req.user.Role !== 'SuperUser') {
+        return res.redirect('/');
+    }
+
+    
+
+    try {
+        // Fetch locations using the LocationDao
+        const availableLocations = await LocationDao.findAllLocations();
+
+        // Render the select-location view with the available locations
+        res.render('select-location', {
+            title: 'Select Location',
+            locations: availableLocations,
+            selectedLocation: req.user.location_code
+        });
+    } catch (error) {
+        console.error("Error fetching locations:", error);
+        res.status(500).send("An error occurred while fetching locations.");
+    }
+});
+
+
+app.post('/select-location', isLoginEnsured, function (req, res) {
+    // Ensure only superusers can access this route
+    if (req.user.Role !== 'SuperUser') {
+        return res.redirect('/');
+    }
+    // Store the selected location in the session
+    req.user.location_code = req.body.location;
+
+    // Redirect to home or dashboard after selecting the location
+    res.redirect('/home');
 });
 
 // error handler - start.

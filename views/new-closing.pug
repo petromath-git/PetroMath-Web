@@ -6,6 +6,7 @@ block content
     - var maxCreditsRowCnt = config.maxCreditsRowCnt;
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
+    - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
     - var currency = config.currency;
     - var denominationValues = config.denominationValues;
     - var denominationValuesJson = config.denominationValuesJson;
@@ -28,6 +29,8 @@ block content
                     a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Cash Sales
                 li.nav-item.col-md
                     a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
+                li.nav-item.col-md                    
+                    a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
                 li.nav-item.col-md
                     a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`trackMenu(this)`) Expenses
                 li.nav-item.col-md
@@ -66,7 +69,7 @@ block content
                         div.col &nbsp;
                     div.row#gasoline-prices
                         if productValues
-                            +listProductNames(productValues, 'rate_')
+                            +listProductNames(pumpProductValues, 'rate_')
                     div.row
                         div.col &nbsp;
                     div.row(align="center")
@@ -109,21 +112,69 @@ block content
 
                 // ----------------------- New reading details ----------------------------
                 div.tab-pane.fade#new_readings
+                    div.row.bg-light.p-3.mb-3
+                        div.col-md-4
+                            label(for="closeReadingTime").font-weight-bold Closing Reading Time *
+                            select#closeReadingTime.form-control(name="close_reading_time" required)
+                                option(value="") -- Select Reading Time --
+                                option(value="00:00:00") 12:00 AM
+                                option(value="00:30:00") 12:30 AM
+                                option(value="01:00:00") 1:00 AM
+                                option(value="01:30:00") 1:30 AM
+                                option(value="02:00:00") 2:00 AM
+                                option(value="02:30:00") 2:30 AM
+                                option(value="03:00:00") 3:00 AM
+                                option(value="03:30:00") 3:30 AM
+                                option(value="04:00:00") 4:00 AM
+                                option(value="04:30:00") 4:30 AM
+                                option(value="05:00:00") 5:00 AM
+                                option(value="05:30:00") 5:30 AM
+                                option(value="06:00:00") 6:00 AM
+                                option(value="06:30:00") 6:30 AM
+                                option(value="07:00:00") 7:00 AM
+                                option(value="07:30:00") 7:30 AM
+                                option(value="08:00:00") 8:00 AM
+                                option(value="08:30:00") 8:30 AM
+                                option(value="09:00:00") 9:00 AM
+                                option(value="09:30:00") 9:30 AM
+                                option(value="10:00:00") 10:00 AM
+                                option(value="10:30:00") 10:30 AM
+                                option(value="11:00:00") 11:00 AM
+                                option(value="11:30:00") 11:30 AM
+                                option(value="12:00:00") 12:00 PM
+                                option(value="12:30:00") 12:30 PM
+                                option(value="13:00:00") 1:00 PM
+                                option(value="13:30:00") 1:30 PM
+                                option(value="14:00:00") 2:00 PM
+                                option(value="14:30:00") 2:30 PM
+                                option(value="15:00:00") 3:00 PM
+                                option(value="15:30:00") 3:30 PM
+                                option(value="16:00:00") 4:00 PM
+                                option(value="16:30:00") 4:30 PM
+                                option(value="17:00:00") 5:00 PM
+                                option(value="17:30:00") 5:30 PM
+                                option(value="18:00:00") 6:00 PM
+                                option(value="18:30:00") 6:30 PM
+                                option(value="19:00:00") 7:00 PM
+                                option(value="19:30:00") 7:30 PM
+                                option(value="20:00:00") 8:00 PM
+                                option(value="20:30:00") 8:30 PM
+                                option(value="21:00:00") 9:00 PM
+                                option(value="21:30:00") 9:30 PM
+                                option(value="22:00:00") 10:00 PM
+                                option(value="22:30:00") 10:30 PM
+                                option(value="23:00:00") 11:00 PM
+                                option(value="23:30:00") 11:30 PM
+                        div.col-md-8
+                            small.text-muted Select the time when pump readings were taken for this shift closure
                     div.row &nbsp;
                     if pumps &&  pumps.length > 0
-                        div.row
-                            each val in pumps
-                                - var pumpColor;
-                                if val.pumpCode.startsWith("MS")
-                                    - pumpColor = "bg-success";
-                                if val.pumpCode.startsWith("HSD")
-                                    - pumpColor = "bg-primary"
-                                if val.pumpCode.startsWith("XMS")
-                                    - pumpColor = "table-warning"
+                        div.row                            
+                            each val in pumps                                
                                 td
-                                    +addProductCodesAsSelected(val, pumpColor, 'f_', (val.pumpReadings ? val.pumpReadings[0] : null))
+                                    +addProductCodesAsSelected(val, productValues, 'f_', (val.pumpReadings ? val.pumpReadings[0] : null))
                                 td
-                                    +addProductCodesAsSelected(val, pumpColor, 's_', (val.pumpReadings ? val.pumpReadings[1] : null))
+                                    +addProductCodesAsSelected(val, productValues, 's_', (val.pumpReadings ? val.pumpReadings[1] : null))
                         div.row
                             table.table
                                 tbody
@@ -222,6 +273,7 @@ block content
                                                 th(scope="col") Bill #
                                                 th(scope="col") Type
                                                 th(scope="col") Company
+                                                th(scope="col") Vehicle Number
                                                 th(scope="col") Price
                                                 th(scope="col") Price Discount
                                                 th(scope="col") Quantity
@@ -242,7 +294,43 @@ block content
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedRow('credit')") Add credits
+                            button.btn.btn-info(type="button", onClick="showAddedCreditRow('credit')") Add credits
+
+                    div.row
+                        div.col &nbsp;
+                    div.row(align="center")
+                        div.col
+                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('digital_sales_tab')") Next &raquo;
+                // ----------------------- New digital sales details ----------------------------
+                div.tab-pane.fade#new_digital_sales
+                    div
+                        div.col-16
+                            div.table-responsive
+                                table.table#digital-sales-table
+                                    tbody.w-100
+                                        thead(class="thead-light")
+                                            tr
+                                                th(scope="col") Vendor
+                                                th(scope="col") Amount
+                                                th(scope="col") Transaction Date
+                                                th(scope="col") Notes
+                                                th(scope="col")
+
+                                                - var rowCnt = 0
+                                                - var maxDigitalSalesRowCnt = 10
+                                                while rowCnt < maxDigitalSalesRowCnt
+                                                    +addDigitalSales(rowCnt++)
+                                            tr
+                                                td(colspan=2)
+                                                td Total
+                                                td
+                                                    input.form-control#digital-sales-total(type='text' name='digital-sales-total' readonly value='0')
+                                                td
+                    div.row
+                        div.col &nbsp;
+                    div.row
+                        div.col(align="center")
+                            button.btn.btn-info(type="button", onClick="showAddedDigitalSalesRow('digital-sales')") Add Digital Sales
 
                     div.row
                         div.col &nbsp;
@@ -331,16 +419,8 @@ block content
                                     div &nbsp;
                                     div.row
                                         each val in pumps
-                                            - var pumpColor;
-                                            if val.pumpCode.startsWith("MS")
-                                                - pumpColor = "bg-success";
-                                            if val.pumpCode.startsWith("HSD")
-                                                - pumpColor = "bg-primary"
-                                            if val.pumpCode.startsWith("XMS")
-                                                - pumpColor = "table-warning"
-
-                                            +summaryPumpInstancesData(val, pumpColor, 'f_')
-                                            +summaryPumpInstancesData(val, pumpColor, 's_')
+                                            +summaryPumpInstancesData(val, productValues, 'f_')
+                                            +summaryPumpInstancesData(val, productValues, 's_')
 
                                 div.row
                                     // Summary: Cash sales
@@ -396,7 +476,32 @@ block content
                                                     td
                                                         span
                                                             b#val-credit-total= 0
-
+                                div.row
+                                    // Summary: Digital sales
+                                    div.col-6#v-digital-sales
+                                        h6.sub-header Digital Sales
+                                        div.table-responsive#vis-digital-sales-table
+                                            table.table.table-sm
+                                                thead.thead-light
+                                                    tr
+                                                        th(scope="col") Vendor
+                                                        th(scope="col") Amount
+                                                        th(scope="col") Transaction Date
+                                                        th(scope="col") Notes
+                                                    - var rowCnt = 0
+                                                    - var maxDigitalSalesRowCnt = 10
+                                                    while rowCnt < maxDigitalSalesRowCnt
+                                                        +summaryDigitalSalesData(rowCnt++)
+                                                    tr
+                                                        td(colspan=1)
+                                                        td
+                                                            span
+                                                                b Total
+                                                        td
+                                                            span
+                                                                b#val-digital-sales-total= 0
+                                                        td                                           
+                                    div.col-6
                                 div.row
                                     // 2T loose details
                                     div.col-3#v-2TLoose-sales
@@ -445,4 +550,7 @@ block content
                         span
                             button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home_tab\')') CLOSE &raquo;
 
-
+    script.    
+        var vehicleData = !{JSON.stringify(vehicleData || {})};        
+        window.pumpsData = !{JSON.stringify(pumps)};    
+        window.productValuesData = !{JSON.stringify(productValues)};

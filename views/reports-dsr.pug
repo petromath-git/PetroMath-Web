@@ -8,8 +8,7 @@ block content
             var pumpReadingFromServer = !{JSON.stringify(readinglist)}
             var salesSummaryFromServer = !{JSON.stringify(salessummarylist)}
             var salesCollectionFromServer = !{JSON.stringify(collectionlist)}
-            var creditSalesFromServer = !{JSON.stringify(creditsaleslist)}
-            var cardSalesFromServer = !{JSON.stringify(cardsalelist)}
+            var creditSalesFromServer = !{JSON.stringify(creditsaleslist)}            
             var cardSalesSummaryFromServer = !{JSON.stringify(CardSaleSummarylist)}
             var cashSalesFromServer = !{JSON.stringify(CashSaleslist)}
             var expenseFromServer = !{JSON.stringify(expenselist)}
@@ -23,7 +22,8 @@ block content
             var productPriceListFromServer = !{JSON.stringify(productPriceList)}  
             var monthlyOfftakeFromServer = !{JSON.stringify(monthlyOfftakeList)}
             var deadlineListFromServer = !{JSON.stringify(deadlineList)}
-            
+            var CreditsummarylistFromServer = !{JSON.stringify(Creditsummarylist)}
+            var creditSummaryTitle = !{JSON.stringify(creditSummaryTitle)};
             
 
             
@@ -65,7 +65,7 @@ block content
                          );
 
                         if (isTotalRow) {
-                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
+                            rowClass = 'font-weight-bold'; // Apply bold  for "Total" row
                         }
                     }
 
@@ -102,6 +102,12 @@ block content
 
             function renderTransposedTable(array,tabletitle,numberColumns = [],tableWidthClass='') {
 
+
+                 // Defensive check: Return message if array is empty or not valid
+                if (!Array.isArray(array) || array.length === 0 || typeof array[0] !== 'object') {
+                    return `<p class='text-center'><strong> *** No ${tabletitle} *** </strong></p>`;
+                }
+
                  var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
                         result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>"; // Card header
                         result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
@@ -130,7 +136,7 @@ block content
                                         (key.toString().toLowerCase().includes("total") || 
                                         key.toString().toLowerCase().includes("excess") || 
                                         key.toString().toLowerCase().includes("shortage"))) {
-                                        rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total", "Excess", or "Shortage"
+                                        rowClass = 'font-weight-bold'; // Apply bold for "Total", "Excess", or "Shortage"
                                     }
 
 
@@ -191,21 +197,21 @@ block content
                 });
                 
                
-                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
+                document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Nozzle Count','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
-                document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary','',"col-sm-8 mx-auto");
+                document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Shift Summary',[],"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
                 document.getElementById('creditreceipt-table-container').innerHTML = renderTable(creditReceiptFromServer,'Customer Receipt',['Amount']);
                // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
                 document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price'], 'col-sm-8 mx-auto');
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
                 document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
-                document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Denomination Amount','Excess/Shortage'],"col-sm-8 mx-auto");
-                document.getElementById('deadline-table-container').innerHTML = renderTable(deadlineListFromServer,'Deadlines',[],"col-sm-8 mx-auto");
+                document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Cashflow Balance','Denomination Total','Excess/Shortage'],"col-sm-8 mx-auto");
+                  document.getElementById('creditoutstanding-table-container').innerHTML = renderTable(CreditsummarylistFromServer,creditSummaryTitle,['Balance','Interest Incurred (Today)'],"col-sm-6 mx-auto");
                 
                 // Extract dynamic column headers from the server-provided data
                 const dynamicHeaders = Object.keys(monthlyOfftakeFromServer[0]); // e.g., ["Product", "Jan 2025", "Dec 2024", "Jan 2024"]
@@ -231,7 +237,8 @@ block content
                     });
 
                 
-                document.getElementById('banktransaction-table-container').innerHTML = resultHtml
+                document.getElementById('banktransaction-table-container').innerHTML = resultHtml;
+                document.getElementById('deadline-table-container').innerHTML = renderTable(deadlineListFromServer,'Deadlines',[],"col-sm-8 mx-auto");
             });
 
         table.center
@@ -287,7 +294,11 @@ block content
         div.row
             div.col-md-12
                 div.row &nbsp;                
-                div(id="creditreceipt-table-container") 
+                div(id="creditreceipt-table-container")
+        div.row
+            div.col-md-12
+                div.row &nbsp;                
+                div(id="creditoutstanding-table-container")         
         div.row
             div.col-md-6
                 div.row &nbsp;                
@@ -314,9 +325,7 @@ block content
         div.row
             div.col-md-12
                 div.row &nbsp;                
-                div(id="deadline-table-container")
-                                    
-
+                div(id="deadline-table-container")        
     else
         div.row &nbsp;
         div.row.bg-light No Transactions.

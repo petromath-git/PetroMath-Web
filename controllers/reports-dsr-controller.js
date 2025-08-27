@@ -7,6 +7,7 @@ const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 const moment = require('moment');
 var locationdao = require("../dao/report-dao");
+var ReportDao = require("../dao/report-dao");
 
 
 module.exports = {
@@ -75,9 +76,9 @@ module.exports = {
       const readingsPromise = DsrReportDao.getreadings(locationCode, fromDate);
       const salesSummaryPromise = DsrReportDao.getsalessummary(locationCode, fromDate);
       const collectionPromise = DsrReportDao.getcollection(locationCode, fromDate);
+      const digitalcollectionPromise = DsrReportDao.getDigitalSales(locationCode, fromDate);
       const oilCollectionPromise =  DsrReportDao.getOilcollection(locationCode, fromDate);
-      const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);
-      const cardSalesPromise = DsrReportDao.getcardsales(locationCode, fromDate);
+      const creditSalesPromise = DsrReportDao.getcreditsales(locationCode, fromDate);      
       const cardSalesSummaryPromise = DsrReportDao.getcardsalesSummary(locationCode, fromDate);
       const cashSalesSummaryPromise = DsrReportDao.getCashsales(locationCode, fromDate);
       const expensesPromise = DsrReportDao.getexpenses(locationCode, fromDate);
@@ -96,14 +97,14 @@ module.exports = {
 
 
       // Wait for all promises to resolve
-      const [readingsData, salesSummaryData,collectionData,oilCollectionData,creditSalesData,
-             cardSalesData,cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
+      const [readingsData, salesSummaryData,collectionData,digitalData,oilCollectionData,creditSalesData,
+             cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
              cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
+                                                                                                digitalcollectionPromise,
                                                                                                 oilCollectionPromise,
-                                                                                                creditSalesPromise,
-                                                                                                cardSalesPromise,
+                                                                                                creditSalesPromise,                                                                                                
                                                                                                 cardSalesSummaryPromise,
                                                                                                 cashSalesSummaryPromise,
                                                                                                 expensesPromise,
@@ -135,34 +136,57 @@ module.exports = {
 
 
 
+      function getSafePreviousMonthDate(date) {
+        const originalDay = date.getDate();
+        const safeDate = new Date(date); 
+        safeDate.setDate(1); // Set to 1st to avoid overflow issues
+        safeDate.setMonth(safeDate.getMonth() - 1);
+      
+        const daysInMonth = new Date(safeDate.getFullYear(), safeDate.getMonth() + 1, 0).getDate();
+        safeDate.setDate(Math.min(originalDay, daysInMonth)); // Clamp to month's max day
+      
+        return safeDate;
+      }
+
       
 
         // Calculate dates for current, last month, and last year
         const currentMonthName = getMonthName(closingDate);
 
-        const lastMonthDate = new Date(closingDate);
-        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonthDate = getSafePreviousMonthDate(closingDate);
         const lastMonthName = getMonthName(lastMonthDate);
 
         const lastYearDate = new Date(closingDate);
         lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
         const lastYearMonthName = getMonthName(lastYearDate);
 
-        console.log('currentMonthName:', currentMonthName);
-        console.log('lastMonthName:', lastMonthName);
-        console.log('lastYearMonthName:', lastYearMonthName);
+       
 
-      monthlyOfftakeData.forEach((monthlyOfftake) => {
-
+        let totalCurrentMonthOfftake = 0;
+        let totalLastMonthOfftake = 0;
+        let totalLastYearOfftake = 0;
         
-
-        monthlyOfftakeList.push({
-          'Product': monthlyOfftake.product_code,
-          [currentMonthName]: monthlyOfftake.current_month_Offtake,          
-          [lastMonthName]: monthlyOfftake.last_month_Offtake,          
-          [lastYearMonthName]: monthlyOfftake.last_year_Offtake
+        monthlyOfftakeData.forEach((monthlyOfftake) => {
+          // Accumulate totals for each off-take field
+          totalCurrentMonthOfftake += Number(monthlyOfftake.current_month_Offtake || 0);
+          totalLastMonthOfftake += Number(monthlyOfftake.last_month_Offtake || 0);
+          totalLastYearOfftake += Number(monthlyOfftake.last_year_Offtake || 0);
+        
+          monthlyOfftakeList.push({
+            'Product': monthlyOfftake.product_code,
+            [currentMonthName]: monthlyOfftake.current_month_Offtake,
+            [lastMonthName]: monthlyOfftake.last_month_Offtake,
+            [lastYearMonthName]: monthlyOfftake.last_year_Offtake
+          });
         });
-      });
+        
+        // Add the totals to the list for each field
+        monthlyOfftakeList.push({
+          'Product': 'Total', // Label for the total row
+          [currentMonthName]: totalCurrentMonthOfftake,
+          [lastMonthName]: totalLastMonthOfftake,
+          [lastYearMonthName]: totalLastYearOfftake
+        });
 
        
 
@@ -197,10 +221,25 @@ module.exports = {
         
         DigiandCashSales = salesSummary.total_sales - salesSummary.credit_sales;
 
+        // Ensure both values are numbers before comparison
+        // const actualTesting = Number(salesSummary.nozzle_test);  
+        // const expectedTesting = Number(salesSummary.nozzle_count) * 5;
+
+        // // Declare formattedTesting inside the loop for each row
+        // let formattedTesting = actualTesting;
+
+        // // Append '*' only if there's a mismatch
+        // if (actualTesting !== expectedTesting) {
+        //     formattedTesting = `***   ${actualTesting}   ***`; // Convert to string with an asterisk
+        // }
+
+
+
         SalesSummarylist.push({
           Product: salesSummary.product_code,
+          'Nozzle Count': salesSummary.nozzle_count,
           'Nozzle Flow': salesSummary.nozzle_sales,
-          'Testing': salesSummary.nozzle_test,
+          'Testing': salesSummary.nozzle_test,       
           'Total Sales': salesSummary.total_sales,
           'Credit Sales': salesSummary.credit_sales,          
           'Digital+Cash Sales': DigiandCashSales.toFixed(2),
@@ -214,18 +253,24 @@ module.exports = {
        // Process sales Collection data
        collectionData.forEach((salesCollection) => {
 
-        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc)-parseFloat(salesCollection.cardsales);
-        const creditAmount = parseFloat(salesCollection.crsaleamt);       
-        const cardAmount = parseFloat(salesCollection.cardsales);
+        const cashAmount = parseFloat(salesCollection.totalsalamt) - parseFloat(salesCollection.crsaleamtwithoutdisc);
+        const creditAmount = parseFloat(salesCollection.crsaleamt); 
 
-        
-
+     
         // Accumulate totals
         totalCash += cashAmount;
         totalCredit += creditAmount;
-        totalCard += cardAmount;
+        
         
       });
+
+
+      if (digitalData && digitalData.digital_sales) {
+          totalCard = parseFloat(digitalData.digital_sales);
+      } 
+
+      // Adjust totalCash to exclude digital sales
+      totalCash = totalCash - totalCard;
 
 
       // Accumalate Oil collection
@@ -286,32 +331,7 @@ module.exports = {
         Amount: totalCreditSales 
       });
 
-      let totalCardSales = 0;
-
-      // Process Card Sales data
-      cardSalesData.forEach((cardSales) => {
-
-        totalCardSales += parseFloat(cardSales.amt);
-
-        CardSalelist.push({
-          'Bill No': cardSales.bill_no,
-          'Card': cardSales.name,
-           Product: cardSales.product_name,
-           Rate: cardSales.price,
-           Quantity: cardSales.qty,
-           Amount: cardSales.amt
-        });
-      });
-
-       // Push the total amount after the loop
-       CardSalelist.push({
-        'Bill No': 'Total',
-        'Credit Party': '-',
-        Product: '-',
-        Rate: '-',
-        Quantity: '-',
-        Amount: totalCardSales 
-      });
+     
     
       let totalCardSummarySales = 0;
 
@@ -430,6 +450,58 @@ module.exports = {
         
       });
 
+
+      const Creditsummarylist = [];      
+      let totalBalance = 0;  // Initialize total balance counter
+      let count = 0;  // Counter for limiting entries on non-special days
+      
+      const fromDateObj = new Date(fromDate);  // Convert fromDate to Date object
+      const dayOfMonth = fromDateObj.getDate();
+      const lastDayOfMonth = new Date(fromDateObj.getFullYear(), fromDateObj.getMonth() + 1, 0).getDate(); // Get last day of the month
+      
+      const data = await ReportDao.getDayBalance(locationCode, fromDate);
+      
+      // Determine if all entries should be added or limited to 3
+      const isSpecialDay = (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth);
+      
+      data.forEach((creditSummaryData) => {
+          // Convert ClosingData to number before adding
+          const balance = Number(creditSummaryData.ClosingData);
+          totalBalance += balance;
+          
+
+           // Calculate daily interest at 12% per annum
+          const interestIncurred = (balance * 0.12) / 365;
+      
+          // If it's a special day, push all data
+          if (isSpecialDay && (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10)) {
+              Creditsummarylist.push({
+                  'Credit Customer': creditSummaryData.company_name,
+                  'Balance': creditSummaryData.ClosingData,
+                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
+              });
+          } 
+          // On other days, limit to 3 entries only
+          else if ((creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) && count < 3) {
+              Creditsummarylist.push({
+                  'Credit Customer': creditSummaryData.company_name,
+                  'Balance': creditSummaryData.ClosingData,
+                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
+              });
+              count++;
+          }
+      });
+      
+              // Add total as the last row
+        Creditsummarylist.push({
+          'Credit Customer': 'Total(All Customer Balances)',
+          'Balance': totalBalance,
+          'Interest Incurred (Today)': (totalBalance * 0.12 / 365).toFixed(2)
+        });
+              
+
+
+
       // Initialize the Cashflowstmtlist array and variables to sum credits and debits
       let Cashflowstmtlist = [];
       let totalCredits = 0;
@@ -483,8 +555,9 @@ module.exports = {
         let resultList = [];  // This will hold both the cashflowresult and TotalDenomAmount
 
         resultList.push({
-          'Denomination Amount': cashflowresult.toFixed(2),
-          'Excess/Shortage': (cashflowresult-totaldenomamount).toFixed(2)
+          'Cashflow Balance': cashflowresult.toFixed(2),
+          'Denomination Total': totaldenomamount.toFixed(2),
+          'Excess/Shortage': (totaldenomamount-cashflowresult).toFixed(2)
         });
 
         
@@ -543,7 +616,11 @@ module.exports = {
         FuelTankStocklist: FuelTankStocklist,
         productPriceList:productPriceList,
         monthlyOfftakeList: monthlyOfftakeList,
-        deadlineList: deadlineList
+        deadlineList: deadlineList,
+        Creditsummarylist:Creditsummarylist,
+        creditSummaryTitle: (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth) 
+        ? 'Credit Customer Balances (All Customers)' 
+        : 'Credit Customer Balances (Top 3)'  // Pass title dynamically
       }
     }else
     {

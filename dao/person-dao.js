@@ -4,6 +4,7 @@ const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
 const dateFormat = require("dateformat");
+const bcrypt = require('bcrypt');
 
 module.exports = {
     findUsers: (locationCode) => {
@@ -11,11 +12,13 @@ module.exports = {
             return Person.findAll({
                 where: {
                     [Op.and]: [
-                        { 'location_code': locationCode }, { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+                        { 'location_code': locationCode }, 
+                        { 'effective_end_date': { [Op.gte]: utils.currentDate() } },
+                        { 'creditlist_id': null }
 
                     ]
                 }, order: [
-                    ['effective_start_date', 'ASC']
+                    ['role', 'ASC']
                 ]
             });
         } else {
@@ -56,7 +59,24 @@ module.exports = {
         return result;
     },
     create: (user) => {
-        return Person.create(user);
+        return new Promise((resolve, reject) => {
+            // Hash the user's password before saving
+            bcrypt.hash(user.Password, 12, (err, hashedPassword) => {
+                if (err) {
+                    return reject('Error hashing password');
+                }
+
+                // Set the hashed password in the user object
+                user.Password = hashedPassword;
+
+                // Create the new user with the hashed password
+                Person.create(user)
+                    .then(createdUser => {
+                        resolve(createdUser); // Return the created user
+                    })
+                    .catch(reject); // In case of an error during user creation
+            });
+        });
     },
     changePwd: (user, currentPassword) => {
         return new Promise((resolve, reject) => {
@@ -74,6 +94,20 @@ module.exports = {
             });
         });
 
+    },
+     usernameExists: async (username) => {
+        try {
+            const user = await Person.findOne({ where: { User_Name: username } });
+            return user !== null;
+        } catch (error) {
+            console.error('Error checking username existence:', error);
+            return false;
+        }
+    },
+    findUserById: (userId) => {
+        return Person.findOne({
+            where: { Person_id: userId }
+        });
     },
     findDrivers: (locationCode) => {
         return Person.findAll({
@@ -110,7 +144,8 @@ module.exports = {
             where: {
                 [Op.and]: [
                     { location_code: locationCode }, // Match location code
-                    { effective_end_date: { [Op.lt]: now } } // effective_start_date < current date
+                    { effective_end_date: { [Op.lt]: now } }, // effective_start_date < current date
+                    { creditlist_id: null }
                 ]    
             },order: [
                 ['effective_end_date', 'DESC']
@@ -124,6 +159,32 @@ module.exports = {
             { effective_end_date: UpdateDate },
             { where: { Person_id: personId } }
         );
+    },
+    findPersonByCreditlistId: (creditlist_id) => {
+        return Person.findOne({
+            where: { 
+                creditlist_id: creditlist_id 
+            }
+        });
+    },
+    findUsersAndCreditList: (locationCode) => {
+        if (locationCode) {
+            return Person.findAll({
+                where: {
+                    [Op.and]: [
+                        { 'location_code': locationCode },
+                        { 'effective_end_date': { [Op.gte]: utils.currentDate() } }
+                    ]
+                },
+                order: [
+                    // Custom ordering: Role 'Customer' should come last
+                    [Sequelize.literal(`CASE WHEN "Role" = 'Customer' THEN 1 ELSE 0 END`), 'ASC'],
+                    ['role', 'ASC']
+                ]
+            });
+        } else {
+            return Person.findAll();
+        }
     },
 
 
