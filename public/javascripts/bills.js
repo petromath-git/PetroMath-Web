@@ -188,8 +188,11 @@ document.addEventListener('change', function(e) {
         newRow.querySelector('.subtotal-hidden').name = `items[${rowIndex}][base_amount]`;
         newRow.querySelector('.cgst-hidden').name = `items[${rowIndex}][cgst_amount]`;
         newRow.querySelector('.sgst-hidden').name = `items[${rowIndex}][sgst_amount]`;
-        newRow.querySelector('input[name*="[cgst_percent]"]').name = `items[${rowIndex}][cgst_percent]`;
-        newRow.querySelector('input[name*="[sgst_percent]"]').name = `items[${rowIndex}][sgst_percent]`;
+       const cgstPercentInput = newRow.querySelector('input[name*="[cgst_percent]"]');
+       const sgstPercentInput = newRow.querySelector('input[name*="[sgst_percent]"]');
+
+        if (cgstPercentInput) cgstPercentInput.name = `items[${rowIndex}][cgst_percent]`;
+        if (sgstPercentInput) sgstPercentInput.name = `items[${rowIndex}][sgst_percent]`;
 
         // Enable remove button
         const removeBtn = newRow.querySelector('.remove-row');
@@ -363,9 +366,28 @@ document.addEventListener('change', function(e) {
 
     // Print button click handler
     $('.print-bill, #printBtn').click(function() {
-        const billId = $(this).data('bill-id');
-        window.open(`/bills/${billId}/print`, '_blank');
-    });
+            const billId = $(this).data('bill-id');
+            
+            // Create a simple menu for print options
+            const printMenu = `
+                <div class="dropdown-menu show" style="position: absolute; z-index: 1000;">
+                    <h6 class="dropdown-header">Print Options</h6>
+                    <a class="dropdown-item" href="/bills/${billId}/print" target="_blank">
+                        <i class="bi bi-eye"></i> Preview (HTML)
+                    </a>
+                    <a class="dropdown-item" href="/bills/${billId}/print/pdf" target="_blank">
+                        <i class="bi bi-file-pdf"></i> Download PDF
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item" href="#" onclick="printDirectly(${billId})">
+                        <i class="bi bi-printer"></i> Print Directly
+                    </a>
+                </div>
+            `;
+            
+            // For now, let's just open the PDF directly (simpler approach)
+            window.open(`/bills/${billId}/print/pdf`, '_blank');
+        });
 });
 
 
@@ -659,4 +681,11 @@ function setAmountFieldState(row) {
         amountInput.style.backgroundColor = '#ffffff';
         amountInput.title = "You can enter amount directly or it will be calculated from quantity";
     }
+}
+
+function printDirectly(billId) {
+    const printWindow = window.open(`/bills/${billId}/print/pdf`, '_blank');
+    printWindow.addEventListener('load', function() {
+        printWindow.print();
+    });
 }
