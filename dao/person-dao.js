@@ -78,23 +78,56 @@ module.exports = {
             });
         });
     },
-    changePwd: (user, currentPassword) => {
-        return new Promise((resolve, reject) => {
-            Person.update({
-                Password: user.Password
-            }, {
-                where: {'Password': currentPassword, 'Person_id': user.Person_id},
-            }).then(function (result) {
-                const firstElement = result.shift();
-                if (firstElement === 1) {
-                    resolve(true);
-                } else {
-                    resolve(false);
-                }
+   // dao/person-dao.js - Replace the existing changePwd method
+    changePwd: async (user, currentPassword) => {
+        try {
+            // First, find the user and verify current password
+            const existingUser = await Person.findOne({
+                where: { Person_id: user.Person_id }
             });
-        });
 
+            if (!existingUser) {
+                throw new Error('User not found');
+            }
+
+            // Verify current password using bcrypt
+            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, existingUser.Password);
+            
+            if (!isCurrentPasswordValid) {
+                throw new Error('Current password is incorrect');
+            }
+
+            // Update with new hashed password
+            const result = await Person.update({
+                Password: user.Password  // This should already be hashed
+            }, {
+                where: { Person_id: user.Person_id }
+            });
+
+            return result[0] === 1; // Return true if one record was updated
+        } catch (error) {
+            console.error('Error changing password:', error);
+            throw error;
+        }
     },
+
+    // Also add a simpler method for admin resets (no current password check)
+    updatePassword: async (userId, newHashedPassword) => {
+        try {
+            const result = await Person.update({
+                Password: newHashedPassword
+            }, {
+                where: { Person_id: userId }
+            });
+
+            return result[0] === 1;
+        } catch (error) {
+            console.error('Error updating password:', error);
+            throw error;
+        }
+    },
+
+
      usernameExists: async (username) => {
         try {
             const user = await Person.findOne({ where: { User_Name: username } });
@@ -186,6 +219,50 @@ module.exports = {
             return Person.findAll();
         }
     },
+    // Add this method to your existing person-dao.js module.exports
+createUserForCredit: async (credit, currentUser) => {
+    try {
+        const bcrypt = require('bcrypt');
+        
+        // Check if user already exists for this creditlist_id
+        const existingUser = await Person.findOne({
+            where: { creditlist_id: credit.creditlist_id }
+        });
+        
+        if (!existingUser) {
+            // Use standard welcome password for all new credit customers
+            const defaultPassword = 'welcome123';
+            
+            // Hash the password with 12 salt rounds (consistent with app)
+            const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+            
+            // Create the user
+            const newUser = await Person.create({
+                Person_Name: credit.Company_Name,
+                User_Name: `${credit.location_code}${credit.creditlist_id}`,
+                Password: hashedPassword,
+                Role: 'Customer',
+                location_code: credit.location_code,
+                effective_start_date: credit.effective_start_date || new Date(),
+                effective_end_date: credit.effective_end_date || new Date('2099-12-31'),
+                created_by: currentUser.User_Name,
+                updated_by: currentUser.User_Name,
+                creditlist_id: credit.creditlist_id,
+                creation_date: new Date(),
+                updation_date: new Date()
+            });
+            
+            console.log(`User created for credit customer: ${credit.Company_Name} (ID: ${credit.creditlist_id})`);
+            return newUser;
+        } else {
+            console.log(`User already exists for creditlist_id: ${credit.creditlist_id}`);
+            return existingUser;
+        }
+    } catch (error) {
+        console.error('Error creating user for credit:', error);
+        throw error; // Let the calling function decide how to handle the error
+    }
+},
 
 
 

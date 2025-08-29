@@ -1,0 +1,265 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        meta(name='viewport', content='width=device-width, initial-scale=1.0')
+        title Bill #{bill.bill_no} - Print
+        style.
+            /* Quarter A4 size: 105mm x 148.5mm */
+            @page {
+                size: 105mm 148.5mm;
+                margin: 5mm;
+            }
+            
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: 'Courier New', monospace;
+                font-size: 9px;
+                line-height: 1.2;
+                width: 95mm;
+                margin: 0 auto;
+                background: white;
+                color: black;
+            }
+            
+            .bill-container {
+                width: 100%;
+                padding: 2mm;
+            }
+            
+            /* Header Section */
+            .header {
+                text-align: center;
+                border-bottom: 1px solid #000;
+                padding-bottom: 2mm;
+                margin-bottom: 2mm;
+            }
+            
+            .company-name {
+                font-size: 14px;
+                font-weight: bold;
+                margin-bottom: 1mm;
+            }
+            
+            .company-address {
+                font-size: 8px;
+                margin-bottom: 1mm;
+            }
+            
+            .company-gst {
+                font-size: 8px;
+                font-weight: bold;
+            }
+            
+            /* Bill Info Section */
+            .bill-info {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 2mm;
+                font-size: 8px;
+            }
+            
+            .bill-info-left, .bill-info-right {
+                width: 48%;
+            }
+            
+            .bill-number {
+                font-size: 10px;
+                font-weight: bold;
+            }
+            
+            /* Customer Section */
+            .customer-section {
+                margin-bottom: 2mm;
+                font-size: 8px;
+            }
+            
+            .customer-name {
+                font-weight: bold;
+            }
+            
+            /* Items Table */
+            .items-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 2mm;
+                font-size: 8px;
+            }
+            
+            .items-table th {
+                background-color: #f0f0f0;
+                border: 1px solid #000;
+                padding: 1mm;
+                text-align: center;
+                font-weight: bold;
+            }
+            
+            .items-table td {
+                border: 1px solid #000;
+                padding: 0.5mm;
+                text-align: center;
+            }
+            
+            .items-table td.left {
+                text-align: left;
+            }
+            
+            .items-table td.right {
+                text-align: right;
+            }
+            
+            /* Totals Section */
+            .totals-section {
+                border-top: 1px solid #000;
+                padding-top: 1mm;
+                margin-bottom: 2mm;
+            }
+            
+            .total-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 0.5mm;
+                font-size: 8px;
+            }
+            
+            .grand-total {
+                font-weight: bold;
+                font-size: 10px;
+                border-top: 1px solid #000;
+                padding-top: 1mm;
+            }
+            
+            /* Footer Section */
+            .footer {
+                border-top: 1px solid #000;
+                padding-top: 2mm;
+                text-align: center;
+                font-size: 7px;
+            }
+            
+            .print-info {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 1mm;
+            }
+            
+            /* Utility Classes */
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .text-left { text-align: left; }
+            .bold { font-weight: bold; }
+            .small { font-size: 7px; }
+            
+            /* Print-specific */
+            @media print {
+                body {
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+            }
+    
+    body
+        .bill-container
+            //- Header Section
+            .header
+                .company-name #{bill.location_name || 'Petrol Pump'}
+                .company-address #{bill.location_address || 'Address not available'}
+                if bill.location_phone
+                    .company-address Phone: #{bill.location_phone}
+                if bill.location_gst
+                    .company-gst GST: #{bill.location_gst}
+            
+            //- Bill Information
+            .bill-info
+                .bill-info-left
+                    .bill-number Bill: #{bill.bill_no}
+                    div Type: #{bill.bill_type}
+                    div Status: #{bill.bill_status}
+                
+                .bill-info-right
+                    div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
+                    div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
+                    div Print ##{bill.print_count + 1}
+            
+            //- Customer Information
+            .customer-section
+                div
+                    span.bold Customer: 
+                    span.customer-name #{bill.customer_name || 'Cash Customer'}
+                if bill.cashier_name
+                    div
+                        span.bold Cashier: 
+                        span #{bill.cashier_name}
+            
+            //- Items Table
+            table.items-table
+                thead
+                    tr
+                        th(style='width: 30%') Product
+                        th(style='width: 10%') Qty
+                        th(style='width: 15%') Rate
+                        th(style='width: 10%') Disc
+                        th(style='width: 15%') Subtotal
+                        th(style='width: 10%') Tax
+                        th(style='width: 15%') Total
+                
+                tbody
+                    each item in items
+                        tr
+                            td.left 
+                                div.bold #{item.product_name}
+                                if item.notes
+                                    div.small #{item.notes}
+                            td #{parseFloat(item.qty).toFixed(2)} #{item.unit}
+                            td.right ₹#{parseFloat(item.price).toFixed(2)}
+                            td.right 
+                                if parseFloat(item.discount) > 0
+                                    | ₹#{parseFloat(item.discount).toFixed(2)}
+                                else
+                                    | -
+                            td.right ₹#{parseFloat(item.base_amount).toFixed(2)}
+                            td.right 
+                                if parseFloat(item.cgst_amount) > 0 || parseFloat(item.sgst_amount) > 0
+                                    | ₹#{(parseFloat(item.cgst_amount) + parseFloat(item.sgst_amount)).toFixed(2)}
+                                else
+                                    | -
+                            td.right ₹#{parseFloat(item.amount).toFixed(2)}
+            
+            //- Totals Section
+            .totals-section
+                .total-row
+                    span Subtotal:
+                    span ₹#{totals.subtotal.toFixed(2)}
+                
+                if totals.cgst > 0
+                    .total-row
+                        span CGST:
+                        span ₹#{totals.cgst.toFixed(2)}
+                
+                if totals.sgst > 0
+                    .total-row
+                        span SGST:
+                        span ₹#{totals.sgst.toFixed(2)}
+                
+                if totals.tax > 0
+                    .total-row
+                        span Total Tax:
+                        span ₹#{totals.tax.toFixed(2)}
+                
+                .total-row.grand-total
+                    span.bold GRAND TOTAL:
+                    span.bold ₹#{totals.grandTotal.toFixed(2)}
+            
+            //- Footer
+            .footer
+                div Thank you for your business!
+                div This is a computer-generated bill
+                
+                .print-info
+                    span Printed: #{printDate.toLocaleDateString('en-IN')} #{printDate.toLocaleTimeString('en-IN')}
+                    span Print Count: #{bill.print_count + 1}
