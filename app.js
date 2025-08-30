@@ -286,10 +286,6 @@ app.get('/logout', function (req, res) {
 });
 
 
-app.get('/changepwd', isLoginEnsured, passwordResetController.getChangePasswordPage);
-
-app.post('/changepwd', isLoginEnsured, passwordResetController.changeSelfPassword);
-
 
 app.post('/generate-pdf', isLoginEnsured,getPDF);
 
