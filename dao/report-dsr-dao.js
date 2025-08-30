@@ -323,7 +323,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                                 AND tc.closing_id in (:closing_id)
                         ) a`,
       {
-        replacements: { closing_id: closing_id}, 
+        replacements: { locationCode: locationCode,closing_id: closing_id}, 
         type: Sequelize.QueryTypes.SELECT
       }
   
@@ -426,7 +426,7 @@ const result = await db.sequelize.query(
                                               and tc.closing_id in (:closing_id)
                                               group by mp.product_name,mp.price`,
     {
-    replacements: { closing_id: closing_id}, 
+    replacements: {locationCode: locationCode,closing_id: closing_id}, 
     type: Sequelize.QueryTypes.SELECT
     }
 
