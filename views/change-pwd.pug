@@ -2,7 +2,7 @@ extends layout
 
 block content
     div.container(style="max-width:300px")
-        form(method='POST' action='/changepwd')
+        form(method='POST' action='/password/self')
             div.form-group
                 label(for='cpw') Current Password:
                 input#cpw.form-control(type='password', required, name='password')
