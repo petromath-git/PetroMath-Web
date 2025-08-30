@@ -114,7 +114,7 @@ module.exports = {
 }
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
-        TxnReadDao.getDraftClosingsCount(locationCode)
+        return TxnReadDao.getDraftClosingsCount(locationCode)
             .then(data => {
                 resolve(data);
             });

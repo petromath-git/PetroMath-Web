@@ -272,7 +272,7 @@ const txnAttendanceDataPromise = (closingId) => {
 // Show closing records flow: Getting txn digital sales data based on closing id
 const txnDigitalSalesPromise = (closingId) => {
     return new Promise((resolve, reject) => {
-        TxnReadDao.getDigitalSalesByClosingId(closingId)
+        return TxnReadDao.getDigitalSalesByClosingId(closingId)
             .then(data => {
                 if (data && data.length > 0) {
                     let digitalSalesData = [];

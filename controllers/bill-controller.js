@@ -5,6 +5,10 @@ const CreditDao = require("../dao/credits-dao");
 const utils = require("../utils/app-utils");
 const msg = require("../config/app-messages");
 const Sequelize = require('sequelize');
+const pug = require('pug');
+const path = require('path');
+const { getBrowser } = require('../utils/browserHelper');
+
 
 module.exports = {
     getNewBill: async (req, res, next) => {
@@ -674,6 +678,359 @@ getBills: async (req, res, next) => {
             res.redirect(`/bills/edit/${req.params.billId}`);
         }
     },
+
+ 
+
+printBill: async (req, res, next) => {
+    try {
+        const billId = req.params.id;
+        console.log('Print request for bill ID:', billId);
+        
+        // Get complete bill data with location details
+        const billData = await db.sequelize.query(`
+            SELECT 
+                b.bill_id,
+                b.location_code,
+                b.bill_no,
+                b.bill_type,
+                b.bill_status,
+                b.print_count,
+                b.total_amount,
+                b.creation_date,
+                
+                -- Location details
+                l.location_name,
+                l.address as location_address,
+                
+                -- Customer details (for credit bills)
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT c.Company_Name 
+                        FROM t_credits tc 
+                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        LIMIT 1
+                    )
+                    ELSE 'Cash Customer'
+                END as customer_name,
+                
+                -- Cashier details
+                p.Person_Name as cashier_name
+                
+            FROM t_bills b
+            LEFT JOIN m_location l ON b.location_code = l.location_code
+            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+            WHERE b.bill_id = :billId
+            AND b.location_code = :locationCode
+        `, {
+            replacements: { 
+                billId: billId,
+                locationCode: req.user.location_code 
+            },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!billData.length) {
+            return res.status(404).send('Bill not found');
+        }
+
+        const bill = billData[0];
+        console.log('Bill loaded:', bill.bill_no, bill.bill_type);
+
+        // Get bill items based on bill type
+        let billItems = [];
+        
+        if (bill.bill_type === 'CREDIT') {
+            console.log('Loading credit bill items...');
+            billItems = await db.sequelize.query(`
+                SELECT 
+                    tc.product_id,
+                    mp.product_name,
+                    mp.unit,
+                    tc.price,
+                    COALESCE(tc.price_discount, 0) as discount,
+                    tc.qty,
+                    tc.amount,
+                    COALESCE(tc.base_amount, tc.amount) as base_amount,
+                    COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                    COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                    COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                    COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                    tc.notes
+                FROM t_credits tc
+                JOIN m_product mp ON tc.product_id = mp.product_id
+                WHERE tc.bill_id = :billId
+                ORDER BY tc.creation_date
+            `, {
+                replacements: { billId: billId },
+                type: Sequelize.QueryTypes.SELECT
+            });
+        } else {
+            console.log('Loading cash bill items...');
+            billItems = await db.sequelize.query(`
+                SELECT 
+                    tc.product_id,
+                    mp.product_name,
+                    mp.unit,
+                    tc.price,
+                    COALESCE(tc.price_discount, 0) as discount,
+                    tc.qty,
+                    tc.amount,
+                    COALESCE(tc.base_amount, tc.amount) as base_amount,
+                    COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                    COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                    COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                    COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                    tc.notes
+                FROM t_cashsales tc
+                JOIN m_product mp ON tc.product_id = mp.product_id
+                WHERE tc.bill_id = :billId
+                ORDER BY tc.creation_date
+            `, {
+                replacements: { billId: billId },
+                type: Sequelize.QueryTypes.SELECT
+            });
+        }
+
+        console.log('Items loaded:', billItems.length, 'items');
+
+        // Calculate totals
+        const subtotal = billItems.reduce((sum, item) => sum + parseFloat(item.base_amount || item.amount || 0), 0);
+        const totalCgst = billItems.reduce((sum, item) => sum + parseFloat(item.cgst_amount || 0), 0);
+        const totalSgst = billItems.reduce((sum, item) => sum + parseFloat(item.sgst_amount || 0), 0);
+        const totalTax = totalCgst + totalSgst;
+        const grandTotal = parseFloat(bill.total_amount || 0);
+
+        console.log('Totals calculated:', { subtotal, totalCgst, totalSgst, grandTotal });
+
+        // Increment print count (only when successfully printing)
+        await db.sequelize.query(`
+            UPDATE t_bills 
+            SET print_count = print_count + 1,
+                bill_status = 'ACTIVE',
+                updation_date = NOW()
+            WHERE bill_id = :billId
+        `, {
+            replacements: { billId: billId }
+        });
+
+        console.log('Print count updated');
+
+        // Render the print template
+        res.render('bills/print', {
+            bill: bill,
+            items: billItems,
+            totals: {
+                subtotal: subtotal,
+                cgst: totalCgst,
+                sgst: totalSgst,
+                tax: totalTax,
+                grandTotal: grandTotal
+            },
+            printDate: new Date(),
+            user: req.user,
+            layout: false // Don't use main layout for print
+        });
+
+    } catch (error) {
+        console.error('Print bill error:', error);
+        res.status(500).send(`
+            <h2>Print Error</h2>
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p><a href="/bills">← Back to Bills List</a></p>
+        `);
+    }
+},
+
+// Replace your PDF function with this bulletproof version
+
+printBillPDF: async (req, res, next) => {
+    const billId = req.params.id;
+    let page = null;
+    
+    try {
+        console.log('=== BULLETPROOF PDF START ===');
+        console.log('Bill ID:', billId);
+        
+        // Get bill data (same as before)
+        const billData = await db.sequelize.query(`
+            SELECT 
+                b.bill_id, b.location_code, b.bill_no, b.bill_type, b.bill_status,
+                b.print_count, b.total_amount, b.creation_date,
+                l.location_name, l.address as location_address,
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT c.Company_Name 
+                        FROM t_credits tc 
+                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        LIMIT 1
+                    )
+                    ELSE 'Cash Customer'
+                END as customer_name,
+                p.Person_Name as cashier_name
+            FROM t_bills b
+            LEFT JOIN m_location l ON b.location_code = l.location_code
+            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+            WHERE b.bill_id = :billId AND b.location_code = :locationCode
+        `, {
+            replacements: { billId, locationCode: req.user.location_code },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!billData.length) {
+            return res.status(404).send('Bill not found');
+        }
+
+        const bill = billData[0];
+
+        // Get items
+        const itemTable = bill.bill_type === 'CREDIT' ? 't_credits' : 't_cashsales';
+        const billItems = await db.sequelize.query(`
+            SELECT 
+                tc.product_id, mp.product_name, mp.unit, tc.price,
+                COALESCE(tc.price_discount, 0) as discount, tc.qty, tc.amount,
+                COALESCE(tc.base_amount, tc.amount) as base_amount,
+                COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                tc.notes
+            FROM ${itemTable} tc
+            JOIN m_product mp ON tc.product_id = mp.product_id
+            WHERE tc.bill_id = :billId
+            ORDER BY tc.creation_date
+        `, {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        // Calculate totals
+        const subtotal = billItems.reduce((sum, item) => sum + parseFloat(item.base_amount || item.amount || 0), 0);
+        const totalCgst = billItems.reduce((sum, item) => sum + parseFloat(item.cgst_amount || 0), 0);
+        const totalSgst = billItems.reduce((sum, item) => sum + parseFloat(item.sgst_amount || 0), 0);
+        const grandTotal = parseFloat(bill.total_amount || 0);
+
+        console.log('Data loaded. Items:', billItems.length, 'Total:', grandTotal);
+
+        // Use simplified template
+        const pug = require('pug');
+        const path = require('path');
+        
+        // First try the simplified template
+        let templatePath = path.join(__dirname, '..', 'views', 'bills', 'print-simple.pug');
+        
+        // Fallback to inline HTML if template missing
+        let htmlContent;
+        const fs = require('fs');
+        
+        if (fs.existsSync(templatePath)) {
+            console.log('Using simplified template');
+            htmlContent = pug.renderFile(templatePath, {
+                bill, items: billItems,
+                totals: { subtotal, cgst: totalCgst, sgst: totalSgst, grandTotal },
+                printDate: new Date(), user: req.user
+            });
+        } else {
+            console.log('Using inline HTML fallback');
+            htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial; font-size: 10px; padding: 10px; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #000; padding: 3px; font-size: 9px; }
+                        .header { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 10px; }
+                        .total { font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">${bill.location_name || 'Petrol Pump'}</div>
+                    <div>Bill: ${bill.bill_no} | Type: ${bill.bill_type} | Date: ${new Date(bill.creation_date).toLocaleDateString()}</div>
+                    <div>Customer: ${bill.customer_name || 'Cash Customer'}</div>
+                    <br>
+                    <table>
+                        <tr><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+                        ${billItems.map(item => `
+                            <tr>
+                                <td>${item.product_name}</td>
+                                <td>${parseFloat(item.qty).toFixed(2)} ${item.unit}</td>
+                                <td>₹${parseFloat(item.price).toFixed(2)}</td>
+                                <td>₹${parseFloat(item.amount).toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                    <br>
+                    <div class="total">GRAND TOTAL: ₹${grandTotal.toFixed(2)}</div>
+                    <div>Thank you for your business!</div>
+                </body>
+                </html>
+            `;
+        }
+
+        console.log('HTML generated, length:', htmlContent.length);
+
+        // Generate PDF with minimal settings
+        const { getBrowser } = require('../utils/browserHelper');
+        const browser = await getBrowser();
+        page = await browser.newPage();
+        
+        // Set simple page settings
+        await page.setContent(htmlContent, {
+            waitUntil: 'networkidle0',
+            timeout: 15000
+        });
+
+        console.log('Content set, generating PDF...');
+
+        // Simple PDF settings to avoid corruption
+        const pdfBuffer = await page.pdf({
+            width: '105mm',
+            height: '148mm',
+            margin: {
+                top: '5mm',
+                right: '5mm',
+                bottom: '5mm',
+                left: '5mm'
+            },
+            printBackground: true,
+            preferCSSPageSize: false
+        });
+
+        await page.close();
+        page = null;
+
+        console.log('PDF generated successfully, size:', pdfBuffer.length);
+
+        // Update print count
+        await db.sequelize.query(`
+            UPDATE t_bills SET print_count = print_count + 1, bill_status = 'ACTIVE', updation_date = NOW()
+            WHERE bill_id = :billId
+        `, { replacements: { billId } });
+
+        // Send PDF with proper headers
+        res.writeHead(200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="Bill-${bill.bill_no}.pdf"`,
+            'Content-Length': pdfBuffer.length,
+            'Cache-Control': 'no-cache'
+        });
+        
+        res.end(pdfBuffer, 'binary');
+
+        console.log('=== PDF SENT SUCCESSFULLY ===');
+
+    } catch (error) {
+        console.error('PDF Error:', error);
+        if (page) {
+            try { await page.close(); } catch (e) { /* ignore */ }
+        }
+        res.status(500).send('PDF Error: ' + error.message);
+    }
+}
+
     
 };
 

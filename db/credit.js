@@ -5,7 +5,8 @@ module.exports = function(sequelize, DataTypes) {
     var Credit = sequelize.define(config.CREDIT_TABLE, {
         creditlist_id: {
             type: DataTypes.INTEGER,
-            primaryKey: true
+            primaryKey: true,
+            autoIncrement: true
         },
         location_code: DataTypes.STRING,
         Company_Name: DataTypes.STRING,

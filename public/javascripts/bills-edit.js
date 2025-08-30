@@ -240,11 +240,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calculate on page load for edit screen with existing data
     const existingRows = document.querySelectorAll('#billItems .item-row');
     existingRows.forEach(function(row) {
-        const productSelect = row.querySelector('.product-select');
-        if (productSelect && productSelect.value) {
-            calculateRowTax(row);
-        }
-    });    
+    const productSelect = row.querySelector('.product-select');
+    if (productSelect && productSelect.value) {
+        calculateRowTax($(row)); // ← Wrap in jQuery
+    }
+}); 
 
 
 });

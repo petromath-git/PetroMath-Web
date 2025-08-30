@@ -253,7 +253,7 @@ block content
                     const rowDateText = $row.find('td:nth-child(9)').text();
                     const dateParts = rowDateText.split('/');
                     if (dateParts.length === 3) {
-                        const rowDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+                        const rowDate = new Date(`${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`);
                         
                         if (dateFrom && rowDate < new Date(dateFrom)) {
                             show = false;

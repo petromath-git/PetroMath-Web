@@ -1,85 +1,95 @@
+// controllers/password-reset-controller.js
 const bcrypt = require('bcrypt');
 const { Person } = require('../db/db-connection');
-const PersonDao = require('../dao/person-dao'); 
+const PersonDao = require('../dao/person-dao');
+const RolePermissionsDao = require('../dao/role-permissions-dao');
 
 // Render the password reset form
-exports.getPasswordResetPage = (req, res,extraData = {}) => {
-    const locationCode = req.user.location_code;  // Get the logged-in user's location code
-    const userRole = req.user.Role;  // Get the logged-in user's role
+exports.getPasswordResetPage = async (req, res, extraData = {}) => {
+    const locationCode = req.user.location_code;
+    const userRole = req.user.Role;
 
-    // Determine the filtering logic based on the user's role
-    let usersQuery;
+    try {
+        // Get roles that this user can reset from database
+        const allowedRoles = await RolePermissionsDao.getRolesUserCanReset(userRole, locationCode);
+        const roleNames = allowedRoles.map(r => r.role);
+        
+        let usersQuery;
+        
+        if (roleNames.length === 0) {
+            // User can only reset their own password
+            usersQuery = PersonDao.findUsersAndCreditList(locationCode).then(users => {
+                return users.filter(user => user.Person_id === req.user.Person_id);
+            });
+        } else {
+            // Check if user can reset customers (to decide which DAO method to use)
+            const includesCustomers = roleNames.includes('Customer');
+            const daoMethod = includesCustomers ? 
+                PersonDao.findUsersAndCreditList : PersonDao.findUsers;
+                
+            usersQuery = daoMethod(locationCode).then(users => {
+                return users.filter(user => 
+                    roleNames.includes(user.Role) ||
+                    user.Person_id === req.user.Person_id // Always include own account
+                );
+            });
+        }
 
-    // SuperUser can see all users
-    if (userRole === 'SuperUser') {
-        usersQuery = PersonDao.findUsersAndCreditList(locationCode);
-    }
-
-    // Admin can see all users except SuperUser
-   else if (userRole === 'Admin') {
-        usersQuery = PersonDao.findUsers(locationCode).then(users => {
-            return users.filter(user => 
-                user.Role === 'Manager' ||
-                user.Role === 'Cashier' ||
-                user.Role === 'Driver' ||
-                user.Role === 'Helper' ||
-                user.Role === 'Customer' ||
-                (user.Role === 'Admin' && user.Person_id === req.user.Person_id) // Only their own Admin account
-            ); 
+        const users = await usersQuery;
+        
+        // Sort users: Staff first, then customers
+        const sortedUsers = users.sort((a, b) => {
+            const roleOrder = {
+                'SuperUser': 1, 'Admin': 2, 'Manager': 3, 'Cashier': 4, 
+                'Driver': 5, 'Helper': 6, 'Customer': 7
+            };
+            const aOrder = roleOrder[a.Role] || 999;
+            const bOrder = roleOrder[b.Role] || 999;
+            
+            if (aOrder !== bOrder) {
+                return aOrder - bOrder;
+            }
+            return a.Person_Name.localeCompare(b.Person_Name);
         });
-    }
 
-   // Manager can see all Cashiers in the same location
-   else if (userRole === 'Manager') {
-    usersQuery = PersonDao.findUsers(locationCode).then(users => {
-        // Manager can reset: their own password + Cashier, Driver, Helper, Customer passwords
-        return users.filter(user =>             
-            user.Role === 'Cashier' || 
-            user.Role === 'Driver' || 
-            user.Role === 'Helper' ||
-            user.Role === 'Customer' ||
-            (user.Role === 'Manager' && user.Person_id === req.user.Person_id) // Only their own Manager account
-            );
-        });
-    }
-    else {
-        usersQuery = PersonDao.findUsers(locationCode).then(users => {
-            return users.filter(user => user.Person_id === req.user.Person_id); // Only logged-in user
-        });
-    }
-
-    // Fetch users based on the role
-    usersQuery
-        .then(users => {
-            // Map users to include formatted name
-            const formattedUsers = users.map(user => ({
+        // Map users to include formatted name and username for customers
+        const formattedUsers = sortedUsers.map(user => {
+            let displayName;
+            if (user.Role === 'Customer') {
+                displayName = `${user.Person_Name} - ${user.User_Name} (${user.Role})`;
+            } else {
+                displayName = `${user.Person_Name} (${user.Role})`;
+            }
+            
+            return {
                 ...user.toJSON(),
-                fullName: `${user.Person_Name} (${user.Role})`
-            }));
-
-            res.render('reset-password', {
-                title: 'Reset Password',
-                users: formattedUsers,
-                ...extraData
-            });
-        })
-        .catch(err => {
-            console.error('Error fetching users:', err);
-            res.render('reset-password', { 
-                title: 'Reset Password',
-                users: [],  // Provide empty array to prevent undefined error
-                message: 'Error fetching users. Please try again.' 
-            });
+                fullName: displayName
+            };
         });
+
+        res.render('reset-password', {
+            title: 'Reset Password',
+            users: formattedUsers,
+            userRole: userRole,
+            allowedRoles: roleNames,
+            ...extraData
+        });
+
+    } catch (error) {
+        console.error('Error fetching role permissions:', error);
+        res.render('reset-password', {
+            title: 'Reset Password',
+            users: [],
+            message: 'Error loading permissions. Please try again.',
+            ...extraData
+        });
+    }
 };
 
 // Handle password reset logic with role-based access
 exports.resetPassword = async (req, res) => {
     const { username, newPassword, confirmPassword } = req.body;
-    const requestingUser = req.user; // Logged-in user
-
-    
-    console.log("User ID to reset:", req.body);
+    const requestingUser = req.user;
 
     // Validate if the passwords match
     if (newPassword !== confirmPassword) {
@@ -87,70 +97,74 @@ exports.resetPassword = async (req, res) => {
     }
 
     try {
-        // Find the user whose password is to be reset
         const userToReset = await PersonDao.findUserById(username);
-        
 
         if (!userToReset) {
             return exports.getPasswordResetPage(req, res, { message: 'User not found.' });
         }
 
-        // Check if the requesting user has the right role to reset passwords
-        if (requestingUser.Role === 'SuperUser') {
-            // SuperUser can reset anyone's password            
+        // Check permission using database
+        const canReset = await RolePermissionsDao.canResetPassword(
+            requestingUser.Role,
+            userToReset.Role,
+            requestingUser.location_code,
+            userToReset.location_code
+        );
+
+        const isOwnAccount = requestingUser.Person_id === userToReset.Person_id;
+
+        if (canReset || isOwnAccount) {
             await updatePassword(userToReset, newPassword);
-            return res.render('login', { message: 'Password reset successfully. Please log in with your new password.' });
-        }
-
-        if (requestingUser.Role === 'Admin') {
-            // Admin can reset passwords for Manager, Cashier, and Customers in the same location
-            if (userToReset.Role === 'Manager' || userToReset.Role === 'Cashier' || userToReset.Role === 'Customer') {
-                if (requestingUser.location_code === userToReset.location_code) {
-                    await updatePassword(userToReset, newPassword);
-                    return res.render('login', { message: 'Password reset successfully. Please log in with your new password.' });
-                } else {
-                    return exports.getPasswordResetPage(req, res, { message: 'Permission denied: User from different location.' });
-                }
+            
+            // Check if user reset their own password
+            if (isOwnAccount) {
+                // If user reset their own password, log them out
+                return res.render('login', { 
+                    message: 'Your password has been reset successfully. Please log in with your new password.' 
+                });
+            } else {
+                // If admin reset someone else's password, stay in admin interface
+                const successMessage = `Password reset successfully for ${userToReset.Person_Name}!\n` +
+                                     `Username: ${userToReset.User_Name || 'N/A'}\n` +
+                                     `New Password: ${newPassword}`;
+                
+                return exports.getPasswordResetPage(req, res, { 
+                    success: successMessage 
+                });
             }
+        } else {
+            return exports.getPasswordResetPage(req, res, { 
+                message: 'Permission denied: You cannot reset this user\'s password.' 
+            });
         }
-
-        if (requestingUser.Role === 'Manager') {
-            // Manager can reset passwords for Cashier and Customers in the same location
-            if (userToReset.Role === 'Cashier' || userToReset.Role === 'Customer') {
-                if (requestingUser.location_code === userToReset.location_code) {
-                    await updatePassword(userToReset, newPassword);
-                    return res.render('login', { message: 'Password reset successfully. Please log in with your new password.' });
-                } else {
-                    return exports.getPasswordResetPage(req, res, { message: 'Permission denied: User from different location.' });
-                }
-            }
-        }
-
-        // If the user is not authorized to reset the password
-        return exports.getPasswordResetPage(req, res, { message: 'You do not have permission to reset this user\'s password.' });
 
     } catch (error) {
         console.error('Error resetting password:', error);
-        return exports.getPasswordResetPage(req, res, { message: 'An error occurred while resetting the password.' });
+        return exports.getPasswordResetPage(req, res, { 
+            message: 'An error occurred while resetting the password.' 
+        });
     }
 };
 
 // Helper function to update the password (bcrypt hashing)
 const updatePassword = async (user, newPassword) => {
-    // Hash the new password
-    const saltRounds = 12; // bcrypt salt rounds
+    const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Update the user's password in the database
-    await PersonDao.changePwd({ Password: hashedPassword, Person_id: user.Person_id }, user.Password);
+    
+    // For admin resets, we don't need to verify current password
+    // Use direct database update instead of changePwd
+    const result = await PersonDao.updatePassword(user.Person_id, hashedPassword);
+    
+    if (!result) {
+        throw new Error('Failed to update password');
+    }
 };
 
 // Method to handle the actual password change (if needed separately)
 exports.changePassword = (req, res, next) => {
     const { currentPassword, newPassword } = req.body;
-    const userId = req.user.Person_id; // Assuming the user is logged in
+    const userId = req.user.Person_id;
 
-    // Check if the current password is correct
     Person.findOne({ where: { Person_id: userId } })
         .then(user => {
             bcrypt.compare(currentPassword, user.Password, (err, isMatch) => {
@@ -158,7 +172,6 @@ exports.changePassword = (req, res, next) => {
                     return res.render('change-pwd', { message: 'Incorrect current password.' });
                 }
 
-                // Hash and update the new password
                 bcrypt.hash(newPassword, 12, (err, hashedPassword) => {
                     if (err) {
                         return res.render('change-pwd', { message: 'Error hashing password.' });
@@ -180,4 +193,68 @@ exports.changePassword = (req, res, next) => {
             console.error(err);
             res.render('change-pwd', { message: 'Error changing password.' });
         });
+};
+
+// Render the change password page (for self-service)
+exports.getChangePasswordPage = (req, res, extraData = {}) => {
+    res.render('change-pwd', {
+        title: 'Change Password',
+        user: req.user,
+        ...extraData
+    });
+};
+
+
+exports.changeSelfPassword = async (req, res) => {
+    try {
+        const { password: currentPassword, new_password: newPassword } = req.body;
+        const userId = req.user.Person_id;
+
+        // Basic validation
+        if (!currentPassword || !newPassword) {
+            return exports.getChangePasswordPage(req, res, {
+                messages: { error: "Both current and new password are required." }
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return exports.getChangePasswordPage(req, res, {
+                messages: { error: "New password must be at least 6 characters long." }
+            });
+        }
+
+        // Hash the new password
+        const bcrypt = require('bcrypt');
+        const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+        // Use the DAO method to change password
+        const result = await PersonDao.changePwd(
+            { Password: hashedNewPassword, Person_id: userId }, 
+            currentPassword
+        );
+
+        if (result === true) {
+            req.flash('success', 'Password changed successfully');
+            res.redirect('/');
+        } else {
+            return exports.getChangePasswordPage(req, res, {
+                messages: { error: "Current password is incorrect." }
+            });
+        }
+
+    } catch (error) {
+        console.error('Error changing password:', error);
+        
+        // Handle specific error messages
+        let errorMessage = "Error while changing password.";
+        if (error.message === 'Current password is incorrect') {
+            errorMessage = "Current password is incorrect.";
+        } else if (error.message === 'User not found') {
+            errorMessage = "User account not found.";
+        }
+
+        return exports.getChangePasswordPage(req, res, {
+            messages: { error: errorMessage }
+        });
+    }
 };

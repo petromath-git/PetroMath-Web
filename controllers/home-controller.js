@@ -527,7 +527,7 @@ const getClosingDataByDate = (locationCode, closingQueryFromDate, closingQueryTo
 
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
-        TxnReadDao.getDraftClosingsCount(locationCode)
+        return TxnReadDao.getDraftClosingsCount(locationCode)
             .then(data => {
                 resolve(data);
             });
@@ -536,7 +536,7 @@ const getDraftsCount = (locationCode) => {
 
 const getDraftsCountBeforeDays = (locationCode, noOfDays) => {
     return new Promise((resolve, reject) => {
-        TxnReadDao.getDraftClosingsCountBeforeDays(locationCode, noOfDays)
+        return TxnReadDao.getDraftClosingsCountBeforeDays(locationCode, noOfDays)
             .then(data => {
                 resolve(data);
             });
@@ -546,7 +546,7 @@ const getDraftsCountBeforeDays = (locationCode, noOfDays) => {
 const getDeadlineWarningMessage = (locationCode) => {
     return new Promise((resolve, reject) => {
         let deadlineMessage =[];
-        TxnReadDao.getDeadlineWarningMessage(locationCode)
+        return TxnReadDao.getDeadlineWarningMessage(locationCode)
             .then(data => {
                 data.forEach((deadlineData) => {
                     deadlineMessage.push({deadlineDate: deadlineData.dataValues.deadline_date,
@@ -562,7 +562,7 @@ const getDeadlineWarningMessage = (locationCode) => {
 const personDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         let cashiers = [];
-        PersonDao.findUsers(locationCode)
+        return PersonDao.findUsers(locationCode)
             .then(data => {
                 data.forEach((person) => {
                     cashiers.push({personName: person.Person_Name, personId: person.Person_id});
@@ -577,7 +577,7 @@ const productDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         let products = [], productIdAliasMapping = [], products2T = [];
         const productMap = config.PRODUCT_DETAILS_MAPPING;
-        ProductDao.findProducts(locationCode)
+        return ProductDao.findProducts(locationCode)
             .then(data => {
                 data.forEach((product) => {
                     const mapData = productMap.get(product.product_name);
@@ -741,7 +741,7 @@ const digitalCompanyDataPromise = (locationCode) => {
 const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) => {
     return new Promise((resolve, reject) => {
         let closings = [];
-        TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
+        return TxnReadDao.getClosingDetailsByDate(locationCode, closingQueryFromDate, closingQueryToDate)
             .then(data => {
                 data.forEach((closingData) => {
                     const dynamicClosingData = {

@@ -144,6 +144,7 @@ const billController = require("./controllers/bill-controller");
 const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
 const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
+const passwordResetController = require('./controllers/password-reset-controller');
 
 
 const flash = require('express-flash');
@@ -284,34 +285,6 @@ app.get('/logout', function (req, res) {
     });
 });
 
-
-app.get('/changepwd', isLoginEnsured, function (req, res) {
-    res.render('change-pwd', { title: 'Change Password', user: req.user });
-});
-
-app.post('/changepwd', isLoginEnsured, function (req, res) {
-    const promiseResponse = PersonDao.changePwd(dbMapping.changePwd(req), req.body.password);
-    promiseResponse.then((result) => {
-        if (result === true) {
-            req.flash('success', 'Password changed successfully');
-            res.redirect('/');
-            
-            // Redirect to the home page
-            // res.render('change-pwd', {
-            //     title: 'Change Password',
-            //     user: req.user,
-            //     messages: { success: "Password changed successfully" }
-            //});
-        
-        } else {
-            res.render('change-pwd', {
-                title: 'Change Password',
-                user: req.user,
-                messages: { error: "Error while changing password." }
-            });
-        }
-    });
-});
 
 
 app.post('/generate-pdf', isLoginEnsured,getPDF);
@@ -562,9 +535,21 @@ app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
     });
 });
 
-app.post('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    CreditDao.create(dbMapping.newCredit(req));
-    res.redirect('/credits');
+
+app.post('/credits', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        // Create the credit customer first
+        const newCredit = await CreditDao.create(dbMapping.newCredit(req));
+        
+        // Create the corresponding user account via DAO
+        await PersonDao.createUserForCredit(newCredit, req.user);
+        
+        res.redirect('/credits');
+    } catch (error) {
+        console.error('Error creating credit:', error);
+        req.flash('error', 'Error creating credit customer');
+        res.redirect('/credits');
+    }
 });
 
 
@@ -1149,6 +1134,14 @@ app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
 app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
     billController.deleteBill(req, res, next);
 });
+
+
+// Add this to your app.js in the bills routes section
+app.get('/bills/:id/print', login.ensureLoggedIn('/login'), billController.printBill);
+
+// Add this route after your existing bill routes
+app.get('/bills/:id/print/pdf', login.ensureLoggedIn('/login'), billController.printBillPDF);
+
 
 // Lubes Invoice routes
 app.get('/lubes-invoice-home', isLoginEnsured, function(req, res, next) {
