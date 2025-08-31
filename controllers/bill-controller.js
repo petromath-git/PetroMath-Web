@@ -2,6 +2,7 @@
 const db = require("../db/db-connection");
 const ProductDao = require("../dao/product-dao");
 const CreditDao = require("../dao/credits-dao");
+const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const utils = require("../utils/app-utils");
 const msg = require("../config/app-messages");
 const Sequelize = require('sequelize');
@@ -33,13 +34,29 @@ module.exports = {
 
             // Get credit customers for the location
             const credits = await CreditDao.findCredits(req.user.location_code);
+            const vehicleData = await CreditVehicleDao.findAllVehiclesForLocation(req.user.location_code);
 
-            res.render('bills/create', {
+            // Group vehicles by creditlist_id for easier access
+            const vehiclesByCredit = {};
+            vehicleData.forEach(vehicle => {
+                if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                    vehiclesByCredit[vehicle.creditlist_id] = [];
+                }
+                vehiclesByCredit[vehicle.creditlist_id].push({
+                    vehicleId: vehicle.vehicle_id,
+                    vehicleNumber: vehicle.vehicle_number,
+                    vehicleType: vehicle.vehicle_type,
+                    companyName: vehicle.company_name
+                });
+            });
+
+             res.render('bills/create', {
                 title: 'Create New Bill',
                 user: req.user,
                 shifts: activeShifts,
                 products: products,
                 credits: credits,
+                vehicleData: vehiclesByCredit,
                 messages: req.flash()
             });
         } catch (error) {
@@ -130,12 +147,12 @@ module.exports = {
                                 closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                                 product_id, price, price_discount, qty, amount,
                                 base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                                notes, created_by, creation_date
+                                notes, odometer_reading, created_by, creation_date
                             ) VALUES (
                                 :closingId, :billNo, :billId, :creditlistId, :vehicleId,
                                 :productId, :price, :discount, :qty, :amount,
                                 :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                                :notes, :createdBy, NOW()
+                                :notes, :odometerReading, :createdBy, NOW()
                             )
                         `, {
                             replacements: {
@@ -143,7 +160,8 @@ module.exports = {
                                 billNo: nextBillNo,
                                 billId: billId,
                                 creditlistId: req.body.creditlist_id,
-                                vehicleId: req.body.vehicle_id || null,
+                                vehicleId: req.body.bill_vehicle_id || null,
+                                odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,   
                                 productId: parseInt(item.product_id),
                                 price: parseFloat(item.price),
                                 discount: parseFloat(item.price_discount || 0),
@@ -155,6 +173,7 @@ module.exports = {
                                 cgstAmount: parseFloat(item.cgst_amount || 0),
                                 sgstAmount: parseFloat(item.sgst_amount || 0),
                                 notes: item.notes || '',
+                                odometerReading: parseFloat(item.odometer_reading) || null,
                                 createdBy: req.user.Person_id
                             },
                             type: Sequelize.QueryTypes.INSERT,
@@ -179,6 +198,8 @@ module.exports = {
                                 closingId: req.body.closing_id,
                                 billNo: nextBillNo,
                                 billId: billId,
+                                vehicleNumber: req.body.bill_vehicle_number || null,
+                                odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
                                 productId: parseInt(item.product_id),
                                 price: parseFloat(item.price),
                                 discount: parseFloat(item.price_discount || 0),
@@ -457,180 +478,186 @@ getBills: async (req, res, next) => {
             // Get products for the location
             const products = await ProductDao.findProducts(req.user.location_code);
             const credits = await CreditDao.findCredits(req.user.location_code);
-
+            const vehicleData = await CreditVehicleDao.findAllVehiclesForLocation(req.user.location_code);
             
-    
-            res.render('bills/edit', {  // Change this to 'bills/edit'
-                title: 'Edit Bill',
-                user: req.user,
-                bill: bill[0],
-                items: billItems,
-                shifts: activeShifts,  // Add this
-                products: products,
-                credits: credits,
-                messages: req.flash()
-            });
+            const vehiclesByCredit = {};
+                vehicleData.forEach(vehicle => {
+                    if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                        vehiclesByCredit[vehicle.creditlist_id] = [];
+                    }
+                    vehiclesByCredit[vehicle.creditlist_id].push({
+                        vehicleId: vehicle.vehicle_id,
+                        vehicleNumber: vehicle.vehicle_number,
+                        vehicleType: vehicle.vehicle_type,
+                        companyName: vehicle.company_name
+                    });
+                });
+                          
+            // Get vehicle info from first bill item for display
+                let billVehicleInfo = {};
+                if (billItems.length > 0) {
+                    billVehicleInfo = {
+                        vehicle_number: billItems[0].vehicle_number,
+                        odometer_reading: billItems[0].odometer_reading,
+                        vehicle_id: billItems[0].vehicle_id
+                    };
+                }    
+                    
+            res.render('bills/edit', {
+                        title: 'Edit Bill',
+                        user: req.user,
+                        bill: { ...bill[0], ...billVehicleInfo },
+                        billItems: billItems,
+                        shifts: activeShifts,
+                        products: products,
+                        credits: credits,
+                        vehicleData: vehiclesByCredit,
+                        messages: req.flash()
+                    });
         } catch (error) {
             next(error);
         }
     },
 
     updateBill: async (req, res, next) => {
-        const transaction = await db.sequelize.transaction();
-    
-         try {
-                const billId = req.params.billId;
-                
-                // Validate bill items FIRST
-                const validation = await validateBillItems(req.body.items, req.user.location_code);
-                if (!validation.valid) {
-                    req.flash('error', validation.errors.join('. '));
-                    return res.redirect(`/bills/edit/${billId}`);
+    const transaction = await db.sequelize.transaction();
+
+     try {
+            const billId = req.params.billId;
+            
+            // Validate bill items FIRST
+            const validation = await validateBillItems(req.body.items, req.user.location_code);
+            if (!validation.valid) {
+                req.flash('error', validation.errors.join('. '));
+                return res.redirect(`/bills/edit/${billId}`);
+    }
+        
+
+        // Validate the bill exists and is editable
+        const bill = await db.sequelize.query(`
+            SELECT * FROM t_bills 
+            WHERE bill_id = :billId 
+            AND bill_status = 'DRAFT'
+        `, {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!bill.length) {
+            req.flash('error', 'Cannot update this bill. It may not exist or is not in DRAFT status.');
+            return res.redirect('/bills');
         }
-            
-    
-            // Validate the bill exists and is editable
-            const bill = await db.sequelize.query(`
-                SELECT * FROM t_bills 
-                WHERE bill_id = :billId 
-                AND bill_status = 'DRAFT'
-            `, {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.SELECT
-            });
-    
-            if (!bill.length) {
-                req.flash('error', 'Cannot update this bill. It may not exist or is not in DRAFT status.');
-                return res.redirect('/bills');
-            }
 
-                    // Ensure bill type hasn't been tampered with
-                if (req.body.bill_type !== bill[0].bill_type) {
-                    req.flash('error', 'Bill type cannot be changed');
-                    return res.redirect(`/bills/edit/${billId}`);
-                }
-
-                // For credit bills, ensure customer is selected
-                if (bill[0].bill_type === 'CREDIT' && !req.body.creditlist_id) {
-                    req.flash('error', 'Customer is required for credit bills');
-                    return res.redirect(`/bills/edit/${billId}`);
-                }
-            
-            // Update bill header first if bill type is changing
+                // Ensure bill type hasn't been tampered with
             if (req.body.bill_type !== bill[0].bill_type) {
-                await db.sequelize.query(`
-                    UPDATE t_bills 
-                    SET bill_type = :billType,
-                        updated_by = :updatedBy,
-                        updation_date = NOW()
-                    WHERE bill_id = :billId
-                `, {
-                    replacements: {
-                        billType: req.body.bill_type,
-                        updatedBy: req.user.Person_id,
-                        billId
-                    },
-                    type: Sequelize.QueryTypes.UPDATE,
-                    transaction
-                });
+                req.flash('error', 'Bill type cannot be changed');
+                return res.redirect(`/bills/edit/${billId}`);
             }
-    
-            // Delete existing items from both tables to handle type change
-            await db.sequelize.query('DELETE FROM t_credits WHERE bill_id = :billId', {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.DELETE,
-                transaction
-            });
-            await db.sequelize.query('DELETE FROM t_cashsales WHERE bill_id = :billId', {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.DELETE,
-                transaction
-            });
-    
-            // Recalculate total amount
-            const totalAmount = req.body.items.reduce((sum, item) => 
-                sum + parseFloat(item.amount || 0), 0);
-    
-            // Update bill total amount and closing_id
-            await db.sequelize.query(`
-                UPDATE t_bills 
-                SET closing_id = :closingId,
-                    total_amount = :totalAmount,
-                    updated_by = :updatedBy,
-                    updation_date = NOW()
-                WHERE bill_id = :billId
-            `, {
+
+            // For credit bills, ensure customer is selected
+            if (bill[0].bill_type === 'CREDIT' && !req.body.creditlist_id) {
+                req.flash('error', 'Customer is required for credit bills');
+                return res.redirect(`/bills/edit/${billId}`);
+            }
+        
+        // Delete existing items from both tables to handle type change
+        await db.sequelize.query('DELETE FROM t_credits WHERE bill_id = :billId', {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.DELETE,
+            transaction
+        });
+        await db.sequelize.query('DELETE FROM t_cashsales WHERE bill_id = :billId', {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.DELETE,
+            transaction
+        });
+
+        // Recalculate total amount
+        const totalAmount = req.body.items.reduce((sum, item) => 
+            sum + parseFloat(item.amount || 0), 0);
+
+        // Update bill total amount and closing_id
+        await db.sequelize.query(`
+            UPDATE t_bills 
+            SET closing_id = :closingId,
+                total_amount = :totalAmount,
+                updated_by = :updatedBy,
+                updation_date = NOW()
+            WHERE bill_id = :billId
+        `, {
+            replacements: {
+                closingId: req.body.closing_id,
+                totalAmount,
+                updatedBy: req.user.Person_id,
+                billId
+            },
+            type: Sequelize.QueryTypes.UPDATE,
+            transaction
+        });
+
+        // Insert new items based on current bill type
+        for (const item of req.body.items) {
+            const insertQuery = req.body.bill_type === 'CREDIT'
+                ? `INSERT INTO t_credits (
+                    closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
+                    product_id, price, price_discount, qty, amount,
+                    base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                    notes, odometer_reading, created_by, creation_date
+                ) VALUES (
+                    :closingId, :billNo, :billId, :creditlistId, :vehicleId,
+                    :productId, :price, :discount, :qty, :amount,
+                    :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                    :notes, :odometerReading, :createdBy, NOW()
+                )`
+                : `INSERT INTO t_cashsales (
+                    closing_id, bill_no, bill_id,
+                    product_id, price, price_discount, qty, amount,
+                    base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                    notes, vehicle_number, odometer_reading, created_by, creation_date
+                ) VALUES (
+                    :closingId, :billNo, :billId,
+                    :productId, :price, :discount, :qty, :amount,
+                    :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                    :notes, :vehicleNumber, :odometerReading, :createdBy, NOW()
+                )`;
+
+            await db.sequelize.query(insertQuery, {
                 replacements: {
                     closingId: req.body.closing_id,
-                    totalAmount,
-                    updatedBy: req.user.Person_id,
-                    billId
+                    billNo: bill[0].bill_no,
+                    billId: billId,
+                    creditlistId: req.body.bill_type === 'CREDIT' ? req.body.creditlist_id : null,
+                    vehicleId: req.body.bill_type === 'CREDIT' ? (req.body.bill_vehicle_id || null) : null,
+                    vehicleNumber: req.body.bill_type === 'CASH' ? (req.body.bill_vehicle_number || null) : null,
+                    odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
+                    productId: parseInt(item.product_id),
+                    price: parseFloat(item.price),
+                    discount: parseFloat(item.price_discount || 0),
+                    qty: parseFloat(item.qty),
+                    amount: parseFloat(item.amount),
+                    baseAmount: parseFloat(item.base_amount),
+                    cgstPercent: parseFloat(item.cgst_percent || 0),
+                    sgstPercent: parseFloat(item.sgst_percent || 0),
+                    cgstAmount: parseFloat(item.cgst_amount || 0),
+                    sgstAmount: parseFloat(item.sgst_amount || 0),
+                    notes: item.notes || '',
+                    createdBy: req.user.Person_id
                 },
-                type: Sequelize.QueryTypes.UPDATE,
+                type: Sequelize.QueryTypes.INSERT,
                 transaction
             });
-    
-            // Insert new items based on current bill type
-            for (const item of req.body.items) {
-                const insertQuery = req.body.bill_type === 'CREDIT'
-                    ? `INSERT INTO t_credits (
-                        closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
-                        product_id, price, price_discount, qty, amount,
-                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                        notes, created_by, creation_date
-                    ) VALUES (
-                        :closingId, :billNo, :billId, :creditlistId, :vehicleId,
-                        :productId, :price, :discount, :qty, :amount,
-                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                        :notes, :createdBy, NOW()
-                    )`
-                    : `INSERT INTO t_cashsales (
-                        closing_id, bill_no, bill_id,
-                        product_id, price, price_discount, qty, amount,
-                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                        notes, created_by, creation_date
-                    ) VALUES (
-                        :closingId, :billNo, :billId,
-                        :productId, :price, :discount, :qty, :amount,
-                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                        :notes, :createdBy, NOW()
-                    )`;
-
-                await db.sequelize.query(insertQuery, {
-                    replacements: {
-                        closingId: req.body.closing_id,
-                        billNo: bill[0].bill_no,
-                        billId: billId,
-                        creditlistId: req.body.bill_type === 'CREDIT' ? req.body.creditlist_id : null,
-                        vehicleId: req.body.bill_type === 'CREDIT' ? (req.body.vehicle_id || null) : null,
-                        productId: parseInt(item.product_id),
-                        price: parseFloat(item.price),
-                        discount: parseFloat(item.price_discount || 0),
-                        qty: parseFloat(item.qty),
-                        amount: parseFloat(item.amount),
-                        baseAmount: parseFloat(item.base_amount),
-                        cgstPercent: parseFloat(item.cgst_percent || 0),
-                        sgstPercent: parseFloat(item.sgst_percent || 0),
-                        cgstAmount: parseFloat(item.cgst_amount || 0),
-                        sgstAmount: parseFloat(item.sgst_amount || 0),
-                        notes: item.notes || '',
-                        createdBy: req.user.Person_id
-                    },
-                    type: Sequelize.QueryTypes.INSERT,
-                    transaction
-                });
-            }
-    
-            await transaction.commit();
-            req.flash('success', `Bill ${bill[0].bill_no} updated successfully`);
-            res.redirect('/bills');
-        } catch (error) {
-            await transaction.rollback();
-            console.error('Bill update error:', error);
-            req.flash('error', 'Error updating bill: ' + error.message);
-            res.redirect(`/bills/edit/${req.params.billId}`);
         }
-    },
+
+        await transaction.commit();
+        req.flash('success', `Bill ${bill[0].bill_no} updated successfully`);
+        res.redirect('/bills');
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Bill update error:', error);
+        req.flash('error', 'Error updating bill: ' + error.message);
+        res.redirect(`/bills/edit/${req.params.billId}`);
+    }
+},
 
     deleteBill: async (req, res, next) => {
         const transaction = await db.sequelize.transaction();
@@ -687,49 +714,76 @@ printBill: async (req, res, next) => {
         console.log('Print request for bill ID:', billId);
         
         // Get complete bill data with location details
-        const billData = await db.sequelize.query(`
-            SELECT 
-                b.bill_id,
-                b.location_code,
-                b.bill_no,
-                b.bill_type,
-                b.bill_status,
-                b.print_count,
-                b.total_amount,
-                b.creation_date,
-                
-                -- Location details
-                l.location_name,
-                l.address as location_address,
-                
-                -- Customer details (for credit bills)
-                CASE 
-                    WHEN b.bill_type = 'CREDIT' THEN (
-                        SELECT c.Company_Name 
-                        FROM t_credits tc 
-                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
-                        WHERE tc.bill_id = b.bill_id 
-                        LIMIT 1
-                    )
-                    ELSE 'Cash Customer'
-                END as customer_name,
-                
-                -- Cashier details
-                p.Person_Name as cashier_name
-                
-            FROM t_bills b
-            LEFT JOIN m_location l ON b.location_code = l.location_code
-            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
-            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
-            WHERE b.bill_id = :billId
-            AND b.location_code = :locationCode
-        `, {
-            replacements: { 
-                billId: billId,
-                locationCode: req.user.location_code 
-            },
-            type: Sequelize.QueryTypes.SELECT
-        });
+        // Get complete bill data with location details
+            const billData = await db.sequelize.query(`
+                SELECT 
+                    b.bill_id,
+                    b.location_code,
+                    b.bill_no,
+                    b.bill_type,
+                    b.bill_status,
+                    b.print_count,
+                    b.total_amount,
+                    b.creation_date,
+                    
+                    -- Location details
+                    l.location_name,
+                    l.address as location_address,
+                    
+                    -- Customer details (for credit bills)
+                    CASE 
+                        WHEN b.bill_type = 'CREDIT' THEN (
+                            SELECT c.Company_Name 
+                            FROM t_credits tc 
+                            JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                            WHERE tc.bill_id = b.bill_id 
+                            LIMIT 1
+                        )
+                        ELSE 'Cash Customer'
+                    END as customer_name,
+                    
+                    -- Vehicle information (from first item)
+                    CASE 
+                        WHEN b.bill_type = 'CREDIT' THEN (
+                            SELECT CONCAT(v.vehicle_number, ' (', v.vehicle_type, ')')
+                            FROM t_credits tc 
+                            JOIN m_creditlist_vehicles v ON tc.vehicle_id = v.vehicle_id 
+                            WHERE tc.bill_id = b.bill_id 
+                            AND tc.vehicle_id IS NOT NULL
+                            LIMIT 1
+                        )
+                        ELSE (
+                            SELECT cs.vehicle_number
+                            FROM t_cashsales cs 
+                            WHERE cs.bill_id = b.bill_id 
+                            AND cs.vehicle_number IS NOT NULL
+                            AND cs.vehicle_number != ''
+                            LIMIT 1
+                        )
+                    END as vehicle_info,
+                    
+                    -- Odometer reading (from first item)
+                    COALESCE(
+                        (SELECT tc.odometer_reading FROM t_credits tc WHERE tc.bill_id = b.bill_id AND tc.odometer_reading IS NOT NULL LIMIT 1),
+                        (SELECT cs.odometer_reading FROM t_cashsales cs WHERE cs.bill_id = b.bill_id AND cs.odometer_reading IS NOT NULL LIMIT 1)
+                    ) as odometer_reading,
+                    
+                    -- Cashier details
+                    p.Person_Name as cashier_name
+                    
+                FROM t_bills b
+                LEFT JOIN m_location l ON b.location_code = l.location_code
+                LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+                LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+                WHERE b.bill_id = :billId
+                AND b.location_code = :locationCode
+            `, {
+                replacements: { 
+                    billId: billId,
+                    locationCode: req.user.location_code 
+                },
+                type: Sequelize.QueryTypes.SELECT
+            });
 
         if (!billData.length) {
             return res.status(404).send('Bill not found');
@@ -742,56 +796,66 @@ printBill: async (req, res, next) => {
         let billItems = [];
         
         if (bill.bill_type === 'CREDIT') {
-            console.log('Loading credit bill items...');
-            billItems = await db.sequelize.query(`
-                SELECT 
-                    tc.product_id,
-                    mp.product_name,
-                    mp.unit,
-                    tc.price,
-                    COALESCE(tc.price_discount, 0) as discount,
-                    tc.qty,
-                    tc.amount,
-                    COALESCE(tc.base_amount, tc.amount) as base_amount,
-                    COALESCE(tc.cgst_percent, 0) as cgst_percent,
-                    COALESCE(tc.sgst_percent, 0) as sgst_percent,
-                    COALESCE(tc.cgst_amount, 0) as cgst_amount,
-                    COALESCE(tc.sgst_amount, 0) as sgst_amount,
-                    tc.notes
-                FROM t_credits tc
-                JOIN m_product mp ON tc.product_id = mp.product_id
-                WHERE tc.bill_id = :billId
-                ORDER BY tc.creation_date
-            `, {
-                replacements: { billId: billId },
-                type: Sequelize.QueryTypes.SELECT
-            });
+                console.log('Loading credit bill items...');
+                billItems = await db.sequelize.query(`
+                    SELECT 
+                        tc.product_id,
+                        mp.product_name,
+                        mp.unit,
+                        tc.price,
+                        COALESCE(tc.price_discount, 0) as discount,
+                        tc.qty,
+                        tc.amount,
+                        COALESCE(tc.base_amount, tc.amount) as base_amount,
+                        COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                        COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                        COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                        COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                        tc.notes,
+                        tc.odometer_reading,
+                        -- Vehicle information for credit bills
+                        CASE 
+                            WHEN tc.vehicle_id IS NOT NULL THEN 
+                                CONCAT(v.vehicle_number, ' (', v.vehicle_type, ')')
+                            ELSE NULL 
+                        END as vehicle_info
+                    FROM t_credits tc
+                    JOIN m_product mp ON tc.product_id = mp.product_id
+                    LEFT JOIN m_creditlist_vehicles v ON tc.vehicle_id = v.vehicle_id
+                    WHERE tc.bill_id = :billId
+                    ORDER BY tc.creation_date
+                `, {
+                    replacements: { billId: billId },
+                    type: Sequelize.QueryTypes.SELECT
+                });
         } else {
-            console.log('Loading cash bill items...');
-            billItems = await db.sequelize.query(`
-                SELECT 
-                    tc.product_id,
-                    mp.product_name,
-                    mp.unit,
-                    tc.price,
-                    COALESCE(tc.price_discount, 0) as discount,
-                    tc.qty,
-                    tc.amount,
-                    COALESCE(tc.base_amount, tc.amount) as base_amount,
-                    COALESCE(tc.cgst_percent, 0) as cgst_percent,
-                    COALESCE(tc.sgst_percent, 0) as sgst_percent,
-                    COALESCE(tc.cgst_amount, 0) as cgst_amount,
-                    COALESCE(tc.sgst_amount, 0) as sgst_amount,
-                    tc.notes
-                FROM t_cashsales tc
-                JOIN m_product mp ON tc.product_id = mp.product_id
-                WHERE tc.bill_id = :billId
-                ORDER BY tc.creation_date
-            `, {
-                replacements: { billId: billId },
-                type: Sequelize.QueryTypes.SELECT
-            });
-        }
+                console.log('Loading cash bill items...');
+                billItems = await db.sequelize.query(`
+                    SELECT 
+                        tc.product_id,
+                        mp.product_name,
+                        mp.unit,
+                        tc.price,
+                        COALESCE(tc.price_discount, 0) as discount,
+                        tc.qty,
+                        tc.amount,
+                        COALESCE(tc.base_amount, tc.amount) as base_amount,
+                        COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                        COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                        COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                        COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                        tc.notes,
+                        tc.vehicle_number,
+                        tc.odometer_reading
+                    FROM t_cashsales tc
+                    JOIN m_product mp ON tc.product_id = mp.product_id
+                    WHERE tc.bill_id = :billId
+                    ORDER BY tc.creation_date
+                `, {
+                    replacements: { billId: billId },
+                    type: Sequelize.QueryTypes.SELECT
+                });
+            }
 
         console.log('Items loaded:', billItems.length, 'items');
 

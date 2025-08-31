@@ -1,9 +1,14 @@
+let vehicleDataByCredit = {};
+
 document.addEventListener('DOMContentLoaded', function() {
     const billForm = document.getElementById('billForm');
     const billItemsTable = document.getElementById('billItemsTable');
     const addRowDesktopBtn = document.getElementById('addRowDesktop');
     const totalAmountDisplay = document.getElementById('totalAmount');
     let rowIndex = 0;
+
+    initializeVehicleHandling();
+    initializeVehicleSelect2();
 
     // Handle product selection for desktop
     function attachProductSelectListener(row) {
@@ -688,4 +693,80 @@ function printDirectly(billId) {
     printWindow.addEventListener('load', function() {
         printWindow.print();
     });
+}
+
+// Add these 5 functions at the bottom of bills.js (outside DOMContentLoaded)
+
+function initializeVehicleHandling() {
+    document.addEventListener('change', function(e) {
+        if (e.target.name === 'bill_type') {
+            toggleVehicleSection(e.target.value);
+        }
+        if (e.target.id === 'creditCustomer') {
+            loadVehiclesForCustomer(e.target.value);
+        }
+    });
+}
+
+function toggleVehicleSection(billType) {
+    const cashVehicleSection = document.getElementById('cashVehicleSection');
+    const creditCustomerDiv = document.getElementById('creditCustomerDiv');
+    
+    if (billType === 'CASH') {
+        cashVehicleSection.classList.remove('d-none');
+        creditCustomerDiv.classList.add('d-none');
+        document.getElementById('creditCustomer').value = '';
+        $('#vehicleSelect').val('').trigger('change');
+    } else if (billType === 'CREDIT') {
+        cashVehicleSection.classList.add('d-none');
+        creditCustomerDiv.classList.remove('d-none');
+        document.getElementById('billVehicleNumber').value = '';
+        document.getElementById('billOdometerReading').value = '';
+    } else {
+        cashVehicleSection.classList.add('d-none');
+        creditCustomerDiv.classList.add('d-none');
+    }
+}
+
+function initializeVehicleSelect2() {
+    $('#vehicleSelect').select2({
+        placeholder: 'Select Vehicle',
+        allowClear: true,
+        width: '100%'
+    });
+}
+
+function loadVehiclesForCustomer(creditListId) {
+    $('#vehicleSelect').empty().append('<option value="">Select Vehicle</option>');
+    
+    if (creditListId && vehicleDataByCredit[creditListId]) {
+        vehicleDataByCredit[creditListId].forEach(vehicle => {
+            const option = new Option(
+                `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
+                vehicle.vehicleId
+            );
+            $('#vehicleSelect').append(option);
+        });
+    }
+    $('#vehicleSelect').trigger('change');
+}
+
+function getVehicleDataForSubmission() {
+    const billType = document.querySelector('input[name="bill_type"]:checked')?.value;
+    
+    if (billType === 'CASH') {
+        return {
+            vehicle_number: document.getElementById('billVehicleNumber').value,
+            odometer_reading: document.getElementById('billOdometerReading').value,
+            vehicle_id: null
+        };
+    } else if (billType === 'CREDIT') {
+        return {
+            vehicle_number: null,
+            odometer_reading: document.getElementById('billOdometerReading').value,
+            vehicle_id: document.getElementById('vehicleSelect').value
+        };
+    }
+    
+    return { vehicle_number: null, odometer_reading: null, vehicle_id: null };
 }

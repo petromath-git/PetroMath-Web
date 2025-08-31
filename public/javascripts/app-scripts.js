@@ -1069,6 +1069,7 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'bill_no': document.getElementById(creditSaleTag + 'billno-' + creditObjRowNum).value,
         'creditlist_id': getCreditType(creditSaleTag, creditObjRowNum),
         'vehicle_id': document.getElementById(creditSaleTag + 'vehicle-' + creditObjRowNum).value,  // ADD THIS
+        'odometer_reading': document.getElementById(creditSaleTag + 'odometer-' + creditObjRowNum).value,
         'product_id': document.getElementById(creditSaleTag + 'product-' + creditObjRowNum).value,
         'price': document.getElementById(creditSaleTag + 'price-' + creditObjRowNum).value,
         'price_discount': document.getElementById(creditSaleTag + 'discount-' + creditObjRowNum).value,
