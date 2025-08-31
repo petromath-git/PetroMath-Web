@@ -270,7 +270,7 @@ mixin addCredits(creditRowNo, rowData)
     if(creditCompanyValues && creditCompanyValues[0])
         - creditName = creditCompanyValues[0].creditorName;
     if(!rowData)
-        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null};
+        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null};
     if(rowData.tCreditId && parseInt(rowData.tCreditId) > 0)
         - trClass = ''
     tr(class=trClass id=trId)
@@ -312,6 +312,8 @@ mixin addCredits(creditRowNo, rowData)
                 if rowData.creditListId && vehicleData && vehicleData[rowData.creditListId]
                     each vehicle in vehicleData[rowData.creditListId]
                         option(value=vehicle.vehicleId selected= rowData.vehicleId === vehicle.vehicleId)= vehicle.vehicleNumber + ' (' + vehicle.vehicleType + ')'        
+        td
+            input.form-control(type='number' name=prefix + 'odometer-' + creditRowNo id=prefix + 'odometer-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.odometerReading step=0.01 placeholder='Odometer Reading')
         td
             input.form-control(type='number' name=prefix + 'price-' + creditRowNo id=prefix + 'price-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01 readonly)
         td

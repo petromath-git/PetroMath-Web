@@ -42,14 +42,32 @@ block content
                                 )
                                 input(type='hidden' name='bill_type' value=bill.bill_type)
 
-                        div#creditCustomerDiv.col-12.col-md-4(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
-                            .form-group
-                                label(for='creditCustomer') Customer *
-                                select#creditCustomer.form-control(name='creditlist_id')
-                                    option(value='') Select Customer
-                                    each credit in credits
-                                        option(value=credit.creditlist_id selected=credit.creditlist_id === bill.creditlist_id) #{credit.Company_Name}
-                  
+                        div#creditCustomerDiv.col-12.col-md-8(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='creditCustomer') Customer *
+                                        select#creditCustomer.form-control(name='creditlist_id')
+                                            option(value='') Select Customer
+                                            each credit in credits
+                                                option(value=credit.creditlist_id selected=credit.creditlist_id === bill.creditlist_id) #{credit.Company_Name}
+                                .col-md-6
+                                    .form-group
+                                        label(for='vehicleSelect') Vehicle Number
+                                        select#vehicleSelect.form-control.select2-vehicle(name='bill_vehicle_id')
+                                            option(value='') Select Vehicle
+
+                        //- Vehicle info section for CASH bills (free text entry)
+                        .row.mb-3#cashVehicleSection(class=bill.bill_type === 'CASH' ? '' : 'd-none')
+                            .col-md-6
+                                .form-group
+                                    label(for='billVehicleNumber') Vehicle Number
+                                    input#billVehicleNumber.form-control(type='text' name='bill_vehicle_number' value=(bill.vehicle_number || '') placeholder='Enter vehicle number' maxlength='100')
+                            .col-md-6
+                                .form-group
+                                    label(for='billOdometerReading') Odometer Reading
+                                    input#billOdometerReading.form-control(type='number' name='bill_odometer_reading' value=(bill.odometer_reading || '') step='0.01' min='0' placeholder='0.00')
+                                        
                     //- Items Table
                     .table-responsive
                         table.table.table-bordered#billItemsTable

@@ -155,7 +155,8 @@ const txnCreditsPromise = (closingId) => {
                                 priceDiscount: credit.price_discount,
                                 qty: credit.qty,
                                 amount: credit.amount,
-                                notes: credit.notes
+                                notes: credit.notes,
+                                odometerReading: credit.odometer_reading  // ADD THIS LINE
                             });
                         });
                         resolve(credits);
