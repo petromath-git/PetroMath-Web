@@ -111,7 +111,20 @@ module.exports = {
                 });
               }
               else {  
-                let runningBalance = Number(OpeningBal); // Ensure it's a number                
+                let runningBalance = Number(OpeningBal); // Ensure it's a number     
+                 
+                  // Helper function to format odometer reading with Indian number format
+                const formatOdometerReading = (reading) => {
+                  if (!reading || reading === null) return '';
+                  const formatted = new Intl.NumberFormat('en-IN', { 
+                    minimumFractionDigits: 2, 
+                    maximumFractionDigits: 2 
+                  }).format(reading);
+                  return formatted + ' km';
+                };
+                
+
+
                 data1.forEach((creditstmtData) => {
                   let transactionAmount = Number(creditstmtData.amount); // Convert amount to number                      
               
@@ -137,9 +150,13 @@ module.exports = {
                     Debit: creditstmtData.product_name !== null ? transactionAmount : null,
                     Credit: creditstmtData.product_name === null ? transactionAmount : null, 
                     Narration: creditstmtData.notes,
-                    Balance: runningBalance // Updated balance
+                    Balance: runningBalance,
+                    'Odometer Reading': formatOdometerReading(creditstmtData.odometer_reading),
+                    'Vehicle Number': creditstmtData.vehicle_number,
                   });
                 });
+
+
               }
               
                         const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');

@@ -25,42 +25,66 @@ module.exports = {
                  type: Sequelize.QueryTypes.SELECT }           
         );
         
-    }    ,
-    getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate,creditId) => {
-        if(creditId==-1){               
-            return TxnCreditStmtViews.findAll({
-                where: { [Op.and]: [
-                    { location_code: locationCode },
-                    {
-                        tran_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("tran_date"), '%Y-%m-%d'), ">=",  closingQueryFromDate)
-                    },
-                    {
-                        tran_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("tran_date"), '%Y-%m-%d'), "<=",  closingQueryToDate)
-                    }
-                ] },
-            });
-        }
-        else{
-            return TxnCreditStmtViews.findAll({
-                where: { [Op.and]: [
-                    { location_code: locationCode },
-                    { creditlist_id: creditId},
-                    {
-                        tran_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("tran_date"), '%Y-%m-%d'), ">=",  closingQueryFromDate)
-                    },
-                    {
-                        tran_date: Sequelize.where(
-                            Sequelize.fn("date_format", Sequelize.col("tran_date"), '%Y-%m-%d'), "<=",  closingQueryToDate)
-                    }
-                ] },
-            });
+    }    ,   
+getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
+    return db.sequelize.query(
+        `SELECT 
+            tcl.closing_date AS tran_date,
+            tcl.location_code,
+            CONCAT('To Bill No: ', tc.bill_no) AS bill_no,
+            mcl.Company_Name AS company_name,
+            mp.product_name,
+            tc.price,
+            tc.price_discount,
+            tc.qty,
+            tc.amount,
+            tc.notes,
+            mcl.creditlist_id,
+            tc.odometer_reading,
+            mcv.vehicle_number
+        FROM t_credits tc
+        JOIN m_product mp ON tc.product_id = mp.product_id
+        JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+        JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+        LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
+        WHERE tcl.location_code = :locationCode
+            AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+            AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
 
-        }
-    },
+        UNION ALL
 
+        SELECT 
+            tr.receipt_date AS tran_date,
+            tr.location_code,
+            CONCAT('By Receipt No: ', tr.receipt_no) AS bill_no,
+            mcl.Company_Name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            tr.amount,
+            tr.notes,
+            mcl.creditlist_id,
+            NULL AS odometer_reading,
+            NULL AS vehicle_number
+        FROM t_receipts tr
+        JOIN m_credit_list mcl ON mcl.creditlist_id = tr.creditlist_id
+        WHERE tr.location_code = :locationCode
+            AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
+            AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
+
+        ORDER BY tran_date`,
+        {
+            replacements: { 
+                locationCode: locationCode, 
+                fromDate: closingQueryFromDate, 
+                toDate: closingQueryToDate,
+                creditId: creditId
+            },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+},
     // In dao/report-dao.js
 getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     const result = await db.sequelize.query(
