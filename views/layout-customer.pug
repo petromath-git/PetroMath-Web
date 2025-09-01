@@ -13,11 +13,11 @@ html
         script(src='/javascripts/app-report-table-generator.js')
         link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
         script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
+        script( src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js")
         script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
         script(src='https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js')
         script(src='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js')
-        script(src ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')
-        script(src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js')
+        script(src ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')        
         link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
         link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
         link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpg" src="/images/mc_logo.jpg")
@@ -57,7 +57,13 @@ html
                         .collapse.navbar-collapse#navbarNav
                             ul.navbar-nav.mr-auto                                
                                 li.nav-item(class=(title === 'Credit Statement' ? 'active' : ''))
-                                    a.nav-link(href='/reports-indiv-customer') Credit Statement                                
+                                    a.nav-link(href='/reports-indiv-customer') 
+                                        i.bi.bi-file-earmark-text &nbsp;
+                                        | Credit Statement
+                                li.nav-item(class=(title === 'Vehicle Mileage Dashboard' ? 'active' : ''))
+                                    a.nav-link(href='/mileage/dashboard')
+                                        i.bi.bi-speedometer2 &nbsp;
+                                        | Mileage Dashboard                             
                             // Right-aligned user details and logout
                             ul.navbar-nav.ml-auto                                
                                 li.nav-item

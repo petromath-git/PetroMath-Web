@@ -1,0 +1,442 @@
+extends layout-customer
+
+block content
+    style.
+        .dashboard-card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            margin-bottom: 20px;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .vehicle-card {
+            border-left: 4px solid #28a745;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .mileage-good { color: #28a745; font-weight: bold; }
+        .mileage-average { color: #ffc107; font-weight: bold; }
+        .mileage-poor { color: #dc3545; font-weight: bold; }
+        .fuel-entry-form {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+    div.container-fluid.mt-4
+        // Header
+        div.row
+            div.col-12
+                h2.text-center.mb-4
+                    i.bi.bi-speedometer2.text-primary &nbsp;
+                    | Vehicle Mileage Dashboard
+
+        // Date Range Filter
+        div.row.mb-4
+            div.col-md-6.mx-auto
+                div.card.dashboard-card
+                    div.card-body
+                        form#dateRangeForm
+                            div.row
+                                div.col-md-5
+                                    label From Date:
+                                    input#fromDate.form-control(type='date', value=fromDate)
+                                div.col-md-5
+                                    label To Date:
+                                    input#toDate.form-control(type='date', value=toDate)
+                                div.col-md-2.d-flex.align-items-end
+                                    button.btn.btn-primary(type="button", onclick="loadMileageData()")
+                                        i.bi.bi-search
+
+        // Summary Cards
+        div.row
+            div.col-md-3
+                div.card.dashboard-card.metric-card
+                    div.card-body.text-center
+                        i.bi.bi-truck.fa-2x.mb-2
+                        h4#totalVehicles= fleetSummary.totalVehicles || 0
+                        p Total Vehicles
+            div.col-md-3
+                div.card.dashboard-card.metric-card
+                    div.card-body.text-center
+                        i.bi.bi-fuel-pump.fa-2x.mb-2
+                        h4#totalFuelConsumption= (fleetSummary.totalFuelConsumed || 0).toLocaleString() + ' L'
+                        p Total Fuel Consumed
+            div.col-md-3
+                div.card.dashboard-card.metric-card
+                    div.card-body.text-center
+                        i.bi.bi-sign-turn-right.fa-2x.mb-2
+                        h4#totalDistance= (fleetSummary.totalDistance || 0).toLocaleString() + ' km'
+                        p Total Distance
+            div.col-md-3
+                div.card.dashboard-card.metric-card
+                    div.card-body.text-center
+                        i.bi.bi-graph-up.fa-2x.mb-2
+                        h4#avgMileage= (fleetSummary.fleetAvgMileage || 0).toFixed(2) + ' KMPL'
+                        p Fleet Average Mileage
+
+        // Vehicle-wise Cards
+        div.row
+            div.col-12
+                h4.mb-3
+                    i.bi.bi-list-ul &nbsp;
+                    | Vehicle-wise Performance
+
+        div.row#vehicleCards
+            if vehicleSummaries && vehicleSummaries.length > 0
+                each vehicle in vehicleSummaries
+                    - var mileageClass = vehicle.avgMileage >= 6 ? 'mileage-good' : (vehicle.avgMileage >= 4.5 ? 'mileage-average' : 'mileage-poor')
+                    div.col-md-4.mb-3
+                        div.card.dashboard-card.vehicle-card
+                            div.card-body
+                                h6
+                                    i.bi.bi-truck &nbsp;
+                                    = vehicle.vehicle_number
+                                p.text-muted.small= vehicle.vehicle_type
+                                div.row
+                                    div.col-6
+                                        small Avg Mileage
+                                        h5(class=mileageClass)= vehicle.avgMileage.toFixed(2) + ' KMPL'
+                                    div.col-6
+                                        small Total Distance
+                                        h6= vehicle.totalDistance.toLocaleString() + ' km'
+                                div.row.mt-2
+                                    div.col-6
+                                        small Fuel Consumed
+                                        h6= vehicle.totalFuelConsumed.toFixed(1) + ' L'
+                                    div.col-6
+                                        small Last Odometer
+                                        h6= vehicle.lastOdometerReading.toLocaleString()
+            else
+                div.col-12
+                    div.alert.alert-info
+                        | No vehicle data available for the selected date range.
+
+        // Charts Section
+        div.row.mt-4
+            div.col-md-6
+                div.card.dashboard-card
+                    div.card-header
+                        h5
+                            i.bi.bi-bar-chart &nbsp;
+                            | Mileage Comparison
+                    div.card-body
+                        div.chart-container
+                            canvas#mileageChart
+
+            div.col-md-6
+                div.card.dashboard-card
+                    div.card-header
+                        h5
+                            i.bi.bi-graph-up &nbsp;
+                            | Mileage Trend
+                    div.card-body
+                        div.chart-container
+                            canvas#trendChart
+
+        // Detailed Vehicle Reports
+        div.row.mt-4
+            div.col-12
+                div.card.dashboard-card
+                    div.card-header
+                        h5
+                            i.bi.bi-table &nbsp;
+                            | Detailed Mileage Report
+                    div.card-body
+                        div.table-responsive
+                            table.table.table-hover
+                                thead.thead-light
+                                    tr
+                                        th Date
+                                        th Vehicle
+                                        th Bill No
+                                        th Fuel (L)
+                                        th Odometer
+                                        th Distance
+                                        th Mileage
+                                        th Status
+                                tbody#detailedReport
+                                    if detailedData && detailedData.length > 0
+                                        each transaction in detailedData
+                                            - var statusClass = transaction.performanceStatus.status === 'excellent' ? 'success' : (transaction.performanceStatus.status === 'good' ? 'warning' : (transaction.performanceStatus.status === 'average' ? 'info' : 'danger'))
+                                            - var mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : (transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor')
+                                            tr
+                                                td= new Date(transaction.transaction_date).toLocaleDateString()
+                                                td= transaction.vehicle_number
+                                                td= transaction.bill_no
+                                                td= transaction.fuel_quantity.toFixed(2)
+                                                td= transaction.odometer_reading.toLocaleString()
+                                                td= transaction.distance_run
+                                                td(class=mileageClass)= transaction.mileage_kmpl.toFixed(2)
+                                                td
+                                                    span(class='badge badge-' + statusClass)= transaction.performanceStatus.label
+                                    else
+                                        tr
+                                            td.text-center(colspan="8") No transactions with mileage data found.
+
+        // Future Feature: External Fuel Entry
+        div.row.mt-4
+            div.col-12
+                div.card.dashboard-card
+                    div.card-header.bg-info.text-white
+                        h5
+                            i.bi.bi-plus-circle &nbsp;
+                            | Add External Fuel Purchase (Coming Soon)
+                    div.card-body.fuel-entry-form
+                        div.alert.alert-info
+                            i.bi.bi-info-circle &nbsp;
+                            strong Coming Soon: &nbsp;
+                            | You'll be able to add fuel purchases from other stations here to get a complete mileage picture.
+                        form#externalFuelForm(style="opacity: 0.5;")
+                            div.row
+                                div.col-md-3
+                                    label Date:
+                                    input.form-control(type='date', disabled)
+                                div.col-md-3
+                                    label Vehicle:
+                                    select.form-control(disabled)
+                                        option Select Vehicle
+                                div.col-md-2
+                                    label Fuel (L):
+                                    input.form-control(type='number', disabled)
+                                div.col-md-2
+                                    label Odometer:
+                                    input.form-control(type='number', disabled)
+                                div.col-md-2.d-flex.align-items-end
+                                    button.btn.btn-success.btn-block(type='button', disabled)
+                                        i.bi.bi-plus &nbsp;
+                                        | Add
+
+    // JavaScript for dashboard functionality
+    script.
+        // Convert server data to JavaScript variables
+        var vehicleData = !{JSON.stringify(vehicleSummaries || [])};
+        var detailedData = !{JSON.stringify(detailedData || [])};
+        var trendData = !{JSON.stringify(trendData || {})};
+        var fleetSummary = !{JSON.stringify(fleetSummary || {})};
+
+        function loadMileageData() {
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            
+            if (!fromDate || !toDate) {
+                alert('Please select both from and to dates');
+                return;
+            }
+            
+            console.log("Loading data from", fromDate, "to", toDate);
+            
+            // Show loading indicator
+            const cards = document.querySelectorAll('.dashboard-card');
+            cards.forEach(card => card.style.opacity = '0.6');
+            
+            // Make API call to refresh data
+            fetch(`/mileage/api/data?fromDate=${fromDate}&toDate=${toDate}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update page with new data
+                        updateDashboard(data.data);
+                    } else {
+                        alert('Error loading data: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading dashboard data');
+                })
+                .finally(() => {
+                    // Remove loading indicator
+                    cards.forEach(card => card.style.opacity = '1');
+                });
+        }
+
+        function updateDashboard(data) {
+            // Update summary cards
+            document.getElementById('totalVehicles').textContent = data.fleetSummary.totalVehicles || 0;
+            document.getElementById('totalFuelConsumption').textContent = (data.fleetSummary.totalFuelConsumed || 0).toLocaleString() + ' L';
+            document.getElementById('totalDistance').textContent = (data.fleetSummary.totalDistance || 0).toLocaleString() + ' km';
+            document.getElementById('avgMileage').textContent = (data.fleetSummary.fleetAvgMileage || 0).toFixed(2) + ' KMPL';
+            
+            // Update global variables for charts
+            vehicleData = data.vehicleSummaries || [];
+            detailedData = data.detailedData || [];
+            trendData = data.trendData || {};
+            
+            // Refresh vehicle cards
+            populateVehicleCards(data.vehicleSummaries);
+            
+            // Refresh charts
+            populateCharts();
+            
+            // Refresh detailed table
+            populateDetailedReport(data.detailedData);
+        }
+
+        function populateVehicleCards(vehicles) {
+            const container = document.getElementById('vehicleCards');
+            container.innerHTML = '';
+
+            if (!vehicles || vehicles.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="alert alert-info">No vehicle data available for the selected date range.</div></div>';
+                return;
+            }
+
+            vehicles.forEach(vehicle => {
+                const mileageClass = vehicle.avgMileage >= 6 ? 'mileage-good' : 
+                                   vehicle.avgMileage >= 4.5 ? 'mileage-average' : 'mileage-poor';
+                
+                const card = `
+                    <div class="col-md-4 mb-3">
+                        <div class="card dashboard-card vehicle-card">
+                            <div class="card-body">
+                                <h6><i class="bi bi-truck"></i> ${vehicle.vehicle_number}</h6>
+                                <p class="text-muted small">${vehicle.vehicle_type}</p>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small>Avg Mileage</small>
+                                        <h5 class="${mileageClass}">${vehicle.avgMileage.toFixed(2)} KMPL</h5>
+                                    </div>
+                                    <div class="col-6">
+                                        <small>Total Distance</small>
+                                        <h6>${vehicle.totalDistance.toLocaleString()} km</h6>
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-6">
+                                        <small>Fuel Consumed</small>
+                                        <h6>${vehicle.totalFuelConsumed.toFixed(1)} L</h6>
+                                    </div>
+                                    <div class="col-6">
+                                        <small>Last Odometer</small>
+                                        <h6>${vehicle.lastOdometerReading.toLocaleString()}</h6>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+        }
+
+        function populateCharts() {
+            // Clear existing charts
+            const mileageChart = Chart.getChart('mileageChart');
+            if (mileageChart) mileageChart.destroy();
+            
+            const trendChart = Chart.getChart('trendChart');
+            if (trendChart) trendChart.destroy();
+
+            // Mileage Comparison Chart
+            if (vehicleData && vehicleData.length > 0) {
+                const mileageCtx = document.getElementById('mileageChart').getContext('2d');
+                new Chart(mileageCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: vehicleData.map(v => v.vehicle_number),
+                        datasets: [{
+                            label: 'Average Mileage (KMPL)',
+                            data: vehicleData.map(v => v.avgMileage),
+                            backgroundColor: vehicleData.map(v => 
+                                v.avgMileage >= 6 ? '#28a745' : 
+                                v.avgMileage >= 4.5 ? '#ffc107' : '#dc3545'
+                            ),
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+            }
+
+            // Trend Chart
+            if (trendData && Object.keys(trendData).length > 0) {
+                const firstVehicle = Object.keys(trendData)[0];
+                const trendCtx = document.getElementById('trendChart').getContext('2d');
+                
+                new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: trendData[firstVehicle].data.map(t => t.month),
+                        datasets: [{
+                            label: 'Mileage (KMPL)',
+                            data: trendData[firstVehicle].data.map(t => t.avgMileage),
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0,123,255,0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `${firstVehicle} Mileage Trend`
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+            }
+        }
+
+        function populateDetailedReport(data) {
+            const tbody = document.getElementById('detailedReport');
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td class="text-center" colspan="8">No transactions with mileage data found.</td></tr>';
+                return;
+            }
+
+            data.forEach(transaction => {
+                const statusClass = transaction.performanceStatus.status === 'excellent' ? 'success' : 
+                                   transaction.performanceStatus.status === 'good' ? 'warning' : 
+                                   transaction.performanceStatus.status === 'average' ? 'info' : 'danger';
+                
+                const mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : 
+                                    transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor';
+
+                const row = `
+                    <tr>
+                        <td>${new Date(transaction.transaction_date).toLocaleDateString()}</td>
+                        <td>${transaction.vehicle_number}</td>
+                        <td>${transaction.bill_no}</td>
+                        <td>${transaction.fuel_quantity.toFixed(2)}</td>
+                        <td>${transaction.odometer_reading.toLocaleString()}</td>
+                        <td>${transaction.distance_run}</td>
+                        <td class="${mileageClass}">${transaction.mileage_kmpl.toFixed(2)}</td>
+                        <td><span class="badge badge-${statusClass}">${transaction.performanceStatus.label}</span></td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            populateCharts();
+        });
