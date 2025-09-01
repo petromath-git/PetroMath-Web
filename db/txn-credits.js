@@ -42,7 +42,7 @@ module.exports = function(sequelize, DataTypes) {
         },
         notes: {
             field: 'notes',
-            type: DataTypes.STRING
+            type: DataTypes.TEXT
         },
         amount: {
             field: 'amount',
@@ -65,6 +65,33 @@ module.exports = function(sequelize, DataTypes) {
             field: 'updation_date',
             type: DataTypes.DATE,
             defaultValue: sequelize.fn('NOW')
+        },
+        // ADD THESE MISSING FIELDS:
+        vehicle_number: {
+            field: 'vehicle_number',
+            type: DataTypes.STRING(100)
+        },
+        indent_number: {
+            field: 'indent_number',
+            type: DataTypes.STRING(100)
+        },
+        settlement_date: {
+            field: 'settlement_date',
+            type: DataTypes.DATEONLY
+        },
+        recon_id: {
+            field: 'recon_id',
+            type: DataTypes.INTEGER
+        },
+        bill_id: {
+            field: 'bill_id',
+            type: DataTypes.INTEGER
+        },
+        odometer_reading: {
+            field: 'odometer_reading',
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: true,
+            comment: 'Vehicle odometer reading at time of fuelling for mileage calculation'
         }
     }, {
         timestamps: false,

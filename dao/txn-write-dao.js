@@ -62,10 +62,12 @@ module.exports = {
         return saleTxn;
     },
     saveCreditSales: (data) => {
-        const salesTxn = TxnCreditSales.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
-                "product_id", "price", "price_discount", "qty", "amount", "notes", "updated_by", "updation_date"]});
-        return salesTxn;
+    const salesTxn = TxnCreditSales.bulkCreate(data, {returning: true,
+        updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
+            "product_id", "price", "price_discount", "qty", "amount", "notes", 
+            "vehicle_number", "indent_number", "settlement_date", "recon_id", "bill_id",
+            "odometer_reading", "updated_by", "updation_date"]});
+    return salesTxn;
     },
     saveDigitalSales: (data) => {
     const salesTxn = TxnDigitalSales.bulkCreate(data, {

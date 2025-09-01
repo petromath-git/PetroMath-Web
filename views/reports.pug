@@ -35,6 +35,8 @@ block content
             - var companyName = creditstmt[0].companyName
             - var cidparam = creditstmt[0].cidparam
             - var showPriceDiscountColumn = creditstmt.some(val => val['Price Discount'] != null && val['Price Discount'] != '' && val['Price Discount'] != 0)
+            - var showVehicleColumn = creditstmt.some(val => val['Vehicle Number'] != null && val['Vehicle Number'] != '')
+            - var showOdometerColumn = creditstmt.some(val => val['Odometer Reading'] != null && val['Odometer Reading'] != '')
             div.row &nbsp;
             h6.font-weight-bold.text-center= "Credit Detail Report"
             if(cidparam == -1)
@@ -73,6 +75,10 @@ block content
                                     th.text-center Date                        
                                     th.text-center Particulars                      
                                     th.text-center Product Name
+                                    if showVehicleColumn
+                                        th.text-center Vehicle Number
+                                    if showOdometerColumn
+                                        th.text-center Odometer Reading
                                     th.text-center Price (Rs.)
                                     if showPriceDiscountColumn
                                         th.text-center PriceDiscount (Rs.)
@@ -88,6 +94,10 @@ block content
                                         td.text-left.font-weight-bold Opening Balance
                                         td &nbsp;
                                         td &nbsp;
+                                        if showVehicleColumn
+                                            td &nbsp;
+                                        if showOdometerColumn
+                                            td &nbsp;
                                         if showPriceDiscountColumn
                                             td &nbsp;
                                         td &nbsp;
@@ -100,6 +110,10 @@ block content
                                         td.text-center(scope="row")= val.Date                            
                                         td.text-left(scope="row")= val.Particulars
                                         td.text-left(scope="row")= val.Product
+                                        if showVehicleColumn
+                                            td.text-center(scope="row")= val['Vehicle Number']
+                                        if showOdometerColumn
+                                            td.text-center(scope="row")= val['Odometer Reading']
                                         td.text-right(scope="row") #{val.Price !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Price) : ''}
                                         if showPriceDiscountColumn
                                             td.text-right(scope="row") #{val['Price Discount'] !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val['Price Discount']) : ''}
@@ -131,6 +145,10 @@ block content
                                         td.text-left.font-weight-bold Closing Balance
                                         td &nbsp;
                                         td &nbsp;
+                                        if showVehicleColumn
+                                            td &nbsp;
+                                        if showOdometerColumn
+                                            td &nbsp;
                                         if showPriceDiscountColumn
                                             td &nbsp;
                                         td &nbsp;

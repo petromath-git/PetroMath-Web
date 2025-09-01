@@ -82,6 +82,12 @@ html(lang='en')
             .customer-name {
                 font-weight: bold;
             }
+
+            /* Vehicle Section */
+            .vehicle-section {
+                margin-bottom: 2mm;
+                font-size: 8px;
+            }
             
             /* Items Table */
             .items-table {
@@ -186,6 +192,7 @@ html(lang='en')
                     div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
                     div Print ##{bill.print_count + 1}
             
+            
             //- Customer Information
             .customer-section
                 div
@@ -195,6 +202,18 @@ html(lang='en')
                     div
                         span.bold Cashier: 
                         span #{bill.cashier_name}
+
+            //- Vehicle Information (if available)
+            if bill.vehicle_info || (bill.odometer_reading && bill.odometer_reading > 0)
+                .vehicle-section
+                    if bill.vehicle_info
+                        div
+                            span.bold Vehicle: 
+                            span #{bill.vehicle_info}
+                    if bill.odometer_reading && bill.odometer_reading > 0
+                        div
+                            span.bold Odometer: 
+                            span #{parseFloat(bill.odometer_reading).toFixed(2)} km
             
             //- Items Table
             table.items-table
