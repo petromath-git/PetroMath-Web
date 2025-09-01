@@ -121,23 +121,7 @@ block content
                                         td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
                                         td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
                                         td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
-                                        td(scope="row")= val.Narration
-                                
-                                // Totals Row
-                                if(totalDebits > 0 || totalCredits > 0)
-                                    tr.bg-light.font-weight-bold
-                                        td &nbsp;
-                                        td.text-left Total
-                                        td &nbsp;
-                                        td &nbsp;
-                                        if showPriceDiscountColumn
-                                            td &nbsp;
-                                        td &nbsp;
-                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
-                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
-                                        td &nbsp;
-                                        td &nbsp;
-                                
+                                        td(scope="row")= val.Narration                                
                                 // Closing Balance Row
                                 if(cidparam != -1)
                                     tr
