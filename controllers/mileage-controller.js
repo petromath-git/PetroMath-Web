@@ -1,6 +1,9 @@
 const MileageDao = require("../dao/mileage-dao");
 const dateFormat = require('dateformat');
 const moment = require('moment');
+const { performance } = require('perf_hooks');
+
+const msToSeconds = ms => (ms / 1000).toFixed(3);
 
 module.exports = {
     // Main dashboard page for customers
@@ -17,24 +20,19 @@ module.exports = {
             const fromDate = req.query.fromDate || dateFormat(threeMonthsAgo, "yyyy-mm-dd");
             const toDate = req.query.toDate || dateFormat(lastDayOfCurrentMonth, "yyyy-mm-dd");
 
-            console.log('getMileageDashboard: Loading data for creditlist:', creditlistId, 'from', fromDate, 'to', toDate);
+            // Time DB queries
+            const dbStartTime = performance.now();
 
-            // Fetch all required data in parallel
-            const [
-                fleetSummary,
-                vehicleSummaries,
-                detailedData,
-                trendData,
-                vehiclesWithoutData
-            ] = await Promise.all([
-                MileageDao.getFleetSummary(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getVehicleMileageSummary(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getMileageData(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getMileageTrendData(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getVehiclesWithoutMileageData(locationCode, creditlistId, fromDate, toDate)
-            ]);
+            const fleetSummary = await MileageDao.getFleetSummary(locationCode, creditlistId, fromDate, toDate);
+            const vehicleSummaries = await MileageDao.getVehicleMileageSummary(locationCode, creditlistId, fromDate, toDate);
+            const detailedData = await MileageDao.getMileageData(locationCode, creditlistId, fromDate, toDate);
+            const trendData = await MileageDao.getMileageTrendData(locationCode, creditlistId, fromDate, toDate);
+            const vehiclesWithoutData = await MileageDao.getVehiclesWithoutMileageData(locationCode, creditlistId, fromDate, toDate);
 
-            // Process the data for dashboard display
+            const totalDbTime = performance.now() - dbStartTime;
+            console.log(`   TOTAL DB TIME:        ${msToSeconds(totalDbTime)}s`);
+
+            // Process data
             const dashboardData = processMileageDataForDashboard({
                 fleetSummary: fleetSummary[0] || {},
                 vehicleSummaries,
@@ -79,8 +77,6 @@ module.exports = {
                     error: 'fromDate and toDate parameters are required'
                 });
             }
-
-            console.log('getMileageDataAPI: Loading data for creditlist:', creditlistId, 'from', fromDate, 'to', toDate);
 
             // Fetch all required data
             const [
@@ -184,7 +180,6 @@ module.exports = {
                 success: false,
                 message: 'External fuel purchase feature is coming soon'
             });
-
         } catch (error) {
             console.error('Error in saveExternalFuelPurchase:', error);
             res.status(500).json({
@@ -223,13 +218,12 @@ function processMileageDataForDashboard(rawData) {
         minMileage: parseFloat(vehicle.min_mileage),
         maxMileage: parseFloat(vehicle.max_mileage),
         lastTransactionDate: vehicle.last_transaction_date,
-        // Add performance indicator
         performanceStatus: getPerformanceStatus(parseFloat(vehicle.avg_mileage))
     }));
 
-    // Process detailed transaction data for tables
+    // Process detailed transaction data
     const processedDetailedData = detailedData
-        .filter(item => parseFloat(item.mileage_kmpl) > 0) // Only include records with valid mileage
+        .filter(item => parseFloat(item.mileage_kmpl) > 0)
         .map(item => ({
             transaction_date: item.transaction_date,
             vehicle_number: item.vehicle_number,
@@ -244,13 +238,13 @@ function processMileageDataForDashboard(rawData) {
             notes: item.notes,
             performanceStatus: getPerformanceStatus(parseFloat(item.mileage_kmpl))
         }))
-        .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)); // Most recent first
+        .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
 
-    // Process trend data for charts
+    // Process trend data
     const processedTrendData = groupTrendDataByVehicle(trendData);
 
-    // Process vehicles without data for alerts
-    const processedAlertsData = vehiclesWithoutData.filter(vehicle => 
+    // Process vehicles without data
+    const processedAlertsData = vehiclesWithoutData.filter(vehicle =>
         vehicle.fuel_transactions > 0 && vehicle.missing_odometer_count > 0
     );
 
@@ -260,7 +254,6 @@ function processMileageDataForDashboard(rawData) {
         detailedData: processedDetailedData,
         trendData: processedTrendData,
         alertsData: processedAlertsData,
-        // Additional computed metrics
         topPerformingVehicle: getTopPerformingVehicle(processedVehicleSummaries),
         poorPerformingVehicles: getPoorPerformingVehicles(processedVehicleSummaries)
     };

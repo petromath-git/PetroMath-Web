@@ -32,6 +32,97 @@ block content
             padding: 20px;
             margin-top: 20px;
         }
+        // New styles for grouped report
+        .vehicle-header {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .vehicle-header:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-1px);
+        }
+       .vehicle-summary {
+            background: #ffffff;
+            color: #333;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .vehicle-summary.poor-performance {
+            background: #ffffff;
+            border-left: 4px solid #dc3545;
+            color: #333;
+        }
+        .vehicle-summary.average-performance {
+            background: #ffffff;
+            border-left: 4px solid #ffc107;
+            color: #333;
+        }
+        .vehicle-summary:not(.poor-performance):not(.average-performance) {
+            border-left: 4px solid #28a745;
+        }
+
+        .number-plate {
+            background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+            color: #000;
+            border: 3px solid #333;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-family: 'Arial Black', Arial, sans-serif;
+            font-weight: 900;
+            font-size: 18px;
+            text-align: center;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.8);
+            display: inline-block;
+            min-width: 160px;
+            position: relative;
+            letter-spacing: 1px;
+        }
+        .number-plate::before {
+            content: "IND";
+            position: absolute;
+            top: -2px;
+            left: 8px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #000;
+            background: #ffffff;
+            padding: 0 4px;
+            border-radius: 2px;
+        }
+        .number-plate::after {
+            content: "";
+            position: absolute;
+            top: -2px;
+            right: 8px;
+            width: 20px;
+            height: 12px;
+            background: linear-gradient(to right, #ff9933 0%, #ff9933 33%, #ffffff 33%, #ffffff 66%, #138808 66%, #138808 100%);
+            border: 1px solid #333;
+            border-radius: 2px;
+        }
+        .transaction-details {
+            background: #f8f9fa;
+            border-radius: 0 0 8px 8px;
+            border: 1px solid #dee2e6;
+            border-top: none;
+        }
+        .collapse-icon {
+            transition: transform 0.3s ease;
+        }
+        .collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+        .vehicle-summary small {
+            color: #6c757d !important;
+        }
+
+        .vehicle-summary .h6 {
+            color: #333 !important;
+        }
 
     div.container-fluid.mt-4
         // Header
@@ -123,26 +214,26 @@ block content
                         | No vehicle data available for the selected date range.
 
         // Charts Section
-        div.row.mt-4
-            div.col-md-6
-                div.card.dashboard-card
-                    div.card-header
-                        h5
-                            i.bi.bi-bar-chart &nbsp;
-                            | Mileage Comparison
-                    div.card-body
-                        div.chart-container
-                            canvas#mileageChart
+        //- div.row.mt-4
+        //-     div.col-md-6
+        //-         div.card.dashboard-card
+        //-             div.card-header
+        //-                 h5
+        //-                     i.bi.bi-bar-chart &nbsp;
+        //-                     | Mileage Comparison
+        //-             div.card-body
+        //-                 div.chart-container
+        //-                     canvas#mileageChart
 
-            div.col-md-6
-                div.card.dashboard-card
-                    div.card-header
-                        h5
-                            i.bi.bi-graph-up &nbsp;
-                            | Mileage Trend
-                    div.card-body
-                        div.chart-container
-                            canvas#trendChart
+        //-     div.col-md-6
+        //-         div.card.dashboard-card
+        //-             div.card-header
+        //-                 h5
+        //-                     i.bi.bi-graph-up &nbsp;
+        //-                     | Mileage Trend
+        //-             div.card-body
+        //-                 div.chart-container
+        //-                     canvas#trendChart
 
         // Detailed Vehicle Reports
         div.row.mt-4
@@ -152,37 +243,7 @@ block content
                         h5
                             i.bi.bi-table &nbsp;
                             | Detailed Mileage Report
-                    div.card-body
-                        div.table-responsive
-                            table.table.table-hover
-                                thead.thead-light
-                                    tr
-                                        th Date
-                                        th Vehicle
-                                        th Bill No
-                                        th Fuel (L)
-                                        th Odometer
-                                        th Distance
-                                        th Mileage
-                                        th Status
-                                tbody#detailedReport
-                                    if detailedData && detailedData.length > 0
-                                        each transaction in detailedData
-                                            - var statusClass = transaction.performanceStatus.status === 'excellent' ? 'success' : (transaction.performanceStatus.status === 'good' ? 'warning' : (transaction.performanceStatus.status === 'average' ? 'info' : 'danger'))
-                                            - var mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : (transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor')
-                                            tr
-                                                td= new Date(transaction.transaction_date).toLocaleDateString()
-                                                td= transaction.vehicle_number
-                                                td= transaction.bill_no
-                                                td= transaction.fuel_quantity.toFixed(2)
-                                                td= transaction.odometer_reading.toLocaleString()
-                                                td= transaction.distance_run
-                                                td(class=mileageClass)= transaction.mileage_kmpl.toFixed(2)
-                                                td
-                                                    span(class='badge badge-' + statusClass)= transaction.performanceStatus.label
-                                    else
-                                        tr
-                                            td.text-center(colspan="8") No transactions with mileage data found.
+                    div.card-body#groupedMileageReport
 
         // Future Feature: External Fuel Entry
         div.row.mt-4
@@ -276,8 +337,7 @@ block content
             // Refresh vehicle cards
             populateVehicleCards(data.vehicleSummaries);
             
-            // Refresh charts
-            populateCharts();
+           
             
             // Refresh detailed table
             populateDetailedReport(data.detailedData);
@@ -330,113 +390,192 @@ block content
             });
         }
 
-        function populateCharts() {
-            // Clear existing charts
-            const mileageChart = Chart.getChart('mileageChart');
-            if (mileageChart) mileageChart.destroy();
-            
-            const trendChart = Chart.getChart('trendChart');
-            if (trendChart) trendChart.destroy();
-
-            // Mileage Comparison Chart
-            if (vehicleData && vehicleData.length > 0) {
-                const mileageCtx = document.getElementById('mileageChart').getContext('2d');
-                new Chart(mileageCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: vehicleData.map(v => v.vehicle_number),
-                        datasets: [{
-                            label: 'Average Mileage (KMPL)',
-                            data: vehicleData.map(v => v.avgMileage),
-                            backgroundColor: vehicleData.map(v => 
-                                v.avgMileage >= 6 ? '#28a745' : 
-                                v.avgMileage >= 4.5 ? '#ffc107' : '#dc3545'
-                            ),
-                            borderRadius: 5
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            y: { beginAtZero: true }
-                        }
-                    }
-                });
-            }
-
-            // Trend Chart
-            if (trendData && Object.keys(trendData).length > 0) {
-                const firstVehicle = Object.keys(trendData)[0];
-                const trendCtx = document.getElementById('trendChart').getContext('2d');
-                
-                new Chart(trendCtx, {
-                    type: 'line',
-                    data: {
-                        labels: trendData[firstVehicle].data.map(t => t.month),
-                        datasets: [{
-                            label: 'Mileage (KMPL)',
-                            data: trendData[firstVehicle].data.map(t => t.avgMileage),
-                            borderColor: '#007bff',
-                            backgroundColor: 'rgba(0,123,255,0.1)',
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `${firstVehicle} Mileage Trend`
-                            }
-                        },
-                        scales: {
-                            y: { beginAtZero: true }
-                        }
-                    }
-                });
-            }
-        }
+        
 
         function populateDetailedReport(data) {
-            const tbody = document.getElementById('detailedReport');
-            tbody.innerHTML = '';
+            const container = document.getElementById('groupedMileageReport');
+            container.innerHTML = '';
 
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td class="text-center" colspan="8">No transactions with mileage data found.</td></tr>';
+            console.log('populateDetailedReport called with data:', data);
+            console.log('Container found:', !!container);
+            
+            if (!container) {
+                console.error('Container #groupedMileageReport not found!');
                 return;
             }
 
-            data.forEach(transaction => {
-                const statusClass = transaction.performanceStatus.status === 'excellent' ? 'success' : 
-                                   transaction.performanceStatus.status === 'good' ? 'warning' : 
-                                   transaction.performanceStatus.status === 'average' ? 'info' : 'danger';
-                
-                const mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : 
-                                    transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor';
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No transactions with mileage data found.</div>';
+                console.log('No data available');
+                return;
+            }
 
-                const row = `
-                    <tr>
-                        <td>${new Date(transaction.transaction_date).toLocaleDateString()}</td>
-                        <td>${transaction.vehicle_number}</td>
-                        <td>${transaction.bill_no}</td>
-                        <td>${transaction.fuel_quantity.toFixed(2)}</td>
-                        <td>${transaction.odometer_reading.toLocaleString()}</td>
-                        <td>${transaction.distance_run}</td>
-                        <td class="${mileageClass}">${transaction.mileage_kmpl.toFixed(2)}</td>
-                        <td><span class="badge badge-${statusClass}">${transaction.performanceStatus.label}</span></td>
-                    </tr>
+              // Debug: Show first few records
+                console.log('First transaction:', data[0]);
+                console.log('Total transactions:', data.length);
+
+            // Group transactions by vehicle
+            const groupedData = groupTransactionsByVehicle(data);
+            
+            // Create grouped sections
+            Object.keys(groupedData).forEach((vehicleNumber, index) => {
+                const vehicleGroup = groupedData[vehicleNumber];
+                const transactions = vehicleGroup.transactions;
+                const isExpanded = index === 0; // First vehicle expanded by default
+                
+                // Calculate vehicle summary stats
+                const totalFuel = transactions.reduce((sum, t) => sum + t.fuel_quantity, 0);
+                const totalDistance = transactions.reduce((sum, t) => sum + t.distance_run, 0);
+                const avgMileage = transactions.reduce((sum, t) => sum + t.mileage_kmpl, 0) / transactions.length;
+                
+                // Format number plate (add spaces for proper Indian format)
+                const formattedPlate = formatIndianNumberPlate(vehicleNumber);
+                
+                // Determine performance class
+                const performanceClass = avgMileage >= 6 ? '' : 
+                                        avgMileage >= 4.5 ? 'average-performance' : 'poor-performance';
+                
+                // Create the grouped section HTML
+                const sectionHtml = `
+                    <div class="mb-3">
+                        <div class="vehicle-header ${isExpanded ? '' : 'collapsed'}" onclick="toggleVehicleSection('${vehicleNumber}')">
+                            <div class="vehicle-summary ${performanceClass}">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <div class="number-plate">${formattedPlate}</div>
+                                        <small class="d-block mt-1" style="color: #e9ecef;">${vehicleGroup.vehicle_type}</small>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small><i class="bi bi-speedometer2"></i> Avg Mileage</small>
+                                        <div class="h6 mb-0">${avgMileage.toFixed(2)} KMPL</div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small><i class="bi bi-geo-alt"></i> Total Distance</small>
+                                        <div class="h6 mb-0">${totalDistance.toLocaleString()} km</div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small><i class="bi bi-fuel-pump-fill"></i> Fuel Used</small>
+                                        <div class="h6 mb-0">${totalFuel.toFixed(1)} L</div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small><i class="bi bi-list-ol"></i> Transactions</small>
+                                        <div class="h6 mb-0">${transactions.length} entries</div>
+                                    </div>
+                                    <div class="col-md-1 text-end">
+                                        <i class="bi bi-chevron-down collapse-icon" id="icon-${vehicleNumber}"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="collapse ${isExpanded ? 'show' : ''}" id="section-${vehicleNumber}">
+                            <div class="transaction-details p-3">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Bill No</th>
+                                                <th>Fuel (L)</th>
+                                                <th>Odometer</th>
+                                                <th>Distance</th>
+                                                <th>Mileage</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${transactions.map(transaction => {
+                                                const statusClass = transaction.performanceStatus?.status === 'excellent' ? 'success' : 
+                                                                transaction.performanceStatus?.status === 'good' ? 'warning' : 
+                                                                transaction.performanceStatus?.status === 'average' ? 'info' : 'danger';
+                                                
+                                                const mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : 
+                                                                    transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor';
+
+                                                return `
+                                                    <tr>
+                                                        <td>${new Date(transaction.transaction_date).toLocaleDateString()}</td>
+                                                        <td>${transaction.bill_no}</td>
+                                                        <td>${transaction.fuel_quantity.toFixed(2)}</td>
+                                                        <td>${transaction.odometer_reading.toLocaleString()}</td>
+                                                        <td>${transaction.distance_run} km</td>
+                                                        <td class="${mileageClass}">${transaction.mileage_kmpl.toFixed(2)} KMPL</td>
+                                                        <td><span class="badge bg-${statusClass}">${transaction.performanceStatus?.label || 'Good'}</span></td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 `;
-                tbody.innerHTML += row;
+                
+                container.innerHTML += sectionHtml;
             });
         }
 
+        // Helper function to group transactions by vehicle
+        function groupTransactionsByVehicle(data) {
+            const grouped = {};
+            
+            data.forEach(transaction => {
+                const vehicleNumber = transaction.vehicle_number;
+                
+                if (!grouped[vehicleNumber]) {
+                    grouped[vehicleNumber] = {
+                        vehicle_type: transaction.vehicle_type,
+                        transactions: []
+                    };
+                }
+                
+                grouped[vehicleNumber].transactions.push(transaction);
+            });
+            
+            // Sort transactions within each vehicle by date (newest first)
+            Object.keys(grouped).forEach(vehicleNumber => {
+                grouped[vehicleNumber].transactions.sort((a, b) => 
+                    new Date(b.transaction_date) - new Date(a.transaction_date)
+                );
+            });
+            
+            return grouped;
+        }
+
+      // Helper function to format Indian number plate
+        function formatIndianNumberPlate(vehicleNumber) {
+            if (vehicleNumber && vehicleNumber.length >= 8) {
+                const state = vehicleNumber.substring(0, 2);
+                const district = vehicleNumber.substring(2, 4);
+                
+                // Check if it's new format (2 letters) or old format (1 letter)
+                // Look for where the numbers start from the end
+                const lastFourDigits = vehicleNumber.slice(-4);
+                const seriesPart = vehicleNumber.substring(4, vehicleNumber.length - 4);
+                
+                return `${state} ${district} ${seriesPart} ${lastFourDigits}`;
+            }
+            return vehicleNumber;
+        }
+
+        // Function to toggle vehicle section expansion
+        function toggleVehicleSection(vehicleNumber) {
+            const element = document.getElementById(`section-${vehicleNumber}`);
+            const icon = document.getElementById(`icon-${vehicleNumber}`);
+            const header = icon.closest('.vehicle-header');
+            
+            if (element.classList.contains('show')) {
+                element.classList.remove('show');
+                header.classList.add('collapsed');
+            } else {
+                element.classList.add('show');
+                header.classList.remove('collapsed');
+            }
+        }
         // Initialize dashboard on page load
         document.addEventListener('DOMContentLoaded', function() {
-            populateCharts();
+             console.log('Page loaded, initial detailedData:', detailedData);
+             populateDetailedReport(detailedData);
+            
         });
