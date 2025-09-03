@@ -45,7 +45,7 @@ block content
         function disableVehicle(index, vehicleId) {
             const r = confirm("Please confirm if you want to disable the vehicle?");
             if (r == true) {
-                putAjax('disable', { vehicle_id: vehicleId }).then(success => {
+                putAjax('vehicles/disable-vehicle/' + vehicleId, {}).then(success => {
                     if (success) {
                         document.getElementById('vehicle-' + index).className = 'd-md-none';
                     }
