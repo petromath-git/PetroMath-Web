@@ -1,14 +1,47 @@
 extends layout
 
 block content
-    div(class="bgImage")
-        if message
-            div(class='alert alert-danger' required="false") #{message}
-        div.container(style="max-width:350px; background: rgba(54, 52, 52, 0.85); padding: 20px; border-radius: 10px;")
-            form(method='POST' action='/login')
-                div.form-group
-                    input#username.form-control(type='text' placeholder="User Name", required, name='username')
-                div.form-group
-                    input#pw.form-control(type='password', required, name='password', placeholder="Password")
-                div(style="text-align:center")
-                    button.btn.btn-secondary(type='submit') Login
+    // Override layout elements for login page
+    style.
+        body { padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
+        #petromath-heading { display: none !important; }
+        .alert { display: none !important; }
+        nav { display: none !important; }
+        footer { display: none !important; }
+    
+    div.location-container
+        div.container-fluid.h-100.d-flex.align-items-center.justify-content-center
+            div.row.w-100.justify-content-center
+                div.col-11.col-sm-8.col-md-6.col-lg-4.col-xl-3
+                    // App-style header
+                    div.text-center.mb-4
+                        div.app-logo.mb-3
+                            i.bi.bi-person-fill.text-white(style="font-size: 1.6rem;")
+                        h2.app-title.mb-1.text-white PetroMath
+                        p.app-subtitle.text-white Welcome Back
+                    
+                    // Login card
+                    div.location-card.shadow-lg
+                        div.card-header.text-center.py-3
+                            h4.mb-0.text-primary Login
+                        
+                        div.card-body.p-4
+                            if message
+                                div.alert.alert-danger.mb-3 #{message}
+                            
+                            form(method='POST' action='/login')
+                                div.form-group.mb-3
+                                    label.form-label.text-muted.fw-bold Username:
+                                    input#username.form-control.form-control-lg(type='text', name='username', placeholder='Enter username', required)
+                                
+                                div.form-group.mb-4
+                                    label.form-label.text-muted.fw-bold Password:
+                                    input#pw.form-control.form-control-lg(type='password', name='password', placeholder='Enter password', required)
+                                
+                                button.btn.btn-success.btn-lg.w-100.location-btn(type='submit') 
+                                    i.bi.bi-box-arrow-in-right.me-2
+                                    span Login
+                    
+                    // Footer
+                    div.text-center.mt-4
+                        small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.

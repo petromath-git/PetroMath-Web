@@ -1,6 +1,7 @@
 extends layout
 
 block content
+    // Desktop Date Filter
     form(method='GET' action='/home' id='closing-by-date')
         table.center
             tr
@@ -14,21 +15,47 @@ block content
                 td &nbsp;
                 td
                     button.btn.btn-primary(type='submit') Go
+    // Mobile Date Filter (only visible on mobile)
+    .date-filter-mobile
+        form(method='GET' action='/home')
+            table.center
+                tr
+                    td From Date:
+                    td
+                        input.form-control(
+                            type='date', 
+                            name='fromClosingDate', 
+                            value=fromClosingDate 
+                            max=currentDate 
+                            required
+                        )
+                tr
+                    td To Date:
+                    td
+                        input.form-control(
+                            type='date', 
+                            name='toClosingDate', 
+                            value=toClosingDate 
+                            max=currentDate 
+                            required
+                        )
+                tr
+                    td(colspan="2")
+                        button.btn.btn-primary(type='submit') Go                
     div &nbsp;
-    div
+    div.container-fluid
         if closingValues && closingValues.length > 0
-            table(class="table")
-                thead(class="thead-light")
+            // Reverted back to simple table.table (like original)
+            table.table.table-desktop(style="width:100% !important;")
+                thead.thead-light
                     tr
                         th Date
                         th Closing ID
-                        th Cashier                        
-                        // Dynamic product column headers
+                        th Cashier
                         if productColumns && productColumns.length > 0
                             each column in productColumns
                                 th= column.label
                         else
-                            // Fallback headers without 2T Pouch
                             th MS
                             th HSD
                             th XMS
@@ -45,14 +72,12 @@ block content
                             td
                                 span= val.closingId
                             td
-                                span= val.cashierName                            
-                            // Dynamic product column data
+                                span= val.cashierName
                             if productColumns && productColumns.length > 0
                                 each column in productColumns
                                     td
                                         span= parseFloat(val[column.key] || 0).toFixed(2)
                             else
-                                // Fallback data without 2T Pouch
                                 td
                                     span= val.msData || '0.00'
                                 td
@@ -61,7 +86,6 @@ block content
                                     span= val.xmsData || '0.00'
                                 td
                                     span= val.l2tData || '0.00'
-                            // Shortage/Excess column with proper formatting
                             td
                                 if val.expenseData && val.expenseData != 0
                                     if val.expenseData > 0
@@ -79,29 +103,22 @@ block content
                                     span.badge.badge-info= val.closingStatus
                             if (val.closingStatus === 'DRAFT')
                                 td
-                                    div.row
                                     a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
                                         span.oi.oi-pencil
-                                if(user.isAdmin)
+                                if user.isAdmin
                                     td
-                                        div.row
                                         a.btn.btn-danger(onClick=`deleteClosing(${val.closingId})`)
                                             span.oi.oi-trash
                             if (val.closingStatus === 'CLOSED')
                                 td
-                                    div.row
-                                    a.btn.btn-info(href='/edit-draft-closing?closingId=' + val.closingId)
+                                    a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
                                         span.oi.oi-book
                                 td &nbsp;
-                    
-                    // Totals row without 2T Pouch
                     if closingValues.length > 1
                         tr.table-info
-                            td
-                                strong Total
+                            td.strong Total
                             td -
                             td -
-                            // Calculate totals for each product column
                             if productColumns && productColumns.length > 0
                                 each column in productColumns
                                     td
@@ -110,7 +127,6 @@ block content
                                             - total += parseFloat(val[column.key] || 0)
                                         strong= total.toFixed(2)
                             else
-                                // Fallback totals without 2T Pouch
                                 td
                                     - var msTotal = 0
                                     each val in closingValues
@@ -131,43 +147,101 @@ block content
                                     each val in closingValues
                                         - l2tTotal += parseFloat(val.l2tData || 0)
                                     strong= l2tTotal.toFixed(2)
-                            // Total shortage/excess - REMOVED
                             td -
                             td -
                             td -
                             td -
+
+            // Mobile cards layout - ONLY visible on mobile
+            .mobile-cards-container(style="display: none;")
+                each val in closingValues
+                    - var statusClass = val.closingStatus === 'DRAFT' ? 'draft' : 'closed'
+                    .closing-card(class=statusClass)
+                        .card-header-mobile
+                            .card-id-title ##{val.closingId}
+                            .card-status-badge(class=val.closingStatus === 'DRAFT' ? 'status-draft' : 'status-closed')= val.closingStatus
+
+                        .card-row
+                            .card-label Date
+                            .card-value= val.closingDate
+
+                        .card-row
+                            .card-label Cashier
+                            .card-value= val.cashierName
+
+                        if productColumns && productColumns.length > 0
+                            each column in productColumns
+                                - var productValue = parseFloat(val[column.key] || 0)
+                                if productValue > 0
+                                    .card-row
+                                        .card-label= column.label
+                                        .card-value
+                                            span.product-value= productValue.toFixed(2)
+                        else
+                            - var msVal = parseFloat(val.msData || 0)
+                            if msVal > 0
+                                .card-row
+                                    .card-label MS
+                                    .card-value
+                                        span.product-value= msVal.toFixed(2)
+                            - var hsdVal = parseFloat(val.hsdData || 0)
+                            if hsdVal > 0
+                                .card-row
+                                    .card-label HSD
+                                    .card-value
+                                        span.product-value= hsdVal.toFixed(2)
+                            - var xmsVal = parseFloat(val.xmsData || 0)
+                            if xmsVal > 0
+                                .card-row
+                                    .card-label XMS
+                                    .card-value
+                                        span.product-value= xmsVal.toFixed(2)
+                            - var l2tVal = parseFloat(val.l2tData || 0)
+                            if l2tVal > 0
+                                .card-row
+                                    .card-label 2T Loose
+                                    .card-value
+                                        span.product-value= l2tVal.toFixed(2)
+
+                        if val.expenseData && val.expenseData != 0
+                            .card-row
+                                .card-label Short/Excess
+                                .card-value
+                                    if val.expenseData > 0
+                                        strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                    else
+                                        strong.text-danger= parseFloat(val.expenseData).toFixed(2)
+
+                        .card-actions
+                            if val.closingStatus === 'DRAFT'
+                                a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) Edit
+                                if user.isAdmin
+                                    button.action-btn.btn-delete(onClick=`deleteClosing(${val.closingId})`) Delete
+                            else
+                                a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) View
+
         else
-            div.row &nbsp;
             div.row.bg-light No records to display.
 
-        div.row
-        if(user.isAdmin)
-            if(draftsCnt < config.maxAllowedDrafts && draftDaysCnt <= 0)
-                div.col &nbsp;
+        if user.isAdmin
+            if draftsCnt < config.maxAllowedDrafts && draftDaysCnt <= 0
                 form(method='GET' action='/new-closing' id='get-new-closing')
-                    div.row
-                        div.col
-                            button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
+                    button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
+            else if draftDaysCnt > 0
+                pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
             else
-                if (draftDaysCnt > 0)
-                    div.col.bg-warning
-                        pre.text-danger= `Note: Drafts are open for long. please close them to add new closing.`
-                else
-                    div.col.bg-warning
-                        pre.text-danger= `Note: Cannot allow to add new closings, max ${config.maxAllowedDrafts} allowed drafts are met.`
-        div.row &nbsp;
-        if(deadlineMessage && deadlineMessage.length > 0)
-            div.row
+                pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{config.maxAllowedDrafts} allowed drafts are met.
+
+        if deadlineMessage && deadlineMessage.length > 0
+            div.container-fluid
                 h6.sub-header.bg-primary Important Deadlines
-                table(class="table" id="deadlineWarning-table")
-                    thead(class="thead-light")
+                table.table#deadlineWarning-table
+                    thead.thead-light
                         tr
                             th Deadline Date
                             th Message
-                        tbody
-                            each val, index in deadlineMessage
-                                tr(id="deadlineWarning_row_"+index)
-                                    td(scope="row")
-                                        span= val.deadlineDate
-                                    td(scope="row")
-                                        span= val.message
+                    tbody
+                        each val, index in deadlineMessage
+                            tr(id="deadlineWarning_row_"+index)
+                                td(scope="row")= val.deadlineDate
+                                td(scope="row")= val.message
