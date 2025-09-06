@@ -777,3 +777,140 @@ ajax-loading image changes - end
     contain: layout style paint; /* CSS containment */
   }
 }
+
+
+/* ===== MILEAGE DASHBOARD MOBILE IMPROVEMENTS ===== */
+
+/* Desktop: Keep existing layout */
+@media (min-width: 769px) {
+  .mileage-date-filter-mobile {
+    display: none !important;
+  }
+}
+
+/* Mobile: Improved mileage dashboard responsiveness */
+@media (max-width: 768px) {
+  
+  /* Hide desktop date filter and show mobile version */
+  .mileage-dashboard .col-md-6.mx-auto .card {
+    display: none !important;
+  }
+  
+  .mileage-date-filter-mobile {
+    display: block !important;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e5e9;
+  }
+  
+  /* Mobile date inputs - larger tap targets */
+  .mileage-date-filter-mobile .form-control {
+    font-size: 16px !important;
+    padding: 14px 12px !important;
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    height: 48px !important; /* Minimum touch target size */
+    border: 2px solid #e1e5e9;
+  }
+  
+  .mileage-date-filter-mobile .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+  }
+  
+  .mileage-date-filter-mobile label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #1f2937;
+    font-size: 14px;
+  }
+  
+  .mileage-date-filter-mobile .btn-primary {
+    width: 100% !important;
+    padding: 14px !important;
+    margin-top: 10px !important;
+    font-size: 16px !important;
+    border-radius: 8px !important;
+    height: 48px !important;
+    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+  }
+  
+  /* Summary cards - 2 per row on mobile */
+  .mileage-dashboard .row .col-md-3 {
+    width: 50% !important;
+    flex: 0 0 50%;
+    max-width: 50%;
+    padding: 0 5px;
+    margin-bottom: 10px;
+  }
+  
+  .mileage-dashboard .metric-card {
+    margin-bottom: 10px;
+  }
+  
+  .mileage-dashboard .metric-card .card-body {
+    padding: 12px !important;
+    text-align: center;
+  }
+  
+  .mileage-dashboard .metric-card h4 {
+    font-size: 16px !important;
+    margin-bottom: 5px;
+  }
+  
+  .mileage-dashboard .metric-card p {
+    font-size: 11px !important;
+    margin-bottom: 0;
+  }
+  
+  .mileage-dashboard .metric-card .fa-2x {
+    font-size: 1.2em !important;
+  }
+  
+  /* Vehicle cards - full width on mobile */
+  .mileage-dashboard #vehicleCards .col-md-4 {
+    width: 100% !important;
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 15px;
+  }
+  
+  .mileage-dashboard .vehicle-card .card-body {
+    padding: 15px;
+  }
+  
+  /* Stack vehicle card info vertically on mobile */
+  .mileage-dashboard .vehicle-card .row {
+    margin: 8px 0;
+  }
+  
+  .mileage-dashboard .vehicle-card .col-6 {
+    width: 50% !important;
+    flex: 0 0 50%;
+    max-width: 50%;
+    margin-bottom: 8px;
+  }
+  
+  .mileage-dashboard .vehicle-card h6 {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  
+  .mileage-dashboard .vehicle-card .text-muted {
+    font-size: 12px;
+  }
+  
+  .mileage-dashboard .vehicle-card small {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  
+  .mileage-dashboard .vehicle-card h5,
+  .mileage-dashboard .vehicle-card h6:not(:first-child) {
+    font-size: 13px;
+    margin-bottom: 0;
+  }
+}

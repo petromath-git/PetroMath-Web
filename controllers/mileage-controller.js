@@ -16,6 +16,8 @@ module.exports = {
             const today = new Date();
             const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1);
             const lastDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+
             
             const fromDate = req.query.fromDate || dateFormat(threeMonthsAgo, "yyyy-mm-dd");
             const toDate = req.query.toDate || dateFormat(lastDayOfCurrentMonth, "yyyy-mm-dd");
@@ -64,57 +66,59 @@ module.exports = {
     },
 
     // API endpoint for AJAX requests to refresh dashboard data
-    getMileageDataAPI: async (req, res) => {
-        try {
-            const locationCode = req.user.location_code;
-            const creditlistId = req.user.creditlist_id;
-            const fromDate = req.query.fromDate || req.body.fromDate;
-            const toDate = req.query.toDate || req.body.toDate;
+   getMileageDataAPI: async (req, res) => {
+    try {
+        const locationCode = req.user.location_code;
+        const creditlistId = req.user.creditlist_id;
+        const fromDate = req.query.fromDate || req.body.fromDate;
+        const toDate = req.query.toDate || req.body.toDate;
 
-            if (!fromDate || !toDate) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'fromDate and toDate parameters are required'
-                });
-            }
-
-            // Fetch all required data
-            const [
-                fleetSummary,
-                vehicleSummaries,
-                detailedData,
-                trendData,
-                vehiclesWithoutData
-            ] = await Promise.all([
-                MileageDao.getFleetSummary(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getVehicleMileageSummary(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getMileageData(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getMileageTrendData(locationCode, creditlistId, fromDate, toDate),
-                MileageDao.getVehiclesWithoutMileageData(locationCode, creditlistId, fromDate, toDate)
-            ]);
-
-            // Process and return data
-            const processedData = processMileageDataForDashboard({
-                fleetSummary: fleetSummary[0] || {},
-                vehicleSummaries,
-                detailedData,
-                trendData,
-                vehiclesWithoutData
-            });
-
-            res.json({
-                success: true,
-                data: processedData
-            });
-
-        } catch (error) {
-            console.error('Error in getMileageDataAPI:', error);
-            res.status(500).json({
+        if (!fromDate || !toDate) {
+            return res.status(400).json({
                 success: false,
-                error: 'Failed to fetch mileage data: ' + error.message
+                error: 'fromDate and toDate parameters are required'
             });
         }
-    },
+
+        // Fetch all required data
+        const [
+            fleetSummary,
+            vehicleSummaries,
+            detailedData,
+            trendData,
+            vehiclesWithoutData
+        ] = await Promise.all([
+            MileageDao.getFleetSummary(locationCode, creditlistId, fromDate, toDate),
+            MileageDao.getVehicleMileageSummary(locationCode, creditlistId, fromDate, toDate),
+            MileageDao.getMileageData(locationCode, creditlistId, fromDate, toDate),
+            MileageDao.getMileageTrendData(locationCode, creditlistId, fromDate, toDate),
+            MileageDao.getVehiclesWithoutMileageData(locationCode, creditlistId, fromDate, toDate)
+        ]);
+
+       
+        // Process and return data
+        const processedData = processMileageDataForDashboard({
+            fleetSummary: fleetSummary[0] || {},
+            vehicleSummaries,
+            detailedData,
+            trendData,
+            vehiclesWithoutData
+        });
+
+        
+        res.json({
+            success: true,
+            data: processedData
+        });
+
+    } catch (error) {
+        console.error('Error in getMileageDataAPI:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch mileage data: ' + error.message
+        });
+    }
+},
 
     // Get mileage data for a specific vehicle (for detailed view)
     getVehicleMileageDetails: async (req, res) => {
@@ -205,47 +209,61 @@ function processMileageDataForDashboard(rawData) {
         fleetOverallMileage: fleetSummary.fleet_overall_mileage || 0
     };
 
-    // Process vehicle summaries
-    const processedVehicleSummaries = vehicleSummaries.map(vehicle => ({
-        vehicle_id: vehicle.vehicle_id,
-        vehicle_number: vehicle.vehicle_number,
-        vehicle_type: vehicle.vehicle_type,
-        totalTransactions: vehicle.total_transactions,
-        totalFuelConsumed: parseFloat(vehicle.total_fuel_consumed),
-        totalDistance: vehicle.total_distance,
-        lastOdometerReading: vehicle.last_odometer_reading,
-        avgMileage: parseFloat(vehicle.avg_mileage),
-        minMileage: parseFloat(vehicle.min_mileage),
-        maxMileage: parseFloat(vehicle.max_mileage),
-        lastTransactionDate: vehicle.last_transaction_date,
-        performanceStatus: getPerformanceStatus(parseFloat(vehicle.avg_mileage))
-    }));
+    // Process vehicle summaries with data quality indicators
+    // In processMileageDataForDashboard, update the vehicle summaries:
+const processedVehicleSummaries = vehicleSummaries.map(vehicle => ({
+    vehicle_id: vehicle.vehicle_id,
+    vehicle_number: vehicle.vehicle_number,
+    vehicle_type: vehicle.vehicle_type,
+    totalTransactions: vehicle.total_transactions,
+    missingOdometerCount: vehicle.missing_odometer_count || 0,
+    firstEntryCount: vehicle.first_entry_count || 0,        // Add this
+    invalidReadingCount: vehicle.invalid_reading_count || 0, // Add this
+    validMileageTransactions: vehicle.valid_mileage_transactions || 0,
+    totalFuelConsumed: parseFloat(vehicle.total_fuel_consumed) || 0,
+    totalDistance: vehicle.total_distance || 0,
+    lastOdometerReading: vehicle.last_odometer_reading || 0,
+    avgMileage: parseFloat(vehicle.avg_mileage) || 0,
+    minMileage: parseFloat(vehicle.min_mileage) || 0,
+    maxMileage: parseFloat(vehicle.max_mileage) || 0,
+    lastTransactionDate: vehicle.last_transaction_date,
+    dataQualityStatus: vehicle.data_quality_status || 'unknown',
+    performanceStatus: getPerformanceStatus(parseFloat(vehicle.avg_mileage)),
+    hasDataQualityIssues: vehicle.data_quality_status !== 'good',
+    dataQualityMessage: getDataQualityMessage(
+        vehicle.data_quality_status, 
+        vehicle.missing_odometer_count, 
+        vehicle.first_entry_count,      // Add this
+        vehicle.invalid_reading_count,  // Add this
+        vehicle.valid_mileage_transactions
+    )
+}));
 
-    // Process detailed transaction data
-    const processedDetailedData = detailedData
-        .filter(item => parseFloat(item.mileage_kmpl) > 0)
-        .map(item => ({
-            transaction_date: item.transaction_date,
-            vehicle_number: item.vehicle_number,
-            vehicle_type: item.vehicle_type,
-            bill_no: item.bill_no,
-            fuel_quantity: parseFloat(item.fuel_quantity),
-            odometer_reading: parseFloat(item.odometer_reading),
-            distance_run: parseFloat(item.distance_run),
-            mileage_kmpl: parseFloat(item.mileage_kmpl),
-            fuel_cost: parseFloat(item.amount),
-            product_name: item.product_name,
-            notes: item.notes,
-            performanceStatus: getPerformanceStatus(parseFloat(item.mileage_kmpl))
-        }))
-        .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
+   // Process detailed transaction data 
+        const processedDetailedData = detailedData
+            .map(item => ({
+                transaction_date: item.transaction_date,
+                vehicle_number: item.vehicle_number,
+                vehicle_type: item.vehicle_type,
+                bill_no: item.bill_no,
+                fuel_quantity: parseFloat(item.fuel_quantity) || 0,
+                odometer_reading: parseFloat(item.odometer_reading) || 0,
+                distance_run: parseFloat(item.distance_run) || 0,
+                mileage_kmpl: parseFloat(item.mileage_kmpl) || 0,
+                fuel_cost: parseFloat(item.amount) || 0,
+                product_name: item.product_name,
+                notes: item.notes,
+                mileage_status: item.mileage_status || 'unknown',
+                performanceStatus: getPerformanceStatus(parseFloat(item.mileage_kmpl))
+            }))
+            .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
 
     // Process trend data
     const processedTrendData = groupTrendDataByVehicle(trendData);
 
     // Process vehicles without data
     const processedAlertsData = vehiclesWithoutData.filter(vehicle =>
-        vehicle.fuel_transactions > 0 && vehicle.missing_odometer_count > 0
+        vehicle.fuel_transactions === 0 || vehicle.missing_odometer_count > 0
     );
 
     return {
@@ -253,11 +271,10 @@ function processMileageDataForDashboard(rawData) {
         vehicleSummaries: processedVehicleSummaries,
         detailedData: processedDetailedData,
         trendData: processedTrendData,
-        alertsData: processedAlertsData,
-        topPerformingVehicle: getTopPerformingVehicle(processedVehicleSummaries),
-        poorPerformingVehicles: getPoorPerformingVehicles(processedVehicleSummaries)
+        vehiclesWithoutData: processedAlertsData
     };
 }
+
 
 // Helper function to determine performance status based on mileage
 function getPerformanceStatus(mileage) {
@@ -311,4 +328,42 @@ function getPoorPerformingVehicles(vehicleSummaries) {
     return vehicleSummaries
         .filter(vehicle => vehicle.avgMileage < 4.0)
         .sort((a, b) => a.avgMileage - b.avgMileage); // Worst first
+}
+
+// Helper function to get data quality message
+// Enhanced helper function to get data quality message
+function getDataQualityMessage(status, missingCount, firstEntryCount, invalidCount, validCount) {
+    switch (status) {
+        case 'missing_odometer':
+            return `${missingCount} transaction(s) missing odometer reading`;
+        case 'invalid_readings':
+            return `${invalidCount} transaction(s) have invalid odometer readings`;
+        case 'all_first_entries':
+            return `${firstEntryCount} first-time transaction(s) - no historical data`;
+        case 'no_mileage_data':
+            return 'Cannot calculate mileage - no valid readings';
+        case 'partial_mileage_data':
+            return `${validCount} of ${missingCount + firstEntryCount + invalidCount + validCount} transactions have valid mileage`;
+        case 'good':
+            return `${validCount} valid mileage calculation(s)`;
+        default:
+            return 'Data quality unknown';
+    }
+}
+
+function getMileageStatusMessage(status) {
+    switch (status) {
+        case 'missing_odometer':
+            return 'Missing odometer reading';
+        case 'first_entry':
+            return 'First transaction - no previous data';
+        case 'no_previous_reading':
+            return 'Previous reading not available';
+        case 'invalid_reading':
+            return 'Invalid reading (lower than previous)';
+        case 'valid_calculation':
+            return 'Valid mileage calculation';
+        default:
+            return 'Unknown status';
+    }
 }

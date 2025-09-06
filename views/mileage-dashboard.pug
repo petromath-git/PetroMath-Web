@@ -124,6 +124,56 @@ block content
             color: #333 !important;
         }
 
+        // New styles for status badges
+        .badge-sm {
+            font-size: 0.75em;
+            padding: 0.25em 0.5em;
+        }
+
+        .vehicle-badge {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .badge-success {
+            background-color: #28a745 !important;
+        }
+
+        .badge-info {
+            background-color: #17a2b8 !important;
+        }
+
+        .badge-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+
+        .badge-secondary {
+            background-color: #6c757d !important;
+        }
+
+        .badge-light {
+            background-color: #f8f9fa !important;
+            color: #212529 !important;
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: rgba(0,123,255,.1);
+        }
+
+        .data-quality-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        .vehicle-card {
+            position: relative;
+        }
+
     div.container-fluid.mt-4
         // Header
         div.row
@@ -213,28 +263,6 @@ block content
                     div.alert.alert-info
                         | No vehicle data available for the selected date range.
 
-        // Charts Section
-        //- div.row.mt-4
-        //-     div.col-md-6
-        //-         div.card.dashboard-card
-        //-             div.card-header
-        //-                 h5
-        //-                     i.bi.bi-bar-chart &nbsp;
-        //-                     | Mileage Comparison
-        //-             div.card-body
-        //-                 div.chart-container
-        //-                     canvas#mileageChart
-
-        //-     div.col-md-6
-        //-         div.card.dashboard-card
-        //-             div.card-header
-        //-                 h5
-        //-                     i.bi.bi-graph-up &nbsp;
-        //-                     | Mileage Trend
-        //-             div.card-body
-        //-                 div.chart-container
-        //-                     canvas#trendChart
-
         // Detailed Vehicle Reports
         div.row.mt-4
             div.col-12
@@ -285,6 +313,40 @@ block content
         var detailedData = !{JSON.stringify(detailedData || [])};
         var trendData = !{JSON.stringify(trendData || {})};
         var fleetSummary = !{JSON.stringify(fleetSummary || {})};
+
+        // Helper functions for status messages
+        function getMileageStatusMessage(status) {
+            switch (status) {
+                case 'missing_odometer':
+                    return 'Missing odometer reading';
+                case 'first_entry':
+                    return 'First transaction - no previous data';
+                case 'no_previous_reading':
+                    return 'Previous reading not available';
+                case 'invalid_reading':
+                    return 'Invalid reading (lower than previous)';
+                case 'valid_calculation':
+                    return 'Valid mileage calculation';
+                default:
+                    return 'Unknown status';
+            }
+        }
+
+        function getStatusBadgeClass(status) {
+            switch (status) {
+                case 'valid_calculation':
+                    return 'badge-success';
+                case 'first_entry':
+                    return 'badge-info';
+                case 'missing_odometer':
+                case 'invalid_reading':
+                    return 'badge-warning';
+                case 'no_previous_reading':
+                    return 'badge-secondary';
+                default:
+                    return 'badge-light';
+            }
+        }
 
         function loadMileageData() {
             const fromDate = document.getElementById('fromDate').value;
@@ -337,8 +399,6 @@ block content
             // Refresh vehicle cards
             populateVehicleCards(data.vehicleSummaries);
             
-           
-            
             // Refresh detailed table
             populateDetailedReport(data.detailedData);
         }
@@ -356,9 +416,19 @@ block content
                 const mileageClass = vehicle.avgMileage >= 6 ? 'mileage-good' : 
                                    vehicle.avgMileage >= 4.5 ? 'mileage-average' : 'mileage-poor';
                 
+                // Add data quality indicator
+                const qualityBadge = vehicle.hasDataQualityIssues ? 
+                    `<span class="badge badge-warning badge-sm data-quality-badge" title="${vehicle.dataQualityMessage || 'Data quality issues'}">
+                        <i class="bi bi-exclamation-triangle"></i> Issues
+                    </span>` : 
+                    `<span class="badge badge-success badge-sm data-quality-badge" title="Good data quality">
+                        <i class="bi bi-check-circle"></i> Good
+                    </span>`;
+                
                 const card = `
                     <div class="col-md-4 mb-3">
                         <div class="card dashboard-card vehicle-card">
+                            ${qualityBadge}
                             <div class="card-body">
                                 <h6><i class="bi bi-truck"></i> ${vehicle.vehicle_number}</h6>
                                 <p class="text-muted small">${vehicle.vehicle_type}</p>
@@ -382,6 +452,9 @@ block content
                                         <h6>${vehicle.lastOdometerReading.toLocaleString()}</h6>
                                     </div>
                                 </div>
+                                ${vehicle.hasDataQualityIssues ? 
+                                    `<div class="mt-2"><small class="text-muted"><i class="bi bi-info-circle"></i> ${vehicle.dataQualityMessage || 'Data quality issues'}</small></div>` : 
+                                    ''}
                             </div>
                         </div>
                     </div>
@@ -389,8 +462,6 @@ block content
                 container.innerHTML += card;
             });
         }
-
-        
 
         function populateDetailedReport(data) {
             const container = document.getElementById('groupedMileageReport');
@@ -405,14 +476,14 @@ block content
             }
 
             if (!data || data.length === 0) {
-                container.innerHTML = '<div class="alert alert-info">No transactions with mileage data found.</div>';
+                container.innerHTML = '<div class="alert alert-info">No detailed transaction data available for the selected date range.</div>';
                 console.log('No data available');
                 return;
             }
 
-              // Debug: Show first few records
-                console.log('First transaction:', data[0]);
-                console.log('Total transactions:', data.length);
+            // Debug: Show first few records
+            console.log('First transaction:', data[0]);
+            console.log('Total transactions:', data.length);
 
             // Group transactions by vehicle
             const groupedData = groupTransactionsByVehicle(data);
@@ -426,7 +497,9 @@ block content
                 // Calculate vehicle summary stats
                 const totalFuel = transactions.reduce((sum, t) => sum + t.fuel_quantity, 0);
                 const totalDistance = transactions.reduce((sum, t) => sum + t.distance_run, 0);
-                const avgMileage = transactions.reduce((sum, t) => sum + t.mileage_kmpl, 0) / transactions.length;
+                const validTransactions = transactions.filter(t => t.mileage_kmpl > 0);
+                const avgMileage = validTransactions.length > 0 ? 
+                    validTransactions.reduce((sum, t) => sum + t.mileage_kmpl, 0) / validTransactions.length : 0;
                 
                 // Format number plate (add spaces for proper Indian format)
                 const formattedPlate = formatIndianNumberPlate(vehicleNumber);
@@ -443,7 +516,7 @@ block content
                                 <div class="row align-items-center">
                                     <div class="col-md-3">
                                         <div class="number-plate">${formattedPlate}</div>
-                                        <small class="d-block mt-1" style="color: #e9ecef;">${vehicleGroup.vehicle_type}</small>
+                                        <small class="d-block mt-1" style="color: #6c757d;">${vehicleGroup.vehicle_type}</small>
                                     </div>
                                     <div class="col-md-2">
                                         <small><i class="bi bi-speedometer2"></i> Avg Mileage</small>
@@ -485,22 +558,24 @@ block content
                                         </thead>
                                         <tbody>
                                             ${transactions.map(transaction => {
-                                                const statusClass = transaction.performanceStatus?.status === 'excellent' ? 'success' : 
-                                                                transaction.performanceStatus?.status === 'good' ? 'warning' : 
-                                                                transaction.performanceStatus?.status === 'average' ? 'info' : 'danger';
+                                                const statusBadge = `<span class="badge ${getStatusBadgeClass(transaction.mileage_status)} badge-sm" 
+                                                                           title="${getMileageStatusMessage(transaction.mileage_status)}">
+                                                                        ${getMileageStatusMessage(transaction.mileage_status)}
+                                                                    </span>`;
                                                 
-                                                const mileageClass = transaction.mileage_kmpl >= 6 ? 'mileage-good' : 
-                                                                    transaction.mileage_kmpl >= 4.5 ? 'mileage-average' : 'mileage-poor';
+                                                const mileageDisplay = transaction.mileage_kmpl > 0 ? 
+                                                    `<span class="text-success font-weight-bold">${transaction.mileage_kmpl.toFixed(2)} KMPL</span>` :
+                                                    `<span class="text-muted">--</span>`;
 
                                                 return `
                                                     <tr>
                                                         <td>${new Date(transaction.transaction_date).toLocaleDateString()}</td>
                                                         <td>${transaction.bill_no}</td>
                                                         <td>${transaction.fuel_quantity.toFixed(2)}</td>
-                                                        <td>${transaction.odometer_reading.toLocaleString()}</td>
-                                                        <td>${transaction.distance_run} km</td>
-                                                        <td class="${mileageClass}">${transaction.mileage_kmpl.toFixed(2)} KMPL</td>
-                                                        <td><span class="badge bg-${statusClass}">${transaction.performanceStatus?.label || 'Good'}</span></td>
+                                                        <td>${transaction.odometer_reading > 0 ? transaction.odometer_reading.toLocaleString() + ' km' : '--'}</td>
+                                                        <td>${transaction.distance_run > 0 ? transaction.distance_run.toLocaleString() + ' km' : '--'}</td>
+                                                        <td>${mileageDisplay}</td>
+                                                        <td>${statusBadge}</td>
                                                     </tr>
                                                 `;
                                             }).join('')}
@@ -543,7 +618,7 @@ block content
             return grouped;
         }
 
-      // Helper function to format Indian number plate
+        // Helper function to format Indian number plate
         function formatIndianNumberPlate(vehicleNumber) {
             if (vehicleNumber && vehicleNumber.length >= 8) {
                 const state = vehicleNumber.substring(0, 2);
@@ -573,9 +648,9 @@ block content
                 header.classList.remove('collapsed');
             }
         }
+
         // Initialize dashboard on page load
         document.addEventListener('DOMContentLoaded', function() {
              console.log('Page loaded, initial detailedData:', detailedData);
              populateDetailedReport(detailedData);
-            
         });
