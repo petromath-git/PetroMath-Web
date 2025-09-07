@@ -1256,3 +1256,155 @@ body {
     display: block !important;
   }
 }
+
+/* ===== ADJUSTMENT ENTRY MOBILE-FRIENDLY STYLES ===== */
+
+/* Desktop: Keep existing card layout */
+@media (min-width: 769px) {
+  .adjustment-date-filter-mobile {
+    display: none !important;
+  }
+}
+
+/* Mobile: Improved adjustment entry responsiveness */
+@media (max-width: 768px) {
+  .adjustment-entry-desktop {
+    display: none !important;
+  }
+  
+  .adjustment-date-filter-mobile {
+    display: block !important;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e5e9;
+  }
+  
+  .adjustment-date-filter-mobile .form-control,
+  .adjustment-date-filter-mobile .form-control-lg {
+    font-size: 16px !important;
+    padding: 14px 12px !important;
+    border-radius: 8px !important;
+    margin-bottom: 15px !important;
+    height: 48px !important;
+    border: 2px solid #e1e5e9;
+  }
+  
+  .adjustment-date-filter-mobile .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+  }
+  
+  .adjustment-date-filter-mobile label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #1f2937;
+    font-size: 14px;
+    display: block;
+  }
+  
+  .amount-input-mobile {
+    font-size: 18px !important;
+    font-weight: bold !important;
+    text-align: center !important;
+  }
+  
+  .btn-mobile {
+    width: 100% !important;
+    padding: 16px !important;
+    margin-bottom: 10px !important;
+    font-size: 16px !important;
+    border-radius: 8px !important;
+    height: 52px !important;
+  }
+  
+  /* Recent adjustments table mobile optimization */
+  .table-responsive {
+    border: none;
+  }
+  
+  .table-sm th,
+  .table-sm td {
+    font-size: 11px !important;
+    padding: 6px 4px !important;
+  }
+  
+  .badge-sm {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+  }
+}
+
+/* Desktop adjustment form enhancements */
+.adjustment-entry-desktop .amount-input {
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: right;
+}
+
+.adjustment-entry-desktop .form-control:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+}
+
+/* Form validation styles */
+.form-control.is-invalid {
+  border-color: #dc3545;
+}
+
+.form-control.is-valid {
+  border-color: #28a745;
+}
+
+/* Adjustment scenarios info box */
+.adjustment-scenarios {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  border-left: 4px solid #2196f3;
+}
+
+.adjustment-scenarios ul {
+  margin-bottom: 0;
+}
+
+.adjustment-scenarios li {
+  margin-bottom: 5px;
+}
+
+/* Recent adjustments styling */
+.recent-adjustments-card {
+  margin-top: 2rem;
+}
+
+.recent-adjustments-table {
+  font-size: 0.875rem;
+}
+
+.recent-adjustments-table .badge {
+  font-size: 0.7rem;
+}
+
+/* Status-based row highlighting */
+.table-warning {
+  background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+/* Recent adjustments responsive table */
+@media (max-width: 768px) {
+  .recent-adjustments-table {
+    font-size: 0.75rem;
+  }
+  
+  .recent-adjustments-table th:nth-child(3),
+  .recent-adjustments-table td:nth-child(3) {
+    display: none; /* Hide Account column on mobile */
+  }
+  
+  .recent-adjustments-table th:nth-child(4),
+  .recent-adjustments-table td:nth-child(4) {
+    display: none; /* Hide Type column on mobile */
+  }
+}
