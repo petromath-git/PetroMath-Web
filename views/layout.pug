@@ -26,6 +26,7 @@ html
     script(src='/javascripts/app-generate-pdf.js', defer)
     script(src='/javascripts/app-report-date.js', defer)
     script(src='/javascripts/app-report-table-generator.js')
+    
     style.
       @media print {
         table.table-bordered {
@@ -43,57 +44,201 @@ html
     - isFreezedRecord = true;
 
   body(onload='populateSummaryFn(' + isFreezedRecord +');')
-    h1.text-center#petromath-heading PetroMath
-
+    
     if user
       div#ajax-loading.d-sm-none
         img#loading-image(src="/images/ajax-loader.gif", alt="Loading...", width="300px", height="300px")
 
-      nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
-        button.navbar-toggler(type='button', data-toggle='collapse', data-target='#navbarNav', aria-controls='navbarNav', aria-expanded='false', aria-label='Toggle navigation')
-          span.navbar-toggler-icon
-        .collapse.navbar-collapse#navbarNav
-          ul.navbar-nav.mr-auto
-            - var dropdownGroups = {}
-            each m in user.menuDetails
-              if m.parent_code
-                - dropdownGroups[m.parent_code] = dropdownGroups[m.parent_code] || []
-                - dropdownGroups[m.parent_code].push(m)
+      // Vertical Sidebar
+      nav.sidebar#sidebar
+        .sidebar-header
+          a.sidebar-logo(href="/") PetroMath
+          .sidebar-user
+            | Logged in as #{user.Person_Name}
+            br
+            | Location: #{user.location_code}
+            if APP_VERSION === 'canary'
+              br
+              span(style='background-color: orange; color: white; font-size: 0.6rem; padding: 1px 3px; border-radius: 2px;') CANARY
 
-            each menu in user.menuDetails
-              if !menu.parent_code
-                - var children = dropdownGroups[menu.menu_code] || []
-                if children.length
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle(href='#', id=menu.menu_code + '-dropdown', role='button', data-toggle='dropdown', aria-haspopup='true', aria-expanded='false')= menu.menu_name
-                    .dropdown-menu(aria-labelledby=menu.menu_code + '-dropdown')
-                      each child in children
-                        a.dropdown-item(href=child.url_path)= child.menu_name
-                else
-                  li.nav-item(class=(title === menu.menu_name ? 'active' : ''))
-                    a.nav-link(href=menu.url_path)= menu.menu_name
+        // Group menus by categories
+        - var dropdownGroups = {}
+        - var standaloneMenus = []
+        each m in user.menuDetails
+          if m.parent_code
+            - dropdownGroups[m.parent_code] = dropdownGroups[m.parent_code] || []
+            - dropdownGroups[m.parent_code].push(m)
 
-          ul.navbar-nav.ml-auto            
-            li.nav-item
-              a.nav-link(href='/logout') Logout
-            li.nav-item.navbar-text.text-white
-              b#user_details Logged in as #{user.Person_Name} for '#{user.location_code}'
-              if APP_VERSION === 'canary'
-                span(style='background-color: orange; color: white; font-size: 0.7rem; padding: 2px 4px; margin-left: 5px; border-radius: 3px;') CANARY
+        each menu in user.menuDetails
+          if !menu.parent_code
+            - var children = dropdownGroups[menu.menu_code] || []
+            if children.length === 0
+              - standaloneMenus.push(menu)
 
-    if messages.error
+        // Daily Operations Section
+        - var dailyOps = standaloneMenus.filter(m => ['Shift Closing', 'Day Close', 'Tank Entry', 'Tank Dip Entry'].includes(m.menu_name))
+        if dailyOps.length > 0
+          .menu-section
+            .menu-section-title Daily Operations
+            each menu in dailyOps
+              a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
+                span.menu-item-icon
+                  if menu.menu_name === 'Shift Closing'
+                    i.bi.bi-clock
+                  else if menu.menu_name === 'Day Close'
+                    i.bi.bi-sunrise
+                  else if menu.menu_name === 'Tank Entry'
+                    i.bi.bi-fuel-pump
+                  else if menu.menu_name === 'Tank Dip Entry'
+                    i.bi.bi-rulers
+                  else
+                    i.bi.bi-circle
+                | #{menu.menu_name}
+
+        // Transactions Section
+        - var transactions = standaloneMenus.filter(m => ['Credit Receipts', 'Tank Receipts', 'Bank Transaction', 'Purchase Invoice'].includes(m.menu_name))
+        if transactions.length > 0
+          .menu-section
+            .menu-section-title Transactions
+            each menu in transactions
+              a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
+                span.menu-item-icon
+                  if menu.menu_name === 'Credit Receipts'
+                    i.bi.bi-credit-card
+                  else if menu.menu_name === 'Tank Receipts'
+                    i.bi.bi-receipt
+                  else if menu.menu_name === 'Bank Transaction'
+                    i.bi.bi-bank
+                  else if menu.menu_name === 'Purchase Invoice'
+                    i.bi.bi-file-earmark-text
+                  else
+                    i.bi.bi-circle
+                | #{menu.menu_name}
+
+        // Reports & Analytics Section
+        - var reports = standaloneMenus.filter(m => ['Reports', 'Utilities'].includes(m.menu_name))
+        if reports.length > 0
+          .menu-section
+            .menu-section-title Reports & Analytics
+            each menu in reports
+              a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
+                span.menu-item-icon
+                  if menu.menu_name === 'Reports'
+                    i.bi.bi-graph-up
+                  else if menu.menu_name === 'Utilities'
+                    i.bi.bi-tools
+                  else
+                    i.bi.bi-circle
+                | #{menu.menu_name}
+
+        // Dropdown Menus as Sections
+        each menu in user.menuDetails
+          if !menu.parent_code
+            - var children = dropdownGroups[menu.menu_code] || []
+            if children.length > 0
+              .menu-section
+                .menu-section-title= menu.menu_name
+                each child in children
+                  a.menu-item(href=child.url_path, class=(title === child.menu_name ? 'active' : ''))
+                    span.menu-item-icon
+                      i.bi.bi-circle
+                    | #{child.menu_name}
+
+        // Administration Section (remaining menus)
+        - var adminMenus = standaloneMenus.filter(m => !['Shift Closing', 'Day Close', 'Tank Entry', 'Tank Dip Entry', 'Credit Receipts', 'Tank Receipts', 'Bank Transaction', 'Purchase Invoice', 'Reports', 'Utilities'].includes(m.menu_name))
+        if adminMenus.length > 0
+          .menu-section
+            .menu-section-title Administration
+            each menu in adminMenus
+              a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
+                span.menu-item-icon
+                  i.bi.bi-gear
+                | #{menu.menu_name}
+
+      // Main Content Area
+      .main-content#mainContent
+        .top-bar
+          .d-flex.align-items-center
+            button.sidebar-toggle#sidebarToggle(type="button")
+              i.bi.bi-list
+            .breadcrumb-nav Dashboard > #{title}
+          
+          .top-bar-actions
+            .user-info
+              small Logged in as 
+              strong #{user.Person_Name}
+            a.logout-btn(href='/logout') Logout
+
+        .content-wrapper
+          if messages.error
+            .alert.alert-danger #{messages.error}
+
+          if messages.success
+            .alert.alert-success #{messages.success}
+
+          if messages.warning
+            .alert.alert-warning #{messages.warning}
+
+          div#static-snackbar.alert.alert-danger.d-md-none
+          div#snackbar
+          
+          block content
+
+    else
+      // When user is not logged in, show original layout
+      h1.text-center#petromath-heading PetroMath
+      
+      if messages.error
+        div &nbsp;
+        div.alert.alert-danger #{messages.error}
+
+      if messages.success
+        div &nbsp;
+        div.alert.alert-success #{messages.success}
+
+      if messages.warning
+        div &nbsp;
+        div.alert.alert-warning #{messages.warning}
+
       div &nbsp;
-      div.alert.alert-danger #{messages.error}
+      div#static-snackbar.alert.alert-danger.d-md-none
+      div#snackbar
+      block content
 
-    if messages.success
-      div &nbsp;
-      div.alert.alert-success #{messages.success}
+    script.
+      // Sidebar toggle functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+        
+        if (sidebarToggle && sidebar && mainContent) {
+          sidebarToggle.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+              // Mobile: toggle sidebar visibility
+              sidebar.classList.toggle('show');
+            } else {
+              // Desktop: toggle sidebar collapse
+              sidebar.classList.toggle('hidden');
+              mainContent.classList.toggle('expanded');
+            }
+          });
 
-    if messages.warning
-      div &nbsp;
-      div.alert.alert-warning #{messages.warning}
+          // Close sidebar when clicking outside on mobile
+          document.addEventListener('click', function(event) {
+            if (window.innerWidth <= 768 && 
+                sidebar.classList.contains('show') &&
+                !sidebar.contains(event.target) && 
+                !sidebarToggle.contains(event.target)) {
+              sidebar.classList.remove('show');
+            }
+          });
 
-    div &nbsp;
-    div#static-snackbar.alert.alert-danger.d-md-none
-    div#snackbar
-    block content
+          // Handle window resize
+          window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+              sidebar.classList.remove('show');
+            }
+          });
+        }
+      });

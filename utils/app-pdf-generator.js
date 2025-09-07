@@ -150,7 +150,77 @@ module.exports = {
         console.log(`PDF generation took: ${pdfEnd - pdfStart}ms`);
        
 
+        // await page.evaluate(() => {
+        //     // Hide all buttons
+        //     const buttons = document.querySelectorAll('button');
+        //     buttons.forEach(button => button.remove());
+
+        //     // Select the form
+        //     const form = document.querySelector('form');
+
+        //     // Hide all elements inside the form
+        //     if (form) {
+        //         const children = form.querySelectorAll('*'); // Select all child elements
+	    //             children.forEach(child => child.style.display = 'none');
+        //     }
+          
+        //     // Hide all text boxes
+        //     const textBoxes = document.querySelectorAll('input[type="text"], input[type="date"]');
+        //     textBoxes.forEach(textBox => textBox.remove());
+
+        //     const tds = document.querySelectorAll('td');
+            
+        //     tds.forEach(td => {
+        //         if (td.textContent.trim() === 'Date:') {  
+        //         td.remove();
+        //         }
+        //      });
+
+             
+        //      const alerts = document.querySelectorAll('.alert:not(.period-summary)'); 
+        //      alerts.forEach(alert => alert.remove()); // Remove each alert element 
+
+        //      const element = document.getElementById('petromath-heading'); // Select the element by ID
+        //      if (element) {
+        //         element.remove();
+        //      }
+
+        //      const footer = document.querySelector('.pageNumber');
+        //      if (footer) {
+        //         footer.textContent = 'Page ' + window.pageNumber + ' of ' + window.totalPages;
+        //      }
+
+
+        //   });
+
+          
+
         await page.evaluate(() => {
+            // Hide the new vertical sidebar
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) {
+                sidebar.style.display = 'none';
+            }
+
+            // Hide the top bar
+            const topBar = document.querySelector('.top-bar');
+            if (topBar) {
+                topBar.style.display = 'none';
+            }
+
+            // Adjust main content to remove left margin for PDF
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.style.marginLeft = '0';
+                mainContent.style.width = '100%';
+            }
+
+            // Remove content wrapper padding for better PDF layout
+            const contentWrapper = document.querySelector('.content-wrapper');
+            if (contentWrapper) {
+                contentWrapper.style.padding = '0';
+            }
+
             // Hide all buttons
             const buttons = document.querySelectorAll('button');
             buttons.forEach(button => button.remove());
@@ -161,9 +231,9 @@ module.exports = {
             // Hide all elements inside the form
             if (form) {
                 const children = form.querySelectorAll('*'); // Select all child elements
-	                children.forEach(child => child.style.display = 'none');
+                children.forEach(child => child.style.display = 'none');
             }
-          
+        
             // Hide all text boxes
             const textBoxes = document.querySelectorAll('input[type="text"], input[type="date"]');
             textBoxes.forEach(textBox => textBox.remove());
@@ -174,24 +244,22 @@ module.exports = {
                 if (td.textContent.trim() === 'Date:') {  
                 td.remove();
                 }
-             });
+            });
 
-             
-             const alerts = document.querySelectorAll('.alert:not(.period-summary)'); 
-             alerts.forEach(alert => alert.remove()); // Remove each alert element 
+     
+     const alerts = document.querySelectorAll('.alert:not(.period-summary)'); 
+     alerts.forEach(alert => alert.remove()); // Remove each alert element 
 
-             const element = document.getElementById('petromath-heading'); // Select the element by ID
-             if (element) {
-                element.remove();
-             }
+     const element = document.getElementById('petromath-heading'); // Select the element by ID
+     if (element) {
+        element.remove();
+     }
 
-             const footer = document.querySelector('.pageNumber');
-             if (footer) {
-                footer.textContent = 'Page ' + window.pageNumber + ' of ' + window.totalPages;
-             }
-
-
-          });
+     const footer = document.querySelector('.pageNumber');
+     if (footer) {
+        footer.textContent = 'Page ' + window.pageNumber + ' of ' + window.totalPages;
+     }
+});
 
 
         
