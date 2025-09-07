@@ -159,6 +159,7 @@ const vehicleRoutes = require('./routes/vehicle-routes');
 const passwordRoutes = require('./routes/password-reset-routes'); 
 const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
 const mileageRoutes = require('./routes/mileage-routes');
+const adjustmentRoutes = require('./routes/adjustment-routes');
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
 
@@ -177,6 +178,7 @@ app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
 app.use('/mileage', mileageRoutes);
+app.use('/adjustments', adjustmentRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
