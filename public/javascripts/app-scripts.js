@@ -1500,7 +1500,7 @@ function enableCredit(index, creditID) {
 function disableVehicle(index, vehicleId) {
     const r = confirm("Please confirm if you want to disable the Vehicle?");
     if (r == true) {
-        putAjax('disable-vehicle/' + vehicleId, {}).then(success => {
+        putAjax('vehicles/disable-vehicle/' + vehicleId, {}).then(success => {
             if (success) {
                 document.getElementById('vehicle-' + index).className = 'd-md-none';
             }
@@ -1512,7 +1512,7 @@ function enableVehicle(index, vehicleId) {
     console.log("Enable Vehicle" + vehicleId);
     const r = confirm("Please confirm if you want to enable the Vehicle?");
     if (r == true) {
-        putAjax('enable-vehicle/' + creditID, {}).then(success => {
+        putAjax('vehicles/enable-vehicle/' + vehicleId, {}).then(success => {
             if (success) {
                 document.getElementById('vehicle-' + index).className = 'd-md-none';
             }
@@ -1734,8 +1734,48 @@ function currenciesAsFloat(data) {
 }
 
 function ajaxLoading(className) {
-    document.getElementById('ajax-loading').className = className;
+    // Check if we're on mobile (screen width < 768px)
+    const isMobile = window.innerWidth < 768;
+    
+    if (isMobile) {
+        // Use mobile-friendly loading
+        const mobileLoader = document.getElementById('mobile-loading');
+        if (mobileLoader) {
+            if (className.includes('block')) {
+                mobileLoader.classList.add('show');
+            } else {
+                mobileLoader.classList.remove('show');
+            }
+        }
+    } else {
+        // Use desktop loading (original behavior)
+        const desktopLoader = document.getElementById('ajax-loading');
+        if (desktopLoader) {
+            desktopLoader.className = className;
+        }
+    }
 }
+
+// Ensure mobile loader exists in DOM
+function createMobileLoader() {
+    // Only create if it doesn't exist and we're on mobile
+    if (window.innerWidth < 768 && !document.getElementById('mobile-loading')) {
+        const mobileLoader = document.createElement('div');
+        mobileLoader.id = 'mobile-loading';
+        mobileLoader.innerHTML = '<div class="mobile-spinner"></div>';
+        document.body.appendChild(mobileLoader);
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    createMobileLoader();
+});
+
+// Handle window resize (in case user rotates device)
+window.addEventListener('resize', function() {
+    createMobileLoader();
+});
 
 function copyToHidden(obj) {
     document.getElementById(obj.id + "_hiddenValue").value = obj.value;

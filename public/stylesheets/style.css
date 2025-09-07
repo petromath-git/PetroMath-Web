@@ -4,7 +4,7 @@ body {
   
 }
 h1 {
-  background-color:  #b2dff1;
+  background-color: #b2dff1;
 }
 
 a {
@@ -76,7 +76,7 @@ a {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.4); /* adjust opacity and color here */
+  background: rgba(255, 255, 255, 0.4);
   z-index: 0;
 }
 
@@ -131,15 +131,29 @@ Snackbar toast message - start
   from {bottom: 30px; opacity: 1;}
   to {bottom: 0; opacity: 0;}
 }
-
 /*
 Snackbar toast message - end
  */
 
+#static-snackbar:empty {
+  display: none !important;
+}
+
+#petromath-heading {
+  background: linear-gradient(135deg, #2563eb, #1e40af); /* Sleek blue gradient */
+  color: white;
+  padding: 12px 20px;
+  font-size: 1.8rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-align: center;
+  border-bottom: 2px solid #1e3a8a;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
 /*
 ajax-loading image changes - start
  */
-
 #ajax-loading {
   width: 100%;
   height: 100%;
@@ -158,10 +172,10 @@ ajax-loading image changes - start
   top: 250px;
   z-index: 100;
 }
-
 /*
 ajax-loading image changes - end
  */
+
 #truckload_tab.nav-link.active {
   background-color:lightblue
 }
@@ -169,4 +183,1076 @@ ajax-loading image changes - end
   background-color:lightblue
 }
 
+/* ===== NEW ELEGANT LOGIN PAGE STYLES ===== */
+.login-container {
+  background: linear-gradient(135deg, #7e8ff1 0%, #9b7bc2 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 9999;
+}
 
+.app-logo {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+  backdrop-filter: blur(15px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.app-title {
+  color: white;
+  font-weight: 700;
+  font-size: 2rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-subtitle {
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.login-card {
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.login-container .form-control-lg {
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 2px solid #e1e5e9;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.login-container .form-control-lg:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+  background: white;
+}
+
+.login-btn {
+  background: linear-gradient(45deg, #667eea, #764ba2) !important;
+  border: none !important;
+  padding: 14px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* ===== LOCATION SELECTOR PAGE STYLES ===== */
+.location-container {
+  background: linear-gradient(135deg, #2dd4bf 0%, #06b6d4 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 9999;
+}
+
+.location-card {
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.location-card .card-header {
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 20px 20px 0 0;
+}
+
+.location-container .form-control-lg {
+  padding: 12px 16px !important;
+  border-radius: 12px;
+  border: 2px solid #e1e5e9;
+  font-size: 16px !important;
+  line-height: 1.4 !important;
+  height: auto !important;
+  transition: all 0.3s ease;
+  background: white !important;
+  color: #333 !important;
+}
+
+.location-container .form-control-lg option {
+  background: white !important;
+  color: #333 !important;
+  padding: 10px !important;
+  font-size: 16px !important;
+  line-height: 1.4 !important;
+}
+
+.location-container .form-control-lg:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 0.15rem rgba(6, 182, 212, 0.25);
+  background: white !important;
+  color: #333 !important;
+}
+
+.location-btn {
+  background: linear-gradient(45deg, #10b981, #06b6d4) !important;
+  border: none !important;
+  padding: 12px 16px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+  height: 48px !important;
+  line-height: 1.2 !important;
+}
+
+.location-container .btn-lg {
+  padding: 12px 16px !important;
+  height: 48px !important;
+  line-height: 1.2 !important;
+  font-size: 14px !important;
+}
+
+.location-btn:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4) !important;
+}
+
+/* ===== MOBILE RESPONSIVE STYLES ===== */
+@media (max-width: 768px) {
+  /* Login container mobile styles */
+  .login-container {
+    padding: 15px;
+  }
+  
+  .app-logo {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .app-title {
+    font-size: 1.6rem;
+  }
+  
+  .login-container .card-body {
+    padding: 1.5rem !important;
+  }
+  
+  .login-container .form-control-lg {
+    font-size: 16px;
+    padding: 14px;
+    height: auto;
+  }
+  
+  .login-container .btn-lg {
+    padding: 14px;
+    font-size: 16px;
+  }
+}
+
+
+/* ===== MOBILE-FRIENDLY AJAX LOADING FIX ===== */
+
+/* Hide ajax loading on mobile by default */
+@media (max-width: 767px) {
+  #ajax-loading {
+    display: none !important;
+  }
+  
+  /* Use a mobile-friendly loading indicator instead */
+  #mobile-loading {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  #mobile-loading.show {
+    display: flex !important;
+  }
+  
+  .mobile-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    animation: mobile-spin 1s linear infinite;
+  }
+}
+
+@keyframes mobile-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Desktop keeps original behavior */
+@media (min-width: 768px) {
+  #mobile-loading {
+    display: none !important;
+  }
+}
+/* ===== HOME PAGE MOBILE-FRIENDLY IMPROVEMENTS ===== */
+
+/* Add these styles to the end of your existing style.css */
+
+/* Fix the pink bar issue - ensure alerts don't show unwanted styling */
+.alert {
+  border: 1px solid transparent;
+}
+
+.alert-primary {
+  background-color: #d1ecf1 !important;
+  border-color: #bee5eb !important;
+  color: #0c5460 !important;
+}
+
+/* Ensure desktop table stays exactly the same */
+@media (min-width: 769px) {
+  .table-desktop {
+    display: table !important;
+  }
+  
+  .mobile-cards-container {
+    display: none !important;
+  }
+  
+  .date-filter-mobile {
+    display: none !important;
+  }
+  
+
+.table-desktop {
+  width: 100% !important;
+  table-layout: auto; /* or fixed if you want equal-width columns */
+}
+
+.table-desktop thead,
+.table-desktop tbody {
+  width: 100% !important;
+}
+
+  /* Ensure original table styling is preserved
+  .table {
+    margin-bottom: 1rem;
+    background-color: transparent;
+  }
+  
+  .table th,
+  .table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+  }
+  
+  .table thead th {
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+  } */
+}
+
+@media (max-width: 768px) {
+  
+  /* Hide the original desktop date filter on mobile */
+  form#closing-by-date {
+    display: none !important;
+  }
+  
+  /* Show the mobile date filter */
+  .date-filter-mobile {
+    display: block !important;
+  }
+  
+  /* Date filter mobile improvements */
+  .date-filter-mobile {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e5e9;
+  }
+  
+  .date-filter-mobile table.center {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  
+  .date-filter-mobile table.center td {
+    display: block !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: 5px 0 !important;
+  }
+  
+  .date-filter-mobile table.center td:nth-child(3),
+  .date-filter-mobile table.center td:nth-child(6) {
+    display: none !important; /* Hide spacer cells */
+  }
+  
+  .date-filter-mobile .form-control {
+    font-size: 16px !important;
+    padding: 12px !important;
+    border-radius: 8px !important;
+    margin-top: 5px !important;
+  }
+  
+  .date-filter-mobile .btn-primary {
+    width: 100% !important;
+    padding: 12px !important;
+    margin-top: 10px !important;
+    font-size: 16px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Hide desktop table on mobile */
+  .table-desktop {
+    display: none !important;
+  }
+  
+  /* Show mobile cards */
+  .mobile-cards-container {
+    display: block !important;
+  }
+  
+  /* Mobile closing record cards */
+  .closing-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-bottom: 15px;
+    padding: 16px;
+    border-left: 4px solid #10b981;
+    transition: transform 0.2s ease;
+  }
+  
+  .closing-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+  
+  .closing-card.draft {
+    border-left-color: #f59e0b;
+  }
+  
+  .closing-card.closed {
+    border-left-color: #ef4444;
+  }
+  
+  /* Card header with closing ID and status */
+  .card-header-mobile {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 8px;
+  }
+  
+  .card-id-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+  }
+  
+  .card-status-badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  
+  .status-draft {
+  background: #fef9c3; /* light yellow */
+  color: #854d0e;      /* dark amber */
+ }
+  
+  .status-closed {
+  background: #dcfce7; /* light green */
+  color: #166534;      /* dark green */
+  }
+  
+  /* Card content rows */
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  
+  .card-row:last-child {
+    border-bottom: none;
+    margin-top: 8px;
+  }
+  
+  .card-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .card-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    text-align: right;
+  }
+  
+  /* Product quantities styling */
+  .product-value {
+    background: #f0f9ff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: #0369a1;
+    font-weight: 700;
+  }
+  
+  /* Action buttons row */
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  .action-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+  
+  .btn-edit {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+  
+  .btn-edit:hover {
+    background: #bfdbfe;
+    color: #1d4ed8;
+    text-decoration: none;
+  }
+  
+  .btn-delete {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+  
+  .btn-delete:hover {
+    background: #fecaca;
+    color: #dc2626;
+    text-decoration: none;
+  }
+  
+  /* Empty state styling */
+  .no-records-mobile {
+    text-align: center;
+    padding: 40px 20px;
+    background: #f9fafb;
+    border-radius: 12px;
+    margin-top: 20px;
+  }
+  
+  .no-records-mobile i {
+    font-size: 48px;
+    color: #9ca3af;
+    margin-bottom: 16px;
+  }
+  
+  .no-records-mobile h4 {
+    color: #6b7280;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  
+  .no-records-mobile p {
+    color: #9ca3af;
+    font-size: 14px;
+  }
+  
+  /* Mobile totals summary styling */
+  .alert-info h6 {
+    margin-bottom: 8px;
+    color: #1f2937;
+  }
+  
+  .alert-info .badge-primary {
+    font-size: 12px;
+    font-weight: 700;
+  }
+}
+
+/* Desktop: Hide mobile elements */
+@media (min-width: 769px) {
+  .mobile-cards-container {
+    display: none !important;
+  }
+  
+  .date-filter-mobile {
+    display: none !important;
+  }
+}
+
+/* Test current mobile tab behavior */
+@media (max-width: 768px) {
+  .nav-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .nav-tabs .nav-item {
+    flex-shrink: 0;
+  }
+  .nav-link {
+    font-size: 11px !important;
+    padding: 8px 6px !important;
+  }
+}
+
+
+/* URGENT: Hide placeholder rows on mobile to prevent freezing */
+@media (max-width: 768px) {
+  /* Hide all but first 5 placeholder rows in tables */
+  .table tbody tr:nth-child(n+6) {
+    display: none !important;
+  }
+  
+  /* Also hide any empty rows that might be placeholders */
+  .table tbody tr:empty,
+  .table tbody tr:has(td:empty) {
+    display: none !important;
+  }
+}
+
+
+/* Optimize mobile performance for edit-draft-closing */
+@media (max-width: 768px) {
+  /* Prevent expensive table reflows */
+  .table {
+    table-layout: fixed !important;
+    width: auto !important;
+    transform: translateZ(0); /* Hardware acceleration */
+  }
+  
+  /* Limit visible content to reduce reflow */
+  .tab-content .tab-pane:not(.active) {
+    display: none !important; /* Don't render hidden tabs */
+  }
+  
+  /* Simplify complex layouts */
+  .container-fluid {
+    contain: layout style paint; /* CSS containment */
+  }
+}
+
+
+/* ===== MILEAGE DASHBOARD MOBILE IMPROVEMENTS ===== */
+
+/* Desktop: Keep existing layout */
+@media (min-width: 769px) {
+  .mileage-date-filter-mobile {
+    display: none !important;
+  }
+}
+
+/* Mobile: Improved mileage dashboard responsiveness */
+@media (max-width: 768px) {
+  
+  /* Hide desktop date filter and show mobile version */
+  .mileage-dashboard .col-md-6.mx-auto .card {
+    display: none !important;
+  }
+  
+  .mileage-date-filter-mobile {
+    display: block !important;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e5e9;
+  }
+  
+  /* Mobile date inputs - larger tap targets */
+  .mileage-date-filter-mobile .form-control {
+    font-size: 16px !important;
+    padding: 14px 12px !important;
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    height: 48px !important; /* Minimum touch target size */
+    border: 2px solid #e1e5e9;
+  }
+  
+  .mileage-date-filter-mobile .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+  }
+  
+  .mileage-date-filter-mobile label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #1f2937;
+    font-size: 14px;
+  }
+  
+  .mileage-date-filter-mobile .btn-primary {
+    width: 100% !important;
+    padding: 14px !important;
+    margin-top: 10px !important;
+    font-size: 16px !important;
+    border-radius: 8px !important;
+    height: 48px !important;
+    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+  }
+  
+  /* Summary cards - 2 per row on mobile */
+  .mileage-dashboard .row .col-md-3 {
+    width: 50% !important;
+    flex: 0 0 50%;
+    max-width: 50%;
+    padding: 0 5px;
+    margin-bottom: 10px;
+  }
+  
+  .mileage-dashboard .metric-card {
+    margin-bottom: 10px;
+  }
+  
+  .mileage-dashboard .metric-card .card-body {
+    padding: 12px !important;
+    text-align: center;
+  }
+  
+  .mileage-dashboard .metric-card h4 {
+    font-size: 16px !important;
+    margin-bottom: 5px;
+  }
+  
+  .mileage-dashboard .metric-card p {
+    font-size: 11px !important;
+    margin-bottom: 0;
+  }
+  
+  .mileage-dashboard .metric-card .fa-2x {
+    font-size: 1.2em !important;
+  }
+  
+  /* Vehicle cards - full width on mobile */
+  .mileage-dashboard #vehicleCards .col-md-4 {
+    width: 100% !important;
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 15px;
+  }
+  
+  .mileage-dashboard .vehicle-card .card-body {
+    padding: 15px;
+  }
+  
+  /* Stack vehicle card info vertically on mobile */
+  .mileage-dashboard .vehicle-card .row {
+    margin: 8px 0;
+  }
+  
+  .mileage-dashboard .vehicle-card .col-6 {
+    width: 50% !important;
+    flex: 0 0 50%;
+    max-width: 50%;
+    margin-bottom: 8px;
+  }
+  
+  .mileage-dashboard .vehicle-card h6 {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  
+  .mileage-dashboard .vehicle-card .text-muted {
+    font-size: 12px;
+  }
+  
+  .mileage-dashboard .vehicle-card small {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  
+  .mileage-dashboard .vehicle-card h5,
+  .mileage-dashboard .vehicle-card h6:not(:first-child) {
+    font-size: 13px;
+    margin-bottom: 0;
+  }
+}
+
+/* ===== VERTICAL SIDEBAR NAVIGATION STYLES ===== */
+
+/* Override body padding when sidebar is active */
+body {
+  background-color: #f8f9fa;
+}
+
+/* Vertical Sidebar */
+.sidebar {
+  width: 260px;
+  background: linear-gradient(180deg, #343a40 0%, #212529 100%);
+  position: fixed;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+  transform: translateX(0);
+}
+
+.sidebar.hidden {
+  transform: translateX(-100%);
+}
+
+.sidebar-header {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.sidebar-logo {
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-decoration: none;
+}
+
+.sidebar-logo:hover {
+  color: white;
+  text-decoration: none;
+}
+
+.sidebar-user {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* Menu Sections */
+.menu-section {
+  margin: 15px 0;
+}
+
+.menu-section-title {
+  padding: 10px 20px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+  font-size: 14px;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: #007bff;
+  color: white;
+  text-decoration: none;
+}
+
+.menu-item.active {
+  background: rgba(255, 255, 255, 0.15);
+  border-left-color: #007bff;
+  color: white;
+  font-weight: 600;
+}
+
+.menu-item-icon {
+  width: 18px;
+  margin-right: 12px;
+  text-align: center;
+}
+
+.submenu {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.submenu .menu-item {
+  padding-left: 50px;
+  font-size: 13px;
+}
+
+/* Main content area */
+.main-content {
+  margin-left: 260px;
+  min-height: 100vh;
+  transition: all 0.3s ease;
+}
+
+.main-content.expanded {
+  margin-left: 0;
+}
+
+/* Top Bar */
+.top-bar {
+  background: white;
+  padding: 15px 25px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.sidebar-toggle {
+  background: #343a40;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-right: 15px;
+  transition: all 0.3s ease;
+}
+
+.sidebar-toggle:hover {
+  background: #23272b;
+}
+
+.breadcrumb-nav {
+  color: #6c757d;
+  font-size: 14px;
+  margin: 0;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-info {
+  font-size: 14px;
+  color: #495057;
+}
+
+.logout-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: #c82333;
+  color: white;
+  text-decoration: none;
+}
+
+/* Content Wrapper */
+.content-wrapper {
+  padding: 25px;
+}
+
+/* Hide original heading when sidebar is active */
+#petromath-heading {
+  display: none;
+}
+
+/* Alerts positioning in sidebar layout */
+.main-content .alert {
+  margin: 0 0 20px 0;
+}
+
+/* Mobile snackbar positioning in sidebar layout */
+.main-content #static-snackbar {
+  position: relative;
+  margin-bottom: 15px;
+}
+
+/* ===== MOBILE RESPONSIVENESS FOR SIDEBAR ===== */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  
+  .sidebar.show {
+    transform: translateX(0);
+  }
+  
+  .main-content {
+    margin-left: 0;
+  }
+
+  .content-wrapper {
+    padding: 15px;
+  }
+
+  .top-bar {
+    padding: 12px 15px;
+  }
+  
+  /* Ensure sidebar covers full screen on mobile when open */
+  .sidebar.show {
+    width: 100%;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+  
+  .main-content {
+    margin-left: 240px;
+  }
+  
+  .main-content.expanded {
+    margin-left: 0;
+  }
+  
+  .content-wrapper {
+    padding: 20px;
+  }
+}
+
+/* Large screen adjustments */
+@media (min-width: 1400px) {
+  .sidebar {
+    width: 280px;
+  }
+  
+  .main-content {
+    margin-left: 280px;
+  }
+  
+  .main-content.expanded {
+    margin-left: 0;
+  }
+}
+
+/* ===== SMOOTH TRANSITIONS AND ANIMATIONS ===== */
+
+/* Sidebar slide animation */
+.sidebar {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Content shift animation */
+.main-content {
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Menu item hover animations */
+.menu-item {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Button hover animations */
+.sidebar-toggle,
+.logout-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== ACCESSIBILITY IMPROVEMENTS ===== */
+
+/* Focus states for keyboard navigation */
+.menu-item:focus,
+.sidebar-toggle:focus,
+.logout-btn:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .sidebar {
+    background: #000;
+    border-right: 2px solid #fff;
+  }
+  
+  .menu-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .top-bar {
+    border-bottom: 2px solid #000;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .main-content,
+  .menu-item,
+  .sidebar-toggle,
+  .logout-btn {
+    transition: none;
+  }
+}
+
+/* ===== PRINT STYLES FOR SIDEBAR LAYOUT ===== */
+@media print {
+  .sidebar,
+  .top-bar {
+    display: none !important;
+  }
+  
+  .main-content {
+    margin-left: 0 !important;
+  }
+  
+  .content-wrapper {
+    padding: 0 !important;
+  }
+  
+  /* Restore original heading for print */
+  #petromath-heading {
+    display: block !important;
+  }
+}
