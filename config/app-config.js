@@ -116,6 +116,11 @@ module.exports = {
   TXN_TANK_DIP: "t_tank_dip",
   TXN_TANK_READING: "t_tank_reading",
   CREDIT_LIST_VEHICLE_TABLE: "m_creditlist_vehicles", // Table for credit list vehicles
+  LOGIN_LOG_TABLE: "t_login_log",
+  LUBES_INVOICE_HDR_TABLE: "t_lubes_inv_hdr",
+  LUBES_INVOICE_LINES_TABLE: "t_lubes_inv_lines",
+  TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
+  ADJUSTMENTS_TABLE: "t_adjustments",
 
 
 

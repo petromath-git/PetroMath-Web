@@ -64,6 +64,7 @@ db.m_supplier = require("./suppliers")(sequelize, Sequelize);
 db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  // Import the creditlistvehicle model
 db.location_config = require('./location-config')(sequelize, Sequelize);
 db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
+db.adjustments = require("./adjustments")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -107,6 +108,8 @@ db.location.hasMany(db.txn_deadline, {foreignKey: 'location_id'});
 db.txn_deadline.belongsTo(db.location, {foreignKey: 'location_id'});
 db.location.hasMany(db.txn_deadline_views, {foreignKey: 'location_id'});
 db.txn_deadline_views.belongsTo(db.location, {foreignKey: 'location_id'});
+db.location.hasMany(db.adjustments, {foreignKey: 'location_code', sourceKey: 'location_code'});
+db.adjustments.belongsTo(db.location, {foreignKey: 'location_code', targetKey: 'location_code'});
 
 // Add these with your other model imports
 db.pump_tank = require("./pump-tank")(sequelize, Sequelize);
@@ -155,5 +158,66 @@ db.t_lubes_inv_hdr.belongsTo(db.m_supplier, {
     as: 'Supplier'
 });
 
+
+
+
+// Adjustments can be linked to credit customers
+db.credit.hasMany(db.adjustments, {
+    foreignKey: 'external_id',
+    scope: {
+        external_source: 'CUSTOMER'
+    },
+    constraints: false
+});
+db.adjustments.belongsTo(db.credit, {
+    foreignKey: 'external_id',
+    constraints: false,
+    scope: {
+        external_source: 'CUSTOMER'
+    }
+});
+
+// Adjustments can be linked to digital vendors (also in credit table with card_flag='Y')
+db.adjustments.belongsTo(db.credit, {
+    foreignKey: 'external_id',
+    as: 'digitalVendor',
+    constraints: false,
+    scope: {
+        external_source: 'DIGITAL_VENDOR',
+        card_flag: 'Y'
+    }
+});
+
+// Adjustments can be linked to suppliers
+db.m_supplier.hasMany(db.adjustments, {
+    foreignKey: 'external_id',
+    scope: {
+        external_source: 'SUPPLIER'
+    },
+    constraints: false
+});
+db.adjustments.belongsTo(db.m_supplier, {
+    foreignKey: 'external_id',
+    constraints: false,
+    scope: {
+        external_source: 'SUPPLIER'
+    }
+});
+
+// Adjustments can be linked to banks
+db.m_bank.hasMany(db.adjustments, {
+    foreignKey: 'external_id',
+    scope: {
+        external_source: 'BANK'
+    },
+    constraints: false
+});
+db.adjustments.belongsTo(db.m_bank, {
+    foreignKey: 'external_id',
+    constraints: false,
+    scope: {
+        external_source: 'BANK'
+    }
+});
 
 module.exports = db;

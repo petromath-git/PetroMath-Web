@@ -1,0 +1,573 @@
+extends layout
+
+block content
+    // Desktop Layout
+    div.adjustment-entry-desktop
+        div.row
+            div.col-12
+                div.card
+                    div.card-header.text-white.bg-dark Credit/Debit Adjustment Entry
+                    div.card-body
+                        // Examples section
+                        div.alert.alert-info(role="alert")
+                            strong Common Scenarios:
+                            ul.mb-0.small
+                                li Customer opening balance from old system
+                                li Bounced check penalties (₹400 to customer)
+                                li Volume discounts at month-end
+                                li Supplier credit memos
+                                li Digital vendor charges (commission, POS rental)
+
+                        form(method='POST' action='/adjustments' id='adjustmentForm')
+                            input(type='hidden' name='location_code' value=user.location_code)
+                            
+                            // Date and Reference section
+                            div.row
+                                div.col-md-3
+                                    label(for='adjustment_date') Date *
+                                    input.form-control(
+                                        type='date' 
+                                        id='adjustment_date' 
+                                        name='adjustment_date' 
+                                        value=currentDate 
+                                        max=currentDate 
+                                        required
+                                    )
+                                div.col-md-3
+                                    label(for='reference_no') Reference No.
+                                    input.form-control(
+                                        type='text' 
+                                        id='reference_no' 
+                                        name='reference_no' 
+                                        placeholder='Optional tracking number'
+                                    )
+                                div.col-md-6
+                                    label(for='adjustment_type') Adjustment Type *
+                                    select.form-control(id='adjustment_type' name='adjustment_type' required)
+                                        option(value='') Select adjustment type
+                                        if adjustmentTypes
+                                            each type in adjustmentTypes
+                                                option(value=type.lookup_id)= type.description
+                            
+                            hr
+                            
+                            // Account selection section
+                            div.row
+                                div.col-md-4
+                                    label(for='account_type') Account Type *
+                                    select.form-control(id='account_type' name='account_type' required onchange='loadAccounts()')
+                                        option(value='') Select account type
+                                        option(value='CUSTOMER') Customer
+                                        option(value='DIGITAL_VENDOR') Digital Vendor
+                                        option(value='SUPPLIER') Supplier
+                                        option(value='BANK') Bank Account
+                                        option(value='EXPENSE') Expense
+                                div.col-md-8
+                                    label(for='account_name') Account Name *
+                                    select.form-control(id='account_name' name='account_name' required disabled)
+                                        option(value='') First select account type
+                            
+                            hr
+                            
+                            // Amount section
+                            div.row
+                                div.col-md-4
+                                    label(for='debit_amount') Debit Amount (₹)
+                                    input.form-control(
+                                        type='number' 
+                                        id='debit_amount' 
+                                        name='debit_amount' 
+                                        min='0' 
+                                        step='0.01'
+                                        style='font-size: 1.2em; font-weight: bold;'
+                                        oninput='disableCreditInput()'
+                                    )
+                                div.col-md-4
+                                    label(for='credit_amount') Credit Amount (₹)
+                                    input.form-control(
+                                        type='number' 
+                                        id='credit_amount' 
+                                        name='credit_amount' 
+                                        min='0' 
+                                        step='0.01'
+                                        style='font-size: 1.2em; font-weight: bold;'
+                                        oninput='disableDebitInput()'
+                                    )
+                                div.col-md-4
+                                    label Description *
+                                    input.form-control(
+                                        type='text' 
+                                        id='description' 
+                                        name='description' 
+                                        placeholder='Brief description'
+                                        required
+                                        maxlength='500'
+                                    )
+                            
+                            br
+                            div.text-center
+                                button.btn.btn-primary(type='button' onclick='validateAndSubmit()') SAVE ADJUSTMENT
+                                span &nbsp;
+                                button.btn.btn-secondary(type='button' onclick='resetForm()') RESET
+
+    // Mobile Layout
+    div.adjustment-date-filter-mobile
+        div.text-center.mb-3
+            h4.text-primary Adjustment Entry
+        
+        // Mobile-friendly form
+        form(method='POST' action='/adjustments' id='adjustmentFormMobile')
+            input(type='hidden' name='location_code' value=user.location_code)
+            
+            // Date
+            div.form-group
+                label(for='adjustment_date_mobile') Date *
+                input.form-control(
+                    type='date' 
+                    id='adjustment_date_mobile' 
+                    name='adjustment_date' 
+                    value=currentDate 
+                    max=currentDate 
+                    required
+                )
+            
+            // Adjustment Type
+            div.form-group
+                label(for='adjustment_type_mobile') Adjustment Type *
+                select.form-control(id='adjustment_type_mobile' name='adjustment_type' required)
+                    option(value='') Select type
+                    if adjustmentTypes
+                        each type in adjustmentTypes
+                            option(value=type.lookup_id)= type.description
+            
+            // Account Type
+            div.form-group
+                label(for='account_type_mobile') Account Type *
+                select.form-control(id='account_type_mobile' name='account_type' required onchange='loadAccountsMobile()')
+                    option(value='') Select account type
+                    option(value='CUSTOMER') Customer
+                    option(value='DIGITAL_VENDOR') Digital Vendor
+                    option(value='SUPPLIER') Supplier
+                    option(value='BANK') Bank Account
+                    option(value='EXPENSE') Expense
+            
+            // Account Name
+            div.form-group
+                label(for='account_name_mobile') Account Name *
+                select.form-control(id='account_name_mobile' name='account_name' required disabled)
+                    option(value='') First select account type
+            
+            // Amount (single field with radio buttons)
+            div.form-group
+                label Amount Type *
+                div.form-check
+                    input.form-check-input(type='radio' name='amount_type' id='debit_radio' value='debit' onchange='toggleAmountType()')
+                    label.form-check-label(for='debit_radio') Debit (Increase Balance)
+                div.form-check
+                    input.form-check-input(type='radio' name='amount_type' id='credit_radio' value='credit' onchange='toggleAmountType()')
+                    label.form-check-label(for='credit_radio') Credit (Decrease Balance)
+                
+                input.form-control.amount-input-mobile(
+                    type='number' 
+                    id='amount_mobile' 
+                    name='amount' 
+                    placeholder='Enter amount'
+                    min='0' 
+                    step='0.01'
+                    required
+                    disabled
+                )
+            
+            // Description
+            div.form-group
+                label(for='description_mobile') Description *
+                textarea.form-control(
+                    id='description_mobile' 
+                    name='description' 
+                    placeholder='Brief description of adjustment'
+                    required
+                    maxlength='500'
+                    rows='3'
+                )
+            
+            // Reference Number
+            div.form-group
+                label(for='reference_no_mobile') Reference No. (Optional)
+                input.form-control(
+                    type='text' 
+                    id='reference_no_mobile' 
+                    name='reference_no' 
+                    placeholder='Tracking number'
+                )
+            
+            // Buttons
+            button.btn.btn-primary.btn-mobile(type='button' onclick='validateAndSubmitMobile()') SAVE ADJUSTMENT
+            button.btn.btn-secondary.btn-mobile(type='button' onclick='resetFormMobile()') RESET
+
+    // Recent Adjustments Section
+    div.row.mt-4
+        div.col-12
+            div.card
+                div.card-header.text-white.bg-secondary
+                    h6.mb-0 Recent Adjustments
+                    small Last 10 entries from this location
+                div.card-body.p-0
+                    if recentAdjustments && recentAdjustments.length > 0
+                        div.table-responsive
+                            table.table.table-sm.mb-0
+                                thead.thead-light
+                                    tr
+                                        th Date
+                                        th Description
+                                        th Account
+                                        th Type
+                                        th.text-right Debit
+                                        th.text-right Credit
+                                        th.text-center Status
+                                        th Created By
+                                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                            th.text-center Actions
+                                tbody
+                                    each adj in recentAdjustments
+                                        tr(class=(adj.status === 'REVERSED' ? 'table-warning' : ''))
+                                            td.small #{adj.adjustment_date}
+                                            td.small #{adj.description}
+                                            td.small #{adj.ledger_name || adj.external_source}
+                                            td.small
+                                                span.badge.badge-info.badge-sm #{adj.adjustment_type}
+                                            td.small.text-right 
+                                                if adj.debit_amount
+                                                    | ₹#{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(adj.debit_amount)}
+                                                else
+                                                    | -
+                                            td.small.text-right
+                                                if adj.credit_amount
+                                                    | ₹#{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(adj.credit_amount)}
+                                                else
+                                                    | -
+                                            td.small.text-center
+                                                if adj.status === 'ACTIVE'
+                                                    span.badge.badge-success Active
+                                                else if adj.status === 'REVERSED'
+                                                    span.badge.badge-warning Reversed
+                                                else
+                                                    span.badge.badge-secondary #{adj.status}
+                                            td.small #{adj.created_by}
+                                            if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                                td.text-center
+                                                    if adj.status === 'ACTIVE' && adj.adjustment_type !== 'REVERSAL'
+                                                        button.btn.btn-outline-warning.btn-sm(
+                                                            type='button'
+                                                            onclick=`reverseAdjustment(${adj.adjustment_id})`
+                                                            title='Reverse this adjustment'
+                                                        )
+                                                            i.bi.bi-arrow-counterclockwise
+                                                    else if adj.status === 'REVERSED'
+                                                        span.text-muted.small Reversed
+                                                    else if adj.adjustment_type === 'REVERSAL'
+                                                        span.text-muted.small Reversal Entry
+                                                    else
+                                                        span.text-muted.small -
+                        div.card-footer.py-2
+                            small.text-muted
+                                | Showing recent adjustments from last 30 days. 
+                                a(href='/adjustments/list') View all adjustments →
+                    else
+                        div.p-3.text-center.text-muted
+                            i.bi.bi-info-circle.me-2
+                            | No recent adjustments found for this location.
+                            br
+                            small Your new adjustments will appear here after saving.
+
+    script.
+        // Initialize with data from backend
+        const adjustmentTypesData = !{JSON.stringify(adjustmentTypes || [])};
+        const customerListData = !{JSON.stringify(customerList || [])};
+        const digitalVendorListData = !{JSON.stringify(digitalVendorList || [])};
+        const supplierListData = !{JSON.stringify(supplierList || [])};
+        const bankListData = !{JSON.stringify(bankList || [])};
+        const expenseListData = !{JSON.stringify(expenseList || [])};
+        
+        // Make user data available to JavaScript
+        window.userData = !{JSON.stringify(user || {})};
+        window.userRole = !{JSON.stringify(user.Role || '')};
+        
+        console.log('User Role:', window.userRole);
+
+        // Desktop functions
+        function loadAccounts() {
+            const accountType = document.getElementById('account_type').value;
+            populateAccountDropdown('account_name', accountType);
+        }
+        
+        // Mobile functions
+        function loadAccountsMobile() {
+            const accountType = document.getElementById('account_type_mobile').value;
+            populateAccountDropdown('account_name_mobile', accountType);
+        }
+        
+        function populateAccountDropdown(dropdownId, accountType) {
+            const accountNameSelect = document.getElementById(dropdownId);
+            
+            // Clear existing options
+            accountNameSelect.innerHTML = '<option value="">Select account</option>';
+            accountNameSelect.disabled = false;
+            
+            let dataList = [];
+            
+            switch(accountType) {
+                case 'CUSTOMER':
+                    dataList = customerListData;
+                    dataList.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.creditlist_id;
+                        option.textContent = customer.Company_Name;
+                        option.dataset.source = 'CUSTOMER';
+                        accountNameSelect.appendChild(option);
+                    });
+                    break;
+                    
+                case 'DIGITAL_VENDOR':
+                    dataList = digitalVendorListData;
+                    dataList.forEach(vendor => {
+                        const option = document.createElement('option');
+                        option.value = vendor.creditlist_id;
+                        option.textContent = vendor.Company_Name;
+                        option.dataset.source = 'DIGITAL_VENDOR';
+                        accountNameSelect.appendChild(option);
+                    });
+                    break;
+                    
+                case 'SUPPLIER':
+                    dataList = supplierListData;
+                    dataList.forEach(supplier => {
+                        const option = document.createElement('option');
+                        option.value = supplier.supplier_id;
+                        option.textContent = supplier.supplier_name;
+                        option.dataset.source = 'SUPPLIER';
+                        accountNameSelect.appendChild(option);
+                    });
+                    break;
+                    
+                case 'BANK':
+                    dataList = bankListData;
+                    dataList.forEach(bank => {
+                        const option = document.createElement('option');
+                        option.value = bank.bank_id;
+                        option.textContent = bank.account_nickname || bank.bank_name;
+                        option.dataset.source = 'BANK';
+                        accountNameSelect.appendChild(option);
+                    });
+                    break;
+                    
+                case 'EXPENSE':
+                    dataList = expenseListData;
+                    dataList.forEach(expense => {
+                        const option = document.createElement('option');
+                        option.value = expense.expense_id;
+                        option.textContent = expense.expense_name;
+                        option.dataset.source = 'EXPENSE';
+                        accountNameSelect.appendChild(option);
+                    });
+                    break;
+                    
+                default:
+                    accountNameSelect.disabled = true;
+            }
+        }
+        
+        // Mobile amount type toggle
+        function toggleAmountType() {
+            const amountField = document.getElementById('amount_mobile');
+            const debitRadio = document.getElementById('debit_radio');
+            const creditRadio = document.getElementById('credit_radio');
+            
+            if (debitRadio.checked || creditRadio.checked) {
+                amountField.disabled = false;
+                amountField.focus();
+            } else {
+                amountField.disabled = true;
+                amountField.value = '';
+            }
+        }
+        
+        // Desktop validation functions
+        function disableCreditInput() {
+            const debitVal = parseFloat(document.getElementById('debit_amount').value || 0);
+            const creditField = document.getElementById('credit_amount');
+            creditField.disabled = debitVal > 0;
+            if (debitVal > 0) creditField.value = '';
+        }
+
+        function disableDebitInput() {
+            const creditVal = parseFloat(document.getElementById('credit_amount').value || 0);
+            const debitField = document.getElementById('debit_amount');
+            debitField.disabled = creditVal > 0;
+            if (creditVal > 0) debitField.value = '';
+        }
+
+        function validateAndSubmit() {
+            const form = document.getElementById('adjustmentForm');
+            
+            if (!validateForm('desktop')) return false;
+            
+            // If validation passes, submit form
+            if (confirm('Are you sure you want to save this adjustment?')) {
+                form.submit();
+            }
+        }
+        
+        function validateAndSubmitMobile() {
+            const form = document.getElementById('adjustmentFormMobile');
+            
+            if (!validateForm('mobile')) return false;
+            
+            // Copy mobile form data to hidden fields for consistent backend processing
+            const amountType = document.querySelector('input[name="amount_type"]:checked').value;
+            const amount = document.getElementById('amount_mobile').value;
+            
+            if (amountType === 'debit') {
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="debit_amount" value="${amount}">`);
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="credit_amount" value="">`);
+            } else {
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="debit_amount" value="">`);
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="credit_amount" value="${amount}">`);
+            }
+            
+            if (confirm('Are you sure you want to save this adjustment?')) {
+                form.submit();
+            }
+        }
+        
+        function validateForm(mode) {
+            const isDesktop = mode === 'desktop';
+            const suffix = isDesktop ? '' : '_mobile';
+            
+            // Basic validations
+            if (!document.getElementById('adjustment_date' + suffix).value) {
+                alert('Please select a date.');
+                return false;
+            }
+            
+            if (!document.getElementById('adjustment_type' + suffix).value) {
+                alert('Please select adjustment type.');
+                return false;
+            }
+            
+            if (!document.getElementById('account_type' + suffix).value) {
+                alert('Please select account type.');
+                return false;
+            }
+            
+            if (!document.getElementById('account_name' + suffix).value) {
+                alert('Please select account name.');
+                return false;
+            }
+            
+            if (!document.getElementById('description' + suffix).value.trim()) {
+                alert('Please enter a description.');
+                return false;
+            }
+            
+            // Amount validation
+            if (isDesktop) {
+                const debitAmount = parseFloat(document.getElementById('debit_amount').value || 0);
+                const creditAmount = parseFloat(document.getElementById('credit_amount').value || 0);
+                
+                if (debitAmount === 0 && creditAmount === 0) {
+                    alert('Please enter either debit or credit amount.');
+                    return false;
+                }
+                
+                if (debitAmount > 0 && creditAmount > 0) {
+                    alert('Cannot enter both debit and credit amounts.');
+                    return false;
+                }
+            } else {
+                const amountType = document.querySelector('input[name="amount_type"]:checked');
+                const amount = parseFloat(document.getElementById('amount_mobile').value || 0);
+                
+                if (!amountType) {
+                    alert('Please select amount type (Debit or Credit).');
+                    return false;
+                }
+                
+                if (amount <= 0) {
+                    alert('Please enter a valid amount.');
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        function resetForm() {
+            if (confirm('Are you sure you want to reset the form?')) {
+                document.getElementById('adjustmentForm').reset();
+                document.getElementById('account_name').disabled = true;
+                document.getElementById('debit_amount').disabled = false;
+                document.getElementById('credit_amount').disabled = false;
+            }
+        }
+        
+        function resetFormMobile() {
+            if (confirm('Are you sure you want to reset the form?')) {
+                document.getElementById('adjustmentFormMobile').reset();
+                document.getElementById('account_name_mobile').disabled = true;
+                document.getElementById('amount_mobile').disabled = true;
+            }
+        }
+
+        // Reversal functionality
+        function reverseAdjustment(adjustmentId) {
+            if (!confirm('Are you sure you want to reverse this adjustment?\n\nThis will:\n1. Mark the original adjustment as REVERSED\n2. Create a new reversal entry with opposite amounts\n\nThis action cannot be undone.')) {
+                return;
+            }
+
+            // Disable the button to prevent double-clicks
+            const button = event.target.closest('button');
+            const originalHtml = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            // Make AJAX call to reverse adjustment
+            fetch(`/adjustments/api/${adjustmentId}/reverse`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Adjustment reversed successfully!\n\n' + data.message);
+                    // Reload the page to show updated data
+                    window.location.reload();
+                } else {
+                    alert('Failed to reverse adjustment:\n' + data.error);
+                    // Re-enable button
+                    button.disabled = false;
+                    button.innerHTML = originalHtml;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error occurred while reversing adjustment. Please try again.');
+                // Re-enable button
+                button.disabled = false;
+                button.innerHTML = originalHtml;
+            });
+        }
+        
+        // Debug function to check if Actions column exists
+        function checkActionsColumn() {
+            const headers = Array.from(document.querySelectorAll('th')).map(th => th.textContent.trim());
+            console.log('Table headers:', headers);
+            console.log('Actions column exists:', headers.includes('Actions'));
+            console.log('User role from window:', window.userRole);
+        }
+        
+        // Run debug check after page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            checkActionsColumn();
+        });
