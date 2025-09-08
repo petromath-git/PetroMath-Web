@@ -162,7 +162,12 @@ const mileageRoutes = require('./routes/mileage-routes');
 const adjustmentRoutes = require('./routes/adjustment-routes');
 const productsRoutes = require('./routes/products-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
+const systemHealthRoutes = require('./routes/system-health-routes');
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
+
+// Add method-override here
+const methodOverride = require('method-override');
+app.use(methodOverride('_method'));
 
 
 app.set('views', path.join(__dirname, 'views'));
@@ -183,6 +188,7 @@ app.use('/mileage', mileageRoutes);
 app.use('/adjustments', adjustmentRoutes);
 app.use('/products', productsRoutes);
 app.use('/dev-tracker', devTrackerRoutes);
+app.use('/system-health', systemHealthRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
@@ -192,9 +198,7 @@ app.use((req, res, next) => {
 
 
 
-// Add method-override here
-const methodOverride = require('method-override');
-app.use(methodOverride('_method'));
+
 
 app.use(logger('dev'));
 app.use(express.json());

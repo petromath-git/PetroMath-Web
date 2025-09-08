@@ -30,7 +30,15 @@ module.exports = {
             };
 
             const trackers = await devTrackerDao.findTrackers(locationCode, filters);
-            const stats = await devTrackerDao.getTrackerStats(locationCode);
+            
+            // Calculate stats from the actual trackers data
+            const stats = {
+                open: trackers.filter(t => t.status === 'Open').length,
+                inProgress: trackers.filter(t => t.status === 'In Progress').length,
+                testing: trackers.filter(t => t.status === 'Testing').length,
+                complete: trackers.filter(t => t.status === 'Complete').length,
+                total: trackers.length
+            };
 
             res.render('dev-tracker', {
                 title: 'Dev Tracker',
