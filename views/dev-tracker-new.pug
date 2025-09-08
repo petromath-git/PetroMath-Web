@@ -1,0 +1,351 @@
+extends layout
+
+block content
+    .container-fluid
+        // Header Section
+        .row.mb-4
+            .col-12
+                .d-flex.justify-content-between.align-items-center.flex-wrap
+                    div
+                        .d-flex.align-items-center.mb-2
+                            a.btn.btn-outline-secondary.me-3(href="/dev-tracker")
+                                i.bi.bi-arrow-left
+                            h2.mb-0
+                                i.bi.bi-plus-circle.me-2
+                                | New Dev Tracker Item
+                        p.text-muted Create a new development task, bug, feature, or enhancement
+
+        // Form Section
+        .row.justify-content-center
+            .col-12.col-lg-8
+                .card.form-card
+                    .card-header
+                        h5.mb-0
+                            i.bi.bi-pencil-square.me-2
+                            | Tracker Details
+                    .card-body
+                        form#newTrackerForm(method="POST" action="/dev-tracker")
+                            // Title and Type Row
+                            .row.g-3.mb-4
+                                .col-12
+                                    label.form-label.required Title *
+                                    input.form-control.form-control-lg(type="text" name="title" required maxlength="255" placeholder="Enter a descriptive title...")
+                                    .form-text Keep it concise but descriptive
+
+                            // Type and Priority Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Type
+                                    select.form-select.form-select-lg(name="type" required)
+                                        option(value="Task" selected) Task
+                                        option(value="Bug") Bug
+                                        option(value="Feature") Feature
+                                        option(value="Enhancement") Enhancement
+                                    .form-text Choose the most appropriate type
+                                .col-12.col-md-6
+                                    label.form-label Priority
+                                    select.form-select.form-select-lg(name="priority" required)
+                                        option(value="Low") Low
+                                        option(value="Medium" selected) Medium
+                                        option(value="High") High
+                                        option(value="Critical") Critical
+                                    .form-text How urgent is this item?
+
+                            // Description
+                            .mb-4
+                                label.form-label Description
+                                textarea.form-control(name="description" rows="4" placeholder="Provide detailed description, requirements, or context...")
+                                .form-text Optional: Add as much detail as needed
+
+                            // Assignment and Due Date Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Assigned To
+                                    input.form-control(type="text" name="assigned_to" maxlength="100" placeholder="Enter person's name or leave blank")
+                                    .form-text Who should work on this?
+                                .col-12.col-md-6
+                                    label.form-label Due Date
+                                    input.form-control(type="date" name="due_date" min=currentDate)
+                                    .form-text Optional target completion date
+
+                            // Time Estimation and Tags Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Estimated Hours
+                                    input.form-control(type="number" name="estimated_hours" step="0.5" min="0" placeholder="0.5, 1, 2.5, etc.")
+                                    .form-text Rough time estimate (optional)
+                                .col-12.col-md-6
+                                    label.form-label Tags
+                                    input.form-control(type="text" name="tags" maxlength="255" placeholder="frontend, api, urgent, etc.")
+                                    .form-text Comma-separated tags for organization
+
+                            // Submit Buttons
+                            .row
+                                .col-12
+                                    hr.my-4
+                                    .d-flex.justify-content-between.flex-wrap.gap-2
+                                        .d-flex.gap-2.flex-wrap
+                                            button.btn.btn-primary.btn-lg.btn-mobile(type="submit")
+                                                i.bi.bi-check-circle.me-2
+                                                | Create Tracker
+                                            button.btn.btn-success.btn-lg.btn-mobile(type="button" onclick="saveAndAddTasks()")
+                                                i.bi.bi-plus-square.me-2
+                                                | Create & Add Tasks
+                                        a.btn.btn-outline-secondary.btn-lg.btn-mobile(href="/dev-tracker") Cancel
+
+        // Quick Tips Section (Desktop only)
+        .row.mt-5.d-none.d-lg-block
+            .col-12
+                .card.tips-card
+                    .card-header
+                        h6.mb-0
+                            i.bi.bi-lightbulb.me-2
+                            | Quick Tips
+                    .card-body
+                        .row.g-4
+                            .col-md-4
+                                h6
+                                    i.bi.bi-tag.me-2.text-primary
+                                    | Types
+                                ul.list-unstyled.small
+                                    li
+                                        strong Bug: 
+                                        | Something broken that needs fixing
+                                    li
+                                        strong Feature: 
+                                        | New functionality to build
+                                    li
+                                        strong Enhancement: 
+                                        | Improvement to existing features
+                                    li
+                                        strong Task: 
+                                        | General work item or maintenance
+                            .col-md-4
+                                h6
+                                    i.bi.bi-exclamation-triangle.me-2.text-warning
+                                    | Priorities
+                                ul.list-unstyled.small
+                                    li
+                                        strong Critical: 
+                                        | Blocks production or users
+                                    li
+                                        strong High: 
+                                        | Important for next release
+                                    li
+                                        strong Medium: 
+                                        | Should be done soon
+                                    li
+                                        strong Low: 
+                                        | Nice to have, when time permits
+                            .col-md-4
+                                h6
+                                    i.bi.bi-list-check.me-2.text-success
+                                    | Best Practices
+                                ul.list-unstyled.small
+                                    li Use specific, actionable titles
+                                    li Add detailed descriptions for complex items
+                                    li Break large features into smaller tasks
+                                    li Set realistic time estimates
+                                    li Use tags to group related items
+
+    // Custom CSS
+    style.
+        /* Form styling */
+        .form-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .tips-card {
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        /* Required field indicator */
+        .form-label.required::after {
+            content: " *";
+            color: #dc3545;
+        }
+
+        /* Enhanced form controls */
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .btn-mobile {
+                width: 100%;
+                margin-bottom: 0.75rem;
+            }
+            .form-control-lg,
+            .form-select-lg {
+                font-size: 16px; /* Prevent zoom on iOS */
+                padding: 12px 16px;
+            }
+            .tips-card {
+                display: none !important;
+            }
+        }
+
+        /* Form validation styling */
+        .is-invalid {
+            border-color: #dc3545;
+        }
+        .is-valid {
+            border-color: #198754;
+        }
+
+        /* Button group responsive */
+        @media (max-width: 576px) {
+            .d-flex.justify-content-between {
+                flex-direction: column;
+            }
+            .d-flex.gap-2 {
+                flex-direction: column;
+                width: 100%;
+            }
+        }
+
+    // JavaScript for form handling
+    script.
+        // Form validation
+        document.getElementById('newTrackerForm').addEventListener('submit', function(e) {
+            const title = document.querySelector('input[name="title"]');
+            const type = document.querySelector('select[name="type"]');
+            
+            // Basic validation
+            if (!title.value.trim()) {
+                e.preventDefault();
+                title.classList.add('is-invalid');
+                title.focus();
+                return;
+            } else {
+                title.classList.remove('is-invalid');
+                title.classList.add('is-valid');
+            }
+
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass me-2"></i>Creating...';
+            submitBtn.disabled = true;
+
+            // Let form submit naturally
+        });
+
+        // Save and add tasks function
+        function saveAndAddTasks() {
+            const form = document.getElementById('newTrackerForm');
+            const formData = new FormData(form);
+            
+            // Validate required fields first
+            const title = document.querySelector('input[name="title"]');
+            if (!title.value.trim()) {
+                title.classList.add('is-invalid');
+                title.focus();
+                return;
+            }
+
+            // Convert FormData to JSON
+            const data = Object.fromEntries(formData);
+            
+            // Submit via AJAX
+            fetch('/dev-tracker', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // Redirect to tracker details page where user can add tasks
+                    window.location.href = `/dev-tracker/${result.tracker.tracker_id}`;
+                } else {
+                    alert('Failed to create tracker: ' + result.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while creating the tracker');
+            });
+        }
+
+        // Real-time title validation
+        document.querySelector('input[name="title"]').addEventListener('input', function() {
+            if (this.value.trim()) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+            }
+        });
+
+        // Auto-resize description textarea
+        document.querySelector('textarea[name="description"]').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+
+        // Smart tag suggestions (simple implementation)
+        const tagInput = document.querySelector('input[name="tags"]');
+        const commonTags = ['frontend', 'backend', 'api', 'database', 'ui', 'ux', 'mobile', 'performance', 'security', 'testing', 'urgent', 'research'];
+        
+        tagInput.addEventListener('input', function(e) {
+            // Simple tag autocomplete could be added here
+            // For now, just validate comma-separated format
+            const tags = this.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+            if (tags.length > 0) {
+                this.classList.add('is-valid');
+            }
+        });
+
+        // Due date validation (prevent past dates)
+        document.querySelector('input[name="due_date"]').addEventListener('change', function() {
+            const selectedDate = new Date(this.value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset time to start of day
+            
+            if (selectedDate < today) {
+                this.classList.add('is-invalid');
+                alert('Due date cannot be in the past');
+                this.value = '';
+            } else {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            }
+        });
+
+        // Priority change styling
+        document.querySelector('select[name="priority"]').addEventListener('change', function() {
+            // Remove all priority classes
+            this.classList.remove('border-danger', 'border-warning', 'border-info', 'border-secondary');
+            
+            // Add appropriate color based on priority
+            switch(this.value) {
+                case 'Critical':
+                    this.classList.add('border-danger');
+                    break;
+                case 'High':
+                    this.classList.add('border-warning');
+                    break;
+                case 'Medium':
+                    this.classList.add('border-info');
+                    break;
+                case 'Low':
+                    this.classList.add('border-secondary');
+                    break;
+            }
+        });
+
+        // Initialize priority styling
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('select[name="priority"]').dispatchEvent(new Event('change'));
+        });

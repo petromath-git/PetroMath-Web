@@ -94,28 +94,60 @@ html
 
         // Helper function for menu icons
         -
-          function getMenuIcon(menuName, groupName) {
-            // Daily Operations icons
+           function getMenuIcon(menuName, groupName) {
+            // DAILY_OPS group icons
             if (menuName === 'Shift Closing') return 'bi-clock';
             if (menuName === 'Day Close') return 'bi-sunrise';
-            if (menuName === 'Tank Entry') return 'bi-fuel-pump';
-            if (menuName === 'Tank Dip Entry') return 'bi-rulers';
+            if (menuName === 'Day-Close Report') return 'bi-file-earmark-text';
             
-            // Transaction icons
+            // TRANSACTIONS group icons
             if (menuName === 'Credit Receipts') return 'bi-credit-card';
             if (menuName === 'Tank Receipts') return 'bi-receipt';
+            if (menuName === 'Tank Dip Entry') return 'bi-rulers';
             if (menuName === 'Bank Transaction') return 'bi-bank';
             if (menuName === 'Purchase Invoice') return 'bi-file-earmark-text';
+            if (menuName === 'Adjustment Entry') return 'bi-arrows-angle-contract';
             
-            // Reports & Analytics icons
+            // REPORTS_SECTION group icons
             if (menuName === 'Reports') return 'bi-graph-up';
+            if (menuName === 'Credit Ledger Account') return 'bi-journal-text';
+            if (menuName === 'Credit Customer Detail Report') return 'bi-person-lines-fill';
+            if (menuName === 'Digital Reconciliation Report') return 'bi-credit-card-2-front';
+            if (menuName === 'Credit Customer Balance Report') return 'bi-calculator';
+            if (menuName === 'GST Summary Report') return 'bi-receipt-cutoff';
+            if (menuName === 'Sales Summary Report') return 'bi-bar-chart';
+            if (menuName === 'Cashflow (Use for Agro Center)') return 'bi-cash-stack';
+            if (menuName === 'Tally Daybook Report') return 'bi-journal-bookmark';
+            if (menuName === 'Adjustment History') return 'bi-clock-history';
+            
+            // ADMIN group icons
+            if (menuName === 'Deadline Manager') return 'bi-calendar-check';
+            if (menuName === 'Select Location') return 'bi-geo-alt';
+            if (menuName === 'Truck Management') return 'bi-truck';
+            if (menuName === 'Truck Load') return 'bi-truck';
+            if (menuName === 'Truck Expense') return 'bi-receipt';
+            if (menuName === 'Password Reset') return 'bi-key';
+            if (menuName === 'Dev Tracker') return 'bi-kanban';
+            
+            // MASTERS group icons
+            if (menuName === 'Masters') return 'bi-gear';
+            if (menuName === 'Users') return 'bi-people';
+            if (menuName === 'Products') return 'bi-box';
+            if (menuName === 'Suppliers') return 'bi-building';
+            if (menuName === 'Customers') return 'bi-person-badge';
+            if (menuName === 'Digital') return 'bi-credit-card-2-front';
+            
+            // AUDITING group icons
             if (menuName === 'Utilities') return 'bi-tools';
+            if (menuName === 'Auditing Utilities') return 'bi-search';
             
             // Default icons by group
-            if (groupName === 'Daily Operations') return 'bi-clock';
-            if (groupName === 'Transactions') return 'bi-credit-card';
-            if (groupName === 'Reports & Analytics') return 'bi-graph-up';
-            if (groupName === 'Administration') return 'bi-gear';
+            if (groupName === 'DAILY_OPS') return 'bi-clock';
+            if (groupName === 'TRANSACTIONS') return 'bi-credit-card';
+            if (groupName === 'REPORTS_SECTION') return 'bi-graph-up';
+            if (groupName === 'ADMIN') return 'bi-gear';
+            if (groupName === 'MASTERS') return 'bi-gear';
+            if (groupName === 'AUDITING') return 'bi-tools';
             
             // Fallback icon
             return 'bi-circle';

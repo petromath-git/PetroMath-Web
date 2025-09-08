@@ -1,0 +1,455 @@
+extends layout
+
+block content
+    // Mobile-ready page - add to layout's mobileReadyPages array
+    - var mobileReady = true
+    
+    .container-fluid
+        // Header Section
+        .row.mb-4
+            .col-12
+                .d-flex.justify-content-between.align-items-center.flex-wrap
+                    div
+                        h2.mb-1
+                            i.bi.bi-kanban.me-2
+                            | Dev Tracker
+                        p.text-muted Dashboard for development items and tasks
+                    .d-flex.gap-2
+                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                            a.btn.btn-primary.btn-mobile(href="/dev-tracker/new")
+                                i.bi.bi-plus-circle.me-1
+                                | New Item
+                        button.btn.btn-outline-secondary.btn-mobile#refreshBtn
+                            i.bi.bi-arrow-clockwise.me-1
+                            | Refresh
+
+        // Stats Cards Row
+        .row.mb-4.stats-row
+            .col-12.col-sm-6.col-lg-3.mb-3
+                .card.stat-card.stat-open
+                    .card-body.text-center
+                        .stat-icon
+                            i.bi.bi-circle
+                        h4.mb-1#statOpen= stats.open || 0
+                        p.mb-0.text-muted Open Items
+            .col-12.col-sm-6.col-lg-3.mb-3
+                .card.stat-card.stat-progress
+                    .card-body.text-center
+                        .stat-icon
+                            i.bi.bi-hourglass-split
+                        h4.mb-1#statProgress= stats.inProgress || 0
+                        p.mb-0.text-muted In Progress
+            .col-12.col-sm-6.col-lg-3.mb-3
+                .card.stat-card.stat-testing
+                    .card-body.text-center
+                        .stat-icon
+                            i.bi.bi-bug
+                        h4.mb-1#statTesting= stats.testing || 0
+                        p.mb-0.text-muted Testing
+            .col-12.col-sm-6.col-lg-3.mb-3
+                .card.stat-card.stat-complete
+                    .card-body.text-center
+                        .stat-icon
+                            i.bi.bi-check-circle
+                        h4.mb-1#statComplete= stats.complete || 0
+                        p.mb-0.text-muted Complete
+
+        // Filters Section - Desktop
+        .row.mb-4.d-none.d-md-block
+            .col-12
+                .card.filter-card
+                    .card-body
+                        form#filterForm.row.g-3
+                            .col-md-3
+                                label.form-label Status
+                                select.form-select#statusFilter(name="status")
+                                    option(value="") All Statuses
+                                    option(value="Open" selected=(filters.status === 'Open')) Open
+                                    option(value="In Progress" selected=(filters.status === 'In Progress')) In Progress
+                                    option(value="Testing" selected=(filters.status === 'Testing')) Testing
+                                    option(value="Complete" selected=(filters.status === 'Complete')) Complete
+                            .col-md-3
+                                label.form-label Type
+                                select.form-select#typeFilter(name="type")
+                                    option(value="") All Types
+                                    option(value="Bug" selected=(filters.type === 'Bug')) Bug
+                                    option(value="Feature" selected=(filters.type === 'Feature')) Feature
+                                    option(value="Enhancement" selected=(filters.type === 'Enhancement')) Enhancement
+                                    option(value="Task" selected=(filters.type === 'Task')) Task
+                            .col-md-3
+                                label.form-label Priority
+                                select.form-select#priorityFilter(name="priority")
+                                    option(value="") All Priorities
+                                    option(value="Critical" selected=(filters.priority === 'Critical')) Critical
+                                    option(value="High" selected=(filters.priority === 'High')) High
+                                    option(value="Medium" selected=(filters.priority === 'Medium')) Medium
+                                    option(value="Low" selected=(filters.priority === 'Low')) Low
+                            .col-md-3
+                                label.form-label Assigned To
+                                input.form-control#assignedToFilter(type="text" name="assigned_to" value=filters.assigned_to placeholder="Enter name...")
+                            .col-12.text-end
+                                button.btn.btn-primary.me-2(type="submit") Apply Filters
+                                button.btn.btn-outline-secondary(type="button" onclick="clearFilters()") Clear
+
+        // Mobile Filters
+        .d-block.d-md-none.mb-4
+            .card.mobile-filter-card
+                .card-header
+                    button.btn.btn-sm.btn-outline-primary.w-100(type="button" data-bs-toggle="collapse" data-bs-target="#mobileFilters")
+                        i.bi.bi-funnel.me-1
+                        | Filters
+                .collapse#mobileFilters
+                    .card-body
+                        .mb-3
+                            label.form-label Status
+                            select.form-select.form-control-mobile#mobileStatusFilter
+                                option(value="") All Statuses
+                                option(value="Open") Open
+                                option(value="In Progress") In Progress
+                                option(value="Testing") Testing
+                                option(value="Complete") Complete
+                        .mb-3
+                            label.form-label Type
+                            select.form-select.form-control-mobile#mobileTypeFilter
+                                option(value="") All Types
+                                option(value="Bug") Bug
+                                option(value="Feature") Feature
+                                option(value="Enhancement") Enhancement
+                                option(value="Task") Task
+                        .mb-3
+                            label.form-label Priority
+                            select.form-select.form-control-mobile#mobilePriorityFilter
+                                option(value="") All Priorities
+                                option(value="Critical") Critical
+                                option(value="High") High
+                                option(value="Medium") Medium
+                                option(value="Low") Low
+                        .mb-3
+                            label.form-label Assigned To
+                            input.form-control.form-control-mobile#mobileAssignedToFilter(type="text" placeholder="Enter name...")
+                        .d-grid.gap-2
+                            button.btn.btn-primary.btn-mobile(onclick="applyMobileFilters()") Apply Filters
+                            button.btn.btn-outline-secondary.btn-mobile(onclick="clearMobileFilters()") Clear
+
+        // Trackers List - Desktop Table
+        .row.d-none.d-md-block
+            .col-12
+                .card
+                    .card-header
+                        h5.mb-0
+                            i.bi.bi-list-ul.me-2
+                            | Development Items
+                    .card-body.p-0
+                        if trackers && trackers.length > 0
+                            .table-responsive
+                                table.table.table-hover.mb-0
+                                    thead.table-light
+                                        tr
+                                            th ID
+                                            th Title
+                                            th Type
+                                            th Status
+                                            th Priority
+                                            th Assigned To
+                                            th Due Date
+                                            th Tasks
+                                            th Actions
+                                    tbody
+                                        each tracker in trackers
+                                            tr(class=`tracker-row priority-${tracker.priority.toLowerCase()}`)
+                                                td
+                                                    .fw-bold ##{tracker.tracker_id}
+                                                td
+                                                    .fw-semibold= tracker.title
+                                                    if tracker.description
+                                                        .small.text-muted= tracker.description.substring(0, 60) + (tracker.description.length > 60 ? '...' : '')
+                                                td
+                                                    span.badge(class=`bg-${tracker.type === 'Bug' ? 'danger' : tracker.type === 'Feature' ? 'primary' : tracker.type === 'Enhancement' ? 'info' : 'secondary'}`)= tracker.type
+                                                td
+                                                    span.badge(class=`bg-${tracker.status === 'Open' ? 'warning' : tracker.status === 'In Progress' ? 'info' : tracker.status === 'Testing' ? 'primary' : tracker.status === 'Complete' ? 'success' : 'secondary'}`)= tracker.status
+                                                td
+                                                    span.badge(class=`bg-${tracker.priority === 'Critical' ? 'danger' : tracker.priority === 'High' ? 'warning' : tracker.priority === 'Medium' ? 'info' : 'secondary'}`)= tracker.priority
+                                                td
+                                                    = tracker.assigned_to || 'Unassigned'
+                                                td
+                                                    if tracker.due_date
+                                                        = new Date(tracker.due_date).toLocaleDateString()
+                                                    else
+                                                        span.text-muted No due date
+                                                td
+                                                    if tracker.tasks && tracker.tasks.length > 0
+                                                        - var doneTasks = tracker.tasks.filter(t => t.task_status === 'Done').length
+                                                        .small
+                                                            span.fw-bold= doneTasks
+                                                            | /
+                                                            = tracker.tasks.length
+                                                            |  tasks
+                                                    else
+                                                        span.text-muted No tasks
+                                                td
+                                                    .btn-group(role="group")
+                                                        a.btn.btn-sm.btn-outline-primary(href=`/dev-tracker/${tracker.tracker_id}`)
+                                                            i.bi.bi-eye
+                                                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                                            a.btn.btn-sm.btn-outline-secondary(href=`/dev-tracker/${tracker.tracker_id}/edit`)
+                                                                i.bi.bi-pencil
+                                                            button.btn.btn-sm.btn-outline-danger(onclick=`deleteTracker(${tracker.tracker_id})`)
+                                                                i.bi.bi-trash
+                        else
+                            .text-center.py-4
+                                i.bi.bi-inbox.text-muted.display-4
+                                h5.text-muted.mt-3 No trackers found
+                                p.text-muted Try adjusting your filters or create a new tracker
+
+        // Trackers List - Mobile Cards
+        .row.d-block.d-md-none
+            .col-12
+                if trackers && trackers.length > 0
+                    each tracker in trackers
+                        .card.tracker-card.mb-3(class=`priority-${tracker.priority.toLowerCase()}`)
+                            .card-body
+                                .d-flex.justify-content-between.align-items-start.mb-2
+                                    .tracker-id ##{tracker.tracker_id}
+                                    .dropdown
+                                        button.btn.btn-sm.btn-outline-secondary(data-bs-toggle="dropdown")
+                                            i.bi.bi-three-dots-vertical
+                                        ul.dropdown-menu
+                                            li
+                                                a.dropdown-item(href=`/dev-tracker/${tracker.tracker_id}`)
+                                                    i.bi.bi-eye.me-2
+                                                    | View
+                                            if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                                li
+                                                    a.dropdown-item(href=`/dev-tracker/${tracker.tracker_id}/edit`)
+                                                        i.bi.bi-pencil.me-2
+                                                        | Edit
+                                                li.dropdown-divider
+                                                li
+                                                    a.dropdown-item.text-danger(href="#" onclick=`deleteTracker(${tracker.tracker_id})`)
+                                                        i.bi.bi-trash.me-2
+                                                        | Delete
+
+                                h6.tracker-title= tracker.title
+                                if tracker.description
+                                    p.tracker-description.text-muted.small= tracker.description
+
+                                .tracker-meta.d-flex.flex-wrap.gap-2.mb-2
+                                    span.badge(class=`bg-${tracker.type === 'Bug' ? 'danger' : tracker.type === 'Feature' ? 'primary' : tracker.type === 'Enhancement' ? 'info' : 'secondary'}`)= tracker.type
+                                    span.badge(class=`bg-${tracker.status === 'Open' ? 'warning' : tracker.status === 'In Progress' ? 'info' : tracker.status === 'Testing' ? 'primary' : tracker.status === 'Complete' ? 'success' : 'secondary'}`)= tracker.status
+                                    span.badge(class=`bg-${tracker.priority === 'Critical' ? 'danger' : tracker.priority === 'High' ? 'warning' : tracker.priority === 'Medium' ? 'info' : 'secondary'}`)= tracker.priority
+
+                                .tracker-details.small
+                                    if tracker.assigned_to
+                                        div
+                                            i.bi.bi-person.me-1
+                                            = tracker.assigned_to
+                                    if tracker.due_date
+                                        div
+                                            i.bi.bi-calendar.me-1
+                                            = new Date(tracker.due_date).toLocaleDateString()
+                                    if tracker.tasks && tracker.tasks.length > 0
+                                        - var doneTasks = tracker.tasks.filter(t => t.task_status === 'Done').length
+                                        div
+                                            i.bi.bi-list-check.me-1
+                                            = doneTasks
+                                            | /
+                                            = tracker.tasks.length
+                                            |  tasks complete
+                else
+                    .card.no-trackers-mobile
+                        .card-body.text-center.py-4
+                            i.bi.bi-inbox.text-muted.display-4
+                            h5.text-muted.mt-3 No trackers found
+                            p.text-muted Try adjusting your filters or create a new tracker
+                            if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                a.btn.btn-primary.btn-mobile.mt-2(href="/dev-tracker/new") Create First Tracker
+
+    // Custom CSS for Dev Tracker
+    style.
+        /* Stats Cards */
+        .stat-card {
+            border: none;
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        .stat-open { border-left: 4px solid #ffc107; }
+        .stat-progress { border-left: 4px solid #0dcaf0; }
+        .stat-testing { border-left: 4px solid #6f42c1; }
+        .stat-complete { border-left: 4px solid #198754; }
+        
+        .stat-icon i {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.7;
+        }
+
+        /* Filter Cards */
+        .filter-card, .mobile-filter-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Table Styling */
+        .tracker-row.priority-critical {
+            border-left: 4px solid #dc3545;
+        }
+        .tracker-row.priority-high {
+            border-left: 4px solid #fd7e14;
+        }
+        .tracker-row.priority-medium {
+            border-left: 4px solid #20c997;
+        }
+        .tracker-row.priority-low {
+            border-left: 4px solid #6c757d;
+        }
+
+        /* Mobile Cards */
+        .tracker-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        .tracker-card:hover {
+            transform: translateY(-2px);
+        }
+        .tracker-card.priority-critical {
+            border-left: 4px solid #dc3545;
+        }
+        .tracker-card.priority-high {
+            border-left: 4px solid #fd7e14;
+        }
+        .tracker-card.priority-medium {
+            border-left: 4px solid #20c997;
+        }
+        .tracker-card.priority-low {
+            border-left: 4px solid #6c757d;
+        }
+
+        .tracker-id {
+            font-weight: bold;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .tracker-title {
+            color: #212529;
+            margin-bottom: 0.5rem;
+        }
+        .tracker-description {
+            line-height: 1.4;
+        }
+        .tracker-meta .badge {
+            font-size: 0.75rem;
+        }
+        .tracker-details {
+            color: #6c757d;
+        }
+        .tracker-details div {
+            margin-bottom: 0.25rem;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .stats-row .col-12 {
+                padding: 0 8px;
+            }
+            .stat-card .card-body {
+                padding: 1rem 0.75rem;
+            }
+            .stat-card h4 {
+                font-size: 1.5rem;
+            }
+            .btn-mobile {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            .form-control-mobile {
+                font-size: 16px;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 1rem;
+            }
+        }
+
+        /* No trackers state */
+        .no-trackers-mobile {
+            border: 2px dashed #dee2e6;
+            background: #f8f9fa;
+        }
+
+    // JavaScript for Dev Tracker functionality
+    script.
+        // Filter functions
+        function applyMobileFilters() {
+            const status = document.getElementById('mobileStatusFilter').value;
+            const type = document.getElementById('mobileTypeFilter').value;
+            const priority = document.getElementById('mobilePriorityFilter').value;
+            const assignedTo = document.getElementById('mobileAssignedToFilter').value;
+            
+            applyFilters(status, type, priority, assignedTo);
+        }
+
+        function clearMobileFilters() {
+            document.getElementById('mobileStatusFilter').value = '';
+            document.getElementById('mobileTypeFilter').value = '';
+            document.getElementById('mobilePriorityFilter').value = '';
+            document.getElementById('mobileAssignedToFilter').value = '';
+            applyFilters('', '', '', '');
+        }
+
+        function clearFilters() {
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('typeFilter').value = '';
+            document.getElementById('priorityFilter').value = '';
+            document.getElementById('assignedToFilter').value = '';
+            document.getElementById('filterForm').submit();
+        }
+
+        function applyFilters(status, type, priority, assignedTo) {
+            const params = new URLSearchParams();
+            if (status) params.append('status', status);
+            if (type) params.append('type', type);
+            if (priority) params.append('priority', priority);
+            if (assignedTo) params.append('assigned_to', assignedTo);
+            
+            window.location.href = '/dev-tracker?' + params.toString();
+        }
+
+        // Delete tracker function
+        function deleteTracker(trackerId) {
+            if (confirm('Are you sure you want to delete this tracker? This action cannot be undone.')) {
+                fetch(`/dev-tracker/${trackerId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Failed to delete tracker: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the tracker');
+                });
+            }
+        }
+
+        // Refresh functionality
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            location.reload();
+        });
+
+        // Auto-refresh every 30 seconds (optional)
+        // setInterval(() => {
+        //     location.reload();
+        // }, 30000);

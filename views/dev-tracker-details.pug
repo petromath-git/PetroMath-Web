@@ -1,0 +1,440 @@
+extends layout
+
+block content
+    .container-fluid
+        // Header Section
+        .row.mb-4
+            .col-12
+                .d-flex.justify-content-between.align-items-center.flex-wrap
+                    div
+                        .d-flex.align-items-center.mb-2
+                            a.btn.btn-outline-secondary.me-3(href="/dev-tracker")
+                                i.bi.bi-arrow-left
+                            h2.mb-0
+                                span.text-muted ##{tracker.tracker_id}
+                                |  #{tracker.title}
+                        .d-flex.gap-2.flex-wrap
+                            span.badge.fs-6(class=`bg-${tracker.type === 'Bug' ? 'danger' : tracker.type === 'Feature' ? 'primary' : tracker.type === 'Enhancement' ? 'info' : 'secondary'}`)= tracker.type
+                            span.badge.fs-6(class=`bg-${tracker.status === 'Open' ? 'warning' : tracker.status === 'In Progress' ? 'info' : tracker.status === 'Testing' ? 'primary' : tracker.status === 'Complete' ? 'success' : 'secondary'}`)= tracker.status
+                            span.badge.fs-6(class=`bg-${tracker.priority === 'Critical' ? 'danger' : tracker.priority === 'High' ? 'warning' : tracker.priority === 'Medium' ? 'info' : 'secondary'}`)= tracker.priority
+                    .d-flex.gap-2.flex-wrap
+                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                            a.btn.btn-primary.btn-mobile(href=`/dev-tracker/${tracker.tracker_id}/edit`)
+                                i.bi.bi-pencil.me-1
+                                | Edit
+                            button.btn.btn-outline-danger.btn-mobile#deleteBtn
+                                i.bi.bi-trash.me-1
+                                | Delete
+                        button.btn.btn-outline-secondary.btn-mobile#refreshBtn
+                            i.bi.bi-arrow-clockwise.me-1
+                            | Refresh
+
+        // Tracker Details Card
+        .row.mb-4
+            .col-12.col-lg-8
+                .card.details-card
+                    .card-header
+                        h5.mb-0
+                            i.bi.bi-info-circle.me-2
+                            | Tracker Details
+                    .card-body
+                        if tracker.description
+                            .mb-3
+                                h6 Description
+                                p= tracker.description
+                        
+                        .row.g-3
+                            .col-12.col-md-6
+                                strong Assigned To:
+                                |  #{tracker.assigned_to || 'Unassigned'}
+                            .col-12.col-md-6
+                                strong Created By:
+                                |  #{tracker.created_by || 'Unknown'}
+                            .col-12.col-md-6
+                                strong Due Date:
+                                if tracker.due_date
+                                    |  #{new Date(tracker.due_date).toLocaleDateString()}
+                                else
+                                    span.text-muted  No due date set
+                            .col-12.col-md-6
+                                strong Created:
+                                |  #{new Date(tracker.creation_date).toLocaleDateString()}
+                            
+                            if tracker.estimated_hours || tracker.actual_hours
+                                .col-12
+                                    hr
+                                .col-12.col-md-6
+                                    strong Estimated Hours:
+                                    |  #{tracker.estimated_hours || 'Not estimated'}
+                                .col-12.col-md-6
+                                    strong Actual Hours:
+                                    |  #{tracker.actual_hours || 'Not tracked'}
+                            
+                            if tracker.tags
+                                .col-12
+                                    hr
+                                .col-12
+                                    strong Tags:
+                                    .mt-1
+                                        each tag in tracker.tags.split(',')
+                                            span.badge.bg-light.text-dark.me-1= tag.trim()
+
+            // Progress Summary (Desktop)
+            .col-12.col-lg-4.d-none.d-lg-block
+                .card.progress-card
+                    .card-header
+                        h6.mb-0
+                            i.bi.bi-graph-up.me-2
+                            | Progress Summary
+                    .card-body
+                        if tracker.tasks && tracker.tasks.length > 0
+                            - var totalTasks = tracker.tasks.length
+                            - var doneTasks = tracker.tasks.filter(t => t.task_status === 'Done').length
+                            - var progressPercentage = Math.round((doneTasks / totalTasks) * 100)
+                            
+                            .text-center.mb-3
+                                .progress.mb-2(style="height: 20px;")
+                                    .progress-bar(class=`bg-${progressPercentage === 100 ? 'success' : progressPercentage >= 50 ? 'info' : 'warning'}` style=`width: ${progressPercentage}%`)= progressPercentage + '%'
+                                h4.mb-0= doneTasks + ' / ' + totalTasks
+                                p.text-muted.small Tasks Complete
+                            
+                            hr
+                            
+                            // Task status breakdown
+                            - var todoTasks = tracker.tasks.filter(t => t.task_status === 'To Do').length
+                            - var inProgressTasks = tracker.tasks.filter(t => t.task_status === 'In Progress').length
+                            - var blockedTasks = tracker.tasks.filter(t => t.task_status === 'Blocked').length
+                            
+                            if todoTasks > 0
+                                .d-flex.justify-content-between.mb-1
+                                    span.small To Do:
+                                    span.badge.bg-secondary= todoTasks
+                            if inProgressTasks > 0
+                                .d-flex.justify-content-between.mb-1
+                                    span.small In Progress:
+                                    span.badge.bg-info= inProgressTasks
+                            if blockedTasks > 0
+                                .d-flex.justify-content-between.mb-1
+                                    span.small Blocked:
+                                    span.badge.bg-danger= blockedTasks
+                            if doneTasks > 0
+                                .d-flex.justify-content-between.mb-1
+                                    span.small Done:
+                                    span.badge.bg-success= doneTasks
+                        else
+                            .text-center.py-3
+                                i.bi.bi-list-ul.text-muted.display-6
+                                p.text-muted.mt-2 No tasks yet
+                                if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                    button.btn.btn-sm.btn-primary(onclick="showAddTaskModal()") Add First Task
+
+        // Tasks Section
+        .row
+            .col-12
+                .card.tasks-card
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        h5.mb-0
+                            i.bi.bi-list-check.me-2
+                            | Tasks 
+                            if tracker.tasks && tracker.tasks.length > 0
+                                span.badge.bg-secondary.ms-2= tracker.tasks.length
+                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                            button.btn.btn-sm.btn-primary#addTaskBtn(onclick="showAddTaskModal()")
+                                i.bi.bi-plus.me-1
+                                | Add Task
+
+                    .card-body.p-0
+                        if tracker.tasks && tracker.tasks.length > 0
+                            // Desktop Task List
+                            .d-none.d-md-block
+                                .table-responsive
+                                    table.table.table-hover.mb-0
+                                        thead.table-light
+                                            tr
+                                                th Task
+                                                th Status
+                                                th Priority
+                                                th Assigned
+                                                th Due Date
+                                                th Progress
+                                                th Actions
+                                        tbody
+                                            each task in tracker.tasks
+                                                tr(class=`task-row priority-${task.task_priority ? task.task_priority.toLowerCase() : 'medium'}`)
+                                                    td
+                                                        .fw-semibold= task.task_title
+                                                        if task.task_description
+                                                            .small.text-muted= task.task_description.substring(0, 80) + (task.task_description.length > 80 ? '...' : '')
+                                                    td
+                                                        span.badge(class=`bg-${task.task_status === 'To Do' ? 'secondary' : task.task_status === 'In Progress' ? 'info' : task.task_status === 'Done' ? 'success' : 'danger'}`)= task.task_status
+                                                    td
+                                                        span.badge(class=`bg-${task.task_priority === 'High' ? 'warning' : task.task_priority === 'Low' ? 'light text-dark' : 'info'}`)= task.task_priority || 'Medium'
+                                                    td= task.assigned_to || 'Unassigned'
+                                                    td
+                                                        if task.due_date
+                                                            = new Date(task.due_date).toLocaleDateString()
+                                                        else
+                                                            span.text-muted -
+                                                    td
+                                                        if task.completion_percentage !== null && task.completion_percentage !== undefined
+                                                            .progress(style="height: 6px; width: 60px;")
+                                                                .progress-bar(style=`width: ${task.completion_percentage}%`)
+                                                            .small.text-muted= task.completion_percentage + '%'
+                                                        else
+                                                            span.text-muted -
+                                                    td
+                                                        if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                                            .btn-group(role="group")
+                                                                button.btn.btn-sm.btn-outline-secondary(onclick=`editTask(${task.task_id})`)
+                                                                    i.bi.bi-pencil
+                                                                button.btn.btn-sm.btn-outline-danger(onclick=`deleteTask(${task.task_id})`)
+                                                                    i.bi.bi-trash
+
+                            // Mobile Task Cards
+                            .d-block.d-md-none.p-3
+                                each task in tracker.tasks
+                                    .card.task-card.mb-3(class=`priority-${task.task_priority ? task.task_priority.toLowerCase() : 'medium'}`)
+                                        .card-body
+                                            .d-flex.justify-content-between.align-items-start.mb-2
+                                                h6.task-title.mb-1= task.task_title
+                                                if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                                    .dropdown
+                                                        button.btn.btn-sm.btn-outline-secondary(data-bs-toggle="dropdown")
+                                                            i.bi.bi-three-dots-vertical
+                                                        ul.dropdown-menu
+                                                            li
+                                                                a.dropdown-item(href="#" onclick=`editTask(${task.task_id})`)
+                                                                    i.bi.bi-pencil.me-2
+                                                                    | Edit
+                                                            li.dropdown-divider
+                                                            li
+                                                                a.dropdown-item.text-danger(href="#" onclick=`deleteTask(${task.task_id})`)
+                                                                    i.bi.bi-trash.me-2
+                                                                    | Delete
+
+                                            if task.task_description
+                                                p.task-description.text-muted.small.mb-2= task.task_description
+
+                                            .task-meta.d-flex.flex-wrap.gap-2.mb-2
+                                                span.badge(class=`bg-${task.task_status === 'To Do' ? 'secondary' : task.task_status === 'In Progress' ? 'info' : task.task_status === 'Done' ? 'success' : 'danger'}`)= task.task_status
+                                                span.badge(class=`bg-${task.task_priority === 'High' ? 'warning' : task.task_priority === 'Low' ? 'light text-dark' : 'info'}`)= task.task_priority || 'Medium'
+
+                                            .task-details.small
+                                                if task.assigned_to
+                                                    div
+                                                        i.bi.bi-person.me-1
+                                                        = task.assigned_to
+                                                if task.due_date
+                                                    div
+                                                        i.bi.bi-calendar.me-1
+                                                        = new Date(task.due_date).toLocaleDateString()
+                                                if task.completion_percentage !== null && task.completion_percentage !== undefined
+                                                    div
+                                                        i.bi.bi-graph-up.me-1
+                                                        = task.completion_percentage + '% complete'
+                        else
+                            .text-center.py-5
+                                i.bi.bi-list-ul.text-muted.display-4
+                                h5.text-muted.mt-3 No tasks yet
+                                p.text-muted Add tasks to break down this tracker into manageable pieces
+                                if user.Role === 'Admin' || user.Role === 'SuperUser'
+                                    button.btn.btn-primary.btn-mobile.mt-2(onclick="showAddTaskModal()") Add First Task
+
+    // Add Task Modal
+    if user.Role === 'Admin' || user.Role === 'SuperUser'
+        .modal.fade#addTaskModal(tabindex="-1")
+            .modal-dialog.modal-lg
+                .modal-content
+                    .modal-header
+                        h5.modal-title Add New Task
+                        button.btn-close(type="button" data-bs-dismiss="modal")
+                    form#addTaskForm
+                        .modal-body
+                            input(type="hidden" name="tracker_id" value=tracker.tracker_id)
+                            .mb-3
+                                label.form-label Task Title *
+                                input.form-control(type="text" name="task_title" required maxlength="255")
+                            .mb-3
+                                label.form-label Description
+                                textarea.form-control(name="task_description" rows="3")
+                            .row.g-3.mb-3
+                                .col-md-6
+                                    label.form-label Priority
+                                    select.form-select(name="task_priority")
+                                        option(value="Low") Low
+                                        option(value="Medium" selected) Medium
+                                        option(value="High") High
+                                .col-md-6
+                                    label.form-label Assigned To
+                                    input.form-control(type="text" name="assigned_to" maxlength="100")
+                            .row.g-3.mb-3
+                                .col-md-6
+                                    label.form-label Due Date
+                                    input.form-control(type="date" name="due_date")
+                                .col-md-6
+                                    label.form-label Estimated Hours
+                                    input.form-control(type="number" name="estimated_hours" step="0.5" min="0")
+                            .mb-3
+                                label.form-label Notes
+                                textarea.form-control(name="notes" rows="2")
+                        .modal-footer
+                            button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+                            button.btn.btn-primary(type="submit") Add Task
+
+    // Custom CSS
+    style.
+        /* Card styling */
+        .details-card, .progress-card, .tasks-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Priority borders for tasks */
+        .task-row.priority-high, .task-card.priority-high {
+            border-left: 4px solid #fd7e14;
+        }
+        .task-row.priority-medium, .task-card.priority-medium {
+            border-left: 4px solid #20c997;
+        }
+        .task-row.priority-low, .task-card.priority-low {
+            border-left: 4px solid #6c757d;
+        }
+
+        /* Mobile task cards */
+        .task-card {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        .task-card:hover {
+            transform: translateY(-1px);
+        }
+
+        .task-title {
+            color: #212529;
+            font-size: 1rem;
+        }
+        .task-description {
+            line-height: 1.4;
+        }
+        .task-meta .badge {
+            font-size: 0.75rem;
+        }
+        .task-details {
+            color: #6c757d;
+        }
+        .task-details div {
+            margin-bottom: 0.25rem;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .btn-mobile {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            .details-card .row.g-3 > div {
+                margin-bottom: 1rem;
+            }
+        }
+
+        /* Progress card styling */
+        .progress-card .card-body {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+    // JavaScript for task management
+    script.
+        // Show add task modal
+        function showAddTaskModal() {
+            new bootstrap.Modal(document.getElementById('addTaskModal')).show();
+        }
+
+        // Add task form submission
+        document.getElementById('addTaskForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            fetch(`/dev-tracker/${data.tracker_id}/tasks`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert('Failed to add task: ' + result.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the task');
+            });
+        });
+
+        // Edit task function
+        function editTask(taskId) {
+            // For now, just reload to edit page (can be enhanced with modal later)
+            alert('Edit task functionality will be enhanced in the next iteration');
+        }
+
+        // Delete task function
+        function deleteTask(taskId) {
+            if (confirm('Are you sure you want to delete this task?')) {
+                fetch(`/dev-tracker/tasks/${taskId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Failed to delete task: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the task');
+                });
+            }
+        }
+
+        // Delete tracker function
+        document.getElementById('deleteBtn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this tracker and all its tasks? This action cannot be undone.')) {
+                fetch(`/dev-tracker/#{tracker.tracker_id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/dev-tracker';
+                    } else {
+                        alert('Failed to delete tracker: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the tracker');
+                });
+            }
+        });
+
+        // Refresh functionality
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            location.reload();
+        });

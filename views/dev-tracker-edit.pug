@@ -1,0 +1,400 @@
+extends layout
+
+block content
+    .container-fluid
+        // Header Section
+        .row.mb-4
+            .col-12
+                .d-flex.justify-content-between.align-items-center.flex-wrap
+                    div
+                        .d-flex.align-items-center.mb-2
+                            a.btn.btn-outline-secondary.me-3(href=`/dev-tracker/${tracker.tracker_id}`)
+                                i.bi.bi-arrow-left
+                            h2.mb-0
+                                i.bi.bi-pencil-square.me-2
+                                | Edit Tracker ##{tracker.tracker_id}
+                        p.text-muted Update tracker details and settings
+
+        // Form Section
+        .row.justify-content-center
+            .col-12.col-lg-8
+                .card.form-card
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        h5.mb-0
+                            i.bi.bi-gear.me-2
+                            | Tracker Settings
+                        .d-flex.gap-2
+                            span.badge.fs-6(class=`bg-${tracker.type === 'Bug' ? 'danger' : tracker.type === 'Feature' ? 'primary' : tracker.type === 'Enhancement' ? 'info' : 'secondary'}`)= tracker.type
+                            span.badge.fs-6(class=`bg-${tracker.status === 'Open' ? 'warning' : tracker.status === 'In Progress' ? 'info' : tracker.status === 'Testing' ? 'primary' : tracker.status === 'Complete' ? 'success' : 'secondary'}`)= tracker.status
+                    .card-body
+                        form#editTrackerForm(method="POST" action=`/dev-tracker/${tracker.tracker_id}?_method=PUT`)
+                            input(type="hidden" name="_method" value="PUT")
+                            
+                            // Title
+                            .mb-4
+                                label.form-label.required Title *
+                                input.form-control.form-control-lg(type="text" name="title" required maxlength="255" value=tracker.title)
+                                .form-text Last updated: #{new Date(tracker.updation_date).toLocaleString()}
+
+                            // Status and Type Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Status
+                                    select.form-select.form-select-lg(name="status" required)
+                                        option(value="Open" selected=(tracker.status === 'Open')) Open
+                                        option(value="In Progress" selected=(tracker.status === 'In Progress')) In Progress
+                                        option(value="Testing" selected=(tracker.status === 'Testing')) Testing
+                                        option(value="Complete" selected=(tracker.status === 'Complete')) Complete
+                                        option(value="Closed" selected=(tracker.status === 'Closed')) Closed
+                                    .form-text Current workflow status
+                                .col-12.col-md-6
+                                    label.form-label Type
+                                    select.form-select.form-select-lg(name="type" required)
+                                        option(value="Task" selected=(tracker.type === 'Task')) Task
+                                        option(value="Bug" selected=(tracker.type === 'Bug')) Bug
+                                        option(value="Feature" selected=(tracker.type === 'Feature')) Feature
+                                        option(value="Enhancement" selected=(tracker.type === 'Enhancement')) Enhancement
+                                    .form-text What kind of work is this?
+
+                            // Priority
+                            .mb-4
+                                label.form-label Priority
+                                select.form-select.form-select-lg(name="priority" required)
+                                    option(value="Low" selected=(tracker.priority === 'Low')) Low
+                                    option(value="Medium" selected=(tracker.priority === 'Medium')) Medium
+                                    option(value="High" selected=(tracker.priority === 'High')) High
+                                    option(value="Critical" selected=(tracker.priority === 'Critical')) Critical
+                                .form-text How urgent is this item?
+
+                            // Description
+                            .mb-4
+                                label.form-label Description
+                                textarea.form-control(name="description" rows="4" placeholder="Provide detailed description, requirements, or context...")= tracker.description
+                                .form-text Add as much detail as needed
+
+                            // Assignment and Due Date Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Assigned To
+                                    input.form-control(type="text" name="assigned_to" maxlength="100" value=tracker.assigned_to placeholder="Enter person's name")
+                                    .form-text Who should work on this?
+                                .col-12.col-md-6
+                                    label.form-label Due Date
+                                    - var dueDateValue = tracker.due_date ? new Date(tracker.due_date).toISOString().split('T')[0] : ''
+                                    input.form-control(type="date" name="due_date" value=dueDateValue)
+                                    .form-text Target completion date
+
+                            // Time Tracking Row
+                            .row.g-3.mb-4
+                                .col-12.col-md-6
+                                    label.form-label Estimated Hours
+                                    input.form-control(type="number" name="estimated_hours" step="0.5" min="0" value=tracker.estimated_hours placeholder="0.5, 1, 2.5, etc.")
+                                    .form-text Original time estimate
+                                .col-12.col-md-6
+                                    label.form-label Actual Hours
+                                    input.form-control(type="number" name="actual_hours" step="0.5" min="0" value=tracker.actual_hours placeholder="Time actually spent")
+                                    .form-text Track time spent so far
+
+                            // Tags
+                            .mb-4
+                                label.form-label Tags
+                                input.form-control(type="text" name="tags" maxlength="255" value=tracker.tags placeholder="frontend, api, urgent, etc.")
+                                .form-text Comma-separated tags for organization
+
+                            // Progress Summary (if has tasks)
+                            if tracker.tasks && tracker.tasks.length > 0
+                                .mb-4
+                                    hr
+                                    h6.mb-3
+                                        i.bi.bi-graph-up.me-2
+                                        | Progress Overview
+                                    - var totalTasks = tracker.tasks.length
+                                    - var doneTasks = tracker.tasks.filter(t => t.task_status === 'Done').length
+                                    - var progressPercentage = Math.round((doneTasks / totalTasks) * 100)
+                                    
+                                    .row.g-3
+                                        .col-12.col-md-6
+                                            .progress.mb-2(style="height: 20px;")
+                                                .progress-bar(class=`bg-${progressPercentage === 100 ? 'success' : progressPercentage >= 50 ? 'info' : 'warning'}` style=`width: ${progressPercentage}%`)= progressPercentage + '%'
+                                            .text-center
+                                                strong= doneTasks + ' / ' + totalTasks + ' tasks complete'
+                                        .col-12.col-md-6
+                                            .small.text-muted
+                                                div Created: #{new Date(tracker.creation_date).toLocaleDateString()}
+                                                div Created by: #{tracker.created_by || 'Unknown'}
+                                                if tracker.updated_by && tracker.updated_by !== tracker.created_by
+                                                    div Last updated by: #{tracker.updated_by}
+
+                            // Submit Buttons
+                            .row
+                                .col-12
+                                    hr.my-4
+                                    .d-flex.justify-content-between.flex-wrap.gap-2
+                                        .d-flex.gap-2.flex-wrap
+                                            button.btn.btn-primary.btn-lg.btn-mobile(type="submit")
+                                                i.bi.bi-check-circle.me-2
+                                                | Update Tracker
+                                            button.btn.btn-outline-info.btn-lg.btn-mobile(type="button" onclick="previewChanges()")
+                                                i.bi.bi-eye.me-2
+                                                | Preview Changes
+                                        .d-flex.gap-2.flex-wrap
+                                            a.btn.btn-outline-secondary.btn-lg.btn-mobile(href=`/dev-tracker/${tracker.tracker_id}`) Cancel
+                                            if tracker.status !== 'Closed'
+                                                button.btn.btn-outline-danger.btn-lg.btn-mobile(type="button" onclick="confirmClose()")
+                                                    i.bi.bi-x-circle.me-2
+                                                    | Close Tracker
+
+        // Change Summary Section (Desktop only)
+        .row.mt-5.d-none.d-lg-block
+            .col-12
+                .card.changes-card
+                    .card-header
+                        h6.mb-0
+                            i.bi.bi-clock-history.me-2
+                            | Recent Changes & Tips
+                    .card-body
+                        .row.g-4
+                            .col-md-6
+                                h6.text-muted Status Guidelines
+                                ul.list-unstyled.small
+                                    li
+                                        span.badge.bg-warning.me-2 Open
+                                        | Ready to start work
+                                    li
+                                        span.badge.bg-info.me-2 In Progress
+                                        | Currently being worked on
+                                    li
+                                        span.badge.bg-primary.me-2 Testing
+                                        | Implementation complete, testing
+                                    li
+                                        span.badge.bg-success.me-2 Complete
+                                        | Fully done and verified
+                                    li
+                                        span.badge.bg-secondary.me-2 Closed
+                                        | Archived or cancelled
+                            .col-md-6
+                                h6.text-muted Update Best Practices
+                                ul.list-unstyled.small
+                                    li
+                                        i.bi.bi-check-circle.text-success.me-2
+                                        | Update status as work progresses
+                                    li
+                                        i.bi.bi-check-circle.text-success.me-2
+                                        | Track actual hours for future estimates
+                                    li
+                                        i.bi.bi-check-circle.text-success.me-2
+                                        | Add details to description as needed
+                                    li
+                                        i.bi.bi-check-circle.text-success.me-2
+                                        | Adjust priority if requirements change
+                                    li
+                                        i.bi.bi-check-circle.text-success.me-2
+                                        | Close when completely finished
+
+    // Custom CSS
+    style.
+        /* Form styling */
+        .form-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .changes-card {
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        /* Required field indicator */
+        .form-label.required::after {
+            content: " *";
+            color: #dc3545;
+        }
+
+        /* Enhanced form controls */
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+
+        /* Status and priority indicators */
+        .form-select.status-changed {
+            border-left: 4px solid #28a745;
+        }
+        .form-select.priority-changed {
+            border-left: 4px solid #ffc107;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .btn-mobile {
+                width: 100%;
+                margin-bottom: 0.75rem;
+            }
+            .form-control-lg,
+            .form-select-lg {
+                font-size: 16px; /* Prevent zoom on iOS */
+                padding: 12px 16px;
+            }
+            .changes-card {
+                display: none !important;
+            }
+        }
+
+        /* Button group responsive */
+        @media (max-width: 576px) {
+            .d-flex.justify-content-between {
+                flex-direction: column;
+            }
+            .d-flex.gap-2 {
+                flex-direction: column;
+                width: 100%;
+            }
+        }
+
+    // JavaScript for form handling and change tracking
+    script.
+        // Store original values for change detection
+        const originalValues = {
+            title: "#{tracker.title}",
+            status: "#{tracker.status}",
+            type: "#{tracker.type}",
+            priority: "#{tracker.priority}",
+            description: "#{tracker.description || ''}",
+            assigned_to: "#{tracker.assigned_to || ''}",
+            due_date: "#{tracker.due_date ? new Date(tracker.due_date).toISOString().split('T')[0] : ''}",
+            estimated_hours: "#{tracker.estimated_hours || ''}",
+            actual_hours: "#{tracker.actual_hours || ''}",
+            tags: "#{tracker.tags || ''}"
+        };
+
+        // Track changes and highlight modified fields
+        function trackChanges() {
+            const form = document.getElementById('editTrackerForm');
+            const formData = new FormData(form);
+            let hasChanges = false;
+
+            for (let [key, value] of formData.entries()) {
+                if (key !== '_method' && originalValues.hasOwnProperty(key)) {
+                    const field = form.querySelector(`[name="${key}"]`);
+                    if (value !== originalValues[key]) {
+                        field.classList.add('is-valid');
+                        hasChanges = true;
+                    } else {
+                        field.classList.remove('is-valid');
+                    }
+                }
+            }
+
+            // Enable/disable submit button based on changes
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (hasChanges) {
+                submitBtn.classList.remove('btn-outline-primary');
+                submitBtn.classList.add('btn-primary');
+                submitBtn.disabled = false;
+            } else {
+                submitBtn.classList.add('btn-outline-primary');
+                submitBtn.classList.remove('btn-primary');
+            }
+        }
+
+        // Add change listeners to all form fields
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('editTrackerForm');
+            const inputs = form.querySelectorAll('input, select, textarea');
+            
+            inputs.forEach(input => {
+                input.addEventListener('input', trackChanges);
+                input.addEventListener('change', trackChanges);
+            });
+
+            // Initial change check
+            trackChanges();
+        });
+
+        // Form submission with loading state
+        document.getElementById('editTrackerForm').addEventListener('submit', function(e) {
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass me-2"></i>Updating...';
+            submitBtn.disabled = true;
+
+            // Let form submit naturally
+        });
+
+        // Preview changes function
+        function previewChanges() {
+            const form = document.getElementById('editTrackerForm');
+            const formData = new FormData(form);
+            let changes = [];
+
+            for (let [key, value] of formData.entries()) {
+                if (key !== '_method' && originalValues.hasOwnProperty(key) && value !== originalValues[key]) {
+                    const fieldName = key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    changes.push(`${fieldName}: "${originalValues[key]}" → "${value}"`);
+                }
+            }
+
+            if (changes.length === 0) {
+                alert('No changes detected.');
+                return;
+            }
+
+            const changesList = changes.join('\n');
+            const confirmed = confirm(`Preview of changes:\n\n${changesList}\n\nDo you want to save these changes?`);
+            
+            if (confirmed) {
+                form.submit();
+            }
+        }
+
+        // Confirm close function
+        function confirmClose() {
+            const confirmed = confirm('Are you sure you want to close this tracker?\n\nThis will mark it as complete and archive it.');
+            if (confirmed) {
+                document.querySelector('select[name="status"]').value = 'Closed';
+                trackChanges();
+                alert('Status changed to Closed. Click "Update Tracker" to save.');
+            }
+        }
+
+        // Auto-resize description textarea
+        document.querySelector('textarea[name="description"]').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+
+        // Due date validation
+        document.querySelector('input[name="due_date"]').addEventListener('change', function() {
+            const selectedDate = new Date(this.value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            if (this.value && selectedDate < today) {
+                this.classList.add('is-invalid');
+                alert('Warning: Due date is in the past');
+            } else {
+                this.classList.remove('is-invalid');
+            }
+        });
+
+        // Status change highlighting
+        document.querySelector('select[name="status"]').addEventListener('change', function() {
+            if (this.value !== originalValues.status) {
+                this.classList.add('status-changed');
+            } else {
+                this.classList.remove('status-changed');
+            }
+        });
+
+        // Priority change highlighting
+        document.querySelector('select[name="priority"]').addEventListener('change', function() {
+            if (this.value !== originalValues.priority) {
+                this.classList.add('priority-changed');
+            } else {
+                this.classList.remove('priority-changed');
+            }
+        });
