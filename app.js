@@ -160,6 +160,7 @@ const passwordRoutes = require('./routes/password-reset-routes');
 const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
 const mileageRoutes = require('./routes/mileage-routes');
 const adjustmentRoutes = require('./routes/adjustment-routes');
+const productsRoutes = require('./routes/products-routes');
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
 
@@ -179,6 +180,7 @@ app.use('/password', passwordRoutes);
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
 app.use('/mileage', mileageRoutes);
 app.use('/adjustments', adjustmentRoutes);
+app.use('/products', productsRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
@@ -317,53 +319,53 @@ app.delete('/delete-receipt', [isLoginEnsured, security.isAdmin()], function (re
     receiptController.deleteReceipts(req, res, next);
 });
 
-app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    let locationCode = req.user.location_code;
-    let products = [];
-    ProductDao.findProducts(locationCode)
-        .then(data => {
-            data.forEach((product) => {
-                products.push({
-                    id: product.product_id,
-                    name: product.product_name,
-                    unit: product.unit,
-                    qty: product.qty,
-                    price: product.price,
-                    ledger_name: product.ledger_name,
-                    cgst_percent: product.cgst_percent,
-                    sgst_percent: product.sgst_percent,
-                    sku_name: product.sku_name,
-                    sku_number: product.sku_number,
-                    hsn_code: product.hsn_code                   
-                });
-            });
-            res.render('products', { title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS, });
-        });
-});
+// app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
+//     let locationCode = req.user.location_code;
+//     let products = [];
+//     ProductDao.findProducts(locationCode)
+//         .then(data => {
+//             data.forEach((product) => {
+//                 products.push({
+//                     id: product.product_id,
+//                     name: product.product_name,
+//                     unit: product.unit,
+//                     qty: product.qty,
+//                     price: product.price,
+//                     ledger_name: product.ledger_name,
+//                     cgst_percent: product.cgst_percent,
+//                     sgst_percent: product.sgst_percent,
+//                     sku_name: product.sku_name,
+//                     sku_number: product.sku_number,
+//                     hsn_code: product.hsn_code                   
+//                 });
+//             });
+//             res.render('products', { title: 'Products', user: req.user, products: products, config: config.APP_CONFIGS, });
+//         });
+// });
 
 // TODO: fix for multiple products
-app.post('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    ProductDao.create(dbMapping.newProduct(req));
-    res.redirect('/products');
-});
+// app.post('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
+//     ProductDao.create(dbMapping.newProduct(req));
+//     res.redirect('/products');
+// });
 
 
-app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    ProductDao.update({
-        product_id: req.params.id,
-        price: req.body.m_product_price,
-        unit: req.body.m_product_unit,
-        ledger_name: req.body.m_product_ledger_name,
-        cgst_percent: req.body.m_product_cgst,
-        sgst_percent: req.body.m_product_sgst
-    }).then(data => {
-        if (data == 1 || data == 0) {
-            res.status(200).send({ message: 'Saved product data successfully.' });
-        } else {
-            res.status(500).send({ error: 'Error while saving data.' });
-        }
-    });
-});
+// app.put('/product/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+//     ProductDao.update({
+//         product_id: req.params.id,
+//         price: req.body.m_product_price,
+//         unit: req.body.m_product_unit,
+//         ledger_name: req.body.m_product_ledger_name,
+//         cgst_percent: req.body.m_product_cgst,
+//         sgst_percent: req.body.m_product_sgst
+//     }).then(data => {
+//         if (data == 1 || data == 0) {
+//             res.status(200).send({ message: 'Saved product data successfully.' });
+//         } else {
+//             res.status(500).send({ error: 'Error while saving data.' });
+//         }
+//     });
+// });
 
 app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     let loginUserId = req.user.Person_id;
