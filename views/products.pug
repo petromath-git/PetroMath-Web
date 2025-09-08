@@ -2,129 +2,503 @@ extends layout
 include mixins/mixins
 
 block content
+    // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
         button.close(type="button" data-dismiss="alert" aria-label="Close")
             span(aria-hidden="true") &times;
     
-    form(method='POST' action='/products')
-        table(class="table" id="product-master-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Product
-                    th(scope="col") SKU Name
-                    th(scope="col") SKU Number
-                    th(scope="col") HSN Code
-                    th(scope="col") Unit
-                    th(scope="col") Price
-                    th(scope="col") Ledger Name
-                    th(scope="col") CGST%
-                    th(scope="col") SGST%
-                    th(scope="col") Edit
-                tbody
-                    each val, index in products
+    // Mobile-first: Sticky header for products table
+    .products-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2
+                .col-auto
+                    h4.mb-0.text-primary Products Management
+                .col.text-right
+                    .btn-group
+                        button.btn.btn-success.btn-sm#addProductBtn(type="button", data-toggle="modal", data-target="#addProductModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Product
+                            span.d-inline.d-sm-none Add
+                        button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                            i.bi.bi-arrow-clockwise.me-1
+                            span.d-none.d-sm-inline Refresh
+                            span.d-inline.d-sm-none Refresh
+
+    // Products content with responsive design
+    .products-container
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive
+                table.table.table-hover.table-striped(id="product-master-table")
+                    thead.thead-dark.sticky-top
                         tr
-                            th(scope="row")= index + 1
-                            td(scope="row")= val.name
-                            td(scope="row")
-                                input.form-control(
-                                    type="text", 
-                                    id="product-sku-name-"+index, 
-                                    value=val.sku_name, 
-                                    readonly
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="text", 
-                                    id="product-sku-number-"+index, 
-                                    value=val.sku_number, 
-                                    readonly
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="text", 
-                                    id="product-hsn-code-"+index, 
-                                    value=val.hsn_code, 
-                                    readonly
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="text", 
-                                    id="product-unit-"+index, 
-                                    value=val.unit, 
-                                    readonly
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="number", 
-                                    id="product-price-"+index, 
-                                    value=val.price, 
-                                    readonly, 
-                                    step=0.01
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="text", 
-                                    id="product-ledger-name-"+index, 
-                                    value=val.ledger_name, 
-                                    readonly
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="number", 
-                                    id="product-cgst-"+index, 
-                                    value=val.cgst_percent, 
-                                    readonly, 
-                                    step=0.01
-                                )
-                            td(scope="row")
-                                input.form-control(
-                                    type="number", 
-                                    id="product-sgst-"+index, 
-                                    value=val.sgst_percent, 
-                                    readonly, 
-                                    step=0.01
-                                )
-                            td(scope="row")
-                                div.row
-                                    a.btn.btn-info(
-                                        id="product-edit-"+index, 
-                                        onclick="editProduct('"+index+"','"+ val.id +"')"
+                            th(scope="col") #
+                            th(scope="col") Product
+                            th(scope="col") SKU Name
+                            th(scope="col") SKU Number
+                            th(scope="col") HSN Code
+                            th(scope="col") Unit
+                            th(scope="col") Price
+                            th(scope="col") Ledger Name
+                            th(scope="col") CGST%
+                            th(scope="col") SGST%
+                            th(scope="col") Edit
+                    tbody
+                        each val, index in products
+                            tr(id=`product-row-${index}`)
+                                th(scope="row")= index + 1
+                                td(scope="row")
+                                    strong= val.name
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`product-sku-name-${index}`, 
+                                        value=val.sku_name, 
+                                        readonly
                                     )
-                                        span.oi.oi-pencil
-                                    a.btn-info.d-md-none(
-                                        id="product-save-"+index, 
-                                        onClick="saveProduct('"+index+"','"+ val.id +"')"
-                                    ) Save
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`product-sku-number-${index}`, 
+                                        value=val.sku_number, 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`product-hsn-code-${index}`, 
+                                        value=val.hsn_code, 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`product-unit-${index}`, 
+                                        value=val.unit, 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    .input-group.input-group-sm
+                                        .input-group-prepend
+                                            span.input-group-text ₹
+                                        input.form-control(
+                                            type="number", 
+                                            id=`product-price-${index}`, 
+                                            value=val.price, 
+                                            readonly, 
+                                            step=0.01
+                                        )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`product-ledger-name-${index}`, 
+                                        value=val.ledger_name, 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    .input-group.input-group-sm
+                                        input.form-control(
+                                            type="number", 
+                                            id=`product-cgst-${index}`, 
+                                            value=val.cgst_percent, 
+                                            readonly, 
+                                            step=0.01
+                                        )
+                                        .input-group-append
+                                            span.input-group-text %
+                                td(scope="row")
+                                    .input-group.input-group-sm
+                                        input.form-control(
+                                            type="number", 
+                                            id=`product-sgst-${index}`, 
+                                            value=val.sgst_percent, 
+                                            readonly, 
+                                            step=0.01
+                                        )
+                                        .input-group-append
+                                            span.input-group-text %
+                                td(scope="row")
+                                    button.btn.btn-primary.btn-sm(
+                                        type="button", 
+                                        onclick=`editProduct(${index}, ${val.id})`
+                                    )
+                                        i.bi.bi-pencil
 
+        // Mobile cards view
+        .mobile-cards-view.d-block.d-lg-none
+            .row
+                each val, index in products
+                    .col-12.mb-3
+                        .card.product-card.shadow-sm
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                .product-name
+                                    strong= val.name
+                                .product-actions
+                                    button.btn.btn-primary.btn-sm(
+                                        type="button", 
+                                        onclick=`editProduct(${index}, ${val.id})`
+                                    )
+                                        i.bi.bi-pencil
+                            .card-body.p-3
+                                .row.g-2
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted SKU Name
+                                            .fw-bold= val.sku_name || 'N/A'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted SKU Number
+                                            .fw-bold= val.sku_number || 'N/A'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted HSN Code
+                                            .fw-bold= val.hsn_code || 'N/A'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted Unit
+                                            .fw-bold= val.unit || 'N/A'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted Price
+                                            .fw-bold.text-success ₹#{val.price}
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted Ledger
+                                            .fw-bold= val.ledger_name || 'N/A'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted CGST
+                                            .fw-bold= val.cgst_percent + '%'
+                                    .col-6
+                                        .product-detail
+                                            small.text-muted SGST
+                                            .fw-bold= val.sgst_percent + '%'
 
-                    - var rowCnt = 0
-                    while rowCnt < 1
-                        +addMasterProduct(rowCnt++)
-        div(align="center")
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'product-master')", id='product-master-add-new') Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", id='product-master-save', disabled=true) Save
+    // Add Product Modal
+    .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#addProductModalLabel Add New Product
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#addProductForm(method='POST', action='/products/api')
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Product Name
+                                input.form-control(type="text", name="product_name", required)
+                            .col-md-6.mb-3
+                                label.form-label SKU Name
+                                input.form-control(type="text", name="sku_name")
+                            .col-md-6.mb-3
+                                label.form-label SKU Number
+                                input.form-control(type="text", name="sku_number")
+                            .col-md-6.mb-3
+                                label.form-label HSN Code
+                                input.form-control(type="text", name="hsn_code")
+                            .col-md-4.mb-3
+                                label.form-label Unit
+                                input.form-control(type="text", name="unit", required)
+                            .col-md-4.mb-3
+                                label.form-label Price
+                                input.form-control(type="number", name="price", step="0.01", required)
+                            .col-md-4.mb-3
+                                label.form-label Ledger Name
+                                input.form-control(type="text", name="ledger_name")
+                            .col-md-6.mb-3
+                                label.form-label CGST %
+                                input.form-control(type="number", name="cgst_percent", step="0.01", min="0", max="100")
+                            .col-md-6.mb-3
+                                label.form-label SGST %
+                                input.form-control(type="number", name="sgst_percent", step="0.01", min="0", max="100")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="submit", form="addProductForm") Add Product
 
+    // CSS for mobile responsiveness and sticky header
+    style.
+        /* Uppercase field styling */
+        .uppercase-field {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
 
+        .uppercase-field::placeholder {
+            text-transform: uppercase;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
 
-    script.
-        function showAlert(message, type = 'success') {
+        /* Visual indicator for uppercase fields */
+        .uppercase-field:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            border-color: #80bdff;
+        }
+
+        /* Add small uppercase indicator */
+        .form-group.uppercase::after {
+            content: "ABC";
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #6c757d;
+            pointer-events: none;
+        }
+        .products-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .products-container {
+            padding-top: 15px;
+        }
+        
+        .product-card {
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        
+        .product-card .card-header {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 12px 16px;
+        }
+        
+        .product-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .product-detail {
+            margin-bottom: 8px;
+        }
+        
+        .product-detail small {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            
+            .mobile-cards-view {
+                display: block !important;
+            }
+            
+            .products-header-sticky h4 {
+                font-size: 18px;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .desktop-table-view {
+                display: block !important;
+            }
+            
+            .mobile-cards-view {
+                display: none !important;
+            }
+        }
+        
+        /* Sticky table header for desktop */
+        .table-responsive {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+    // JavaScript for product management
+    script.       
+        function convertToUppercase(input) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.toUpperCase();
+            input.setSelectionRange(start, end);
+        }
+
+        function setupUppercaseFields() {
+            const uppercaseFields = [
+                'input[name="product_name"]',
+                'input[name="sku_name"]', 
+                'input[name="sku_number"]',
+                'input[name="hsn_code"]',
+                'input[name="unit"]',
+                'input[name="ledger_name"]',
+                'input[id*="product-sku-name-"]',
+                'input[id*="product-sku-number-"]', 
+                'input[id*="product-hsn-code-"]',
+                'input[id*="product-unit-"]',
+                'input[id*="product-ledger-name-"]'
+            ];
+            
+            uppercaseFields.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(element => {
+                    element.value = element.value.toUpperCase();
+                    
+                    element.addEventListener('input', function(e) {
+                        convertToUppercase(e.target);
+                    });
+                    
+                    element.addEventListener('paste', function(e) {
+                        setTimeout(() => convertToUppercase(e.target), 10);
+                    });
+                });
+            });
+        }
+
+        function editProduct(index, productId) {
+            const row = document.getElementById(`product-row-${index}`);
+            const inputs = row.querySelectorAll('input[readonly]');
+            
+            inputs.forEach(input => {
+                if (!input.id.includes('sku-name') && !input.id.includes('sku-number') && !input.id.includes('hsn-code')) {
+                    input.removeAttribute('readonly');
+                    input.classList.add('bg-light');
+                }
+            });
+            
+            // Re-apply uppercase conversion to editable fields
+            setupUppercaseFields();
+            
+            const editBtn = row.querySelector('button');
+            editBtn.innerHTML = '<i class="bi bi-check"></i>';
+            editBtn.classList.remove('btn-primary');
+            editBtn.classList.add('btn-success');
+            editBtn.setAttribute('onclick', `saveProduct(${index}, ${productId})`);
+        }
+
+        function saveProduct(index, productId) {
+            const row = document.getElementById(`product-row-${index}`);
+            
+            // Ensure all text values are uppercase before saving
+            const updateData = {
+                m_product_price: document.getElementById(`product-price-${index}`).value,
+                m_product_unit: document.getElementById(`product-unit-${index}`).value.toUpperCase(),
+                m_product_ledger_name: document.getElementById(`product-ledger-name-${index}`).value.toUpperCase(),
+                m_product_cgst: document.getElementById(`product-cgst-${index}`).value,
+                m_product_sgst: document.getElementById(`product-sgst-${index}`).value
+            };
+            
+            fetch(`/products/api/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Product updated successfully', 'success');
+                    const inputs = row.querySelectorAll('input');
+                    inputs.forEach(input => {
+                        input.setAttribute('readonly', true);
+                        input.classList.remove('bg-light');
+                    });
+                    
+                    const saveBtn = row.querySelector('button');
+                    saveBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+                    saveBtn.classList.remove('btn-success');
+                    saveBtn.classList.add('btn-primary');
+                    saveBtn.setAttribute('onclick', `editProduct(${index}, ${productId})`);
+                } else {
+                    showMessage('Error updating product: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                showMessage('Error updating product: ' + error.message, 'danger');
+            });
+        }
+
+        function refreshData() {
+            location.reload();
+        }
+
+        function showMessage(message, type) {
             const alertDiv = document.getElementById('messageAlert');
             const messageText = document.getElementById('messageText');
             
-            // Set message and style
-            messageText.textContent = message;
             alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-            
-            // Show alert
+            messageText.textContent = message;
             alertDiv.style.display = 'block';
             
-            // Auto hide after 3 seconds
             setTimeout(() => {
-                if (alertDiv) {
+                alertDiv.classList.remove('show');
+                setTimeout(() => {
                     alertDiv.style.display = 'none';
-                }
+                }, 150);
             }, 3000);
         }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Setup uppercase conversion
+            setupUppercaseFields();
+            
+            document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+            
+            // Handle form submission for new products
+            document.getElementById('addProductForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                const jsonData = {};
+                
+                // Convert text fields to uppercase before sending
+                for (let [key, value] of formData.entries()) {
+                    if (key === 'product_name' || key === 'sku_name' || key === 'sku_number' || 
+                        key === 'hsn_code' || key === 'unit' || key === 'ledger_name') {
+                        jsonData[key] = value.toUpperCase();
+                    } else {
+                        jsonData[key] = value;
+                    }
+                }
+                
+                fetch('/products/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(jsonData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Product added successfully', 'success');
+                        $('#addProductModal').modal('hide');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showMessage('Error adding product: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showMessage('Error adding product: ' + error.message, 'danger');
+                });
+            });
+        });
