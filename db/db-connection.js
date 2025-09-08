@@ -65,6 +65,8 @@ db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  //
 db.location_config = require('./location-config')(sequelize, Sequelize);
 db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 db.adjustments = require("./adjustments")(sequelize, Sequelize);
+db.dev_tracker = require("./dev-tracker")(sequelize, Sequelize);
+db.dev_tracker_tasks = require("./dev-tracker-tasks")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -218,6 +220,25 @@ db.adjustments.belongsTo(db.m_bank, {
     scope: {
         external_source: 'BANK'
     }
+});
+
+db.dev_tracker.hasMany(db.dev_tracker_tasks, {
+    foreignKey: 'tracker_id',
+    as: 'tasks'
+});
+db.dev_tracker_tasks.belongsTo(db.dev_tracker, {
+    foreignKey: 'tracker_id',
+    as: 'tracker'
+});
+
+// Optional: Link to location if needed
+db.location.hasMany(db.dev_tracker, {
+    foreignKey: 'location_code', 
+    sourceKey: 'location_code'
+});
+db.dev_tracker.belongsTo(db.location, {
+    foreignKey: 'location_code', 
+    targetKey: 'location_code'
 });
 
 module.exports = db;

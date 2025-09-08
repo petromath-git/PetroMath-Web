@@ -161,6 +161,7 @@ const tallyDaybookRoutes = require('./routes/tally-daybook-routes');
 const mileageRoutes = require('./routes/mileage-routes');
 const adjustmentRoutes = require('./routes/adjustment-routes');
 const productsRoutes = require('./routes/products-routes');
+const devTrackerRoutes = require('./routes/dev-tracker-routes');
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
 
@@ -181,6 +182,7 @@ app.use('/reports-tally-daybook', tallyDaybookRoutes);
 app.use('/mileage', mileageRoutes);
 app.use('/adjustments', adjustmentRoutes);
 app.use('/products', productsRoutes);
+app.use('/dev-tracker', devTrackerRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
