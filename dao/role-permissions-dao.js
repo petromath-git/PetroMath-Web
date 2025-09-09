@@ -123,5 +123,31 @@ module.exports = {
         });
         
         return results;
-    }
+    },
+
+    // Generic method to check if user has a specific permission
+hasPermission: async (userRole, userLocation, permissionType) => {
+    const query = `
+        SELECT rp.location_specific, rp.location_code
+        FROM m_role_permissions rp
+        JOIN m_roles r ON rp.role_id = r.role_id
+        WHERE r.role_name = :userRole 
+          AND rp.permission_type = :permissionType
+          AND r.is_active = 1 
+          AND (rp.location_code IS NULL OR rp.location_code = :userLocation)
+          AND CURDATE() BETWEEN rp.effective_start_date AND rp.effective_end_date
+          AND CURDATE() BETWEEN r.effective_start_date AND r.effective_end_date
+        ORDER BY rp.location_code DESC
+        LIMIT 1
+    `;
+    
+    const result = await db.sequelize.query(query, {
+        replacements: { userRole, userLocation, permissionType },
+        type: QueryTypes.SELECT
+    });
+    
+    return result.length > 0;
+},
+
+
 };

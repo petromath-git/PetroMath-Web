@@ -1,0 +1,62 @@
+// Mobile-friendly Credit Party Edit Modal  
+#creditPartyEditModal.modal.fade(tabindex='-1')
+    .modal-dialog.modal-dialog-centered
+        .modal-content
+            .modal-header
+                h5.modal-title.fw-bold
+                    i.bi.bi-people.me-2
+                    | Change Customer
+                button.close(type='button' data-dismiss='modal' aria-label='Close')
+                    span(aria-hidden='true') &times;
+            
+            .modal-body
+                // Transaction info card
+                .card.mb-3.bg-light
+                    .card-body.py-2
+                        .row.g-2
+                            .col-6.col-md-4
+                                small.text-muted Bill No:
+                                .fw-semibold#modalBillNo2 -
+                            .col-6.col-md-4
+                                small.text-muted Amount:
+                                .fw-semibold#modalAmount -
+                            .col-12.col-md-4
+                                small.text-muted Product:
+                                .fw-semibold#modalProduct -
+                
+                form#creditPartyEditForm
+                    .row.g-3
+                        .col-12
+                            label.form-label(for='currentCustomer') Current Customer:
+                            input#currentCustomer.form-control(type='text' readonly)
+                        
+                        .col-12
+                            label.form-label(for='newCustomer') 
+                                | New Customer: 
+                                span.text-danger *
+                            select#newCustomer.form-control(required)
+                                option(value='') Select Customer...
+                            .form-text Choose the correct customer for this transaction
+                        
+                        .col-12
+                            label.form-label(for='creditPartyReason') 
+                                | Reason for Change: 
+                                span.text-danger *
+                            textarea#creditPartyReason.form-control(rows='2' placeholder='Required: Explain why the customer is being changed' required)
+                        
+                        .col-12
+                            .alert.alert-warning.py-2
+                                .d-flex.align-items-start
+                                    i.bi.bi-exclamation-triangle.me-2.mt-1.text-warning
+                                    div
+                                        small.fw-semibold Warning
+                                        .small This change affects financial records and customer balances.
+            
+            .modal-footer
+                .row.g-2.w-100
+                    .col-6
+                        button.btn.btn-outline-secondary.w-100(type='button' data-dismiss='modal') Cancel
+                    .col-6
+                        button#saveCreditPartyBtn.btn.btn-danger.w-100(type='button')
+                            span.spinner-border.spinner-border-sm.me-2(style='display:none') 
+                            | Change Customer

@@ -1,0 +1,421 @@
+extends layout
+
+block content
+    .container-fluid.mt-4
+        .row
+            .col-12
+                .card
+                    .card-header.sticky-top.bg-white.border-bottom
+                        .d-flex.justify-content-between.align-items-center
+                            h5.card-title.mb-0
+                                i.bi.bi-gear.text-primary.me-2
+                                | Credit Transaction Corrections
+                            .text-muted
+                                | Correct odometer readings and credit party assignments
+                    
+                    .card-body
+                        // Search Filters
+                        form#searchForm.mb-4
+                            .row.g-3
+                                .col-md-3
+                                    label.form-label From Date:
+                                    input#fromDate.form-control(type='date' name='fromDate' required)
+                                .col-md-3
+                                    label.form-label To Date:
+                                    input#toDate.form-control(type='date' name='toDate' required)
+                                if userRole !== 'Customer'
+                                    .col-md-4
+                                        label.form-label Customer:
+                                        select#customerFilter.form-control(name='customerFilter')
+                                            option(value='') All Customers
+                                .col-md-2.d-flex.align-items-end
+                                    button#searchBtn.btn.btn-primary.w-100(type='submit')
+                                        i.bi.bi-search.me-2
+                                        | Search
+                        
+                        // Results Section
+                        #resultsSection(style='display:none')
+                            .d-flex.justify-content-between.align-items-center.mb-3
+                                h6.mb-0 Search Results
+                                #resultCount.text-muted
+                            
+                            .table-responsive(style="max-height: 60vh; overflow-y: auto;")
+                                table#transactionsTable.table.table-hover.mb-0
+                                    thead.thead-dark.sticky-top
+                                        tr
+                                            th(scope="col") Date
+                                            th(scope="col") Bill No
+                                            th(scope="col") Customer
+                                            th(scope="col") Vehicle
+                                            th(scope="col") Product
+                                            th(scope="col") Quantity
+                                            th(scope="col") Amount
+                                            th(scope="col") Odometer
+                                            th(scope="col") Actions
+                                    tbody#transactionsList
+                                        // Results will be populated here
+                        
+                        // No Results Message
+                        #noResults.alert.alert-info(style='display:none')
+                            i.bi.bi-info-circle.me-2
+                            | No transactions found for the selected criteria.
+
+    // Include modals at the bottom
+    include modals/odometer-edit-modal
+    include modals/credit-party-edit-modal
+
+    script.       
+            // Initialize page
+            document.addEventListener('DOMContentLoaded', function() {
+                // Set default date range (last 30 days)
+                const today = new Date();
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                
+                document.getElementById('fromDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+                document.getElementById('toDate').value = today.toISOString().split('T')[0];
+                
+                // Load customer dropdown for non-customer users
+                if ('#{userRole}' !== 'Customer') {
+                    loadCustomers();
+                }
+                
+                // Search form handler
+                document.getElementById('searchForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    searchTransactions();
+                });
+                
+                // Modal handlers
+                setupModalHandlers();
+            });
+
+            // Load customers for dropdown
+            async function loadCustomers() {
+                try {
+                    const response = await fetch('/api/transaction-corrections/customers');
+                    const customers = await response.json();
+                    
+                    const select = document.getElementById('customerFilter');
+                    select.innerHTML = '<option value="">All Customers</option>';
+                    
+                    customers.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.creditlist_id;
+                        option.textContent = customer.Company_Name;
+                        select.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading customers:', error);
+                }
+            }
+
+            // Search transactions
+            async function searchTransactions() {
+                const fromDate = document.getElementById('fromDate').value;
+                const toDate = document.getElementById('toDate').value;
+                const customerFilter = document.getElementById('customerFilter')?.value || '';
+                
+                if (!fromDate || !toDate) {
+                    showAlert('warning', 'Please select both from and to dates');
+                    return;
+                }
+                
+                showLoading(true);
+                
+                try {
+                    const params = new URLSearchParams({
+                        fromDate: fromDate,
+                        toDate: toDate,
+                        customerFilter: customerFilter
+                    });
+                    
+                    const response = await fetch(`/api/transaction-corrections/search?${params}`);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        displayTransactions(data.transactions);
+                        document.getElementById('resultCount').textContent = `${data.transactions.length} transactions found`;
+                    } else {
+                        throw new Error(data.error || 'Failed to search transactions');
+                    }
+                } catch (error) {
+                    console.error('Search error:', error);
+                    showAlert('danger', 'Error searching transactions: ' + error.message);
+                } finally {
+                    showLoading(false);
+                }
+            }
+
+            // Display transactions in table
+            function displayTransactions(transactions) {
+                const tbody = document.getElementById('transactionsList');
+                const resultsSection = document.getElementById('resultsSection');
+                const noResults = document.getElementById('noResults');
+                
+                if (transactions.length === 0) {
+                    resultsSection.style.display = 'none';
+                    noResults.style.display = 'block';
+                    return;
+                }
+                
+                tbody.innerHTML = '';
+                
+                transactions.forEach(transaction => {
+                    const row = document.createElement('tr');
+                    
+                    // Format date
+                    const date = new Date(transaction.closing_date).toLocaleDateString('en-IN');
+                    
+                    // Format amount
+                    const amount = parseFloat(transaction.amount || 0).toLocaleString('en-IN');
+                    
+                    // Format odometer
+                    const odometer = transaction.odometer_reading ? 
+                        parseFloat(transaction.odometer_reading).toLocaleString('en-IN') + ' km' : 
+                        '<span class="text-muted">Not set</span>';
+                    
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${transaction.bill_no || '-'}</td>
+                        <td>${transaction.Company_Name || '-'}</td>
+                        <td>${transaction.vehicle_number || '-'}</td>
+                        <td>${transaction.product_name || '-'}</td>
+                        <td>${parseFloat(transaction.qty || 0).toLocaleString('en-IN')}</td>
+                        <td>₹${amount}</td>
+                        <td>${odometer}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary btn-sm" onclick="editOdometer(${transaction.tcredit_id}, '${transaction.bill_no}', '${transaction.vehicle_number}', '${transaction.Company_Name}', ${transaction.odometer_reading || 0})">
+                                    <i class="bi bi-speedometer2"></i> Odometer
+                                </button>
+                                ${canEditCreditParty() ? `
+                                <button class="btn btn-outline-warning btn-sm" onclick="editCreditParty(${transaction.tcredit_id}, '${transaction.bill_no}', '${transaction.Company_Name}', ${transaction.creditlist_id}, '${transaction.product_name}', '${amount}')">
+                                    <i class="bi bi-people"></i> Customer
+                                </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+                
+                resultsSection.style.display = 'block';
+                noResults.style.display = 'none';
+            }
+
+            // Check if user can edit credit party
+            function canEditCreditParty() {
+                return '#{userRole}' === 'SuperUser';
+            }
+
+            // Show loading state
+            function showLoading(show) {
+                const btn = document.getElementById('searchBtn');
+                if (show) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching...';
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-search me-2"></i>Search';
+                }
+            }
+
+            // Show alert messages
+            function showAlert(type, message) {
+                const alertHtml = `
+                    <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+                
+                const container = document.querySelector('.container-fluid');
+                container.insertAdjacentHTML('afterbegin', alertHtml);
+                
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => {
+                    const alert = container.querySelector('.alert');
+                    if (alert) alert.remove();
+                }, 5000);
+            }
+
+                    // Setup modal handlers
+            function setupModalHandlers() {
+                // Odometer modal save handler
+                document.getElementById('saveOdometerBtn').addEventListener('click', saveOdometerReading);
+                
+                // Credit party modal save handler
+                document.getElementById('saveCreditPartyBtn').addEventListener('click', saveCreditPartyChange);
+            }
+
+            // Edit odometer reading
+            function editOdometer(tcreditId, billNo, vehicleNumber, customerName, currentReading) {
+                // Populate modal data
+                document.getElementById('modalBillNo').textContent = billNo;
+                document.getElementById('modalVehicle').textContent = vehicleNumber;
+                document.getElementById('modalCustomer').textContent = customerName;
+                
+                document.getElementById('currentOdometer').value = currentReading || '';
+                document.getElementById('newOdometer').value = currentReading || '';
+                document.getElementById('odometerReason').value = '';
+                
+                // Store tcredit ID for save
+                document.getElementById('saveOdometerBtn').setAttribute('data-tcredit-id', tcreditId);
+                
+                // Show modal
+                $('#odometerEditModal').modal('show');
+                
+            }
+
+            // Edit credit party
+            function editCreditParty(tcreditId, billNo, currentCustomer, currentCreditlistId, productName, amount) {
+                // Populate modal data
+                document.getElementById('modalBillNo2').textContent = billNo;
+                document.getElementById('modalAmount').textContent = '₹' + amount.replace(/,/g, '');
+                document.getElementById('modalProduct').textContent = productName;
+                
+                document.getElementById('currentCustomer').value = currentCustomer;
+                document.getElementById('creditPartyReason').value = '';
+                
+                // Load customers for dropdown
+                loadCustomersForModal(currentCreditlistId);
+                
+                // Store tcredit ID for save
+                document.getElementById('saveCreditPartyBtn').setAttribute('data-tcredit-id', tcreditId);
+                
+                // Show modal
+                $('#creditPartyEditModal').modal('show');
+                
+            }
+
+            // Load customers for credit party modal
+            async function loadCustomersForModal(currentCreditlistId) {
+                try {
+                    const response = await fetch('/api/transaction-corrections/customers');
+                    const customers = await response.json();
+                    
+                    const select = document.getElementById('newCustomer');
+                    select.innerHTML = '<option value="">Select Customer...</option>';
+                    
+                    customers.forEach(customer => {
+                        const option = document.createElement('option');
+                        option.value = customer.creditlist_id;
+                        option.textContent = customer.Company_Name;
+                        if (customer.creditlist_id == currentCreditlistId) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading customers for modal:', error);
+                }
+            }
+
+            // Save odometer reading
+            async function saveOdometerReading() {
+                const tcreditId = document.getElementById('saveOdometerBtn').getAttribute('data-tcredit-id');
+                const newReading = document.getElementById('newOdometer').value;
+                const reason = document.getElementById('odometerReason').value;
+                
+                if (!newReading || newReading < 0) {
+                    showAlert('warning', 'Please enter a valid odometer reading');
+                    return;
+                }
+                
+                const btn = document.getElementById('saveOdometerBtn');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+                
+                try {
+                    const response = await fetch(`/api/transaction-corrections/credits/${tcreditId}/odometer`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            odometerReading: parseFloat(newReading),
+                            reason: reason
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Close modal
+                        $('#odometerEditModal').modal('hide');
+                        
+                        // Show success message
+                        showAlert('success', 'Odometer reading updated successfully');
+                        
+                        // Refresh search results
+                        searchTransactions();
+                    } else {
+                        throw new Error(data.error || 'Failed to update odometer reading');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showAlert('danger', 'Error: ' + error.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
+
+            // Save credit party change
+            async function saveCreditPartyChange() {
+                const tcreditId = document.getElementById('saveCreditPartyBtn').getAttribute('data-tcredit-id');
+                const newCreditlistId = document.getElementById('newCustomer').value;
+                const reason = document.getElementById('creditPartyReason').value;
+                
+                if (!newCreditlistId) {
+                    showAlert('warning', 'Please select a customer');
+                    return;
+                }
+                
+                if (!reason.trim()) {
+                    showAlert('warning', 'Please provide a reason for the change');
+                    return;
+                }
+                
+                const btn = document.getElementById('saveCreditPartyBtn');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+                
+                try {
+                    const response = await fetch(`/api/transaction-corrections/credits/${tcreditId}/credit-party`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            newCreditlistId: parseInt(newCreditlistId),
+                            reason: reason
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Close modal
+                        $('#creditPartyEditModal').modal('hide');
+                        
+                        // Show success message
+                        showAlert('success', 'Credit party updated successfully');
+                        
+                        // Refresh search results
+                        searchTransactions();
+                    } else {
+                        throw new Error(data.error || 'Failed to update credit party');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showAlert('danger', 'Error: ' + error.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            }
