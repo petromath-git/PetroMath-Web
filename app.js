@@ -163,6 +163,9 @@ const adjustmentRoutes = require('./routes/adjustment-routes');
 const productsRoutes = require('./routes/products-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
+const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
+
+
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
 // Add method-override here
@@ -189,6 +192,7 @@ app.use('/adjustments', adjustmentRoutes);
 app.use('/products', productsRoutes);
 app.use('/dev-tracker', devTrackerRoutes);
 app.use('/system-health', systemHealthRoutes);
+app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';

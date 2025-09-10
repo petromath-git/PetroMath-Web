@@ -1,5 +1,6 @@
 
 const config = require("../config/app-config");
+const rolePermissionsDao = require("../dao/role-permissions-dao");
 
 module.exports = {
     isAdmin : () => {
@@ -25,5 +26,32 @@ module.exports = {
             }
             next();  // Proceed if the user is not a customer
         };
+    },
+    hasPermission: (permissionType) => {
+    return async (req, res, next) => {
+        try {
+            const userRole = req.user?.Role;
+            const userLocation = req.user?.location_code;
+            
+            if (!userRole || !userLocation) {
+                return res.status(403).send('Access Denied: Invalid user session.');
+            }
+            
+            const hasPermission = await rolePermissionsDao.hasPermission(
+                userRole, 
+                userLocation, 
+                permissionType
+            );
+            
+            if (hasPermission) {
+                next();
+            } else {
+                res.status(403).send(`Access Denied: You do not have permission for ${permissionType}.`);
+            }
+        } catch (error) {
+            console.error(`Error checking permission ${permissionType}:`, error);
+            res.status(500).send('Internal server error while checking permissions.');
+        }
     }
+}
 }
