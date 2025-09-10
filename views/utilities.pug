@@ -37,8 +37,86 @@ block content
                 div.card-header.text-white.bg-dark Tally Export
                 div.card-body
                     form(method='POST' action='/tally-export' id='form-tally-export')
-                        label(for='exportDate') Export Date:
-                        input#exportDate.form-control(type='date' name='exportDate', value=currentDate max=currentDate format="dd/mm/yyyy" required)
+                        div.row
+                            div.col-6
+                                label(for='exportYear') Year:
+                                select#exportYear.form-control(name='exportYear' required)
+                                    option(value='') Select Year
+                                    if availableYears
+                                        each year in availableYears
+                                            option(value=year, selected=year === currentYear ? true : undefined)= year
+                                    else
+                                        - for (let year = 2020; year <= currentYear; year++)
+                                            option(value=year, selected=year === currentYear ? true : undefined)= year
+                            div.col-6
+                                label(for='exportMonth') Month:
+                                select#exportMonth.form-control(name='exportMonth' required)
+                                    option(value='') Select Month
+                                    if availableMonths
+                                        each month in availableMonths
+                                            option(value=month.value)= month.name
+                                    else
+                                        option(value='01') January
+                                        option(value='02') February
+                                        option(value='03') March
+                                        option(value='04') April
+                                        option(value='05') May
+                                        option(value='06') June
+                                        option(value='07') July
+                                        option(value='08') August
+                                        option(value='09') September
+                                        option(value='10') October
+                                        option(value='11') November
+                                        option(value='12') December
                         br
                         div.text-center
                             button.btn.btn-primary(type='submit') Download
+
+    script.
+        // Handle year change to update available months
+        document.getElementById('exportYear').addEventListener('change', function() {
+            const selectedYear = parseInt(this.value);
+            const currentYear = new Date().getFullYear();
+            const currentMonth = new Date().getMonth() + 1;
+            const monthSelect = document.getElementById('exportMonth');
+            
+            // Clear current options except the first one
+            monthSelect.innerHTML = '<option value="">Select Month</option>';
+            
+            const months = [
+                {value: '01', name: 'January'},
+                {value: '02', name: 'February'},
+                {value: '03', name: 'March'},
+                {value: '04', name: 'April'},
+                {value: '05', name: 'May'},
+                {value: '06', name: 'June'},
+                {value: '07', name: 'July'},
+                {value: '08', name: 'August'},
+                {value: '09', name: 'September'},
+                {value: '10', name: 'October'},
+                {value: '11', name: 'November'},
+                {value: '12', name: 'December'}
+            ];
+            
+            // Add months based on selected year
+            months.forEach(function(month) {
+                const monthValue = parseInt(month.value);
+                
+                // If current year, only show months up to current month
+                // If previous year, show all months
+                if (selectedYear < currentYear || monthValue <= currentMonth) {
+                    const option = document.createElement('option');
+                    option.value = month.value;
+                    option.textContent = month.name;
+                    monthSelect.appendChild(option);
+                }
+            });
+        });
+        
+        // Initialize months on page load if year is already selected
+        document.addEventListener('DOMContentLoaded', function() {
+            const yearSelect = document.getElementById('exportYear');
+            if (yearSelect.value) {
+                yearSelect.dispatchEvent(new Event('change'));
+            }
+        });
