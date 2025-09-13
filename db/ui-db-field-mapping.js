@@ -253,5 +253,33 @@ module.exports = {
             effective_start_date: new Date(),
             effective_end_date: '2099-12-31'
         };
-    }
+    },
+    newTank: function (req) {
+    return {
+        tank_code: req.body.tank_code,
+        product_code: req.body.product_code,
+        tank_orig_capacity: req.body.tank_orig_capacity,
+        tank_opening_stock: req.body.tank_opening_stock || 0,
+        dead_stock: req.body.dead_stock || 0,
+        dipchartid: req.body.dipchartid || null,
+        location_code: req.user.location_code,
+        effective_start_date: dateFormat(new Date(), "yyyy-mm-dd"),
+        effective_end_date: '2900-01-01',
+        created_by: req.user.User_Name,
+        creation_date: new Date()
+    };
+},
+
+updateTank: function (req) {
+    return {
+        tank_code: req.body.tank_code,
+        product_code: req.body.product_code,
+        tank_orig_capacity: req.body.tank_orig_capacity,
+        tank_opening_stock: req.body.tank_opening_stock,
+        dead_stock: req.body.dead_stock,
+        dipchartid: req.body.dipchartid,
+        updated_by: req.user.User_Name,
+        updation_date: new Date()
+    };
+}
 }

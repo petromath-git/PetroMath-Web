@@ -160,5 +160,53 @@ module.exports = {
         } else {
             return Tank.findAll();
         }
-    }
+    },
+    create: (tankData, transaction) => {
+        return Tank.create(tankData, {
+            transaction: transaction
+        });
+    },
+
+    findById: (tankId) => {
+        return Tank.findOne({
+            where: { tank_id: tankId }
+        });
+    },
+
+    update: (tankId, tankData, transaction) => {
+        return Tank.update(tankData, {
+            where: { tank_id: tankId },
+            transaction: transaction
+        });
+    },
+
+    deactivate: async function(tankId, deactivateData, transaction) {
+        const today = new Date();
+        
+        return await Tank.update(deactivateData, {
+            where: { 
+                tank_id: tankId,
+                effective_end_date: {
+                    [Op.gt]: today
+                }
+            },
+            transaction: transaction
+        });
+    },
+
+    checkCodeOverlap: async (tankId, tankCode, startDate, locationCode) => {
+        const overlapping = await Tank.findOne({
+            where: {
+                location_code: locationCode,
+                tank_code: tankCode,
+                [Op.and]: [
+                    { effective_start_date: { [Op.lte]: startDate } },
+                    { effective_end_date: { [Op.gt]: startDate } }
+                ],
+                ...(tankId && { tank_id: { [Op.ne]: tankId } })
+            }
+        });
+
+        return !!overlapping;
+    },
 }

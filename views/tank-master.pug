@@ -1,0 +1,666 @@
+extends layout
+
+block content
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Mobile-first: Sticky header for tank master
+    .tank-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2
+                .col-auto
+                    h4.mb-0.text-primary Tank Master
+                .col.text-right
+                    .btn-group
+                        button.btn.btn-success.btn-sm#addTankBtn(type="button", data-toggle="modal", data-target="#addTankModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Tank
+                            span.d-inline.d-sm-none Add
+                        button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                            i.bi.bi-arrow-clockwise.me-1
+                            span.d-none.d-sm-inline Refresh
+                            span.d-inline.d-sm-none Refresh
+
+    // Tank content with responsive design
+    .tank-container
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive
+                table.table.table-hover.table-striped#tank-master-table
+                    thead.thead-dark.sticky-top
+                        tr
+                            th(scope="col") Tank Code
+                            th(scope="col") Product
+                            th(scope="col") Capacity (L)
+                            th(scope="col") Opening Stock (L)
+                            th(scope="col") Dead Stock (L)
+                            th(scope="col") Dip Chart
+                            th(scope="col") Status
+                            th(scope="col") Actions
+                    tbody
+                        each tank in tanks
+                            tr(id=`tank-row-${tank.tank_id}`)
+                                td= tank.tank_code
+                                td
+                                    span.badge.badge-info= tank.product_code
+                                td= tank.tank_orig_capacity.toLocaleString()
+                                td= tank.tank_opening_stock ? tank.tank_opening_stock.toLocaleString() : '0'
+                                td= tank.dead_stock ? tank.dead_stock.toLocaleString() : '0'
+                                td= tank.dipchartid ? 'Assigned' : 'Not Assigned'
+                                td
+                                    if Date.parse(tank.effective_end_date) > Date.now()
+                                        span.badge.badge-success Active
+                                    else
+                                        span.badge.badge-secondary Inactive
+                                td
+                                    if tank.canEdit
+                                        .btn-group.btn-group-sm
+                                            button.btn.btn-outline-primary.btn-sm(
+                                                type="button", 
+                                                onclick=`editTank(${tank.tank_id})`
+                                            )
+                                                i.bi.bi-pencil
+                                            button.btn.btn-outline-danger.btn-sm(
+                                                type="button", 
+                                                onclick=`deactivateTank(${tank.tank_id})`
+                                            )
+                                                i.bi.bi-trash
+                                    else
+                                        span.text-muted.small View Only
+
+        // Mobile cards view
+        .mobile-cards-view.d-block.d-lg-none
+            .row
+                each tank in tanks
+                    .col-12.mb-3
+                        .card.tank-card.shadow-sm
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                .tank-name
+                                    strong= tank.tank_code
+                                    span.badge.badge-info.ml-2= tank.product_code
+                                .tank-status
+                                    if Date.parse(tank.effective_end_date) > Date.now()
+                                        span.badge.badge-success Active
+                                    else
+                                        span.badge.badge-secondary Inactive
+                            .card-body.p-3
+                                .row.g-2
+                                    .col-6
+                                        .tank-detail
+                                            small.text-muted Capacity
+                                            .fw-bold= tank.tank_orig_capacity.toLocaleString() + ' L'
+                                    .col-6
+                                        .tank-detail
+                                            small.text-muted Opening Stock
+                                            .fw-bold= (tank.tank_opening_stock || 0).toLocaleString() + ' L'
+                                    .col-6
+                                        .tank-detail
+                                            small.text-muted Dead Stock
+                                            .fw-bold= (tank.dead_stock || 0).toLocaleString() + ' L'
+                                    .col-6
+                                        .tank-detail
+                                            small.text-muted Dip Chart
+                                            .fw-bold= tank.dipchartid ? 'Assigned' : 'Not Assigned'
+                                if tank.canEdit
+                                    .row.mt-3
+                                        .col-6
+                                            button.btn.btn-outline-primary.btn-sm.w-100(
+                                                type="button", 
+                                                onclick=`editTank(${tank.tank_id})`
+                                            )
+                                                i.bi.bi-pencil.me-1
+                                                | Edit
+                                        .col-6
+                                            button.btn.btn-outline-danger.btn-sm.w-100(
+                                                type="button", 
+                                                onclick=`deactivateTank(${tank.tank_id})`
+                                            )
+                                                i.bi.bi-trash.me-1
+                                                | Delete
+                                else
+                                    .text-center.mt-2
+                                        span.text-muted.small Tank has active connections - View Only
+
+    // Add Tank Modal
+    #addTankModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-lg
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Tank
+                    button.btn-close(type='button', data-dismiss='modal', aria-label='Close')
+                .modal-body
+                    form#addTankForm
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='tankCode') Tank Code
+                                    input#tankCode.form-control(
+                                        type='text'
+                                        name='tank_code'
+                                        placeholder='Enter tank code (e.g., T01)'
+                                        required
+                                        style='text-transform: uppercase;'
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='productCode') Product Code
+                                    select#productCode.form-control(name='product_code', required)
+                                        option(value='') -- Select Product --
+                                        each product in products
+                                            option(value=product)= product
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='tankCapacity') Tank Capacity (Liters)
+                                    input#tankCapacity.form-control(
+                                        type='number'
+                                        name='tank_orig_capacity'
+                                        placeholder='Enter capacity in liters'
+                                        min='1'
+                                        step='0.01'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='openingStock') Opening Stock (Liters)
+                                    input#openingStock.form-control(
+                                        type='number'
+                                        name='tank_opening_stock'
+                                        placeholder='Enter opening stock'
+                                        min='0'
+                                        step='0.01'
+                                        value='0'
+                                    )
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='deadStock') Dead Stock (Liters)
+                                    input#deadStock.form-control(
+                                        type='number'
+                                        name='dead_stock'
+                                        placeholder='Enter dead stock'
+                                        min='0'
+                                        step='0.01'
+                                        value='0'
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='dipChart') Dip Chart
+                                    select#dipChart.form-control(name='dipchartid')
+                                        option(value='') -- No Dip Chart --
+                                        each chart in dipCharts
+                                            option(value=chart.dipchartid)= `${chart.chart_name} (${chart.capacity_liters}L)`
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#addTankBtn.btn.btn-success(type='button')
+                        i.bi.bi-save.me-1
+                        | Save Tank
+
+    // Edit Tank Modal
+    #editTankModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-lg
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Tank
+                    button.btn-close(type='button', data-dismiss='modal', aria-label='Close')
+                .modal-body
+                    form#editTankForm
+                        input#editTankId(type='hidden', name='tank_id')
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editTankCode') Tank Code
+                                    input#editTankCode.form-control(
+                                        type='text'
+                                        name='tank_code'
+                                        required
+                                        style='text-transform: uppercase;'
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editProductCode') Product Code
+                                    select#editProductCode.form-control(name='product_code', required)
+                                        option(value='') -- Select Product --
+                                        each product in products
+                                            option(value=product)= product
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editTankCapacity') Tank Capacity (Liters)
+                                    input#editTankCapacity.form-control(
+                                        type='number'
+                                        name='tank_orig_capacity'
+                                        min='1'
+                                        step='0.01'
+                                        required
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editOpeningStock') Opening Stock (Liters)
+                                    input#editOpeningStock.form-control(
+                                        type='number'
+                                        name='tank_opening_stock'
+                                        min='0'
+                                        step='0.01'
+                                    )
+                        .row
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editDeadStock') Dead Stock (Liters)
+                                    input#editDeadStock.form-control(
+                                        type='number'
+                                        name='dead_stock'
+                                        min='0'
+                                        step='0.01'
+                                    )
+                            .col-md-6
+                                .form-group.mb-3
+                                    label(for='editDipChart') Dip Chart
+                                    select#editDipChart.form-control(name='dipchartid')
+                                        option(value='') -- No Dip Chart --
+                                        each chart in dipCharts
+                                            option(value=chart.dipchartid)= `${chart.chart_name} (${chart.capacity_liters}L)`
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#updateTankBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Update Tank
+
+    // Mobile-specific CSS
+    style.
+        /* Tank Master Mobile Improvements */
+        
+        /* Desktop: Keep existing layout */
+        @media (min-width: 992px) {
+            .mobile-cards-view {
+                display: none !important;
+            }
+            .desktop-table-view {
+                display: block !important;
+            }
+            .tank-header-sticky h4 {
+                font-size: 24px;
+            }
+        }
+        
+        /* Mobile: Tank cards layout */
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            .mobile-cards-view {
+                display: block !important;
+            }
+            .tank-header-sticky h4 {
+                font-size: 18px;
+            }
+        }
+        
+        /* Tank header sticky */
+        .tank-header-sticky {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 1020;
+            border-bottom: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        /* Tank cards styling */
+        .tank-card {
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .tank-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .tank-card .card-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 12px 12px 0 0 !important;
+            border-bottom: none;
+        }
+        
+        .tank-detail {
+            margin-bottom: 8px;
+        }
+        
+        .tank-detail small {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            display: block;
+        }
+        
+        /* Modal improvements for mobile */
+        @media (max-width: 768px) {
+            .modal-dialog {
+                margin: 10px;
+                max-width: none;
+                width: auto;
+            }
+            
+            .modal-body .row .col-md-6 {
+                margin-bottom: 15px;
+            }
+            
+            .form-control {
+                font-size: 16px !important;
+                padding: 14px 12px !important;
+                border-radius: 8px !important;
+                height: 48px !important;
+                border: 2px solid #e1e5e9;
+            }
+            
+            .form-control:focus {
+                border-color: #667eea;
+                box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+            }
+            
+            .btn {
+                padding: 14px 20px !important;
+                font-size: 16px !important;
+                border-radius: 8px !important;
+                height: 48px !important;
+            }
+        }
+        
+        /* Sticky table header for desktop */
+        .table-responsive {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Upper case input styling */
+        input[style*="text-transform: uppercase"] {
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+    // JavaScript for tank management with uppercase validation
+    script.
+        // Tank data from server
+        const tanksData = !{tanksData};
+        const productsData = !{productsData};
+        const dipChartsData = !{dipChartsData};
+        const userLocationCode = '#{user.location_code}';
+        
+        // Uppercase conversion function
+        function convertToUppercase(input) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.toUpperCase();
+            input.setSelectionRange(start, end);
+        }
+        
+        // Setup uppercase fields
+        function setupUppercaseFields() {
+            const uppercaseFields = [
+                'input[name="tank_code"]',
+                '#tankCode',
+                '#editTankCode'
+            ];
+            
+            uppercaseFields.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(element => {
+                    // Convert existing value to uppercase
+                    element.value = element.value.toUpperCase();
+                    
+                    // Add input event listener
+                    element.addEventListener('input', function(e) {
+                        convertToUppercase(e.target);
+                    });
+                    
+                    // Add paste event listener
+                    element.addEventListener('paste', function(e) {
+                        setTimeout(() => convertToUppercase(e.target), 10);
+                    });
+                    
+                    // Add keydown listener to handle special keys
+                    element.addEventListener('keydown', function(e) {
+                        // Allow control keys like backspace, delete, arrows, etc.
+                        if (e.ctrlKey || e.altKey || e.metaKey) return;
+                        
+                        const allowedKeys = [
+                            'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
+                            'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                            'Home', 'End'
+                        ];
+                        
+                        if (allowedKeys.includes(e.key)) return;
+                        
+                        // Convert character to uppercase immediately
+                        if (e.key.length === 1) {
+                            setTimeout(() => convertToUppercase(e.target), 1);
+                        }
+                    });
+                });
+            });
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setupUppercaseFields();
+            
+            // Re-setup when modals are shown
+            $('#addTankModal, #editTankModal').on('shown.bs.modal', function() {
+                setupUppercaseFields();
+            });
+        });
+        
+        // Add Tank Form Submission
+        document.getElementById('addTankBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                tank_code: document.getElementById('tankCode').value.trim().toUpperCase(),
+                product_code: document.getElementById('productCode').value,
+                tank_orig_capacity: parseFloat(document.getElementById('tankCapacity').value),
+                tank_opening_stock: parseFloat(document.getElementById('openingStock').value) || 0,
+                dead_stock: parseFloat(document.getElementById('deadStock').value) || 0,
+                dipchartid: document.getElementById('dipChart').value || null
+            };
+            
+            // Validate required fields
+            if (!formData.tank_code || !formData.product_code || !formData.tank_orig_capacity) {
+                showMessage('Please fill in all required fields', 'danger');
+                return;
+            }
+            
+            // Validate dead stock is not greater than capacity
+            if (formData.dead_stock >= formData.tank_orig_capacity) {
+                showMessage('Dead stock cannot be greater than or equal to tank capacity', 'danger');
+                return;
+            }
+            
+            // Send AJAX request
+            fetch('/tank-master', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    $('#addTankModal').modal('hide');
+                    location.reload();
+                } else {
+                    showMessage(data.message || 'Error creating tank', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error creating tank', 'danger');
+            });
+        });
+        
+        // Edit Tank Function
+        function editTank(tankId) {
+            const tank = tanksData.find(t => t.tank_id === tankId);
+            if (!tank) {
+                showMessage('Tank not found', 'danger');
+                return;
+            }
+            
+            // Check if tank can be edited
+            if (!tank.canEdit) {
+                showMessage('Tank cannot be edited because it has active pump connections or transaction history', 'warning');
+                return;
+            }
+            
+            // Fill the form
+            document.getElementById('editTankId').value = tank.tank_id;
+            document.getElementById('editTankCode').value = tank.tank_code;
+            document.getElementById('editProductCode').value = tank.product_code;
+            document.getElementById('editTankCapacity').value = tank.tank_orig_capacity;
+            document.getElementById('editOpeningStock').value = tank.tank_opening_stock || 0;
+            document.getElementById('editDeadStock').value = tank.dead_stock || 0;
+            document.getElementById('editDipChart').value = tank.dipchartid || '';
+            
+            // Show the modal
+            $('#editTankModal').modal('show');
+        }
+        
+        // Update Tank Form Submission
+        document.getElementById('updateTankBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const tankId = document.getElementById('editTankId').value;
+            const formData = {
+                tank_code: document.getElementById('editTankCode').value.trim().toUpperCase(),
+                product_code: document.getElementById('editProductCode').value,
+                tank_orig_capacity: parseFloat(document.getElementById('editTankCapacity').value),
+                tank_opening_stock: parseFloat(document.getElementById('editOpeningStock').value) || 0,
+                dead_stock: parseFloat(document.getElementById('editDeadStock').value) || 0,
+                dipchartid: document.getElementById('editDipChart').value || null
+            };
+            
+            // Validate required fields
+            if (!formData.tank_code || !formData.product_code || !formData.tank_orig_capacity) {
+                showMessage('Please fill in all required fields', 'danger');
+                return;
+            }
+            
+            // Validate dead stock is not greater than capacity
+            if (formData.dead_stock >= formData.tank_orig_capacity) {
+                showMessage('Dead stock cannot be greater than or equal to tank capacity', 'danger');
+                return;
+            }
+            
+            // Send AJAX request
+            fetch(`/tank-master/${tankId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    $('#editTankModal').modal('hide');
+                    location.reload();
+                } else {
+                    showMessage(data.message || 'Error updating tank', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error updating tank', 'danger');
+            });
+        });
+        
+        // Deactivate Tank Function
+        function deactivateTank(tankId) {
+            const tank = tanksData.find(t => t.tank_id === tankId);
+            if (!tank) {
+                showMessage('Tank not found', 'danger');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to deactivate tank ${tank.tank_code}?`)) {
+                return;
+            }
+            
+            // Send AJAX request
+            fetch(`/tank-master/${tankId}/deactivate`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    location.reload();
+                } else {
+                    showMessage(data.message || 'Error deactivating tank', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error deactivating tank', 'danger');
+            });
+        }
+        
+        // Refresh Data Function
+        document.getElementById('refreshDataBtn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // Clear form when modals are hidden
+        $('#addTankModal').on('hidden.bs.modal', function () {
+            document.getElementById('addTankForm').reset();
+        });
+        
+        $('#editTankModal').on('hidden.bs.modal', function () {
+            document.getElementById('editTankForm').reset();
+        });
+        
+        // Message display function
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            // Remove existing classes
+            alertDiv.className = 'alert alert-dismissible fade show';
+            
+            // Add new class based on type
+            alertDiv.classList.add(`alert-${type}`);
+            
+            // Set message text
+            messageText.textContent = message;
+            
+            // Show the alert
+            alertDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Make functions globally available
+        window.editTank = editTank;
+        window.deactivateTank = deactivateTank;

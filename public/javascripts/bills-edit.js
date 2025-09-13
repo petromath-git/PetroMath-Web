@@ -1,4 +1,4 @@
-let vehicleDataByCredit = {};
+let editVehicleData = {};
 
 document.addEventListener('DOMContentLoaded', function() {
     const billForm = document.getElementById('billForm');
@@ -541,8 +541,8 @@ function initializeVehicleSelect2() {
 function loadVehiclesForCustomer(creditListId) {
     $('#vehicleSelect').empty().append('<option value="">Select Vehicle</option>');
     
-    if (creditListId && vehicleDataByCredit[creditListId]) {
-        vehicleDataByCredit[creditListId].forEach(vehicle => {
+    if (creditListId && editVehicleData[creditListId]) {
+        editVehicleData[creditListId].forEach(vehicle => {
             const option = new Option(
                 `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
                 vehicle.vehicleId

@@ -168,23 +168,21 @@ block content
             });
 
              $('.delete-bill').each(function() {
-                $(this).on('click', function() {
-                    const billId = $(this).data('bill-id');
-                    
-                    if (confirm('Are you sure you want to delete this bill? This action cannot be undone.')) {
-                        fetch(`/bills/${billId}`, {
-                            method: 'DELETE'
-                        }).then(response => {
-                            if (response.redirected) {
-                                window.location.href = response.url;
-                            }
-                        }).catch(error => {
-                            console.error('Delete error:', error);
-                            alert('An error occurred while deleting the bill.');
-                        });
-                    }
+                    $(this).on('click', function() {
+                        const billId = $(this).data('bill-id');
+                        
+                        if (confirm('Are you sure you want to delete this bill? This action cannot be undone.')) {
+                            // Create hidden form and submit
+                            const form = $('<form>', {
+                                method: 'POST',
+                                action: `/bills/delete/${billId}`
+                            });                          
+
+                            $('body').append(form);
+                            form.submit();
+                        }
+                    });
                 });
-            });
 
             const $table = $('.table tbody');
         const $rows = $table.find('tr:not(.bill-details)'); // Exclude detail rows
