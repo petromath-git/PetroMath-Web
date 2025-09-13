@@ -164,6 +164,8 @@ const productsRoutes = require('./routes/products-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
+const tankRoutes = require('./routes/tank-routes');
+const billsRoutes = require('./routes/bills-routes');
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -193,6 +195,9 @@ app.use('/products', productsRoutes);
 app.use('/dev-tracker', devTrackerRoutes);
 app.use('/system-health', systemHealthRoutes);
 app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
+app.use('/tank-master', tankRoutes);
+app.use('/bills', billsRoutes);
+
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
@@ -816,7 +821,7 @@ app.get('/edit-draft-closing', isLoginEnsured, function (req, res, next) {
     ClosingEditController.getDataToEdit(req, res, next, false);  // response returned inside controller
 });
 
-app.post('/close-closing', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+app.post('/close-closing', [isLoginEnsured, security.hasPermission('CLOSE_SHIFT_CLOSE')], function (req, res, next) {
     ClosingEditController.closeData(req, res, next);  // response returned inside controller
 });
 
@@ -919,7 +924,7 @@ app.get('/cashflow', isLoginEnsured, function (req, res, next) {
     cashflowController.getCashFlowEntry(req, res, next);
 });
 
-app.post('/cashflow', isLoginEnsured, function (req, res, next) {
+app.post('/cashflow', [isLoginEnsured, security.hasPermission('GENERATE_DAY_CLOSE')], function (req, res, next) {
     cashflowController.triggerCashSalesByDate(req, res, next);
 });
 
@@ -943,7 +948,7 @@ app.get('/cashflowhome', isLoginEnsured, function (req, res) {
     cashflowController.getCashFlowHome(req, res);
 });
 
-app.post('/close-cashflow', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+app.post('/close-cashflow', [isLoginEnsured, security.hasPermission('CLOSE_DAY_CLOSE')], function (req, res, next) {
     cashflowController.closeData(req, res, next);  // response returned inside controller
 });
 
@@ -1113,50 +1118,6 @@ app.get('/pump-tanks/validate', [isLoginEnsured, security.isAdmin()], function(r
 });
 
 
-// Billing routes
-app.get('/bills', isLoginEnsured, function(req, res, next) {
-    billController.getBills(req, res, next);
-});
-
-app.get('/bills/new', isLoginEnsured, function(req, res, next) {
-    billController.getNewBill(req, res, next);
-});
-
-app.post('/bills', isLoginEnsured, function(req, res, next) {
-    billController.createBill(req, res, next);
-});
-
-app.put('/bills/:billId/cancel', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
-    billController.cancelBill(req, res, next);
-});
-
-app.get('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.getBillDetails(req, res, next);
-});
-
-app.get('/bills/:billId/details', isLoginEnsured, function(req, res, next) {
-    billController.getBillDetails(req, res, next);
-});
-
-// Billing routes for editing bills
-app.get('/bills/edit/:billId', isLoginEnsured, function(req, res, next) {
-    billController.editBill(req, res, next);
-});
-
-app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.updateBill(req, res, next);
-});
-
-app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.deleteBill(req, res, next);
-});
-
-
-// Add this to your app.js in the bills routes section
-app.get('/bills/:id/print', login.ensureLoggedIn('/login'), billController.printBill);
-
-// Add this route after your existing bill routes
-app.get('/bills/:id/print/pdf', login.ensureLoggedIn('/login'), billController.printBillPDF);
 
 
 // Lubes Invoice routes

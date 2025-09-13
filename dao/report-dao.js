@@ -26,6 +26,70 @@ module.exports = {
         );
         
     }    ,   
+// getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
+//     return db.sequelize.query(
+//         `SELECT 
+//             tcl.closing_date AS tran_date,
+//             tcl.location_code,
+//             CONCAT('To Bill No: ', tc.bill_no) AS bill_no,
+//             mcl.Company_Name AS company_name,
+//             mp.product_name,
+//             tc.price,
+//             tc.price_discount,
+//             tc.qty,
+//             tc.amount,
+//             tc.notes,
+//             mcl.creditlist_id,
+//             tc.odometer_reading,
+//             mcv.vehicle_number
+//         FROM t_credits tc
+//         JOIN m_product mp ON tc.product_id = mp.product_id
+//         JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+//         JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+//         LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
+//         WHERE tcl.location_code = :locationCode
+//             AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+//             AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
+
+//         UNION ALL
+
+//         SELECT 
+//             tr.receipt_date AS tran_date,
+//             tr.location_code,
+//             CONCAT('By Receipt No: ', tr.receipt_no) AS bill_no,
+//             mcl.Company_Name AS company_name,
+//             NULL AS product_name,
+//             NULL AS price,
+//             NULL AS price_discount,
+//             NULL AS qty,
+//             tr.amount,
+//             tr.notes,
+//             mcl.creditlist_id,
+//             NULL AS odometer_reading,
+//             NULL AS vehicle_number
+//         FROM t_receipts tr
+//         JOIN m_credit_list mcl ON mcl.creditlist_id = tr.creditlist_id
+//         WHERE tr.location_code = :locationCode
+//             AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
+//             AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
+
+//         ORDER BY tran_date`,
+//         {
+//             replacements: { 
+//                 locationCode: locationCode, 
+//                 fromDate: closingQueryFromDate, 
+//                 toDate: closingQueryToDate,
+//                 creditId: creditId
+//             },
+//             type: Sequelize.QueryTypes.SELECT
+//         }
+//     );
+// },
+    // In dao/report-dao.js
+// Updated getCreditStmt function in dao/report-dao.js
+
+
+// Updated getCreditStmt function in dao/report-dao.js with transaction_type
 getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
     return db.sequelize.query(
         `SELECT 
@@ -41,15 +105,16 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             tc.notes,
             mcl.creditlist_id,
             tc.odometer_reading,
-            mcv.vehicle_number
+            mcv.vehicle_number,
+            'SALE' AS transaction_type
         FROM t_credits tc
         JOIN m_product mp ON tc.product_id = mp.product_id
         JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
         JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
-        LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
+        LEFT JOIN m_credit_vehicle mcv ON tc.vehicle_id = mcv.vehicle_id
         WHERE tcl.location_code = :locationCode
-            AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
-            AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
+          AND mcl.creditlist_id = :creditId
+          AND DATE(tcl.closing_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
 
         UNION ALL
 
@@ -66,27 +131,59 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             tr.notes,
             mcl.creditlist_id,
             NULL AS odometer_reading,
-            NULL AS vehicle_number
+            NULL AS vehicle_number,
+            'RECEIPT' AS transaction_type
         FROM t_receipts tr
-        JOIN m_credit_list mcl ON mcl.creditlist_id = tr.creditlist_id
-        WHERE tr.location_code = :locationCode
-            AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
-            AND (:creditId = -1 OR mcl.creditlist_id = :creditId)
+        JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
+        WHERE mcl.creditlist_id = :creditId
+          AND DATE(tr.receipt_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
+          AND tr.location_code = :locationCode
 
-        ORDER BY tran_date`,
+        UNION ALL
+
+        -- NEW: Include adjustments with explicit transaction types
+        SELECT 
+            ta.adjustment_date AS tran_date,
+            ta.location_code,
+            CONCAT('Adjustment: ', COALESCE(ta.reference_no, ta.adjustment_id)) AS bill_no,
+            mcl.Company_Name AS company_name,
+            ta.description AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            COALESCE(ta.debit_amount, ta.credit_amount) AS amount,
+            CONCAT(ta.adjustment_type, ' - ', ta.description) AS notes,
+            mcl.creditlist_id,
+            NULL AS odometer_reading,
+            NULL AS vehicle_number,
+            CASE 
+                WHEN ta.debit_amount > 0 THEN 'ADJUSTMENT_DEBIT'
+                WHEN ta.credit_amount > 0 THEN 'ADJUSTMENT_CREDIT'
+                ELSE 'ADJUSTMENT'
+            END AS transaction_type
+        FROM t_adjustments ta
+        JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
+        WHERE ta.external_source = 'CREDIT'
+          AND ta.external_id = :creditId
+          AND ta.status = 'ACTIVE'
+          AND ta.location_code = :locationCode
+          AND DATE(ta.adjustment_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
+
+        ORDER BY tran_date, bill_no`,
         {
             replacements: { 
-                locationCode: locationCode, 
-                fromDate: closingQueryFromDate, 
-                toDate: closingQueryToDate,
-                creditId: creditId
-            },
-            type: Sequelize.QueryTypes.SELECT
+                locationCode: locationCode,
+                creditId: creditId,
+                closingQueryFromDate: closingQueryFromDate,
+                closingQueryToDate: closingQueryToDate
+            }, 
+            type: db.Sequelize.QueryTypes.SELECT
         }
     );
 },
-    // In dao/report-dao.js
-getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
+
+
+    getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     const result = await db.sequelize.query(
         `SELECT 
                   DATE_FORMAT(tds.transaction_date, '%d-%m-%Y') as tran_date,

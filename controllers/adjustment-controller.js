@@ -17,22 +17,14 @@ module.exports = {
                 digitalVendorList,
                 supplierList,
                 bankList,
-                expenseList,
-                recentAdjustments
+                expenseList                
             ] = await Promise.all([
                 adjustmentDao.getAdjustmentTypes(),
                 adjustmentDao.getCustomers(locationCode),
                 adjustmentDao.getDigitalVendors(locationCode),
                 adjustmentDao.getSuppliers(locationCode),
                 adjustmentDao.getBankAccounts(locationCode),
-                adjustmentDao.getExpenseCategories(),
-                // Get recent adjustments (last 10 entries)
-                adjustmentDao.getAdjustmentsList({
-                    locationCode,
-                    fromDate: moment().subtract(30, 'days').format('YYYY-MM-DD'),
-                    toDate: currentDate,
-                    limit: 10
-                })
+                adjustmentDao.getExpenseCategories()               
             ]);
 
             // Process data for frontend
@@ -65,23 +57,10 @@ module.exports = {
                 expenseList: expenseList.map(expense => ({
                     expense_id: expense.lookup_id,
                     expense_name: expense.description
-                })),
-                recentAdjustments: recentAdjustments.map(adj => ({
-                    adjustment_id: adj.adjustment_id,
-                    adjustment_date: moment(adj.adjustment_date).format('DD/MM/YYYY'),
-                    description: adj.description,
-                    external_source: adj.external_source,
-                    ledger_name: adj.ledger_name,
-                    debit_amount: adj.debit_amount,
-                    credit_amount: adj.credit_amount,
-                    adjustment_type: adj.adjustment_type,
-                    status: adj.status,
-                    created_by: adj.created_by,
-                    creation_date: moment(adj.creation_date).format('DD/MM/YYYY HH:mm')
                 }))
             };
 
-            res.render('adjustments', {
+            res.render('adjustments-entry', {
                 title: 'Credit/Debit Adjustment Entry',
                 user: req.user,
                 currentDate,
@@ -92,13 +71,14 @@ module.exports = {
         } catch (error) {
             console.error('Error in getAdjustmentEntryPage:', error);
             req.flash('error', 'Failed to load adjustment entry page: ' + error.message);
-            res.redirect('/home');
+            res.redirect('/adjustments');
         }
     },
 
     // POST /adjustments - Save adjustment entry
     saveAdjustment: async (req, res, next) => {
         try {
+
             const locationCode = req.user.location_code;
             const userName = req.user.User_Name;
 
@@ -135,7 +115,7 @@ module.exports = {
         } catch (error) {
             console.error('Error in saveAdjustment:', error);
             req.flash('error', 'Failed to save adjustment: ' + error.message);
-            res.redirect('/adjustments');
+            res.redirect('/adjustments/new'); 
         }
     },
 
@@ -237,6 +217,83 @@ module.exports = {
         }
     },
 
+    
+    // Main list page (what managers see)
+        getAdjustmentListPage: async (req, res, next) => {
+            try {
+                const locationCode = req.user.location_code;
+                
+                // Get all data needed for filters and dropdowns
+                const [
+                    adjustmentTypes,
+                    customerList,
+                    digitalVendorList,
+                    supplierList,
+                    bankList,
+                    expenseList
+                ] = await Promise.all([
+                    adjustmentDao.getAdjustmentTypes(),
+                    adjustmentDao.getCustomers(locationCode),
+                    adjustmentDao.getDigitalVendors(locationCode),
+                    adjustmentDao.getSuppliers(locationCode),
+                    adjustmentDao.getBankAccounts(locationCode),
+                    adjustmentDao.getExpenseCategories()
+                ]);
+
+                // Process data for frontend (same as entry page)
+                const processedData = {
+                    adjustmentTypes: adjustmentTypes.map(type => ({
+                        lookup_id: type.lookup_id,
+                        description: type.description
+                    })),
+                    customerList: customerList.map(customer => ({
+                        creditlist_id: customer.creditlist_id,
+                        Company_Name: customer.Company_Name,
+                        ledger_name: customer.ledger_name
+                    })),
+                    digitalVendorList: digitalVendorList.map(vendor => ({
+                        creditlist_id: vendor.creditlist_id,
+                        Company_Name: vendor.Company_Name,
+                        ledger_name: vendor.ledger_name
+                    })),
+                    supplierList: supplierList.map(supplier => ({
+                        supplier_id: supplier.supplier_id,
+                        supplier_name: supplier.supplier_name,
+                        supplier_short_name: supplier.supplier_short_name
+                    })),
+                    bankList: bankList.map(bank => ({
+                        bank_id: bank.bank_id,
+                        bank_name: bank.bank_name,
+                        account_nickname: bank.account_nickname,
+                        ledger_name: bank.ledger_name
+                    })),
+                    expenseList: expenseList.map(expense => ({
+                        expense_id: expense.lookup_id,
+                        expense_name: expense.description
+                    }))
+                };
+
+
+                    const currentDate = moment().format('YYYY-MM-DD');
+                    const currentYear = moment().year();
+                    const currentMonth = moment().month() + 1; // moment months are 0-based, convert to 1-based
+                    
+                    res.render('adjustments', {
+                        title: 'Adjustments',
+                        user: req.user,
+                        currentDate,
+                        currentYear,
+                        currentMonth,
+                        ...processedData,
+                        messages: req.flash()
+                    });
+
+            } catch (error) {
+                console.error('Error in getAdjustmentListPage:', error);
+                req.flash('error', 'Failed to load adjustments page');
+                res.redirect('/home');
+            }
+        },
     // GET /adjustments/list - Display adjustments list
     getAdjustmentList: async (req, res, next) => {
         try {

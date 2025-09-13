@@ -28,6 +28,12 @@ module.exports = {
                     replacements: { locationCode: req.user.location_code },
                     type: Sequelize.QueryTypes.SELECT
                 });
+
+            let selectedShift = null;
+                if (activeShifts.length === 1) {
+                    selectedShift = activeShifts[0].closing_id;
+                }        
+
             // Get products for the location
             const products = await ProductDao.findProducts(req.user.location_code);
 
@@ -54,6 +60,7 @@ module.exports = {
                 title: 'Create New Bill',
                 user: req.user,
                 shifts: activeShifts,
+                selectedShift: selectedShift,  // Add this
                 products: products,
                 credits: credits,
                 vehicleData: vehiclesByCredit,
@@ -507,7 +514,7 @@ getBills: async (req, res, next) => {
                         title: 'Edit Bill',
                         user: req.user,
                         bill: { ...bill[0], ...billVehicleInfo },
-                        billItems: billItems,
+                        items: billItems,  // ← Changed from 'billItems' to 'items'
                         shifts: activeShifts,
                         products: products,
                         credits: credits,
@@ -520,6 +527,8 @@ getBills: async (req, res, next) => {
     },
 
     updateBill: async (req, res, next) => {
+
+        console.log('Update request body:', req.body);  // Add this line
     const transaction = await db.sequelize.transaction();
 
      try {

@@ -6,13 +6,18 @@ const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
 const adjustmentController = require('../controllers/adjustment-controller');
 
-// Route to display the adjustment entry page (GET)
+// Main list page (accessible to Managers)
 router.get('/', isLoginEnsured, function (req, res, next) {
+    adjustmentController.getAdjustmentListPage(req, res, next);
+});
+
+// Entry form page (Admin/SuperUser only)
+router.get('/new', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     adjustmentController.getAdjustmentEntryPage(req, res, next);
 });
 
-// Route to save adjustment entry (POST)
-router.post('/', isLoginEnsured, function (req, res, next) {
+// Save entry (Admin/SuperUser only)  
+router.post('/new', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     adjustmentController.saveAdjustment(req, res, next);
 });
 
@@ -26,19 +31,9 @@ router.get('/api/adjustment-types', isLoginEnsured, function (req, res, next) {
     adjustmentController.getAdjustmentTypes(req, res, next);
 });
 
-// Route to display adjustment list/history page
-router.get('/list', isLoginEnsured, function (req, res, next) {
-    adjustmentController.getAdjustmentList(req, res, next);
-});
-
 // API endpoint for adjustment list (with filters)
 router.post('/api/list', isLoginEnsured, function (req, res, next) {
     adjustmentController.getAdjustmentListAPI(req, res, next);
-});
-
-// Route to view specific adjustment details
-router.get('/:adjustmentId', isLoginEnsured, function (req, res, next) {
-    adjustmentController.getAdjustmentDetails(req, res, next);
 });
 
 // Route to reverse an adjustment (admin only)
@@ -49,6 +44,11 @@ router.post('/:adjustmentId/reverse', [isLoginEnsured, security.isAdmin()], func
 // API endpoint for AJAX reversal
 router.post('/api/:adjustmentId/reverse', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     adjustmentController.reverseAdjustmentAPI(req, res, next);
+});
+
+// Route to view specific adjustment details
+router.get('/:adjustmentId', isLoginEnsured, function (req, res, next) {
+    adjustmentController.getAdjustmentDetails(req, res, next);
 });
 
 // Future: Export adjustments to Excel

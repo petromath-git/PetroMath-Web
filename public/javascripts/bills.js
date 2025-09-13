@@ -1,4 +1,4 @@
-let vehicleDataByCredit = {};
+let billsVehicleData  = {};
 
 document.addEventListener('DOMContentLoaded', function() {
     const billForm = document.getElementById('billForm');
@@ -99,6 +99,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 
+
+
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'bill_type' || e.target.name === 'bill_type_mobile') {
+        handleBillTypeChange(e.target.value);
+        
+        // Sync the other form if values differ
+        if (e.target.name === 'bill_type') {
+            // Desktop changed, sync mobile
+            const mobileCash = document.getElementById('cashBillMobile');
+            const mobileCredit = document.getElementById('creditBillMobile');
+            if (e.target.value === 'CASH' && mobileCash) mobileCash.checked = true;
+            if (e.target.value === 'CREDIT' && mobileCredit) mobileCredit.checked = true;
+        } else {
+            // Mobile changed, sync desktop
+            const desktopCash = document.getElementById('cashBill');
+            const desktopCredit = document.getElementById('creditBill');
+            if (e.target.value === 'CASH' && desktopCash) desktopCash.checked = true;
+            if (e.target.value === 'CREDIT' && desktopCredit) desktopCredit.checked = true;
+        }
+    }
+});
+
+
 document.addEventListener('change', function(e) {
     if (e.target.classList.contains('product-select')) {
         const row = e.target.closest('.item-row');
@@ -124,13 +148,10 @@ document.addEventListener('change', function(e) {
             qtyInput.setAttribute('title', 'Quantity can have decimals');
         }
         
-        // NEW: Set amount field readonly state
         setAmountFieldState(row);
-        
         calculateRowTax(row);
     }
 });
-    
 
 
     document.addEventListener('input', function(e) {
@@ -277,90 +298,85 @@ document.addEventListener('change', function(e) {
         }
     });
 
-    // Bill Type change handler
-    document.querySelectorAll('input[name="bill_type"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            const creditCustomerDiv = document.getElementById('creditCustomerDiv');
-            const creditCustomerSelect = document.getElementById('creditCustomer');
-            
-            if (this.value === 'CREDIT') {
-                creditCustomerDiv.classList.remove('d-none');
-                creditCustomerSelect.required = true;
-            } else {
-                creditCustomerDiv.classList.add('d-none');
-                creditCustomerSelect.required = false;
-                creditCustomerSelect.value = ''; // Clear selection
-            }
-        });
-    });
 
+   
     // Initial setup for first row
     const firstRow = billItemsTable.querySelector('tbody tr.item-row');
     attachProductSelectListener(firstRow);
 
+    syncFormValues();    
+
     // Form validation
+  // Form validation - FIXED VERSION
     billForm.addEventListener('submit', function(e) {
-    const shift = document.getElementById('shift').value;
-    const billType = document.getElementById('billType').value;
-    const creditCustomer = billType === 'CREDIT' ? document.getElementById('creditCustomer').value : null;
+        // Get values from either desktop or mobile (whichever is visible)
+        const shiftDesktop = document.getElementById('shift')?.value;
+        const shiftMobile = document.getElementById('shiftMobile')?.value;
+        const shift = shiftDesktop || shiftMobile;
 
-    if (!shift) {
-        alert('Please select a shift');
-        e.preventDefault();
-        return false;
-    }
+        // Get bill type from checked radio buttons
+        const billTypeDesktop = document.querySelector('input[name="bill_type"]:checked')?.value;
+        const billTypeMobile = document.querySelector('input[name="bill_type_mobile"]:checked')?.value;
+        const billType = billTypeDesktop || billTypeMobile;
 
-    if (billType === 'CREDIT' && !creditCustomer) {
-        alert('Please select a customer for credit bill');
-        e.preventDefault();
-        return false;
-    }
+        // Get customer for credit bills
+        const creditCustomerDesktop = document.getElementById('creditCustomer')?.value;
+        const creditCustomerMobile = document.getElementById('creditCustomerMobile')?.value;
+        const creditCustomer = creditCustomerDesktop || creditCustomerMobile;
 
-    // Check if there are any items (either desktop or mobile)
-    const desktopItems = document.querySelectorAll('.item-row');
-    const mobileItems = document.querySelectorAll('#mobileItemsList .list-group-item');
-    const hasDesktopItems = desktopItems.length > 0 && desktopItems[0].querySelector('.product-select').value;
-    const hasMobileItems = mobileItems.length > 0;
-
-    if (!hasDesktopItems && !hasMobileItems) {
-        alert('Please add at least one item');
-        e.preventDefault();
-        return false;
-    }
-
-    // NEW: Add detailed item validation for desktop items
-    if (hasDesktopItems) {
-        let hasValidItems = false;
-        let allRowsValid = true;
-        
-        for (let row of desktopItems) {
-            const productSelect = row.querySelector('.product-select');
-            
-            // Skip empty rows
-            if (!productSelect.value) {
-                continue;
-            }
-            
-            const validation = validateRow(row);
-            if (!validation.valid) {
-                allRowsValid = false;
-                alert(validation.message);
-                e.preventDefault();
-                return false;
-            } else {
-                hasValidItems = true;
-            }
-        }
-        
-        if (!hasValidItems) {
-            alert('Please add at least one valid item to the bill');
+        if (!shift) {
+            alert('Please select a shift');
             e.preventDefault();
             return false;
         }
-    }
 
-    // If we reach here, all validations passed
-    return true;
+        if (billType === 'CREDIT' && !creditCustomer) {
+            alert('Please select a customer for credit bill');
+            e.preventDefault();
+            return false;
+        }
+
+        // Check if there are any items
+        const desktopItems = document.querySelectorAll('.item-row');
+        const mobileItems = document.querySelectorAll('#mobileItemsList .list-group-item');
+        const hasDesktopItems = desktopItems.length > 0 && desktopItems[0].querySelector('.product-select')?.value;
+        const hasMobileItems = mobileItems.length > 0;
+
+        if (!hasDesktopItems && !hasMobileItems) {
+            alert('Please add at least one item');
+            e.preventDefault();
+            return false;
+        }
+
+        // Validate desktop items if present
+        if (hasDesktopItems) {
+            let hasValidItems = false;
+            
+            for (let row of desktopItems) {
+                const productSelect = row.querySelector('.product-select');
+                
+                if (!productSelect.value) {
+                    continue;
+                }
+                
+                const validation = validateRow(row);
+                if (!validation.valid) {
+                    alert(validation.message);
+                    e.preventDefault();
+                    return false;
+                } else {
+                    hasValidItems = true;
+                }
+            }
+            
+            if (!hasValidItems) {
+                alert('Please add at least one valid item to the bill');
+                e.preventDefault();
+                return false;
+            }
+        }
+
+        return true;
     });
 
 
@@ -393,7 +409,18 @@ document.addEventListener('change', function(e) {
             // For now, let's just open the PDF directly (simpler approach)
             window.open(`/bills/${billId}/print/pdf`, '_blank');
         });
-});
+
+           setTimeout(function() {
+        $('#billItems .item-row').each(function() {
+            const productSelect = $(this).find('.product-select');
+            if (productSelect.val()) {
+                // Trigger the change event that already works
+                productSelect.trigger('change');
+            }
+        });
+    }, 100);
+
+    });
 
 
 // Auto-calculate tax with RSP-inclusive logic
@@ -695,38 +722,17 @@ function printDirectly(billId) {
     });
 }
 
-// Add these 5 functions at the bottom of bills.js (outside DOMContentLoaded)
+
 
 function initializeVehicleHandling() {
-    document.addEventListener('change', function(e) {
-        if (e.target.name === 'bill_type') {
-            toggleVehicleSection(e.target.value);
-        }
-        if (e.target.id === 'creditCustomer') {
+    document.addEventListener('change', function(e) {        
+        if (e.target.id === 'creditCustomer' || e.target.id === 'creditCustomerMobile') {
             loadVehiclesForCustomer(e.target.value);
         }
     });
 }
 
-function toggleVehicleSection(billType) {
-    const cashVehicleSection = document.getElementById('cashVehicleSection');
-    const creditCustomerDiv = document.getElementById('creditCustomerDiv');
-    
-    if (billType === 'CASH') {
-        cashVehicleSection.classList.remove('d-none');
-        creditCustomerDiv.classList.add('d-none');
-        document.getElementById('creditCustomer').value = '';
-        $('#vehicleSelect').val('').trigger('change');
-    } else if (billType === 'CREDIT') {
-        cashVehicleSection.classList.add('d-none');
-        creditCustomerDiv.classList.remove('d-none');
-        document.getElementById('billVehicleNumber').value = '';
-        document.getElementById('billOdometerReading').value = '';
-    } else {
-        cashVehicleSection.classList.add('d-none');
-        creditCustomerDiv.classList.add('d-none');
-    }
-}
+
 
 function initializeVehicleSelect2() {
     $('#vehicleSelect').select2({
@@ -739,8 +745,8 @@ function initializeVehicleSelect2() {
 function loadVehiclesForCustomer(creditListId) {
     $('#vehicleSelect').empty().append('<option value="">Select Vehicle</option>');
     
-    if (creditListId && vehicleDataByCredit[creditListId]) {
-        vehicleDataByCredit[creditListId].forEach(vehicle => {
+    if (creditListId && billsVehicleData [creditListId]) {
+        billsVehicleData [creditListId].forEach(vehicle => {
             const option = new Option(
                 `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
                 vehicle.vehicleId
@@ -752,21 +758,218 @@ function loadVehiclesForCustomer(creditListId) {
 }
 
 function getVehicleDataForSubmission() {
-    const billType = document.querySelector('input[name="bill_type"]:checked')?.value;
+    const billTypeDesktop = document.querySelector('input[name="bill_type"]:checked')?.value;
+    const billTypeMobile = document.querySelector('input[name="bill_type_mobile"]:checked')?.value;
+    const billType = billTypeDesktop || billTypeMobile;
     
     if (billType === 'CASH') {
+        const cashVehicleDesktop = document.getElementById('cashVehicleNumber')?.value;
+        const cashVehicleMobile = document.getElementById('cashVehicleMobile')?.value;
+        const odometerDesktop = document.getElementById('odometerReading')?.value;
+        const odometerMobile = document.getElementById('odometerMobile')?.value;
+        
         return {
-            vehicle_number: document.getElementById('billVehicleNumber').value,
-            odometer_reading: document.getElementById('billOdometerReading').value,
+            vehicle_number: cashVehicleDesktop || cashVehicleMobile,
+            odometer_reading: odometerDesktop || odometerMobile,
             vehicle_id: null
         };
     } else if (billType === 'CREDIT') {
+        const creditVehicleDesktop = document.getElementById('creditVehicle')?.value;
+        const creditVehicleMobile = document.getElementById('creditVehicleMobile')?.value;
+        const odometerDesktop = document.getElementById('odometerReading')?.value;
+        const odometerMobile = document.getElementById('odometerMobile')?.value;
+        
         return {
             vehicle_number: null,
-            odometer_reading: document.getElementById('billOdometerReading').value,
-            vehicle_id: document.getElementById('vehicleSelect').value
+            odometer_reading: odometerDesktop || odometerMobile,
+            vehicle_id: creditVehicleDesktop || creditVehicleMobile
         };
     }
     
     return { vehicle_number: null, odometer_reading: null, vehicle_id: null };
+}
+
+
+// Sync mobile and desktop form values
+function syncFormValues() {
+    console.log('Setting up form sync...');
+    
+    // 1. Sync shift selection
+    const shiftDesktop = document.getElementById('shift');
+    const shiftMobile = document.getElementById('shiftMobile');
+    
+    if (shiftDesktop && shiftMobile) {
+        shiftDesktop.addEventListener('change', function() {
+            shiftMobile.value = this.value;
+            console.log('Synced shift to mobile:', this.value);
+        });
+        
+        shiftMobile.addEventListener('change', function() {
+            shiftDesktop.value = this.value;
+            console.log('Synced shift to desktop:', this.value);
+        });
+    }
+    
+    // 2. Sync bill type
+    const cashDesktop = document.getElementById('cashBill');
+    const creditDesktop = document.getElementById('creditBill');
+    const cashMobile = document.getElementById('cashBillMobile');
+    const creditMobile = document.getElementById('creditBillMobile');
+    
+    if (cashDesktop && cashMobile) {
+        cashDesktop.addEventListener('change', function() {
+            if (this.checked) {
+                cashMobile.checked = true;
+                creditMobile.checked = false;
+            }
+        });
+        
+        cashMobile.addEventListener('change', function() {
+            if (this.checked) {
+                cashDesktop.checked = true;
+                creditDesktop.checked = false;
+            }
+        });
+    }
+    
+    if (creditDesktop && creditMobile) {
+        creditDesktop.addEventListener('change', function() {
+            if (this.checked) {
+                creditMobile.checked = true;
+                cashMobile.checked = false;
+            }
+        });
+        
+        creditMobile.addEventListener('change', function() {
+            if (this.checked) {
+                creditDesktop.checked = true;
+                cashDesktop.checked = false;
+            }
+        });
+    }
+    
+    // 3. Sync customer fields
+    const cashCustomerDesktop = document.getElementById('cashCustomerName');
+    const cashCustomerMobile = document.getElementById('cashCustomerMobile');
+    const creditCustomerDesktop = document.getElementById('creditCustomer');
+    const creditCustomerMobile = document.getElementById('creditCustomerMobile');
+    
+    if (cashCustomerDesktop && cashCustomerMobile) {
+        cashCustomerDesktop.addEventListener('input', function() {
+            cashCustomerMobile.value = this.value;
+        });
+        
+        cashCustomerMobile.addEventListener('input', function() {
+            cashCustomerDesktop.value = this.value;
+        });
+    }
+    
+    if (creditCustomerDesktop && creditCustomerMobile) {
+        creditCustomerDesktop.addEventListener('change', function() {
+            creditCustomerMobile.value = this.value;
+        });
+        
+        creditCustomerMobile.addEventListener('change', function() {
+            creditCustomerDesktop.value = this.value;
+        });
+    }
+    
+    // 4. Sync vehicle fields
+    const cashVehicleDesktop = document.getElementById('cashVehicleNumber');
+    const cashVehicleMobile = document.getElementById('cashVehicleMobile');
+    const creditVehicleDesktop = document.getElementById('creditVehicle');
+    const creditVehicleMobile = document.getElementById('creditVehicleMobile');
+    
+    if (cashVehicleDesktop && cashVehicleMobile) {
+        cashVehicleDesktop.addEventListener('input', function() {
+            cashVehicleMobile.value = this.value;
+        });
+        
+        cashVehicleMobile.addEventListener('input', function() {
+            cashVehicleDesktop.value = this.value;
+        });
+    }
+    
+    if (creditVehicleDesktop && creditVehicleMobile) {
+        creditVehicleDesktop.addEventListener('change', function() {
+            creditVehicleMobile.value = this.value;
+        });
+        
+        creditVehicleMobile.addEventListener('change', function() {
+            creditVehicleDesktop.value = this.value;
+        });
+    }
+    
+    // 5. Sync odometer
+    const odometerDesktop = document.getElementById('odometerReading');
+    const odometerMobile = document.getElementById('odometerMobile');
+    
+    if (odometerDesktop && odometerMobile) {
+        odometerDesktop.addEventListener('input', function() {
+            odometerMobile.value = this.value;
+        });
+        
+        odometerMobile.addEventListener('input', function() {
+            odometerDesktop.value = this.value;
+        });
+    }
+}
+
+function handleBillTypeChange(billType) {
+    // Desktop Elements
+    const cashCustomerDiv = document.getElementById('cashCustomerDiv');
+    const creditCustomerDiv = document.getElementById('creditCustomerDiv');
+    const cashVehicleDiv = document.getElementById('cashVehicleDiv');
+    const creditVehicleDiv = document.getElementById('creditVehicleDiv');
+    
+    // Mobile Elements  
+    const cashCustomerMobileDiv = document.getElementById('cashCustomerMobileDiv');
+    const creditCustomerMobileDiv = document.getElementById('creditCustomerMobileDiv');
+    const cashVehicleMobileDiv = document.getElementById('cashVehicleMobileDiv');
+    const creditVehicleMobileDiv = document.getElementById('creditVehicleMobileDiv');
+    
+    if (billType === 'CREDIT') {
+        // Show Credit fields, Hide Cash fields
+        if (cashCustomerDiv) cashCustomerDiv.classList.add('d-none');
+        if (creditCustomerDiv) creditCustomerDiv.classList.remove('d-none');
+        if (cashVehicleDiv) cashVehicleDiv.classList.add('d-none');
+        if (creditVehicleDiv) creditVehicleDiv.classList.remove('d-none');
+        
+        // Mobile
+        if (cashCustomerMobileDiv) cashCustomerMobileDiv.classList.add('d-none');
+        if (creditCustomerMobileDiv) creditCustomerMobileDiv.classList.remove('d-none');
+        if (cashVehicleMobileDiv) cashVehicleMobileDiv.classList.add('d-none');
+        if (creditVehicleMobileDiv) creditVehicleMobileDiv.classList.remove('d-none');
+        
+        // Set required and load vehicles
+        const creditCustomerSelect = document.getElementById('creditCustomer');
+        const creditCustomerMobileSelect = document.getElementById('creditCustomerMobile');
+        if (creditCustomerSelect) creditCustomerSelect.required = true;
+        if (creditCustomerMobileSelect) creditCustomerMobileSelect.required = true;
+        
+    } else {
+        // Show Cash fields, Hide Credit fields
+        if (cashCustomerDiv) cashCustomerDiv.classList.remove('d-none');
+        if (creditCustomerDiv) creditCustomerDiv.classList.add('d-none');
+        if (cashVehicleDiv) cashVehicleDiv.classList.remove('d-none');
+        if (creditVehicleDiv) creditVehicleDiv.classList.add('d-none');
+        
+        // Mobile
+        if (cashCustomerMobileDiv) cashCustomerMobileDiv.classList.remove('d-none');
+        if (creditCustomerMobileDiv) creditCustomerMobileDiv.classList.add('d-none');
+        if (cashVehicleMobileDiv) cashVehicleMobileDiv.classList.remove('d-none');
+        if (creditVehicleMobileDiv) creditVehicleMobileDiv.classList.add('d-none');
+        
+        // Clear and remove required
+        const creditCustomerSelect = document.getElementById('creditCustomer');
+        const creditCustomerMobileSelect = document.getElementById('creditCustomerMobile');
+        if (creditCustomerSelect) {
+            creditCustomerSelect.required = false;
+            creditCustomerSelect.value = '';
+        }
+        if (creditCustomerMobileSelect) {
+            creditCustomerMobileSelect.required = false;
+            creditCustomerMobileSelect.value = '';
+        }
+    }
 }
