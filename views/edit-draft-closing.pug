@@ -371,8 +371,7 @@ block content
                                                 if(!freezedRecord)
                                                     th(scope="col")
 
-                                                - var rowCnt = 0
-                                                - var maxDigitalSalesRowCnt = 10
+                                                - var rowCnt = 0                                                
                                                 while rowCnt < maxDigitalSalesRowCnt
                                                     +addDigitalSales(rowCnt, digitalSalesData ? digitalSalesData[rowCnt] : null)
                                                     - rowCnt++
