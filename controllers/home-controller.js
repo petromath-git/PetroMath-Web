@@ -8,6 +8,7 @@ const dbMapping = require("../db/ui-db-field-mapping");
 const txnController = require("./txn-common-controller");
 const ExpenseDao = require("../dao/expense-dao");
 const config = require("../config/app-config");
+const locationConfig = require('../utils/location-config');
 const dateFormat = require('dateformat');
 const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
@@ -22,8 +23,17 @@ module.exports = {
         getHomeData(req, res, next);
     },
 
-    getNewData: (req, res, next) => {
+    getNewData: async (req, res, next) => {
         const locationCode = req.user.location_code;
+
+
+        const maxBackDateDays = await locationConfig.getLocationConfigValue(
+            locationCode, 
+            'MAX_DAYS_ALLOWED_BACK_DATE_CLOSING', 
+            config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing
+        );
+
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -42,7 +52,7 @@ module.exports = {
                             user: req.user,
                             config: config.APP_CONFIGS,
                             cashiers: values[0].value.cashiers,
-                            minDateForNewClosing: utils.restrictToPastDate(config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing),
+                            minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                             currentDate: utils.currentDate(),
                             productValues: values[1].value.products,                            
                             product2TValues: values[1].value.products2T,

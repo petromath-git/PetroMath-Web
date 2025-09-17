@@ -145,6 +145,7 @@ const lubesInvoiceController = require("./controllers/lubes-invoice-controller")
 const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
 const passwordResetController = require('./controllers/password-reset-controller');
+const txnController = require("./controllers/txn-common-controller");
 
 
 const flash = require('express-flash');
@@ -186,6 +187,54 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+
+
+// Development login bypass - respecting location changes
+const bypassLoginInDev = async (req, res, next) => {
+    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
+        // Get current location from session or default to MUE
+        const currentLocation = req.session.selectedLocation || "MUE";
+        
+        // Check if user needs to be created or location changed
+        if (!req.user || req.user.location_code !== currentLocation || req.session.menuCacheCleared) {
+            try {
+                const role = "SuperUser";
+                
+                const menus = await MenuAccessDao.getAllowedMenusForUser(role, currentLocation);
+                const allowedMenus = menus.map(m => m.menu_code);
+                
+                req.user = {
+                    Person_id: 758,
+                    Person_Name: "MUTHU SAKTHIVELAN",
+                    User_Name: "SAKTHI",
+                    Role: "SuperUser", 
+                    location_code: currentLocation,
+                    isAdmin: true,
+                    creditlist_id: null,
+                    allowedMenus: allowedMenus,
+                    menuDetails: menus
+                };
+                
+                // Clear the cache flag
+                delete req.session.menuCacheCleared;
+            } catch (error) {
+                console.error('Error fetching menu data for bypass:', error);
+            }
+        }
+        req.isAuthenticated = () => true;
+    }
+    next();
+};
+
+
+// Apply the bypass middleware
+app.use(bypassLoginInDev);
+
+
+
+
+
 app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
@@ -213,6 +262,9 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+
+
 
 const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
@@ -834,6 +886,59 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
 });
 
 
+app.get('/api/shift-products/:closingId', (req, res) => {
+    console.log('=== API ROUTE CALLED ===');
+    console.log('Received closingId:', req.params.closingId);
+    
+    const closingId = req.params.closingId;
+    txnController.shiftProductsPromise(closingId)
+        .then(products => {
+            console.log('Database returned:', products);
+            res.json(products);
+        })
+        .catch(err => {
+            console.error('Database error:', err);
+            res.json([]);
+        });
+});
+
+
+
+
+
+// REPLACE the testing routes in app.js with this:
+app.post('/test-switch-role', isLoginEnsured, function(req, res, next) {
+    // Only allow if user is originally SuperUser
+    if (req.user.Role === 'SuperUser' || req.user.originalRole === 'SuperUser') {
+        if (!req.user.originalRole) {
+            req.user.originalRole = req.user.Role;  // Save in user object
+            req.session.originalRole = req.user.Role;  // Also save in session for persistence
+        }
+        req.user.Role = req.body.testRole;
+        if (req.session.user) {
+            req.session.user.Role = req.body.testRole;
+            req.session.user.originalRole = req.user.originalRole;  // Keep original in session
+        }
+        console.log(`Role switched to: ${req.body.testRole}`);
+    }
+    res.redirect('back');
+});
+
+app.get('/test-reset-role', isLoginEnsured, function(req, res, next) {
+    if (req.user.originalRole || req.session.originalRole) {
+        const originalRole = req.user.originalRole || req.session.originalRole;
+        req.user.Role = originalRole;
+        if (req.session.user) {
+            req.session.user.Role = originalRole;
+            delete req.session.user.originalRole;
+        }
+        delete req.user.originalRole;
+        delete req.session.originalRole;
+        console.log(`Role reset to: ${originalRole}`);
+    }
+    res.redirect('back');
+});
+
 
 // app.post('/login', function (req, res, next) {
 //     passport.authenticate('local', {
@@ -1297,6 +1402,13 @@ app.post('/select-location', isLoginEnsured, function (req, res) {
     }
     // Store the selected location in the session
     req.user.location_code = req.body.location;
+    req.session.selectedLocation = req.body.location; // Add this line
+
+    // Clear any cached menu data so it gets refreshed for new location
+    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
+        req.session.menuCacheCleared = true; // Signal to bypass to refresh menus
+    }
+
 
     // Redirect to home or dashboard after selecting the location
     res.redirect('/home');
@@ -1325,6 +1437,10 @@ app.listen(process.env.SERVER_PORT, function () {
 });
 
 getBrowser().then(() => console.log('Browser is ready for use.')); // used for PDF Generation.
+
+
+
+
 
 // port - end
 module.exports = app;
