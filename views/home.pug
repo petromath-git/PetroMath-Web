@@ -231,10 +231,11 @@ block content
                 pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
             else
                 pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{config.maxAllowedDrafts} allowed drafts are met.
+            .mb-4    
 
         if deadlineMessage && deadlineMessage.length > 0
-            div.container-fluid
-                h6.sub-header.bg-primary Important Deadlines
+            .deadline-section
+                .deadline-header Important Deadlines
                 table.table#deadlineWarning-table
                     thead.thead-light
                         tr

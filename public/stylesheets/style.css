@@ -2308,3 +2308,68 @@ body {
         border: 1px solid #000 !important;
     }
 }
+
+/* ===== SUBTLE DEADLINE MANAGER STYLING ===== */
+
+.deadline-section {
+  background: #fafbfc;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.deadline-header {
+  background: #6c757d !important; /* Muted gray instead of bright blue */
+  color: white !important;
+  padding: 8px 16px !important; /* Smaller padding */
+  border-radius: 6px !important;
+  margin-bottom: 12px !important;
+  font-size: 13px !important; /* Smaller font */
+  font-weight: 500 !important; /* Less bold */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deadline-header::before {
+  content: "📋"; /* More subtle icon */
+  font-size: 14px;
+}
+
+/* Keep table styling clean but less prominent */
+#deadlineWarning-table {
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* Much lighter shadow */
+  border: 1px solid #e9ecef;
+  font-size: 13px; /* Smaller text */
+}
+
+#deadlineWarning-table thead {
+  background: #f8f9fa !important; /* Lighter header */
+}
+
+#deadlineWarning-table th {
+  border: none !important;
+  padding: 10px 12px !important; /* Smaller padding */
+  font-weight: 500 !important; /* Less bold */
+  color: #6c757d !important; /* Muted color */
+  font-size: 12px !important;
+  text-transform: none; /* Remove uppercase */
+  letter-spacing: normal;
+}
+
+#deadlineWarning-table td {
+  border: none !important;
+  padding: 10px 12px !important;
+  color: #495057; /* Muted text color */
+  vertical-align: middle;
+  border-bottom: 1px solid #f8f9fa !important;
+  font-size: 13px;
+}
+
+#deadlineWarning-table tbody tr:hover {
+  background: #f8f9fa; /* Subtle hover */
+}

@@ -7,6 +7,8 @@ const CreditDao = require("../dao/credits-dao");
 const utils = require("../utils/app-utils");
 const appCache = require("../utils/app-cache");
 const config = require("../config/app-config");
+const db = require("../db/db-connection");
+const Sequelize = require("sequelize");
 
 // New/edit flow: Common functions related to get master / txn table related data.
 
@@ -38,6 +40,10 @@ module.exports = {
     txnAttendanceDataPromise: (closingId) => {
         return txnAttendanceDataPromise(closingId);
     },
+    shiftProductsPromise: (closingId) => {
+        return shiftProductsPromise(closingId);
+    }
+
 }
 
 // Used as part of txnClosingPromise(new/edit flow) to do cashier,closer ids to person's name conversion
@@ -293,3 +299,47 @@ const txnDigitalSalesPromise = (closingId) => {
             });
     });
 }
+
+
+
+const shiftProductsPromise = async (closingId) => {
+    console.log('shiftProductsPromise called with:', closingId);
+    
+    if (!closingId) {
+        console.log('No closingId provided, returning empty array');
+        return [];
+    }
+    
+    const query = `
+        SELECT DISTINCT 
+            p.product_code,
+            mp.product_name,
+            COALESCE(mp.rgb_color, '#f8f9fa') as rgb_color,
+            SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) as total_amount
+        FROM t_reading tr
+        JOIN m_pump p ON tr.pump_id = p.pump_id  
+        JOIN m_product mp ON p.product_code = mp.product_name 
+        JOIN t_closing tc ON tr.closing_id = tc.closing_id
+        WHERE tr.closing_id = :closingId
+        AND mp.location_code = tc.location_code
+        GROUP BY p.product_code, mp.product_name, mp.rgb_color
+        ORDER BY p.product_code
+    `;
+    
+    console.log('Executing query with closingId:', closingId);
+    
+    try {
+        const result = await db.sequelize.query(query, {
+            replacements: { closingId: closingId },
+            type: Sequelize.QueryTypes.SELECT
+        });
+        
+        console.log('Database results:', result);
+        console.log('Results length:', result ? result.length : 0);
+        return result;
+        
+    } catch (error) {
+        console.error('Database error:', error);
+        throw error;
+    }
+};

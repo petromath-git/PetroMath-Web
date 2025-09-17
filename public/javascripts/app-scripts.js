@@ -595,44 +595,113 @@ function calculateDenominations() {
 //- then iterate for elements with 'val-' prefix to populate value
 //- some of the elements require text values instead of value of the element e.g. cashier (requires name instead of id)
 //- iterate through elements having 'vis-' prefix to check for visibility in summary page
+// function populateSummary(obj) {
+//     calculateAllInOnePlace().then((data) => {
+//         let hsd_total = 0, ms_total = 0, xms_total = 0;
+//         if (obj) {
+//             trackMenu(obj);
+//         }
+//         getExcessShortage(document.getElementById("closing_hiddenId").value);
+//         const elements = document.getElementById("summary-div").querySelectorAll('[id^=v-]');
+//         for (let i = 0; i < elements.length; i++) {
+
+//             const labels = elements[i].querySelectorAll('[id^=val-]');
+//             for (let j = 0; j < labels.length; j++) {
+//                 const getValueFromLabelId = labels[j].id.replace("val-", "");
+
+//                   if (getValueFromLabelId.includes('digital-sales-transaction-date-')) {
+//                         const dateElement = document.getElementById(getValueFromLabelId);
+//                         if (dateElement && dateElement.value) {
+//                             const date = new Date(dateElement.value);
+//                             const options = { day: '2-digit', month: 'short', year: 'numeric' };
+//                             labels[j].textContent = date.toLocaleDateString('en-GB', options);
+//                         } else {
+//                             labels[j].textContent = '';
+//                         }
+//                     } else {   
+
+//                 labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+//                     }
+
+//                 if (getValueFromLabelId.endsWith("pump_amount")) {
+//                     let value = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : 0;
+//                     if (getValueFromLabelId.indexOf("_MS") >= 0) {
+//                         ms_total += currenciesAsFloat(value);
+//                     } else if (getValueFromLabelId.indexOf("_HSD") >= 0) {
+//                         hsd_total += currenciesAsFloat(value);
+//                     } else if (getValueFromLabelId.indexOf("_XMS") >= 0) {
+//                         xms_total += currenciesAsFloat(value);
+//                     }
+//                 }
+//             }
+
+//             const dateValues = elements[i].querySelectorAll('[id^=valDate-]');
+//             for (let j = 0; j < dateValues.length; j++) {
+//                 const getValueFromLabelId = dateValues[j].id.replace("valDate-", "h_")
+//                 dateValues[j].textContent = document.getElementById(getValueFromLabelId).value;
+//             }
+
+//             const texts = elements[i].querySelectorAll('[id^=valText-]');
+//             for (let j = 0; j < texts.length; j++) {
+//                 const getTextValueFromLabelId = texts[j].id.replace("valText-", "");
+//                 const getElement = document.getElementById(getTextValueFromLabelId);
+//                 if (getElement) {
+//                     if (getElement.tagName === 'SELECT') {
+//                         if (getElement.selectedIndex > -1) {
+//                             texts[j].textContent = getElement.options[getElement.selectedIndex].text;
+//                         }
+//                     } else {
+//                         texts[j].textContent = document.getElementById(getTextValueFromLabelId).textContent;
+//                     }
+//                 }
+//             }
+
+//             const divsToHideOrShow = elements[i].querySelectorAll('[id^=vis-]');
+//             for (let j = 0; j < divsToHideOrShow.length; j++) {
+//                 const getDivFromLabelId = divsToHideOrShow[j].id.replace("vis-", "");
+//                 if (document.getElementById(getDivFromLabelId)) {
+//                     if (getDivFromLabelId.endsWith("_sub_header")) {
+//                         divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className + " col-3";
+//                     } else {
+//                         divsToHideOrShow[j].className = document.getElementById(getDivFromLabelId).className;
+//                     }
+//                 }
+//             }
+//         }
+//         document.getElementById("MS_pump_amount").textContent = formatCurrencies(ms_total, toFixedValue);
+//         document.getElementById("HSD_pump_amount").textContent = formatCurrencies(hsd_total, toFixedValue);
+//         document.getElementById("XMS_pump_amount").textContent = formatCurrencies(xms_total, toFixedValue);
+//     });
+// }
+
 function populateSummary(obj) {
     calculateAllInOnePlace().then((data) => {
-        let hsd_total = 0, ms_total = 0, xms_total = 0;
         if (obj) {
             trackMenu(obj);
         }
         getExcessShortage(document.getElementById("closing_hiddenId").value);
         const elements = document.getElementById("summary-div").querySelectorAll('[id^=v-]');
+        
         for (let i = 0; i < elements.length; i++) {
-
             const labels = elements[i].querySelectorAll('[id^=val-]');
             for (let j = 0; j < labels.length; j++) {
                 const getValueFromLabelId = labels[j].id.replace("val-", "");
 
-                  if (getValueFromLabelId.includes('digital-sales-transaction-date-')) {
-                        const dateElement = document.getElementById(getValueFromLabelId);
-                        if (dateElement && dateElement.value) {
-                            const date = new Date(dateElement.value);
-                            const options = { day: '2-digit', month: 'short', year: 'numeric' };
-                            labels[j].textContent = date.toLocaleDateString('en-GB', options);
-                        } else {
-                            labels[j].textContent = '';
-                        }
-                    } else {   
-
-                labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+                if (getValueFromLabelId.includes('digital-sales-transaction-date-')) {
+                    const dateElement = document.getElementById(getValueFromLabelId);
+                    if (dateElement && dateElement.value) {
+                        const date = new Date(dateElement.value);
+                        const options = { day: '2-digit', month: 'short', year: 'numeric' };
+                        labels[j].textContent = date.toLocaleDateString('en-GB', options);
+                    } else {
+                        labels[j].textContent = '';
                     }
-
-                if (getValueFromLabelId.endsWith("pump_amount")) {
-                    let value = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : 0;
-                    if (getValueFromLabelId.indexOf("_MS") >= 0) {
-                        ms_total += currenciesAsFloat(value);
-                    } else if (getValueFromLabelId.indexOf("_HSD") >= 0) {
-                        hsd_total += currenciesAsFloat(value);
-                    } else if (getValueFromLabelId.indexOf("_XMS") >= 0) {
-                        xms_total += currenciesAsFloat(value);
-                    }
+                } else {   
+                    labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
                 }
+
+                // Removed the hardcoded pump_amount calculation section
+                // This is now handled by the dynamic shift products API
             }
 
             const dateValues = elements[i].querySelectorAll('[id^=valDate-]');
@@ -668,9 +737,13 @@ function populateSummary(obj) {
                 }
             }
         }
-        document.getElementById("MS_pump_amount").textContent = formatCurrencies(ms_total, toFixedValue);
-        document.getElementById("HSD_pump_amount").textContent = formatCurrencies(hsd_total, toFixedValue);
-        document.getElementById("XMS_pump_amount").textContent = formatCurrencies(xms_total, toFixedValue);
+        
+        // Replace hardcoded MS/HSD/XMS calculation with dynamic shift products
+        if (typeof loadShiftProducts === 'function') {
+            loadShiftProducts();
+        } else {
+            console.warn('loadShiftProducts function not available');
+        }
     });
 }
 

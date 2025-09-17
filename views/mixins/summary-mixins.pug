@@ -196,26 +196,12 @@ mixin showDenominationsData(denominationValues)
 
 //- Gas sales total
 mixin gasSalesTotal()
-    span.sub-header Total Sales Amount
-        span(id='total-sales')
-        div.table-responsive
-            table.table.table-sm.table-secondary
-                tbody
-                    tr.bg-success
-                        td
-                            span MS Sales
-                        td.font-weight-bold
-                            span(id='MS_pump_amount')
-                    tr.bg-primary
-                        td
-                            span HSD Sales
-                        td.font-weight-bold
-                            span(id='HSD_pump_amount')
-                    tr.table-warning
-                        td
-                            span XMS Sales
-                        td.font-weight-bold
-                            span(id='XMS_pump_amount')
+    div.summary-sales-total(style="margin-top: 20px;")
+        h6.sub-header Total Sales Amount
+        div.row(id='shift-products-container')
+            div.col-12
+                div.text-muted Loading products...
+
 
 //- Add new page: Summary on Decant Lines details
 mixin summaryDecantLinesData(decantRowNo)
