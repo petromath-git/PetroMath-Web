@@ -145,6 +145,7 @@ const lubesInvoiceController = require("./controllers/lubes-invoice-controller")
 const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
 const passwordResetController = require('./controllers/password-reset-controller');
+const txnController = require("./controllers/txn-common-controller");
 
 
 const flash = require('express-flash');
@@ -164,6 +165,8 @@ const productsRoutes = require('./routes/products-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
+const tankRoutes = require('./routes/tank-routes');
+const billsRoutes = require('./routes/bills-routes');
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -184,6 +187,54 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+
+
+// Development login bypass - respecting location changes
+const bypassLoginInDev = async (req, res, next) => {
+    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
+        // Get current location from session or default to MUE
+        const currentLocation = req.session.selectedLocation || "MUE";
+        
+        // Check if user needs to be created or location changed
+        if (!req.user || req.user.location_code !== currentLocation || req.session.menuCacheCleared) {
+            try {
+                const role = "SuperUser";
+                
+                const menus = await MenuAccessDao.getAllowedMenusForUser(role, currentLocation);
+                const allowedMenus = menus.map(m => m.menu_code);
+                
+                req.user = {
+                    Person_id: 758,
+                    Person_Name: "MUTHU SAKTHIVELAN",
+                    User_Name: "SAKTHI",
+                    Role: "SuperUser", 
+                    location_code: currentLocation,
+                    isAdmin: true,
+                    creditlist_id: null,
+                    allowedMenus: allowedMenus,
+                    menuDetails: menus
+                };
+                
+                // Clear the cache flag
+                delete req.session.menuCacheCleared;
+            } catch (error) {
+                console.error('Error fetching menu data for bypass:', error);
+            }
+        }
+        req.isAuthenticated = () => true;
+    }
+    next();
+};
+
+
+// Apply the bypass middleware
+app.use(bypassLoginInDev);
+
+
+
+
+
 app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
@@ -193,6 +244,9 @@ app.use('/products', productsRoutes);
 app.use('/dev-tracker', devTrackerRoutes);
 app.use('/system-health', systemHealthRoutes);
 app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
+app.use('/tank-master', tankRoutes);
+app.use('/bills', billsRoutes);
+
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
@@ -208,6 +262,9 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+
+
 
 const isLoginEnsured = login.ensureLoggedIn({});
 //const isLoginEnsured = login.ensureNotLoggedIn({});     // enable for quick development only
@@ -816,7 +873,7 @@ app.get('/edit-draft-closing', isLoginEnsured, function (req, res, next) {
     ClosingEditController.getDataToEdit(req, res, next, false);  // response returned inside controller
 });
 
-app.post('/close-closing', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+app.post('/close-closing', [isLoginEnsured, security.hasPermission('CLOSE_SHIFT_CLOSE')], function (req, res, next) {
     ClosingEditController.closeData(req, res, next);  // response returned inside controller
 });
 
@@ -828,6 +885,59 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
+
+app.get('/api/shift-products/:closingId', (req, res) => {
+    console.log('=== API ROUTE CALLED ===');
+    console.log('Received closingId:', req.params.closingId);
+    
+    const closingId = req.params.closingId;
+    txnController.shiftProductsPromise(closingId)
+        .then(products => {
+            console.log('Database returned:', products);
+            res.json(products);
+        })
+        .catch(err => {
+            console.error('Database error:', err);
+            res.json([]);
+        });
+});
+
+
+
+
+
+// REPLACE the testing routes in app.js with this:
+app.post('/test-switch-role', isLoginEnsured, function(req, res, next) {
+    // Only allow if user is originally SuperUser
+    if (req.user.Role === 'SuperUser' || req.user.originalRole === 'SuperUser') {
+        if (!req.user.originalRole) {
+            req.user.originalRole = req.user.Role;  // Save in user object
+            req.session.originalRole = req.user.Role;  // Also save in session for persistence
+        }
+        req.user.Role = req.body.testRole;
+        if (req.session.user) {
+            req.session.user.Role = req.body.testRole;
+            req.session.user.originalRole = req.user.originalRole;  // Keep original in session
+        }
+        console.log(`Role switched to: ${req.body.testRole}`);
+    }
+    res.redirect('back');
+});
+
+app.get('/test-reset-role', isLoginEnsured, function(req, res, next) {
+    if (req.user.originalRole || req.session.originalRole) {
+        const originalRole = req.user.originalRole || req.session.originalRole;
+        req.user.Role = originalRole;
+        if (req.session.user) {
+            req.session.user.Role = originalRole;
+            delete req.session.user.originalRole;
+        }
+        delete req.user.originalRole;
+        delete req.session.originalRole;
+        console.log(`Role reset to: ${originalRole}`);
+    }
+    res.redirect('back');
+});
 
 
 // app.post('/login', function (req, res, next) {
@@ -919,7 +1029,7 @@ app.get('/cashflow', isLoginEnsured, function (req, res, next) {
     cashflowController.getCashFlowEntry(req, res, next);
 });
 
-app.post('/cashflow', isLoginEnsured, function (req, res, next) {
+app.post('/cashflow', [isLoginEnsured, security.hasPermission('GENERATE_DAY_CLOSE')], function (req, res, next) {
     cashflowController.triggerCashSalesByDate(req, res, next);
 });
 
@@ -943,7 +1053,7 @@ app.get('/cashflowhome', isLoginEnsured, function (req, res) {
     cashflowController.getCashFlowHome(req, res);
 });
 
-app.post('/close-cashflow', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+app.post('/close-cashflow', [isLoginEnsured, security.hasPermission('CLOSE_DAY_CLOSE')], function (req, res, next) {
     cashflowController.closeData(req, res, next);  // response returned inside controller
 });
 
@@ -1113,50 +1223,6 @@ app.get('/pump-tanks/validate', [isLoginEnsured, security.isAdmin()], function(r
 });
 
 
-// Billing routes
-app.get('/bills', isLoginEnsured, function(req, res, next) {
-    billController.getBills(req, res, next);
-});
-
-app.get('/bills/new', isLoginEnsured, function(req, res, next) {
-    billController.getNewBill(req, res, next);
-});
-
-app.post('/bills', isLoginEnsured, function(req, res, next) {
-    billController.createBill(req, res, next);
-});
-
-app.put('/bills/:billId/cancel', [isLoginEnsured, security.isAdmin()], function(req, res, next) {
-    billController.cancelBill(req, res, next);
-});
-
-app.get('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.getBillDetails(req, res, next);
-});
-
-app.get('/bills/:billId/details', isLoginEnsured, function(req, res, next) {
-    billController.getBillDetails(req, res, next);
-});
-
-// Billing routes for editing bills
-app.get('/bills/edit/:billId', isLoginEnsured, function(req, res, next) {
-    billController.editBill(req, res, next);
-});
-
-app.put('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.updateBill(req, res, next);
-});
-
-app.delete('/bills/:billId', isLoginEnsured, function(req, res, next) {
-    billController.deleteBill(req, res, next);
-});
-
-
-// Add this to your app.js in the bills routes section
-app.get('/bills/:id/print', login.ensureLoggedIn('/login'), billController.printBill);
-
-// Add this route after your existing bill routes
-app.get('/bills/:id/print/pdf', login.ensureLoggedIn('/login'), billController.printBillPDF);
 
 
 // Lubes Invoice routes
@@ -1336,6 +1402,13 @@ app.post('/select-location', isLoginEnsured, function (req, res) {
     }
     // Store the selected location in the session
     req.user.location_code = req.body.location;
+    req.session.selectedLocation = req.body.location; // Add this line
+
+    // Clear any cached menu data so it gets refreshed for new location
+    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
+        req.session.menuCacheCleared = true; // Signal to bypass to refresh menus
+    }
+
 
     // Redirect to home or dashboard after selecting the location
     res.redirect('/home');
@@ -1364,6 +1437,10 @@ app.listen(process.env.SERVER_PORT, function () {
 });
 
 getBrowser().then(() => console.log('Browser is ready for use.')); // used for PDF Generation.
+
+
+
+
 
 // port - end
 module.exports = app;

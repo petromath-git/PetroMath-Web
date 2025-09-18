@@ -317,8 +317,7 @@ block content
                                                 th(scope="col") Notes
                                                 th(scope="col")
 
-                                                - var rowCnt = 0
-                                                - var maxDigitalSalesRowCnt = 10
+                                                - var rowCnt = 0                                                
                                                 while rowCnt < maxDigitalSalesRowCnt
                                                     +addDigitalSales(rowCnt++)
                                             tr
@@ -555,3 +554,4 @@ block content
         var vehicleData = !{JSON.stringify(vehicleData || {})};        
         window.pumpsData = !{JSON.stringify(pumps)};    
         window.productValuesData = !{JSON.stringify(productValues)};
+    script(src='/javascripts/shift-products.js')    

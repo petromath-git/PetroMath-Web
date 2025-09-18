@@ -9,13 +9,22 @@ const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
-
+const locationConfig = require('../utils/location-config');
 // Edit flow: This controller takes care of all joins to get data for editing.
 
 module.exports = {
-    getDataToEdit: (req, res, next) => {
+    getDataToEdit: async  (req, res, next) => {
         const closingId = req.query.closingId;
         const locationCode = req.user.location_code;
+
+
+        const maxBackDateDays = await locationConfig.getLocationConfigValue(
+            locationCode, 
+            'MAX_DAYS_ALLOWED_BACK_DATE_CLOSING', 
+            config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing
+        );
+
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -34,13 +43,14 @@ module.exports = {
                 homeController.personAttendanceDataPromise(locationCode),
                 vehicleDataPromise(locationCode),
                 homeController.pumpProductDataPromise(locationCode),
-                txnController.txnDigitalSalesPromise(closingId),])
+                txnController.txnDigitalSalesPromise(closingId),
+                txnController.shiftProductsPromise(closingId)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
                         config: config.APP_CONFIGS,
                         currentDate: utils.currentDate(),
-                        minDateForNewClosing: utils.restrictToPastDate(config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing),
+                        minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
@@ -58,7 +68,8 @@ module.exports = {
                         usersList: values[14].value.allUsers,
                         vehicleData: values[15].value,
                         pumpProductValues: values[16].value.products, 
-                        digitalSalesData: values[17].value
+                        digitalSalesData: values[17].value,
+                        shiftProducts: values[18].value || []
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());

@@ -1408,3 +1408,968 @@ body {
     display: none; /* Hide Type column on mobile */
   }
 }
+
+/* ===== BILLS CREATE PAGE MOBILE STYLES ===== */
+
+/* Hide desktop table on mobile for bills */
+@media (max-width: 768px) {
+  .table-responsive {
+    display: none !important;
+  }
+  
+  /* Mobile bills form styling */
+  .mobile-form-section {
+    background: #f8f9fa !important;
+    padding: 15px !important;
+    border-radius: 10px !important;
+    border: 1px solid #e1e5e9 !important;
+  }
+  
+  /* Mobile form controls for bills */
+  .mobile-form-section .form-control-lg {
+    font-size: 16px !important;
+    height: 48px !important;
+  }
+}
+
+/* ===== ENHANCED PAST ADJUSTMENTS FILTER SECTION ===== */
+
+/* Enhanced Past Adjustments Filter Section */
+.filter-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.filter-toggle {
+    cursor: pointer;
+    padding: 15px;
+    border-bottom: 1px solid #dee2e6;
+    transition: background-color 0.3s ease;
+}
+
+.filter-toggle:hover {
+    background: #e9ecef;
+}
+
+.filter-content {
+    padding: 20px;
+    display: none;
+}
+
+.filter-content.show {
+    display: block;
+}
+
+.enhanced-adjustments-table {
+    font-size: 0.9rem;
+}
+
+.enhanced-adjustments-table th {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.status-badge {
+    font-size: 0.75rem;
+}
+
+.amount-column {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+}
+
+.no-results {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    display: none;
+}
+
+.loading-spinner .spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Enhanced adjustments summary footer */
+#summaryFooter {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+#summaryFooter .font-weight-bold {
+    color: #495057;
+}
+
+/* Filter form styling */
+.filter-content .form-row .col-md-3,
+.filter-content .form-row .col-md-4,
+.filter-content .form-row .col-md-6 {
+    margin-bottom: 15px;
+}
+
+.filter-content .form-control {
+    border: 2px solid #e1e5e9;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filter-content .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+}
+
+.filter-content label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #495057;
+    font-size: 13px;
+}
+
+/* Filter buttons styling */
+.filter-content .btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+.filter-content .btn-primary {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+}
+
+.filter-content .btn-secondary {
+    background: #6c757d;
+    border: none;
+}
+
+/* Mobile optimizations for enhanced adjustments */
+@media (max-width: 768px) {
+    .filter-section {
+        margin-bottom: 15px;
+    }
+    
+    .filter-toggle {
+        padding: 12px;
+    }
+    
+    .filter-content {
+        padding: 15px;
+    }
+    
+    .filter-content .form-row .col-md-3,
+    .filter-content .form-row .col-md-4,
+    .filter-content .form-row .col-md-6 {
+        width: 100%;
+        margin-bottom: 12px;
+    }
+    
+    .filter-content .form-control {
+        font-size: 16px !important;
+        padding: 12px !important;
+        height: 48px !important;
+        border-radius: 8px !important;
+    }
+    
+    .filter-content label {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+    
+    .filter-content .btn {
+        width: 100%;
+        margin-bottom: 8px;
+        padding: 12px;
+        font-size: 16px;
+        height: 48px;
+    }
+    
+    .filter-content .btn:last-child {
+        margin-bottom: 0;
+    }
+    
+    .enhanced-adjustments-table {
+        font-size: 0.8rem;
+    }
+    
+    .enhanced-adjustments-table .d-none.d-md-table-cell {
+        display: none !important;
+    }
+    
+    .enhanced-adjustments-table th,
+    .enhanced-adjustments-table td {
+        padding: 8px 4px !important;
+    }
+    
+    .no-results {
+        padding: 30px 15px;
+    }
+    
+    .no-results i {
+        font-size: 2rem !important;
+    }
+    
+    .no-results h5 {
+        font-size: 18px;
+    }
+    
+    .no-results p {
+        font-size: 14px;
+    }
+    
+    .loading-spinner {
+        padding: 30px;
+    }
+    
+    .loading-spinner .spinner-border {
+        width: 2rem;
+        height: 2rem;
+    }
+    
+    /* Summary footer mobile styling */
+    #summaryFooter .row {
+        flex-direction: column;
+    }
+    
+    #summaryFooter .col-md-4,
+    #summaryFooter .col-md-8 {
+        width: 100%;
+        text-align: center !important;
+        margin-bottom: 8px;
+    }
+    
+    #summaryFooter .col-md-4:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* Integration with existing adjustment styles */
+.enhanced-adjustments-table .table-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.enhanced-adjustments-table .badge-info {
+    background-color: #17a2b8;
+}
+
+.enhanced-adjustments-table .badge-success {
+    background-color: #28a745;
+}
+
+.enhanced-adjustments-table .badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.enhanced-adjustments-table .badge-secondary {
+    background-color: #6c757d;
+}
+
+/* Chevron icon animation */
+#filterChevron {
+    transition: transform 0.3s ease;
+}
+
+.filter-content.show ~ .filter-toggle #filterChevron {
+    transform: rotate(180deg);
+}
+
+/* Date range preset specific styling */
+#filterDateRange {
+    font-weight: 600;
+    color: #495057;
+}
+
+#filterDateRange option {
+    padding: 8px;
+}
+
+/* Search input styling */
+#filterSearch {
+    position: relative;
+}
+
+#filterSearch:focus {
+    background-color: #fff;
+}
+
+/* Ensure compatibility with existing table styles */
+.enhanced-adjustments-table.table-sm th,
+.enhanced-adjustments-table.table-sm td {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Button hover effects for enhanced table */
+.enhanced-adjustments-table .btn-outline-warning:hover {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+/* Text truncation for long descriptions on mobile */
+@media (max-width: 768px) {
+    .enhanced-adjustments-table td:nth-child(4) { /* Description column */
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+/* Ensure filter section doesn't conflict with sidebar */
+.main-content .filter-section {
+    margin-top: 0;
+}
+
+/* Print styles for enhanced adjustments */
+@media print {
+    .filter-section {
+        display: none !important;
+    }
+    
+    .enhanced-adjustments-table .d-none.d-md-table-cell {
+        display: table-cell !important;
+    }
+    
+    .enhanced-adjustments-table .btn {
+        display: none !important;
+    }
+    
+    #summaryFooter {
+        display: block !important;
+        background: white !important;
+        border: 1px solid #000 !important;
+    }
+}
+
+
+/* ===== STICKY HEADER AND ALWAYS EXPANDED FILTERS ===== */
+
+/* Sticky header section */
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: white;
+    border-bottom: 2px solid #dee2e6;
+    padding: 15px 0;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Always expanded filter section */
+.filter-section-expanded {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-top: 15px;
+}
+
+.filter-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #dee2e6;
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.filter-content-expanded {
+    padding: 20px;
+    background: white;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Results container with proper spacing */
+.results-container {
+    margin-top: 0;
+}
+
+/* Enhanced form styling for always-visible filters */
+.filter-content-expanded .form-row .col-md-2,
+.filter-content-expanded .form-row .col-md-3,
+.filter-content-expanded .form-row .col-md-4 {
+    margin-bottom: 15px;
+}
+
+.filter-content-expanded .form-control {
+    border: 2px solid #e1e5e9;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.filter-content-expanded .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+}
+
+.filter-content-expanded label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #495057;
+    font-size: 13px;
+}
+
+/* Button styling in filter section */
+.filter-content-expanded .btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    min-width: 80px;
+}
+
+.filter-content-expanded .btn-primary {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+}
+
+.filter-content-expanded .btn-secondary {
+    background: #6c757d;
+    border: none;
+}
+
+/* Ensure proper spacing between buttons */
+.filter-content-expanded .btn + .btn {
+    margin-left: 8px;
+}
+
+/* Mobile responsiveness for sticky header */
+@media (max-width: 768px) {
+    .sticky-header {
+        padding: 10px 0;
+        margin-bottom: 15px;
+    }
+    
+    .sticky-header h4 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .sticky-header .d-flex {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    
+    .sticky-header .btn {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .filter-header {
+        padding: 12px 15px;
+    }
+    
+    .filter-content-expanded {
+        padding: 15px;
+    }
+    
+    .filter-content-expanded .form-row .col-md-2,
+    .filter-content-expanded .form-row .col-md-3,
+    .filter-content-expanded .form-row .col-md-4 {
+        width: 100%;
+        margin-bottom: 12px;
+    }
+    
+    .filter-content-expanded .form-control {
+        font-size: 16px !important;
+        padding: 12px !important;
+        height: 48px !important;
+        border-radius: 8px !important;
+    }
+    
+    .filter-content-expanded label {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+    
+    .filter-content-expanded .btn {
+        width: 100%;
+        margin-bottom: 8px;
+        margin-left: 0 !important;
+        padding: 12px;
+        font-size: 16px;
+        height: 48px;
+    }
+    
+    .filter-content-expanded .btn:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* Integration with sidebar layout */
+.main-content .sticky-header {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* Print styles - hide sticky header elements */
+@media print {
+    .sticky-header {
+        position: static !important;
+        box-shadow: none !important;
+        border-bottom: 1px solid #000 !important;
+    }
+    
+    .filter-section-expanded {
+        display: none !important;
+    }
+}
+
+/* ===== COMPLETE STICKY HEADERS SYSTEM ===== */
+
+/* Main sticky container - sticks to top */
+.sticky-header-container {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    background: white;
+    border-bottom: 2px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 15px 0;
+    margin-bottom: 0;
+}
+
+/* Main header with title and button */
+.main-header {
+    margin-bottom: 15px;
+}
+
+/* Section header for Past Adjustments */
+.section-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.section-header h5 {
+    color: #495057;
+    font-weight: 600;
+}
+
+/* Always expanded filter section */
+.filter-section-expanded {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.filter-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #dee2e6;
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.filter-content-expanded {
+    padding: 20px;
+    background: white;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Sticky table header - positioned below the filters */
+.sticky-table-header {
+    position: sticky;
+    top: 270px; /* Adjust based on filter section height */
+    z-index: 100;
+    background: white;
+    border-bottom: 2px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+
+.sticky-table-header .table {
+    margin-bottom: 0;
+}
+
+.sticky-table-header th {
+    background: #f8f9fa !important;
+    border-bottom: 2px solid #dee2e6 !important;
+    font-weight: 600;
+    color: #495057;
+    padding: 12px 8px;
+}
+
+/* Results container with no top margin */
+.results-container {
+    margin-top: 0;
+}
+
+/* Borderless card for seamless table continuation */
+.borderless-card {
+    border: none;
+    box-shadow: none;
+}
+
+.borderless-card .card-body {
+    padding: 0;
+}
+
+/* Enhanced form styling for always-visible filters */
+.filter-content-expanded .form-row .col-md-2,
+.filter-content-expanded .form-row .col-md-3,
+.filter-content-expanded .form-row .col-md-4 {
+    margin-bottom: 15px;
+}
+
+.filter-content-expanded .form-control {
+    border: 2px solid #e1e5e9;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.filter-content-expanded .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+}
+
+.filter-content-expanded label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #495057;
+    font-size: 13px;
+}
+
+/* Button styling in filter section */
+.filter-content-expanded .btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    min-width: 80px;
+}
+
+.filter-content-expanded .btn-primary {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+}
+
+.filter-content-expanded .btn-secondary {
+    background: #6c757d;
+    border: none;
+}
+
+/* Ensure proper spacing between buttons */
+.filter-content-expanded .btn + .btn {
+    margin-left: 8px;
+}
+
+/* Table styling to match sticky header */
+.enhanced-adjustments-table {
+    font-size: 0.9rem;
+}
+
+.enhanced-adjustments-table th {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.status-badge {
+    font-size: 0.75rem;
+}
+
+.amount-column {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+}
+
+.no-results {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    display: none;
+}
+
+.loading-spinner .spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Summary footer styling */
+#summaryFooter {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+#summaryFooter .font-weight-bold {
+    color: #495057;
+}
+
+/* Mobile responsiveness for sticky headers */
+@media (max-width: 768px) {
+    .sticky-header-container {
+        padding: 10px 0;
+        position: relative; /* Disable sticky on mobile for better UX */
+    }
+    
+    .sticky-table-header {
+        position: relative; /* Disable sticky on mobile */
+        top: auto;
+    }
+    
+    .main-header h4 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .main-header .d-flex {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    
+    .main-header .btn {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .filter-header {
+        padding: 12px 15px;
+    }
+    
+    .filter-content-expanded {
+        padding: 15px;
+    }
+    
+    .filter-content-expanded .form-row .col-md-2,
+    .filter-content-expanded .form-row .col-md-3,
+    .filter-content-expanded .form-row .col-md-4 {
+        width: 100%;
+        margin-bottom: 12px;
+    }
+    
+    .filter-content-expanded .form-control {
+        font-size: 16px !important;
+        padding: 12px !important;
+        height: 48px !important;
+        border-radius: 8px !important;
+    }
+    
+    .filter-content-expanded label {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+    
+    .filter-content-expanded .btn {
+        width: 100%;
+        margin-bottom: 8px;
+        margin-left: 0 !important;
+        padding: 12px;
+        font-size: 16px;
+        height: 48px;
+    }
+    
+    .filter-content-expanded .btn:last-child {
+        margin-bottom: 0;
+    }
+    
+    .enhanced-adjustments-table {
+        font-size: 0.8rem;
+    }
+    
+    .enhanced-adjustments-table .d-none.d-md-table-cell {
+        display: none !important;
+    }
+    
+    .enhanced-adjustments-table th,
+    .enhanced-adjustments-table td {
+        padding: 8px 4px !important;
+    }
+    
+    .no-results {
+        padding: 30px 15px;
+    }
+    
+    .no-results i {
+        font-size: 2rem !important;
+    }
+    
+    .no-results h5 {
+        font-size: 18px;
+    }
+    
+    .no-results p {
+        font-size: 14px;
+    }
+    
+    .loading-spinner {
+        padding: 30px;
+    }
+    
+    .loading-spinner .spinner-border {
+        width: 2rem;
+        height: 2rem;
+    }
+    
+    /* Summary footer mobile styling */
+    #summaryFooter .row {
+        flex-direction: column;
+    }
+    
+    #summaryFooter .col-md-4,
+    #summaryFooter .col-md-8 {
+        width: 100%;
+        text-align: center !important;
+        margin-bottom: 8px;
+    }
+    
+    #summaryFooter .col-md-4:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* Integration with existing adjustment styles */
+.enhanced-adjustments-table .table-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.enhanced-adjustments-table .badge-info {
+    background-color: #17a2b8;
+}
+
+.enhanced-adjustments-table .badge-success {
+    background-color: #28a745;
+}
+
+.enhanced-adjustments-table .badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.enhanced-adjustments-table .badge-secondary {
+    background-color: #6c757d;
+}
+
+/* Button hover effects for enhanced table */
+.enhanced-adjustments-table .btn-outline-warning:hover {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+/* Text truncation for long descriptions on mobile */
+@media (max-width: 768px) {
+    .enhanced-adjustments-table td:nth-child(4) { /* Description column */
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+/* Integration with sidebar layout */
+.main-content .sticky-header-container {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* Print styles - disable sticky positioning */
+@media print {
+    .sticky-header-container,
+    .sticky-table-header {
+        position: static !important;
+        box-shadow: none !important;
+        border-bottom: 1px solid #000 !important;
+    }
+    
+    .filter-section-expanded {
+        display: none !important;
+    }
+    
+    .enhanced-adjustments-table .d-none.d-md-table-cell {
+        display: table-cell !important;
+    }
+    
+    .enhanced-adjustments-table .btn {
+        display: none !important;
+    }
+    
+    #summaryFooter {
+        display: block !important;
+        background: white !important;
+        border: 1px solid #000 !important;
+    }
+}
+
+/* ===== SUBTLE DEADLINE MANAGER STYLING ===== */
+
+.deadline-section {
+  background: #fafbfc;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.deadline-header {
+  background: #6c757d !important; /* Muted gray instead of bright blue */
+  color: white !important;
+  padding: 8px 16px !important; /* Smaller padding */
+  border-radius: 6px !important;
+  margin-bottom: 12px !important;
+  font-size: 13px !important; /* Smaller font */
+  font-weight: 500 !important; /* Less bold */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deadline-header::before {
+  content: "📋"; /* More subtle icon */
+  font-size: 14px;
+}
+
+/* Keep table styling clean but less prominent */
+#deadlineWarning-table {
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* Much lighter shadow */
+  border: 1px solid #e9ecef;
+  font-size: 13px; /* Smaller text */
+}
+
+#deadlineWarning-table thead {
+  background: #f8f9fa !important; /* Lighter header */
+}
+
+#deadlineWarning-table th {
+  border: none !important;
+  padding: 10px 12px !important; /* Smaller padding */
+  font-weight: 500 !important; /* Less bold */
+  color: #6c757d !important; /* Muted color */
+  font-size: 12px !important;
+  text-transform: none; /* Remove uppercase */
+  letter-spacing: normal;
+}
+
+#deadlineWarning-table td {
+  border: none !important;
+  padding: 10px 12px !important;
+  color: #495057; /* Muted text color */
+  vertical-align: middle;
+  border-bottom: 1px solid #f8f9fa !important;
+  font-size: 13px;
+}
+
+#deadlineWarning-table tbody tr:hover {
+  background: #f8f9fa; /* Subtle hover */
+}

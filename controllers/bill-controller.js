@@ -9,6 +9,7 @@ const Sequelize = require('sequelize');
 const pug = require('pug');
 const path = require('path');
 const { getBrowser } = require('../utils/browserHelper');
+const BillNumberingService = require('../services/bill-numbering-service');
 
 
 module.exports = {
@@ -28,6 +29,12 @@ module.exports = {
                     replacements: { locationCode: req.user.location_code },
                     type: Sequelize.QueryTypes.SELECT
                 });
+
+            let selectedShift = null;
+                if (activeShifts.length === 1) {
+                    selectedShift = activeShifts[0].closing_id;
+                }        
+
             // Get products for the location
             const products = await ProductDao.findProducts(req.user.location_code);
 
@@ -54,6 +61,7 @@ module.exports = {
                 title: 'Create New Bill',
                 user: req.user,
                 shifts: activeShifts,
+                selectedShift: selectedShift,  // Add this
                 products: products,
                 credits: credits,
                 vehicleData: vehiclesByCredit,
@@ -63,177 +71,179 @@ module.exports = {
             next(error);
         }
     },
-    createBill: async (req, res, next) => {
-        const transaction = await db.sequelize.transaction();
+    // createBill: async (req, res, next) => {
+    //     const transaction = await db.sequelize.transaction();
 
-          try {
-        // Validate bill items FIRST
-            const validation = await validateBillItems(req.body.items, req.user.location_code);
-            if (!validation.valid) {
-                req.flash('error', validation.errors.join('. '));
-                return res.redirect('/bills/new');
-        }
+    //       try {
+    //     // Validate bill items FIRST
+    //         const validation = await validateBillItems(req.body.items, req.user.location_code);
+    //         if (!validation.valid) {
+    //             req.flash('error', validation.errors.join('. '));
+    //             return res.redirect('/bills/new');
+    //     }
         
         
-            // First validate closing status
-            const closing = await db.sequelize.query(`
-                SELECT closing_status 
-                FROM t_closing 
-                WHERE closing_id = :closingId
-                AND location_code = :locationCode
-            `, {
-                replacements: { 
-                    closingId: req.body.closing_id,
-                    locationCode: req.user.location_code 
-                },
-                type: Sequelize.QueryTypes.SELECT
-            });
+    //         // First validate closing status
+    //         const closing = await db.sequelize.query(`
+    //             SELECT closing_status 
+    //             FROM t_closing 
+    //             WHERE closing_id = :closingId
+    //             AND location_code = :locationCode
+    //         `, {
+    //             replacements: { 
+    //                 closingId: req.body.closing_id,
+    //                 locationCode: req.user.location_code 
+    //             },
+    //             type: Sequelize.QueryTypes.SELECT
+    //         });
 
-            if (!closing.length || closing[0].closing_status === 'CLOSED') {
-                req.flash('error', 'Cannot create bills for closed or invalid shifts');
-                return res.redirect('/bills/new');
-            }
+    //         if (!closing.length || closing[0].closing_status === 'CLOSED') {
+    //             req.flash('error', 'Cannot create bills for closed or invalid shifts');
+    //             return res.redirect('/bills/new');
+    //         }
 
             
-            // Get next bill number based on bill type
-            const maxBillResult = await db.sequelize.query(`
-                SELECT COALESCE(MAX(CAST(SUBSTRING(bill_no, 4) AS UNSIGNED)), 0) as max_bill 
-                FROM t_bills 
-                WHERE location_code = :locationCode
-                AND bill_no LIKE :prefix
-            `, {
-                replacements: { 
-                    locationCode: req.user.location_code,
-                    prefix: req.body.bill_type === 'CREDIT' ? 'CR/%' : 'CS/%'
-                },
-                type: Sequelize.QueryTypes.SELECT
-            });
+    //         // Get next bill number based on bill type
+    //         const maxBillResult = await db.sequelize.query(`
+    //             SELECT COALESCE(MAX(CAST(SUBSTRING(bill_no, 4) AS UNSIGNED)), 0) as max_bill 
+    //             FROM t_bills 
+    //             WHERE location_code = :locationCode
+    //             AND bill_no LIKE :prefix
+    //         `, {
+    //             replacements: { 
+    //                 locationCode: req.user.location_code,
+    //                 prefix: req.body.bill_type === 'CREDIT' ? 'CR/%' : 'CS/%'
+    //             },
+    //             type: Sequelize.QueryTypes.SELECT
+    //         });
             
-            const nextNumber = maxBillResult[0].max_bill + 1;
-            const prefix = req.body.bill_type === 'CREDIT' ? 'CR/' : 'CS/';
-            // Pad the number with leading zeros to ensure proper sorting
-            const paddedNumber = String(nextNumber).padStart(6, '0');
-            const nextBillNo = `${prefix}${paddedNumber}`;
+    //         const nextNumber = maxBillResult[0].max_bill + 1;
+    //         const prefix = req.body.bill_type === 'CREDIT' ? 'CR/' : 'CS/';
+    //         // Pad the number with leading zeros to ensure proper sorting
+    //         const paddedNumber = String(nextNumber).padStart(6, '0');
+    //         const nextBillNo = `${prefix}${paddedNumber}`;
 
-            // Create bill
-            const [billResult] = await db.sequelize.query(`
-                INSERT INTO t_bills (
-                    location_code, bill_no, bill_type, closing_id,
-                    total_amount, created_by, creation_date
-                ) VALUES (
-                    :locationCode, :billNo, :billType, :closingId,
-                    :totalAmount, :createdBy, NOW()
-                )
-            `, {
-                replacements: {
-                    locationCode: req.user.location_code,
-                    billNo: nextBillNo,
-                    billType: req.body.bill_type,
-                    closingId: req.body.closing_id,
-                    totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
-                    createdBy: req.user.Person_id
-                },
-                type: Sequelize.QueryTypes.INSERT,
-                transaction
-            });
+    //         // Create bill
+    //         const [billResult] = await db.sequelize.query(`
+    //             INSERT INTO t_bills (
+    //                 location_code, bill_no, bill_type, closing_id,
+    //                 total_amount, created_by, creation_date
+    //             ) VALUES (
+    //                 :locationCode, :billNo, :billType, :closingId,
+    //                 :totalAmount, :createdBy, NOW()
+    //             )
+    //         `, {
+    //             replacements: {
+    //                 locationCode: req.user.location_code,
+    //                 billNo: nextBillNo,
+    //                 billType: req.body.bill_type,
+    //                 closingId: req.body.closing_id,
+    //                 totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
+    //                 createdBy: req.user.Person_id
+    //             },
+    //             type: Sequelize.QueryTypes.INSERT,
+    //             transaction
+    //         });
 
-            const billId = billResult;
+    //         const billId = billResult;
 
-            // Create bill items
-            for (const item of req.body.items) {
-                if (req.body.bill_type === 'CREDIT') {
-                        await db.sequelize.query(`
-                            INSERT INTO t_credits (
-                                closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
-                                product_id, price, price_discount, qty, amount,
-                                base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                                notes, odometer_reading, created_by, creation_date
-                            ) VALUES (
-                                :closingId, :billNo, :billId, :creditlistId, :vehicleId,
-                                :productId, :price, :discount, :qty, :amount,
-                                :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                                :notes, :odometerReading, :createdBy, NOW()
-                            )
-                        `, {
-                            replacements: {
-                                closingId: req.body.closing_id,
-                                billNo: nextBillNo,
-                                billId: billId,
-                                creditlistId: req.body.creditlist_id,
-                                vehicleId: req.body.bill_vehicle_id || null,
-                                odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,   
-                                productId: parseInt(item.product_id),
-                                price: parseFloat(item.price),
-                                discount: parseFloat(item.price_discount || 0),
-                                qty: parseFloat(item.qty),
-                                amount: parseFloat(item.amount),
-                                baseAmount: parseFloat(item.base_amount),
-                                cgstPercent: parseFloat(item.cgst_percent || 0),
-                                sgstPercent: parseFloat(item.sgst_percent || 0),
-                                cgstAmount: parseFloat(item.cgst_amount || 0),
-                                sgstAmount: parseFloat(item.sgst_amount || 0),
-                                notes: item.notes || '',
-                                odometerReading: parseFloat(item.odometer_reading) || null,
-                                createdBy: req.user.Person_id
-                            },
-                            type: Sequelize.QueryTypes.INSERT,
-                            transaction
-                        });
-                } else {
-                        // For CASH bills
-                        await db.sequelize.query(`
-                            INSERT INTO t_cashsales (
-                                closing_id, bill_no, bill_id,
-                                product_id, price, price_discount, qty, amount,
-                                base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                                notes, created_by, creation_date
-                            ) VALUES (
-                                :closingId, :billNo, :billId,
-                                :productId, :price, :discount, :qty, :amount,
-                                :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                                :notes, :createdBy, NOW()
-                            )
-                        `, {
-                            replacements: {
-                                closingId: req.body.closing_id,
-                                billNo: nextBillNo,
-                                billId: billId,
-                                vehicleNumber: req.body.bill_vehicle_number || null,
-                                odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
-                                productId: parseInt(item.product_id),
-                                price: parseFloat(item.price),
-                                discount: parseFloat(item.price_discount || 0),
-                                qty: parseFloat(item.qty),
-                                amount: parseFloat(item.amount),
-                                baseAmount: parseFloat(item.base_amount),
-                                cgstPercent: parseFloat(item.cgst_percent || 0),
-                                sgstPercent: parseFloat(item.sgst_percent || 0),
-                                cgstAmount: parseFloat(item.cgst_amount || 0),
-                                sgstAmount: parseFloat(item.sgst_amount || 0),
-                                notes: item.notes || '',
-                                createdBy: req.user.Person_id
-                            },
-                            type: Sequelize.QueryTypes.INSERT,
-                            transaction
-                        });
-                    }
-            }
+    //         // Create bill items
+    //         for (const item of req.body.items) {
+    //             if (req.body.bill_type === 'CREDIT') {
+    //                     await db.sequelize.query(`
+    //                         INSERT INTO t_credits (
+    //                             closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
+    //                             product_id, price, price_discount, qty, amount,
+    //                             base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+    //                             notes, odometer_reading, created_by, creation_date
+    //                         ) VALUES (
+    //                             :closingId, :billNo, :billId, :creditlistId, :vehicleId,
+    //                             :productId, :price, :discount, :qty, :amount,
+    //                             :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+    //                             :notes, :odometerReading, :createdBy, NOW()
+    //                         )
+    //                     `, {
+    //                         replacements: {
+    //                             closingId: req.body.closing_id,
+    //                             billNo: nextBillNo,
+    //                             billId: billId,
+    //                             creditlistId: req.body.creditlist_id,
+    //                             vehicleId: req.body.bill_vehicle_id || null,
+    //                             odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,   
+    //                             productId: parseInt(item.product_id),
+    //                             price: parseFloat(item.price),
+    //                             discount: parseFloat(item.price_discount || 0),
+    //                             qty: parseFloat(item.qty),
+    //                             amount: parseFloat(item.amount),
+    //                             baseAmount: parseFloat(item.base_amount),
+    //                             cgstPercent: parseFloat(item.cgst_percent || 0),
+    //                             sgstPercent: parseFloat(item.sgst_percent || 0),
+    //                             cgstAmount: parseFloat(item.cgst_amount || 0),
+    //                             sgstAmount: parseFloat(item.sgst_amount || 0),
+    //                             notes: item.notes || '',
+    //                             odometerReading: parseFloat(item.odometer_reading) || null,
+    //                             createdBy: req.user.Person_id
+    //                         },
+    //                         type: Sequelize.QueryTypes.INSERT,
+    //                         transaction
+    //                     });
+    //             } else {
+    //                     // For CASH bills
+    //                     await db.sequelize.query(`
+    //                         INSERT INTO t_cashsales (
+    //                             closing_id, bill_no, bill_id,
+    //                             product_id, price, price_discount, qty, amount,
+    //                             base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+    //                             notes, created_by, creation_date
+    //                         ) VALUES (
+    //                             :closingId, :billNo, :billId,
+    //                             :productId, :price, :discount, :qty, :amount,
+    //                             :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+    //                             :notes, :createdBy, NOW()
+    //                         )
+    //                     `, {
+    //                         replacements: {
+    //                             closingId: req.body.closing_id,
+    //                             billNo: nextBillNo,
+    //                             billId: billId,
+    //                             vehicleNumber: req.body.bill_vehicle_number || null,
+    //                             odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
+    //                             productId: parseInt(item.product_id),
+    //                             price: parseFloat(item.price),
+    //                             discount: parseFloat(item.price_discount || 0),
+    //                             qty: parseFloat(item.qty),
+    //                             amount: parseFloat(item.amount),
+    //                             baseAmount: parseFloat(item.base_amount),
+    //                             cgstPercent: parseFloat(item.cgst_percent || 0),
+    //                             sgstPercent: parseFloat(item.sgst_percent || 0),
+    //                             cgstAmount: parseFloat(item.cgst_amount || 0),
+    //                             sgstAmount: parseFloat(item.sgst_amount || 0),
+    //                             notes: item.notes || '',
+    //                             createdBy: req.user.Person_id
+    //                         },
+    //                         type: Sequelize.QueryTypes.INSERT,
+    //                         transaction
+    //                     });
+    //                 }
+    //         }
 
-            await transaction.commit();
-            req.flash('success', `Bill ${nextBillNo} created successfully`);
-            res.redirect('/bills');
+    //         await transaction.commit();
+    //         req.flash('success', `Bill ${nextBillNo} created successfully`);
+    //         res.redirect('/bills');
             
-        } catch (error) {
-            await transaction.rollback();
-            console.error('Bill creation error details:', {
-                error: error.message,
-                items: req.body.items,
-                billType: req.body.bill_type
-            });
-            req.flash('error', 'Error creating bill: ' + error.message);
-            res.redirect('/bills/new');
-        }
-    },
+    //     } catch (error) {
+    //         await transaction.rollback();
+    //         console.error('Bill creation error details:', {
+    //             error: error.message,
+    //             items: req.body.items,
+    //             billType: req.body.bill_type
+    //         });
+    //         req.flash('error', 'Error creating bill: ' + error.message);
+    //         res.redirect('/bills/new');
+    //     }
+    // },
+
+    
 
     // getBills: async (req, res, next) => {
     //     try {
@@ -268,6 +278,205 @@ module.exports = {
     // },
 
 // Replace the getBills query in your bill-controller.js with this:
+
+
+createBill: async (req, res, next) => {
+        const transaction = await db.sequelize.transaction();
+
+        try {
+            // Validate bill items FIRST
+            const validation = await validateBillItems(req.body.items, req.user.location_code);
+            if (!validation.valid) {
+                req.flash('error', validation.errors.join('. '));
+                return res.redirect('/bills/new');
+            }
+
+            // First validate closing status
+            const closing = await db.sequelize.query(`
+                SELECT closing_status 
+                FROM t_closing 
+                WHERE closing_id = :closingId
+                AND location_code = :locationCode
+            `, {
+                replacements: { 
+                    closingId: req.body.closing_id,
+                    locationCode: req.user.location_code 
+                },
+                type: Sequelize.QueryTypes.SELECT
+            });
+
+            if (!closing.length || closing[0].closing_status === 'CLOSED') {
+                req.flash('error', 'Cannot create bills for closed or invalid shifts');
+                return res.redirect('/bills/new');
+            }
+
+            // *** NEW CONFIGURABLE BILL NUMBER GENERATION ***
+            const nextBillNo = await BillNumberingService.generateNextBillNumber(
+                req.user.location_code, 
+                req.body.bill_type
+            );
+
+            console.log(`Generated bill number: ${nextBillNo} for location: ${req.user.location_code}, type: ${req.body.bill_type}`);
+
+            // Create bill
+            const [billResult] = await db.sequelize.query(`
+                INSERT INTO t_bills (
+                    location_code, bill_no, bill_type, closing_id,
+                    total_amount, created_by, creation_date
+                ) VALUES (
+                    :locationCode, :billNo, :billType, :closingId,
+                    :totalAmount, :createdBy, NOW()
+                )
+            `, {
+                replacements: {
+                    locationCode: req.user.location_code,
+                    billNo: nextBillNo,
+                    billType: req.body.bill_type,
+                    closingId: req.body.closing_id,
+                    totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
+                    createdBy: req.user.Person_id
+                },
+                type: Sequelize.QueryTypes.INSERT,
+                transaction
+            });
+
+            const billId = billResult;
+
+            // Create bill items (existing logic remains the same)
+            for (const item of req.body.items) {
+                if (req.body.bill_type === 'CREDIT') {
+                    await db.sequelize.query(`
+                        INSERT INTO t_credits (
+                            closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
+                            product_id, price, price_discount, qty, amount,
+                            base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                            notes, created_by, creation_date, vehicle_number, indent_number,
+                            odometer_reading
+                        ) VALUES (
+                            :closingId, :billNo, :billId, :creditlistId, :vehicleId,
+                            :productId, :price, :priceDiscount, :qty, :amount,
+                            :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                            :notes, :createdBy, NOW(), :vehicleNumber, :indentNumber,
+                            :odometerReading
+                        )
+                    `, {
+                        replacements: {
+                            closingId: req.body.closing_id,
+                            billNo: nextBillNo,
+                            billId: billId,
+                            creditlistId: req.body.creditlist_id || null,
+                            vehicleId: item.vehicle_id || null,
+                            productId: item.product_id,
+                            price: item.price,
+                            priceDiscount: item.price_discount || 0,
+                            qty: item.qty,
+                            amount: item.amount,
+                            baseAmount: item.base_amount || item.amount,
+                            cgstPercent: item.cgst_percent || 0,
+                            sgstPercent: item.sgst_percent || 0,
+                            cgstAmount: item.cgst_amount || 0,
+                            sgstAmount: item.sgst_amount || 0,
+                            notes: item.notes || '',
+                            createdBy: req.user.Person_id,
+                            vehicleNumber: item.vehicle_number || '',
+                            indentNumber: item.indent_number || '',
+                            odometerReading: item.odometer_reading || null
+                        },
+                        type: Sequelize.QueryTypes.INSERT,
+                        transaction
+                    });
+                } else {
+                    // Cash sales
+                    await db.sequelize.query(`
+                        INSERT INTO t_cashsales (
+                            closing_id, bill_no, bill_id, product_id, price, price_discount,
+                            qty, notes, amount, created_by, creation_date
+                        ) VALUES (
+                            :closingId, :billNo, :billId, :productId, :price, :priceDiscount,
+                            :qty, :notes, :amount, :createdBy, NOW()
+                        )
+                    `, {
+                        replacements: {
+                            closingId: req.body.closing_id,
+                            billNo: nextBillNo,
+                            billId: billId,
+                            productId: item.product_id,
+                            price: item.price,
+                            priceDiscount: item.price_discount || 0,
+                            qty: item.qty,
+                            notes: item.notes || '',
+                            amount: item.amount,
+                            createdBy: req.user.Person_id
+                        },
+                        type: Sequelize.QueryTypes.INSERT,
+                        transaction
+                    });
+                }
+            }
+
+            await transaction.commit();
+            req.flash('success', `Bill ${nextBillNo} created successfully`);
+            res.redirect('/bills');
+
+        } catch (error) {
+            await transaction.rollback();
+            console.error('Error creating bill:', error);
+            req.flash('error', 'Error creating bill: ' + error.message);
+            res.redirect('/bills/new');
+        }
+    },
+
+    // Add a new method to show bill numbering configuration
+    getBillNumberingConfig: async (req, res, next) => {
+        try {
+            const config = await BillNumberingService.getConfigSummary(req.user.location_code);
+            
+            res.render('bills/numbering-config', {
+                title: 'Bill Numbering Configuration',
+                user: req.user,
+                config: config,
+                messages: req.flash()
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // Add method to update bill numbering configuration
+    updateBillNumberingConfig: async (req, res, next) => {
+        try {
+            const { locationCode } = req.params;
+            const {
+                creditPrefix, cashPrefix, padding, resetFrequency,
+                includeYear, yearFormat, useUnifiedSequence,
+                unifiedPrefix, creditStartNumber, cashStartNumber,
+                unifiedStartNumber
+            } = req.body;
+
+            // Set each configuration setting
+            if (creditPrefix) await locationConfigDao.setSetting(locationCode, 'BILL_PREFIX_CREDIT', creditPrefix, req.user.Person_id);
+            if (cashPrefix) await locationConfigDao.setSetting(locationCode, 'BILL_PREFIX_CASH', cashPrefix, req.user.Person_id);
+            if (padding) await locationConfigDao.setSetting(locationCode, 'BILL_NUMBER_PADDING', padding, req.user.Person_id);
+            if (resetFrequency) await locationConfigDao.setSetting(locationCode, 'BILL_RESET_FREQUENCY', resetFrequency, req.user.Person_id);
+            if (includeYear) await locationConfigDao.setSetting(locationCode, 'BILL_INCLUDE_YEAR', includeYear, req.user.Person_id);
+            if (yearFormat) await locationConfigDao.setSetting(locationCode, 'BILL_YEAR_FORMAT', yearFormat, req.user.Person_id);
+            if (useUnifiedSequence) await locationConfigDao.setSetting(locationCode, 'BILL_UNIFIED_SEQUENCE', useUnifiedSequence, req.user.Person_id);
+            if (unifiedPrefix) await locationConfigDao.setSetting(locationCode, 'BILL_UNIFIED_PREFIX', unifiedPrefix, req.user.Person_id);
+            if (creditStartNumber) await locationConfigDao.setSetting(locationCode, 'BILL_CREDIT_START_NUMBER', creditStartNumber, req.user.Person_id);
+            if (cashStartNumber) await locationConfigDao.setSetting(locationCode, 'BILL_CASH_START_NUMBER', cashStartNumber, req.user.Person_id);
+            if (unifiedStartNumber) await locationConfigDao.setSetting(locationCode, 'BILL_UNIFIED_START_NUMBER', unifiedStartNumber, req.user.Person_id);
+
+            req.flash('success', 'Bill numbering configuration updated successfully');
+            res.redirect(`/bills/config/${locationCode}`);
+
+        } catch (error) {
+            console.error('Error updating bill numbering config:', error);
+            req.flash('error', 'Error updating configuration: ' + error.message);
+            res.redirect('back');
+        }
+    },
+
+
 
 getBills: async (req, res, next) => {
     try {
@@ -507,7 +716,7 @@ getBills: async (req, res, next) => {
                         title: 'Edit Bill',
                         user: req.user,
                         bill: { ...bill[0], ...billVehicleInfo },
-                        billItems: billItems,
+                        items: billItems,  // ← Changed from 'billItems' to 'items'
                         shifts: activeShifts,
                         products: products,
                         credits: credits,
@@ -520,6 +729,8 @@ getBills: async (req, res, next) => {
     },
 
     updateBill: async (req, res, next) => {
+
+        console.log('Update request body:', req.body);  // Add this line
     const transaction = await db.sequelize.transaction();
 
      try {

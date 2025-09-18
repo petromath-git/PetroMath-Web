@@ -6,21 +6,22 @@ block content
             .card-header
                 .d-flex.justify-content-between.align-items-center
                     .d-flex.align-items-center.gap-3
-                        button.btn.btn-outline-secondary(onclick="window.location.href='/bills'")
-                            i.bi.bi-arrow-left.me-1
-                            | Back to Bills
+                        button.btn.btn-secondary(onclick="window.location.href='/bills'")
+                            i.bi.bi-arrow-left
+                            |  Back to Bills
                         h5.card-title.mb-0 Edit Bill #{bill.bill_no}
-                    .d-flex.gap-2
+                    .float-right.d-none.d-md-block
                         button.btn.btn-info#addRowDesktop(type='button')
-                            i.bi.bi-plus.me-1
+                            i.bi.bi-plus
                             |  Add Item
 
-            .card-body              
+            .card-body               
                 
-                form#billForm(method='POST' action=`/bills/${bill.bill_id}?_method=PUT`)
-                    //- Selection Section
-                    .row.mb-3
-                        .col-12.col-md-4.mb-3.mb-md-0
+                form#billForm(method='POST' action=`/bills/${bill.bill_id}/update`)
+                    
+                    //- Desktop Selection Section
+                    .row.mb-3.d-none.d-md-flex
+                        .col-md-4.mb-3.mb-md-0
                             .form-group
                                 label(for='shift') Select Shift *
                                 select#shift.form-control(name='closing_id' required)
@@ -30,45 +31,189 @@ block content
                                             value=shift.closing_id 
                                             selected=shift.closing_id === bill.closing_id
                                         ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
-
-                        .col-12.col-md-4.mb-3.mb-md-0
+                        .col-md-4.mb-3.mb-md-0
                             .form-group
-                                label Bill Type
-                                input.form-control(
+                                label Bill Type *
+                                .mt-2
+                                    .form-check.form-check-inline
+                                        input#cashBill.form-check-input(type='radio' name='bill_type' value='CASH' required checked=bill.bill_type === 'CASH')
+                                        label.form-check-label(for='cashBill') Cash
+                                    .form-check.form-check-inline.ms-3
+                                        input#creditBill.form-check-input(type='radio' name='bill_type' value='CREDIT' required checked=bill.bill_type === 'CREDIT')
+                                        label.form-check-label(for='creditBill') Credit
+                        .col-md-4.mb-3.mb-md-0
+                            //- Customer/Vehicle fields will go here for desktop
+                    
+                    //- Mobile Selection Section
+                    .d-block.d-md-none.mb-3
+                        .mobile-form-section
+                            //- Shift Selection - Mobile
+                            .form-group.mb-3
+                                label(for='shiftMobile').form-label.fw-bold Select Shift *
+                                select#shiftMobile.form-control.form-control-lg(name='closing_id_mobile' required)
+                                    option(value='') Select Shift
+                                    each shift in shifts
+                                        option(
+                                            value=shift.closing_id 
+                                            selected=shift.closing_id === bill.closing_id
+                                        ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
+                            
+                            //- Bill Type - Mobile
+                            .form-group.mb-3
+                                label.form-label.fw-bold Bill Type *
+                                .row.g-3
+                                    .col-6
+                                        .form-check
+                                            input#cashBillMobile.form-check-input(type='radio' name='bill_type_mobile' value='CASH' required checked=bill.bill_type === 'CASH')
+                                            label.form-check-label(for='cashBillMobile' style='font-weight: 600; font-size: 16px;') Cash
+                                    .col-6
+                                        .form-check
+                                            input#creditBillMobile.form-check-input(type='radio' name='bill_type_mobile' value='CREDIT' required checked=bill.bill_type === 'CREDIT')
+                                            label.form-check-label(for='creditBillMobile' style='font-weight: 600; font-size: 16px;') Credit
+
+                            //- Customer Name (Cash) - Mobile
+                            .form-group.mb-3#cashCustomerMobileDiv(class=bill.bill_type === 'CASH' ? '' : 'd-none')
+                                label(for='cashCustomerMobile').form-label.fw-bold Customer Name
+                                input#cashCustomerMobile.form-control.form-control-lg(
                                     type='text' 
-                                    value=bill.bill_type 
-                                    readonly 
-                                    disabled
+                                    name='customer_name_mobile'
+                                    maxlength='80'
+                                    value=bill.customer_name || ''
+                                    placeholder='Enter customer name'
                                 )
-                                input(type='hidden' name='bill_type' value=bill.bill_type)
+                            
+                            //- Credit Customer Dropdown - Mobile
+                            .form-group.mb-3#creditCustomerMobileDiv(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                                label(for='creditCustomerMobile').form-label.fw-bold Customer *
+                                select#creditCustomerMobile.form-control.form-control-lg(name='creditlist_id_mobile')
+                                    option(value='') Select Customer
+                                    each credit in credits
+                                        option(
+                                            value=credit.creditlist_id 
+                                            selected=credit.creditlist_id === bill.creditlist_id
+                                        ) #{credit.Company_Name}
 
-                        div#creditCustomerDiv.col-12.col-md-8(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
-                            .row
-                                .col-md-6
-                                    .form-group
-                                        label(for='creditCustomer') Customer *
-                                        select#creditCustomer.form-control(name='creditlist_id')
-                                            option(value='') Select Customer
-                                            each credit in credits
-                                                option(value=credit.creditlist_id selected=credit.creditlist_id === bill.creditlist_id) #{credit.Company_Name}
-                                .col-md-6
-                                    .form-group
-                                        label(for='vehicleSelect') Vehicle Number
-                                        select#vehicleSelect.form-control.select2-vehicle(name='bill_vehicle_id')
-                                            option(value='') Select Vehicle
+                            //- Vehicle Number - Mobile
+                            .form-group.mb-3
+                                //- Cash Vehicle - Mobile
+                                div#cashVehicleMobileDiv(class=bill.bill_type === 'CASH' ? '' : 'd-none')
+                                    label(for='cashVehicleMobile').form-label.fw-bold Vehicle Number
+                                    input#cashVehicleMobile.form-control.form-control-lg(
+                                        type='text'
+                                        name='vehicle_number_mobile'
+                                        maxlength='12'
+                                        value=bill.vehicle_number || ''
+                                        placeholder='Enter vehicle number'
+                                    )
+                                
+                                //- Credit Vehicle - Mobile
+                                div#creditVehicleMobileDiv(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                                    label(for='creditVehicleMobile').form-label.fw-bold Vehicle Number
+                                    select#creditVehicleMobile.form-control.form-control-lg(name='bill_vehicle_id_mobile')
+                                        option(value='') Select Vehicle
 
-                        //- Vehicle info section for CASH bills (free text entry)
-                        .row.mb-3#cashVehicleSection(class=bill.bill_type === 'CASH' ? '' : 'd-none')
-                            .col-md-6
-                                .form-group
-                                    label(for='billVehicleNumber') Vehicle Number
-                                    input#billVehicleNumber.form-control(type='text' name='bill_vehicle_number' value=(bill.vehicle_number || '') placeholder='Enter vehicle number' maxlength='100')
-                            .col-md-6
-                                .form-group
-                                    label(for='billOdometerReading') Odometer Reading
-                                    input#billOdometerReading.form-control(type='number' name='bill_odometer_reading' value=(bill.odometer_reading || '') step='0.01' min='0' placeholder='0.00')
-                                        
-                    //- Items Table
+                            //- Odometer Reading - Mobile
+                            .form-group.mb-0
+                                label(for='odometerMobile').form-label.fw-bold Odometer Reading
+                                input#odometerMobile.form-control.form-control-lg(
+                                    type='number'
+                                    name='bill_odometer_reading_mobile'
+                                    step='0.01'
+                                    min='0'
+                                    value=bill.odometer_reading || ''
+                                    placeholder='0.00'
+                                )
+
+                    //- Desktop Customer/Vehicle Row
+                    .row.mb-3.d-none.d-md-flex
+                        .col-md-4.mb-3.mb-md-0
+                            .form-group
+                                //- Cash Customer Name - Desktop
+                                div#cashCustomerDiv(class=bill.bill_type === 'CASH' ? '' : 'd-none')
+                                    label(for='cashCustomerName') Customer Name
+                                    input#cashCustomerName.form-control(
+                                        type='text' 
+                                        name='customer_name'
+                                        maxlength='80'
+                                        value=bill.customer_name || ''
+                                        placeholder='Enter customer name'
+                                    )
+                                
+                                //- Credit Customer Dropdown - Desktop
+                                div#creditCustomerDiv(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                                    label(for='creditCustomer') Customer *
+                                    select#creditCustomer.form-control(name='creditlist_id')
+                                        option(value='') Select Customer
+                                        each credit in credits
+                                            option(
+                                                value=credit.creditlist_id 
+                                                selected=credit.creditlist_id === bill.creditlist_id
+                                            ) #{credit.Company_Name}
+
+                        .col-md-4.mb-3.mb-md-0
+                            .form-group
+                                //- Cash Vehicle - Desktop
+                                div#cashVehicleDiv(class=bill.bill_type === 'CASH' ? '' : 'd-none')
+                                    label(for='cashVehicleNumber') Vehicle Number
+                                    input#cashVehicleNumber.form-control(
+                                        type='text'
+                                        name='vehicle_number'
+                                        maxlength='12'
+                                        value=bill.vehicle_number || ''
+                                        placeholder='Enter vehicle number'
+                                    )
+                                
+                                //- Credit Vehicle - Desktop
+                                div#creditVehicleDiv(class=bill.bill_type === 'CREDIT' ? '' : 'd-none')
+                                    label(for='creditVehicle') Vehicle Number
+                                    select#creditVehicle.form-control(name='bill_vehicle_id')
+                                        option(value='') Select Vehicle
+
+                        .col-md-4.mb-3.mb-md-0
+                            .form-group
+                                label(for='odometerReading') Odometer Reading
+                                input#odometerReading.form-control(
+                                    type='number'
+                                    name='bill_odometer_reading'
+                                    step='0.01'
+                                    min='0'
+                                    value=bill.odometer_reading || ''
+                                    placeholder='0.00'
+                                )
+                    
+                    //- Mobile Add Item Section  
+                    .d-block.d-md-none.mb-3
+                        .mobile-form-section
+                            .form-group.mb-3
+                                label.form-label.fw-bold Product *
+                                select#mobileProduct.form-control.form-control-lg
+                                    option(value='') Select Product
+                                    each product in products
+                                        option(
+                                            value=product.product_id 
+                                            data-price=product.price
+                                            data-unit=product.unit
+                                        ) #{product.product_name}
+                            
+                            .row.g-2
+                                .col-6
+                                    .form-group.mb-3
+                                        label.form-label.fw-bold Quantity *
+                                        input#mobileQty.form-control.form-control-lg(type='number' step='0.001' placeholder='0.000')
+                                .col-6
+                                    .form-group.mb-3
+                                        label.form-label.fw-bold Discount
+                                        input#mobileDiscount.form-control.form-control-lg(type='number' step='0.01' placeholder='0.00')
+                            
+                            .form-group.mb-0
+                                button#addRowMobile.btn.btn-primary.w-100(type='button')
+                                    i.bi.bi-plus.me-1
+                                    | Add Item
+
+                    //- Mobile Items List
+                    #mobileItemsList.list-group.mb-3
+                    
+                    //- Items Table - Desktop View
                     .table-responsive
                         table.table.table-bordered#billItemsTable
                             thead.thead-light
@@ -101,57 +246,26 @@ block content
                                                         data-hsn-code=product.hsn_code || ''
                                                     ) #{product.product_name}
                                         td
-                                            input.form-control.price-input.text-right(
-                                                type='number' 
-                                                step="0.001" 
-                                                name=`items[${index}][price]` 
-                                                value=item.price 
-                                                readonly
-                                            )
+                                            input.form-control.price-input.text-right(type='number' step="0.001" name=`items[${index}][price]` value=item.price readonly)
                                         td
-                                            input.form-control.qty-input.text-right(
-                                                type='number' 
-                                                step='0.001' 
-                                                name=`items[${index}][qty]` 
-                                                value=item.qty 
-                                                required 
-                                                min='0'
-                                            )
+                                            input.form-control.qty-input.text-right(type='number' step='0.001' name=`items[${index}][qty]` value=item.qty required min='0')
                                         td
-                                            input.form-control.discount-input.text-right(
-                                                type='number' 
-                                                step='0.01' 
-                                                name=`items[${index}][price_discount]` 
-                                                value=item.price_discount 
-                                                min='0'
-                                            )
+                                            input.form-control.discount-input.text-right(type='number' step='0.01' name=`items[${index}][price_discount]` value=item.price_discount || 0 min='0')
                                         td.text-right
                                             span.subtotal-display 0.00
                                             input.subtotal-hidden(type='hidden' name=`items[${index}][base_amount]`)
                                         td.text-right
                                             span.cgst-display 0.00
                                             input.cgst-hidden(type='hidden' name=`items[${index}][cgst_amount]`)
-                                            input(type='hidden' name=`items[${index}][cgst_percent]`)
                                         td.text-right
                                             span.sgst-display 0.00
-                                            input.sgst-hidden(type='hidden' name=`items[${index}][sgst_amount]`)
-                                            input(type='hidden' name=`items[${index}][sgst_percent]`)    
+                                            input.sgst-hidden(type='hidden' name=`items[${index}][sgst_amount]`)    
                                         td
-                                            input.form-control.amount-input.text-right(
-                                                type='number' 
-                                                step='0.001' 
-                                                name=`items[${index}][amount]` 
-                                                value=item.amount 
-                                                required
-                                            )
+                                            input.form-control.amount-input.text-right(type='number' step='0.001' name=`items[${index}][amount]` value=item.amount required min='0')
                                         td
-                                            input.form-control.notes-input(
-                                                type='text' 
-                                                name=`items[${index}][notes]` 
-                                                value=item.notes
-                                            )
+                                            input.form-control.notes-input(type='text' name=`items[${index}][notes]` value=item.notes || '')
                                         td.text-center
-                                            button.btn.btn-danger.btn-sm.remove-row(type='button' disabled) 
+                                            button.btn.btn-danger.btn-sm.remove-row(type='button' disabled=index === 0) 
                                                 i.bi.bi-trash
 
                     //- Total Amount Row
@@ -170,7 +284,7 @@ block content
                                 i.bi.bi-save
                                 |  Update Bill
 
-                            button.btn.btn-danger#deleteBillBtn(type='button' data-bill-id=bill.bill_id).ml-2
+                            button.btn.btn-danger#deleteBillBtn(type='button' data-bill-id=bill.bill_id).ms-2
                                 i.bi.bi-trash
                                 |  Delete Bill    
 
@@ -179,6 +293,4 @@ block content
         const products = !{JSON.stringify(products)};
         const billData = !{JSON.stringify(bill)};
 
-    block scripts
-        script(src="/javascripts/bills-edit.js")        
-                        
+    script(src="/javascripts/bills.js")
