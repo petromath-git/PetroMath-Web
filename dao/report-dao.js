@@ -111,7 +111,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         JOIN m_product mp ON tc.product_id = mp.product_id
         JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
         JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
-        LEFT JOIN m_credit_vehicle mcv ON tc.vehicle_id = mcv.vehicle_id
+        LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
         WHERE tcl.location_code = :locationCode
           AND mcl.creditlist_id = :creditId
           AND DATE(tcl.closing_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
