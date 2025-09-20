@@ -99,7 +99,7 @@ const BillNumberingService = {
 
             // If reset frequency is FINANCIAL_YEAR, filter by current financial year
             if (config.resetFrequency === 'FINANCIAL_YEAR') {
-                const fy = this.getCurrentFinancialYear();
+                const fy = BillNumberingService.getCurrentFinancialYear();
                 whereClause += ' AND creation_date >= :fyStart AND creation_date <= :fyEnd';
                 replacements.fyStart = fy.fromDate;
                 replacements.fyEnd = fy.toDate;
@@ -134,8 +134,8 @@ const BillNumberingService = {
     // Generate next bill number based on configuration
     generateNextBillNumber: async (locationCode, billType) => {
         try {
-            const config = await this.getBillNumberConfig(locationCode);
-            const maxNumber = await this.getMaxBillNumberForPeriod(locationCode, billType, config);
+            const config = await BillNumberingService.getBillNumberConfig(locationCode);
+            const maxNumber = await BillNumberingService.getMaxBillNumberForPeriod(locationCode, billType, config);
             
             let prefix;
             
@@ -151,7 +151,7 @@ const BillNumberingService = {
             
             // Build bill number based on configuration
             if (config.includeYearInNumber === 'true') {
-                const fy = this.getCurrentFinancialYear();
+                const fy = BillNumberingService.getCurrentFinancialYear();
                 const yearPart = config.yearFormat === 'YYYY' ? 
                     fy.fyYear.toString() : 
                     fy.fyYear.toString().slice(-2);
@@ -265,21 +265,21 @@ const BillNumberingService = {
 
     // Set global default configuration (location_code = '*')
     setGlobalDefaults: async (createdBy = 'system') => {
-        return await this.setDefaultConfig('*', createdBy);
+        return await BillNumberingService.setDefaultConfig('*', createdBy);
     },
 
     // Helper to get current configuration for debugging
     getConfigSummary: async (locationCode) => {
-        const config = await this.getBillNumberConfig(locationCode);
-        const fy = this.getCurrentFinancialYear();
+        const config = await BillNumberingService.getBillNumberConfig(locationCode);
+        const fy = BillNumberingService.getCurrentFinancialYear();
         
         return {
             locationCode,
             currentFinancialYear: fy.fyString,
             configuration: config,
             sampleNumbers: {
-                nextCredit: await this.generateNextBillNumber(locationCode, 'CREDIT'),
-                nextCash: await this.generateNextBillNumber(locationCode, 'CASH')
+                nextCredit: await BillNumberingService.generateNextBillNumber(locationCode, 'CREDIT'),
+                nextCash: await BillNumberingService.generateNextBillNumber(locationCode, 'CASH')
             }
         };
     }

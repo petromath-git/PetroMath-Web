@@ -322,10 +322,10 @@ createBill: async (req, res, next) => {
             const [billResult] = await db.sequelize.query(`
                 INSERT INTO t_bills (
                     location_code, bill_no, bill_type, closing_id,
-                    total_amount, created_by, creation_date
+                    customer_name, total_amount, created_by, creation_date
                 ) VALUES (
                     :locationCode, :billNo, :billType, :closingId,
-                    :totalAmount, :createdBy, NOW()
+                    :customerName, :totalAmount, :createdBy, NOW()
                 )
             `, {
                 replacements: {
@@ -333,6 +333,7 @@ createBill: async (req, res, next) => {
                     billNo: nextBillNo,
                     billType: req.body.bill_type,
                     closingId: req.body.closing_id,
+                    customerName: req.body.bill_type === 'CASH' ? (req.body.customer_name || null) : null,
                     totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
                     createdBy: req.user.Person_id
                 },
@@ -389,10 +390,10 @@ createBill: async (req, res, next) => {
                     // Cash sales
                     await db.sequelize.query(`
                         INSERT INTO t_cashsales (
-                            closing_id, bill_no, bill_id, product_id, price, price_discount,
+                            closing_id, bill_no, bill_id,customer_name, product_id, price, price_discount,
                             qty, notes, amount, created_by, creation_date
                         ) VALUES (
-                            :closingId, :billNo, :billId, :productId, :price, :priceDiscount,
+                            :closingId, :billNo, :billId, :customerName, :productId, :price, :priceDiscount,
                             :qty, :notes, :amount, :createdBy, NOW()
                         )
                     `, {
@@ -400,6 +401,7 @@ createBill: async (req, res, next) => {
                             closingId: req.body.closing_id,
                             billNo: nextBillNo,
                             billId: billId,
+                            customerName: req.body.customer_name || null,
                             productId: item.product_id,
                             price: item.price,
                             priceDiscount: item.price_discount || 0,
@@ -500,6 +502,7 @@ getBills: async (req, res, next) => {
                         WHERE tc.bill_id = b.bill_id 
                         LIMIT 1
                     )
+                    WHEN b.bill_type = 'CASH' THEN b.customer_name    
                     ELSE NULL
                 END as customer_name,
                 p.Person_Name as cashier_name
@@ -757,14 +760,7 @@ getBills: async (req, res, next) => {
         if (!bill.length) {
             req.flash('error', 'Cannot update this bill. It may not exist or is not in DRAFT status.');
             return res.redirect('/bills');
-        }
-
-                // Ensure bill type hasn't been tampered with
-            if (req.body.bill_type !== bill[0].bill_type) {
-                req.flash('error', 'Bill type cannot be changed');
-                return res.redirect(`/bills/edit/${billId}`);
-            }
-
+        }  
             // For credit bills, ensure customer is selected
             if (bill[0].bill_type === 'CREDIT' && !req.body.creditlist_id) {
                 req.flash('error', 'Customer is required for credit bills');
@@ -792,6 +788,7 @@ getBills: async (req, res, next) => {
             UPDATE t_bills 
             SET closing_id = :closingId,
                 total_amount = :totalAmount,
+                customer_name = :customerName,
                 updated_by = :updatedBy,
                 updation_date = NOW()
             WHERE bill_id = :billId
@@ -799,6 +796,7 @@ getBills: async (req, res, next) => {
             replacements: {
                 closingId: req.body.closing_id,
                 totalAmount,
+                customerName: req.body.bill_type === 'CASH' ? (req.body.customer_name || null) : null,
                 updatedBy: req.user.Person_id,
                 billId
             },
@@ -820,13 +818,13 @@ getBills: async (req, res, next) => {
                     :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
                     :notes, :odometerReading, :createdBy, NOW()
                 )`
-                : `INSERT INTO t_cashsales (
-                    closing_id, bill_no, bill_id,
+                :  `INSERT INTO t_cashsales (
+                    closing_id, bill_no, bill_id, customer_name,
                     product_id, price, price_discount, qty, amount,
                     base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
                     notes, vehicle_number, odometer_reading, created_by, creation_date
                 ) VALUES (
-                    :closingId, :billNo, :billId,
+                    :closingId, :billNo, :billId, :customerName,
                     :productId, :price, :discount, :qty, :amount,
                     :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
                     :notes, :vehicleNumber, :odometerReading, :createdBy, NOW()
@@ -837,6 +835,7 @@ getBills: async (req, res, next) => {
                     closingId: req.body.closing_id,
                     billNo: bill[0].bill_no,
                     billId: billId,
+                    customerName: req.body.bill_type === 'CASH' ? (req.body.customer_name || null) : null,
                     creditlistId: req.body.bill_type === 'CREDIT' ? req.body.creditlist_id : null,
                     vehicleId: req.body.bill_type === 'CREDIT' ? (req.body.bill_vehicle_id || null) : null,
                     vehicleNumber: req.body.bill_type === 'CASH' ? (req.body.bill_vehicle_number || null) : null,
@@ -950,6 +949,7 @@ printBill: async (req, res, next) => {
                             WHERE tc.bill_id = b.bill_id 
                             LIMIT 1
                         )
+                        WHEN b.bill_type = 'CASH' THEN COALESCE(b.customer_name, 'Cash Customer')    
                         ELSE 'Cash Customer'
                     END as customer_name,
                     
@@ -1142,6 +1142,7 @@ printBillPDF: async (req, res, next) => {
                         WHERE tc.bill_id = b.bill_id 
                         LIMIT 1
                     )
+                    WHEN b.bill_type = 'CASH' THEN COALESCE(b.customer_name, 'Cash Customer')    
                     ELSE 'Cash Customer'
                 END as customer_name,
                 p.Person_Name as cashier_name
@@ -1394,7 +1395,7 @@ const validateBillItems = async (items, locationCode) => {
         const expectedBaseAmount = totalTaxPercent > 0 ? afterDiscount / (1 + totalTaxPercent / 100) : afterDiscount;
         const expectedAmount = Math.round(afterDiscount * 100) / 100; // Round to 2 decimal places
         
-        if (Math.abs(amount - expectedAmount) > 0.02) { // Allow small rounding differences
+        if (Math.abs(amount - expectedAmount) > 0.10) { // Allow small rounding differences
             errors.push(`Amount calculation error for ${product.product_name}`);
             continue;
         }

@@ -33,14 +33,13 @@ block content
                                         ) #{shift.cashier_name}(#{shift.closing_id}) - #{new Date(shift.creation_date).toLocaleDateString('en-IN')}
                         .col-md-4.mb-3.mb-md-0
                             .form-group
-                                label Bill Type *
+                                label Bill Type
                                 .mt-2
-                                    .form-check.form-check-inline
-                                        input#cashBill.form-check-input(type='radio' name='bill_type' value='CASH' required checked=bill.bill_type === 'CASH')
-                                        label.form-check-label(for='cashBill') Cash
-                                    .form-check.form-check-inline.ms-3
-                                        input#creditBill.form-check-input(type='radio' name='bill_type' value='CREDIT' required checked=bill.bill_type === 'CREDIT')
-                                        label.form-check-label(for='creditBill') Credit
+                                    .alert.alert-info.py-2.mb-0
+                                        i.bi.bi-info-circle.me-2
+                                        strong #{bill.bill_type} Bill
+                                        .small.text-muted Bill type cannot be changed after creation
+                                    input(type='hidden' name='bill_type' value=bill.bill_type)
                         .col-md-4.mb-3.mb-md-0
                             //- Customer/Vehicle fields will go here for desktop
                     
@@ -60,16 +59,12 @@ block content
                             
                             //- Bill Type - Mobile
                             .form-group.mb-3
-                                label.form-label.fw-bold Bill Type *
-                                .row.g-3
-                                    .col-6
-                                        .form-check
-                                            input#cashBillMobile.form-check-input(type='radio' name='bill_type_mobile' value='CASH' required checked=bill.bill_type === 'CASH')
-                                            label.form-check-label(for='cashBillMobile' style='font-weight: 600; font-size: 16px;') Cash
-                                    .col-6
-                                        .form-check
-                                            input#creditBillMobile.form-check-input(type='radio' name='bill_type_mobile' value='CREDIT' required checked=bill.bill_type === 'CREDIT')
-                                            label.form-check-label(for='creditBillMobile' style='font-weight: 600; font-size: 16px;') Credit
+                                label.form-label.fw-bold Bill Type
+                                .alert.alert-info.py-2.mb-0
+                                    i.bi.bi-info-circle.me-2
+                                    strong #{bill.bill_type} Bill
+                                    .small.text-muted Type cannot be changed
+                                input(type='hidden' name='bill_type_mobile' value=bill.bill_type)
 
                             //- Customer Name (Cash) - Mobile
                             .form-group.mb-3#cashCustomerMobileDiv(class=bill.bill_type === 'CASH' ? '' : 'd-none')
@@ -292,5 +287,6 @@ block content
     script.
         const products = !{JSON.stringify(products)};
         const billData = !{JSON.stringify(bill)};
+        billsVehicleData = !{JSON.stringify(vehicleData)};
 
     script(src="/javascripts/bills.js")
