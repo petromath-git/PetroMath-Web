@@ -12,8 +12,22 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DEV_SERVER }} >> ~/.ssh/known_hosts
-          ssh-keyscan -H ${{ secrets.PROD_SERVER }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DEV_SERVER }} >> ~/.ssh/known_hosts || true
+          ssh-keyscan -H ${{ secrets.PROD_SERVER }} >> ~/.ssh/known_hosts || true
+
+      - name: Debug Secrets (safe)
+        run: |
+          if [ -z "${{ secrets.DEV_SERVER }}" ]; then
+            echo "❌ DEV_SERVER is EMPTY"
+          else
+            echo "✅ DEV_SERVER is SET (value hidden)"
+          fi
+
+          if [ -z "${{ secrets.PROD_SERVER }}" ]; then
+            echo "❌ PROD_SERVER is EMPTY"
+          else
+            echo "✅ PROD_SERVER is SET (value hidden)"
+          fi
 
       - name: Test SSH Dev
         run: ssh ${{ secrets.DEV_SERVER }} "echo ✅ Connected to Dev EC2"
