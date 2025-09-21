@@ -1,0 +1,29 @@
+name: CI/CD Deploy (Dev only)
+
+on:
+  push:
+    branches:
+      - PetroMath_dev_new   # auto-deploy when merging into Dev branch
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $(echo ${{ secrets.DEV_SERVER }} | cut -d@ -f2) >> ~/.ssh/known_hosts
+
+      - name: Deploy to Dev + Beta Prod
+        run: |
+          ssh ${{ secrets.DEV_SERVER }} "
+            cd /home/ubuntu/petromath_dev_new &&
+            git pull origin PetroMath_dev_new
+
+            cd /home/ubuntu/petromath_prod_beta &&
+            git pull origin PetroMath_dev_new
+
+            pm2 restart all
+          "
