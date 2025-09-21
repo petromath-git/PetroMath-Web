@@ -1,36 +1,9 @@
-name: Test SSH
+- name: Setup SSH
+  run: |
+    mkdir -p ~/.ssh
+    echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+    chmod 600 ~/.ssh/id_rsa
 
-on:
-  workflow_dispatch:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DEV_SERVER }} >> ~/.ssh/known_hosts || true
-          ssh-keyscan -H ${{ secrets.PROD_SERVER }} >> ~/.ssh/known_hosts || true
-
-      - name: Debug Secrets (safe)
-        run: |
-          if [ -z "${{ secrets.DEV_SERVER }}" ]; then
-            echo "❌ DEV_SERVER is EMPTY"
-          else
-            echo "✅ DEV_SERVER is SET (value hidden)"
-          fi
-
-          if [ -z "${{ secrets.PROD_SERVER }}" ]; then
-            echo "❌ PROD_SERVER is EMPTY"
-          else
-            echo "✅ PROD_SERVER is SET (value hidden)"
-          fi
-
-      - name: Test SSH Dev
-        run: ssh ${{ secrets.DEV_SERVER }} "echo ✅ Connected to Dev EC2"
-
-      - name: Test SSH Prod
-        run: ssh ${{ secrets.PROD_SERVER }} "echo ✅ Connected to Prod EC2"
+    # Add Dev and Prod fingerprints to known_hosts
+    ssh-keyscan -H $(echo ${{ secrets.DEV_SERVER }} | cut -d@ -f2) >> ~/.ssh/known_hosts
+    ssh-keyscan -H $(echo ${{ secrets.PROD_SERVER }} | cut -d@ -f2) >> ~/.ssh/known_hosts
