@@ -19,40 +19,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const amountInput = row.querySelector('.amount-input');
         const removeBtn = row.querySelector('.remove-row');
 
-        productSelect.addEventListener('change', function() {
+       productSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
             const price = selectedOption.getAttribute('data-price') || '0';
             
-            priceInput.value = parseFloat(price).toFixed(3);
+            priceInput.value = parseFloat(price).toFixed(2); // Changed from toFixed(3) to toFixed(2)
             
-            // Enable remove button if it's not the first row
-            if (rowIndex > 0) {
-                removeBtn.disabled = false;
-            }
-
-            // Recalculate if any input is present
-            recalculateBillItem(row);
+            // Don't call recalculateBillItem here - let the global handler manage it
         });
 
-        // Add event listeners for dynamic calculation
-        qtyInput.addEventListener('input', () => recalculateBillItem(row));
-        discountInput.addEventListener('input', () => recalculateBillItem(row));
+
         
-        // Allow manual amount entry
-        amountInput.addEventListener('input', () => {
-            const price = parseFloat(priceInput.value) || 0;
-            const discount = parseFloat(discountInput.value) || 0;
-            const amount = parseFloat(amountInput.value) || 0;
-            
-            // If amount is manually entered, calculate quantity
-            if (price > 0) {
-                const discountedPrice = price - discount;
-                const qty = (amount / discountedPrice).toFixed(3);
-                qtyInput.value = qty;
-            }
-            
-            calculateGrandTotal();
-        });
+        
+       
 
         // Remove row functionality
         removeBtn.addEventListener('click', function() {
@@ -65,38 +44,41 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Recalculate bill item based on different inputs
-    function recalculateBillItem(row) {
-        const priceInput = row.querySelector('.price-input');
-        const qtyInput = row.querySelector('.qty-input');
-        const discountInput = row.querySelector('.discount-input');
-        const amountInput = row.querySelector('.amount-input');
 
-        const originalPrice = parseFloat(priceInput.value) || 0;
-        const qty = parseFloat(qtyInput.value) || 0;
-        const discount = parseFloat(discountInput.value) || 0;
-
-        // Calculate discounted price
-        const discountedPrice = originalPrice - discount;
-
-        // Calculate amount if quantity is entered
-        if (qty > 0) {
-            const calculatedAmount = qty * discountedPrice;
-            amountInput.value = calculatedAmount.toFixed(3);
-        }
-
-        calculateGrandTotal();
-    }
-
-    // Update total amount
-    function updateTotalAmount() {
-        let total = 0;
-        document.querySelectorAll('.amount-input').forEach(amountInput => {
-            const amount = parseFloat(amountInput.value) || 0;
-            total += amount;
+// Improved remove row functionality
+function attachRemoveRowListener(row) {
+    const removeBtn = row.querySelector('.remove-row');
+    if (removeBtn) {
+        // Remove any existing listeners to prevent duplicates
+        removeBtn.replaceWith(removeBtn.cloneNode(true));
+        const newRemoveBtn = row.querySelector('.remove-row');
+        
+        newRemoveBtn.addEventListener('click', function() {
+            const rows = billItemsTable.querySelectorAll('.item-row');
+            if (rows.length > 1) {
+                row.remove();
+                calculateGrandTotal();
+                updateRemoveButtonStates(); // Update all button states
+            } else {
+                alert('Cannot delete the last row. At least one item is required.');
+            }
         });
-        totalAmountDisplay.textContent = `₹ ${total.toFixed(2)}`;
     }
+}
+
+
+// New function to update remove button states dynamically
+function updateRemoveButtonStates() {
+    const rows = billItemsTable.querySelectorAll('.item-row');
+    rows.forEach(row => {
+        const removeBtn = row.querySelector('.remove-row');
+        if (removeBtn) {
+            // Enable all remove buttons when there's more than 1 row
+            removeBtn.disabled = rows.length <= 1;
+        }
+    });
+}
+
 
 
 
@@ -135,8 +117,16 @@ document.addEventListener('change', function(e) {
             priceInput.value = parseFloat(price).toFixed(2);
         }
         
-        // Set quantity step for unit-based products
+        // Clear existing values when switching products
         const qtyInput = row.querySelector('.qty-input');
+        const discountInput = row.querySelector('.discount-input');
+        const amountInput = row.querySelector('.amount-input');
+        
+        qtyInput.value = '';
+        discountInput.value = '0';
+        amountInput.value = '';
+        
+        // Set quantity step for unit-based products
         const unit = selectedOption.dataset.unit || '';
         const unitBasedProducts = ['NOS', 'PCS', 'UNITS', 'BOTTLES', 'CANS'];
         
@@ -148,8 +138,20 @@ document.addEventListener('change', function(e) {
             qtyInput.setAttribute('title', 'Quantity can have decimals');
         }
         
+        // Clear tax displays
+        const subtotalDisplay = row.querySelector('.subtotal-display');
+        const cgstDisplay = row.querySelector('.cgst-display');
+        const sgstDisplay = row.querySelector('.sgst-display');
+        
+        if (subtotalDisplay) subtotalDisplay.textContent = '0.00';
+        if (cgstDisplay) cgstDisplay.textContent = '0.00';
+        if (sgstDisplay) sgstDisplay.textContent = '0.00';
+        
+        // Set amount field state (readonly for units, editable for volume)
         setAmountFieldState(row);
-        calculateRowTax(row);
+        
+        // No calculations here - let input handlers trigger them naturally
+        // when user enters quantity or amount
     }
 });
 
@@ -188,12 +190,13 @@ document.addEventListener('change', function(e) {
 
 
 
-    // Add new row for desktop
-    addRowDesktopBtn.addEventListener('click', function() {
-        rowIndex++;
-        const newRow = billItemsTable.querySelector('tbody tr.item-row').cloneNode(true);
+        // Add new row for desktop
+        addRowDesktopBtn.addEventListener('click', function() {
+            rowIndex++;
+            const newRow = billItemsTable.querySelector('tbody tr.item-row').cloneNode(true);
         
-        // Reset values
+       
+                // Reset form values
         newRow.querySelectorAll('select, input').forEach(el => {
             if (el.type === 'select-one') {
                 el.selectedIndex = 0;
@@ -203,6 +206,17 @@ document.addEventListener('change', function(e) {
                 el.value = '';
             }
         });
+
+        // Reset display text content
+        newRow.querySelectorAll('.subtotal-display, .cgst-display, .sgst-display').forEach(display => {
+            display.textContent = '0.00';
+        });
+
+        // Reset amount input specifically
+        const amountInput = newRow.querySelector('.amount-input');
+        if (amountInput) amountInput.value = '';
+
+
 
         // Update input names with new index
         newRow.querySelector('.product-select').name = `items[${rowIndex}][product_id]`;
@@ -222,13 +236,18 @@ document.addEventListener('change', function(e) {
 
         // Enable remove button
         const removeBtn = newRow.querySelector('.remove-row');
-        removeBtn.disabled = false;
-
-        // Attach event listeners
-        attachProductSelectListener(newRow);
+        removeBtn.disabled = false;        
+        
 
         // Append new row
         billItemsTable.querySelector('tbody').appendChild(newRow);
+
+        // Attach event listeners
+        attachProductSelectListener(newRow);
+        attachRemoveRowListener(newRow);
+
+        // Update all remove button states
+        updateRemoveButtonStates();
     });
 
     // Mobile: Add item handler
@@ -300,9 +319,14 @@ document.addEventListener('change', function(e) {
 
 
    
-    // Initial setup for first row
-    const firstRow = billItemsTable.querySelector('tbody tr.item-row');
-    attachProductSelectListener(firstRow);
+const existingRows = billItemsTable.querySelectorAll('tbody tr.item-row');
+existingRows.forEach((row) => {
+    attachProductSelectListener(row);
+    attachRemoveRowListener(row);
+});
+
+// Update remove button states based on current row count
+updateRemoveButtonStates();
 
     syncFormValues();    
 
@@ -380,6 +404,33 @@ document.addEventListener('change', function(e) {
     });
 
 
+
+// Delete Bill Button Handler - Add this inside the DOMContentLoaded event
+const deleteBillBtn = document.getElementById('deleteBillBtn');
+if (deleteBillBtn) {
+    deleteBillBtn.addEventListener('click', function() {
+        const billId = this.dataset.billId;
+        
+        if (confirm('Are you sure you want to delete this bill? This action cannot be undone.')) {
+            fetch(`/bills/delete/${billId}`, {
+                method: 'POST'
+            }).then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    return response.text();
+                }
+            }).then(data => {
+                if (data) {
+                    console.log('Delete response:', data);
+                }
+            }).catch(error => {
+                console.error('Delete error:', error);
+                alert('An error occurred while deleting the bill.');
+            });
+        }
+    });
+}
      // Enable print button after successful save
      if (window.location.search.includes('success=true')) {
         $('#printBtn').prop('disabled', false);
@@ -410,17 +461,27 @@ document.addEventListener('change', function(e) {
             window.open(`/bills/${billId}/print/pdf`, '_blank');
         });
 
-           setTimeout(function() {
-        $('#billItems .item-row').each(function() {
-            const productSelect = $(this).find('.product-select');
-            if (productSelect.val()) {
-                // Trigger the change event that already works
-                productSelect.trigger('change');
-            }
-        });
-    }, 100);
+// Enhanced initialization for existing data (edit page)
+setTimeout(function() {
+    const itemRows = document.querySelectorAll('#billItems .item-row');
+    itemRows.forEach(function(row) {
+        const productSelect = row.querySelector('.product-select');
+        if (productSelect && productSelect.value) {
+            console.log('Initializing row with product:', productSelect.value);
+            
+            // Set amount field state
+            setAmountFieldState(row);
+            
+            // Trigger tax calculation
+            calculateRowTax(row);
+        }
+    });
+}, 200); // Increased timeout slightly
 
     });
+
+
+
 
 
 // Auto-calculate tax with RSP-inclusive logic
@@ -430,14 +491,54 @@ function calculateRowTax(row) {
     const priceInput = row.querySelector('.price-input');
     const discountInput = row.querySelector('.discount-input');
     
+
+     // Add validation to prevent NaN
+    if (!productSelect || !productSelect.value) {
+        console.log('No product selected, skipping tax calculation');
+        return;
+    }
+    
     const selectedOption = productSelect.options[productSelect.selectedIndex];
+    if (!selectedOption) {
+        console.log('No valid product option found');
+        return;
+    }
+
+            // Add validation for numeric inputs to prevent NaN
+        const rspPrice = parseFloat(priceInput.value || 0);
+        const qty = parseFloat(qtyInput.value || 0);
+        const discount = parseFloat(discountInput.value || 0);
+
+        // Validate all numeric inputs to prevent NaN
+        if (isNaN(rspPrice) || isNaN(qty) || isNaN(discount)) {
+            console.log('Invalid numeric values detected:', {
+                price: priceInput.value,
+                qty: qtyInput.value,
+                discount: discountInput.value
+            });
+            return;
+        }
+
+        if (rspPrice <= 0 || qty <= 0) {
+            console.log('Price or quantity is zero/negative, skipping calculation');
+            return;
+        }
+            
+
+
+    console.log('=== TAX CALCULATION DEBUG ===');
+    console.log('Product:', selectedOption.text);
+    console.log('Raw CGST:', selectedOption.dataset.cgstPercent);
+    console.log('Raw SGST:', selectedOption.dataset.sgstPercent);
+
     const cgstPercent = parseFloat(selectedOption.dataset.cgstPercent || 0);
     const sgstPercent = parseFloat(selectedOption.dataset.sgstPercent || 0);
+
+     console.log('Parsed CGST:', cgstPercent);
+    console.log('Parsed SGST:', sgstPercent);
+    console.log('Total Tax %:', cgstPercent + sgstPercent);
     
-    const rspPrice = parseFloat(priceInput.value || 0);
-    const qty = parseFloat(qtyInput.value || 0);
-    const discount = parseFloat(discountInput.value || 0);
-    
+ 
     // Calculate line total after discount (RSP inclusive)
     const lineTotalRSP = (rspPrice * qty) - discount;
     
@@ -452,7 +553,10 @@ function calculateRowTax(row) {
         cgstAmount = baseAmount * (cgstPercent / 100);
         sgstAmount = baseAmount * (sgstPercent / 100);
     } else {
+         // No tax case - explicitly set to proper values
         baseAmount = lineTotalRSP;
+        cgstAmount = 0;  // Explicitly set to 0, not empty
+        sgstAmount = 0;  // Explicitly set to 0, not empty
     }
     
     const finalAmount = baseAmount + cgstAmount + sgstAmount;
@@ -467,6 +571,11 @@ function calculateRowTax(row) {
     if (cgstDisplay) cgstDisplay.textContent = cgstAmount.toFixed(2);
     if (sgstDisplay) sgstDisplay.textContent = sgstAmount.toFixed(2);
     if (amountInput) amountInput.value = finalAmount.toFixed(2);
+
+     console.log('Calculated values:');
+    console.log('Base Amount:', baseAmount.toFixed(2));
+    console.log('CGST Amount:', cgstAmount.toFixed(2));
+    console.log('SGST Amount:', sgstAmount.toFixed(2)); 
     
     // Update hidden fields
     const subtotalHidden = row.querySelector('.subtotal-hidden');
@@ -488,6 +597,12 @@ function calculateRowTax(row) {
     if (sgstAmountInput) sgstAmountInput.value = sgstAmount.toFixed(2);
     
     calculateGrandTotal();
+
+
+    console.log('Hidden field values set:');
+    if (cgstAmountInput) console.log('cgst_amount field:', cgstAmountInput.value);
+    if (sgstAmountInput) console.log('sgst_amount field:', sgstAmountInput.value);
+    console.log('=== END TAX CALCULATION ===');
 }
 
 // Calculate grand total and tax summary
