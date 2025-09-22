@@ -990,44 +990,35 @@ function syncFormValues() {
     }
     
     // 4. Sync vehicle fields
-    const cashVehicleDesktop = document.getElementById('cashVehicleNumber');
-    const cashVehicleMobile = document.getElementById('cashVehicleMobile');
-    const creditVehicleDesktop = document.getElementById('creditVehicle');
-    const creditVehicleMobile = document.getElementById('creditVehicleMobile');
-    
-    if (cashVehicleDesktop && cashVehicleMobile) {
-        cashVehicleDesktop.addEventListener('input', function() {
-            cashVehicleMobile.value = this.value;
-        });
-        
-        cashVehicleMobile.addEventListener('input', function() {
-            cashVehicleDesktop.value = this.value;
-        });
-    }
-    
-    if (creditVehicleDesktop && creditVehicleMobile) {
-        creditVehicleDesktop.addEventListener('change', function() {
-            creditVehicleMobile.value = this.value;
-        });
-        
-        creditVehicleMobile.addEventListener('change', function() {
-            creditVehicleDesktop.value = this.value;
-        });
-    }
-    
-    // 5. Sync odometer
-    const odometerDesktop = document.getElementById('odometerReading');
-    const odometerMobile = document.getElementById('odometerMobile');
-    
-    if (odometerDesktop && odometerMobile) {
-        odometerDesktop.addEventListener('input', function() {
-            odometerMobile.value = this.value;
-        });
-        
-        odometerMobile.addEventListener('input', function() {
-            odometerDesktop.value = this.value;
-        });
-    }
+        const cashVehicleDesktop = document.getElementById('cashVehicleNumber');
+        const cashVehicleMobile = document.getElementById('cashVehicleMobile'); // same ID, but name is now bill_vehicle_number_mobile
+        const creditVehicleDesktop = document.getElementById('creditVehicle');
+        const creditVehicleMobile = document.getElementById('creditVehicleMobile');
+
+        if (cashVehicleDesktop && cashVehicleMobile) {
+            cashVehicleDesktop.addEventListener('input', function() {
+                cashVehicleMobile.value = this.value;
+            });
+            
+            cashVehicleMobile.addEventListener('input', function() {
+                cashVehicleDesktop.value = this.value;
+            });
+        }
+
+        // 5. Sync odometer
+        const odometerDesktop = document.getElementById('odometerReading');
+        const odometerMobile = document.getElementById('odometerMobile'); // same ID, but name is now bill_odometer_reading_mobile
+
+        if (odometerDesktop && odometerMobile) {
+            odometerDesktop.addEventListener('input', function() {
+                odometerMobile.value = this.value;
+            });
+            
+            odometerMobile.addEventListener('input', function() {
+                odometerDesktop.value = this.value;
+            });
+        }
+
 }
 
 function handleBillTypeChange(billType) {

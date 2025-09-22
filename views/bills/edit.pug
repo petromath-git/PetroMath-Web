@@ -5,15 +5,15 @@ block content
         .card
             .card-header
                 .d-flex.justify-content-between.align-items-center
-                    .d-flex.align-items-center.gap-3
-                        button.btn.btn-secondary(onclick="window.location.href='/bills'")
-                            i.bi.bi-arrow-left
+                    .d-flex.align-items-center
+                        button.btn.btn-outline-secondary(onclick="window.location.href='/bills'" style="margin-right: 2rem;")
+                            i.bi.bi-arrow-left.me-1
                             |  Back to Bills
                         h5.card-title.mb-0 Edit Bill #{bill.bill_no}
-                    .float-right.d-none.d-md-block
-                        button.btn.btn-info#addRowDesktop(type='button')
-                            i.bi.bi-plus
-                            |  Add Item
+                    
+                    button.btn.btn-primary#addRowDesktop(type='button')
+                        i.bi.bi-plus.me-1
+                        |  Add Item
 
             .card-body               
                 
@@ -152,7 +152,7 @@ block content
                                     label(for='cashVehicleNumber') Vehicle Number
                                     input#cashVehicleNumber.form-control(
                                         type='text'
-                                        name='vehicle_number'
+                                        name='bill_vehicle_number' 
                                         maxlength='12'
                                         value=bill.vehicle_number || ''
                                         placeholder='Enter vehicle number'
@@ -278,10 +278,6 @@ block content
                             button.btn.btn-primary#saveBtn(type='submit')
                                 i.bi.bi-save
                                 |  Update Bill
-
-                            button.btn.btn-danger#deleteBillBtn(type='button' data-bill-id=bill.bill_id).ms-2
-                                i.bi.bi-trash
-                                |  Delete Bill    
 
     //- Embed data for JavaScript
     script.

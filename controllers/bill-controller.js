@@ -291,24 +291,8 @@ createBill: async (req, res, next) => {
                 return res.redirect('/bills/new');
             }
 
-            // First validate closing status
-            const closing = await db.sequelize.query(`
-                SELECT closing_status 
-                FROM t_closing 
-                WHERE closing_id = :closingId
-                AND location_code = :locationCode
-            `, {
-                replacements: { 
-                    closingId: req.body.closing_id,
-                    locationCode: req.user.location_code 
-                },
-                type: Sequelize.QueryTypes.SELECT
-            });
-
-            if (!closing.length || closing[0].closing_status === 'CLOSED') {
-                req.flash('error', 'Cannot create bills for closed or invalid shifts');
-                return res.redirect('/bills/new');
-            }
+           await validateShiftForBillOperation(req.body.closing_id, req.user.location_code, 'create');
+           await validateProductPumpReadings(req.user.location_code, req.body.closing_id, req.body.items);
 
             // *** NEW CONFIGURABLE BILL NUMBER GENERATION ***
             const nextBillNo = await BillNumberingService.generateNextBillNumber(
@@ -317,6 +301,11 @@ createBill: async (req, res, next) => {
             );
 
             console.log(`Generated bill number: ${nextBillNo} for location: ${req.user.location_code}, type: ${req.body.bill_type}`);
+
+
+            const customerName = req.body.bill_type === 'CASH' ? (req.body.customer_name || null) : null;
+        console.log('Customer name value:', customerName);
+        console.log('Customer name type:', typeof customerName);
 
             // Create bill
             const [billResult] = await db.sequelize.query(`
@@ -340,6 +329,8 @@ createBill: async (req, res, next) => {
                 type: Sequelize.QueryTypes.INSERT,
                 transaction
             });
+
+             console.log('After T Bills');
 
             const billId = billResult;
 
@@ -388,33 +379,45 @@ createBill: async (req, res, next) => {
                     });
                 } else {
                     // Cash sales
-                    await db.sequelize.query(`
-                        INSERT INTO t_cashsales (
-                            closing_id, bill_no, bill_id,customer_name, product_id, price, price_discount,
-                            qty, notes, amount, created_by, creation_date
-                        ) VALUES (
-                            :closingId, :billNo, :billId, :customerName, :productId, :price, :priceDiscount,
-                            :qty, :notes, :amount, :createdBy, NOW()
-                        )
-                    `, {
-                        replacements: {
-                            closingId: req.body.closing_id,
-                            billNo: nextBillNo,
-                            billId: billId,
-                            customerName: req.body.customer_name || null,
-                            productId: item.product_id,
-                            price: item.price,
-                            priceDiscount: item.price_discount || 0,
-                            qty: item.qty,
-                            notes: item.notes || '',
-                            amount: item.amount,
-                            createdBy: req.user.Person_id
-                        },
-                        type: Sequelize.QueryTypes.INSERT,
-                        transaction
-                    });
+                    
+                        await db.sequelize.query(`
+                            INSERT INTO t_cashsales (
+                                closing_id, bill_no, bill_id, customer_name, product_id, price, price_discount,
+                                qty, amount, base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                                notes, vehicle_number, odometer_reading, created_by, creation_date
+                            ) VALUES (
+                                :closingId, :billNo, :billId, :customerName, :productId, :price, :priceDiscount,
+                                :qty, :amount, :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                                :notes, :vehicleNumber, :odometerReading, :createdBy, NOW()
+                            )
+                        `, {
+                            replacements: {
+                                closingId: req.body.closing_id,
+                                billNo: nextBillNo,
+                                billId: billId,
+                                customerName: req.body.customer_name || null,
+                                productId: item.product_id,
+                                price: item.price,
+                                priceDiscount: item.price_discount || 0,
+                                qty: item.qty,
+                                amount: item.amount,
+                                baseAmount: item.base_amount || item.amount,
+                                cgstPercent: item.cgst_percent || 0,
+                                sgstPercent: item.sgst_percent || 0,
+                                cgstAmount: item.cgst_amount || 0,
+                                sgstAmount: item.sgst_amount || 0,
+                                notes: item.notes || '',
+                                vehicleNumber: req.body.bill_vehicle_number || null,
+                                odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
+                                createdBy: req.user.Person_id
+                            },
+                            type: Sequelize.QueryTypes.INSERT,
+                            transaction
+                        });
                 }
             }
+
+            console.log('After Insert lines');
 
             await transaction.commit();
             req.flash('success', `Bill ${nextBillNo} created successfully`);
@@ -484,16 +487,18 @@ getBills: async (req, res, next) => {
     try {
         const bills = await db.sequelize.query(`
             SELECT DISTINCT
-                b.bill_id,
-                b.location_code,
-                b.bill_no,
-                b.bill_type,
-                b.closing_id,
-                b.bill_status,
-                b.print_count,
-                b.total_amount,
-                b.creation_date,
+                b.bill_id, b.location_code, b.bill_no, b.bill_type, b.closing_id,
+                b.bill_status, b.print_count, b.total_amount, b.creation_date,
                 b.updation_date,
+                -- Check if bill can be deleted
+                CASE 
+                    WHEN cl.closing_status = 'CLOSED' THEN 0
+                    WHEN b.print_count > 0 THEN 0
+                    WHEN b.bill_status = 'CANCELLED' THEN 0
+                    ELSE 1
+                END as can_delete,
+                cl.closing_status,
+                -- Customer name logic (existing)
                 CASE 
                     WHEN b.bill_type = 'CREDIT' THEN (
                         SELECT c.Company_Name 
@@ -504,7 +509,7 @@ getBills: async (req, res, next) => {
                     )
                     WHEN b.bill_type = 'CASH' THEN b.customer_name    
                     ELSE NULL
-                END as customer_name,
+                END as customer_name,                
                 p.Person_Name as cashier_name
             FROM t_bills b
             LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
@@ -733,10 +738,18 @@ getBills: async (req, res, next) => {
 
     updateBill: async (req, res, next) => {
 
-        console.log('Update request body:', req.body);  // Add this line
-    const transaction = await db.sequelize.transaction();
+        
+        const transaction = await db.sequelize.transaction();
+
+        
+
 
      try {
+
+
+        await validateShiftForBillOperation(req.body.closing_id, req.user.location_code, 'update');
+        await validateProductPumpReadings(req.user.location_code, req.body.closing_id, req.body.items);
+
             const billId = req.params.billId;
             
             // Validate bill items FIRST
@@ -782,6 +795,20 @@ getBills: async (req, res, next) => {
         // Recalculate total amount
         const totalAmount = req.body.items.reduce((sum, item) => 
             sum + parseFloat(item.amount || 0), 0);
+
+        // Add detailed debugging
+        console.log('=== TOTAL AMOUNT CALCULATION DEBUG ===');
+        console.log('Items received:', req.body.items?.length || 0, 'items');
+        req.body.items?.forEach((item, index) => {
+            console.log(`Item ${index}:`, {
+                product_id: item.product_id,
+                amount: item.amount,
+                parsed_amount: parseFloat(item.amount || 0)
+            });
+        });
+        console.log('Calculated total amount:', totalAmount);
+        console.log('Is total NaN?', isNaN(totalAmount));
+        console.log('==========================================');
 
         // Update bill total amount and closing_id
         await db.sequelize.query(`
@@ -869,52 +896,67 @@ getBills: async (req, res, next) => {
     }
 },
 
-    deleteBill: async (req, res, next) => {
-        const transaction = await db.sequelize.transaction();
-        
-        try {
-            const billId = req.params.billId;
+deleteBill: async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
     
-            // Determine bill type
-            const billType = await db.sequelize.query(`
-                SELECT bill_type 
-                FROM t_bills 
-                WHERE bill_id = :billId
-            `, {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.SELECT
-            });
-    
-            // Delete bill items based on bill type
-            const deleteItemsQuery = billType[0].bill_type === 'CREDIT'
-                ? 'DELETE FROM t_credits WHERE bill_id = :billId'
-                : 'DELETE FROM t_cashsales WHERE bill_id = :billId';
-            
-            await db.sequelize.query(deleteItemsQuery, {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.DELETE,
-                transaction
-            });
-    
-            // Delete bill from t_bills
-            await db.sequelize.query(`
-                DELETE FROM t_bills WHERE bill_id = :billId
-            `, {
-                replacements: { billId },
-                type: Sequelize.QueryTypes.DELETE,
-                transaction
-            });
-    
-            await transaction.commit();
-            req.flash('success', 'Bill deleted successfully');
-            res.redirect('/bills');
-        } catch (error) {
-            await transaction.rollback();
-            console.error('Bill deletion error:', error);
-            req.flash('error', 'Error deleting bill: ' + error.message);
-            res.redirect(`/bills/edit/${req.params.billId}`);
+    try {
+        const billId = req.params.billId;
+
+        // Get bill info and validate shift access
+        const bill = await db.sequelize.query(`
+            SELECT bill_type, closing_id 
+            FROM t_bills 
+            WHERE bill_id = :billId 
+            AND location_code = :locationCode
+        `, {
+            replacements: { 
+                billId,
+                locationCode: req.user.location_code 
+            },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!bill.length) {
+            throw new Error('Bill not found or does not belong to this location');
         }
-    },
+
+        // Validate shift status before deletion
+        await validateShiftForBillOperation(
+            bill[0].closing_id, 
+            req.user.location_code, 
+            'delete'
+        );
+
+        // Delete bill items based on bill type
+        const deleteItemsQuery = bill[0].bill_type === 'CREDIT'
+            ? 'DELETE FROM t_credits WHERE bill_id = :billId'
+            : 'DELETE FROM t_cashsales WHERE bill_id = :billId';
+        
+        await db.sequelize.query(deleteItemsQuery, {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.DELETE,
+            transaction
+        });
+
+        // Delete bill from t_bills
+        await db.sequelize.query(`
+            DELETE FROM t_bills WHERE bill_id = :billId
+        `, {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.DELETE,
+            transaction
+        });
+
+        await transaction.commit();
+        req.flash('success', 'Bill deleted successfully');
+        res.redirect('/bills');
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Bill deletion error:', error);
+        req.flash('error', 'Error deleting bill: ' + error.message);
+        res.redirect('/bills');  // Changed from edit redirect since bill might be deleted
+    }
+},
 
  
 
@@ -1408,4 +1450,82 @@ const validateBillItems = async (items, locationCode) => {
     }
     
     return { valid: errors.length === 0, errors };
+};
+
+// Add this before the main module.exports
+const validateShiftForBillOperation = async (closingId, locationCode, operation) => {
+    // Check if shift exists and get its status
+    const shift = await db.sequelize.query(`
+        SELECT closing_status, closing_date, cashier_id
+        FROM t_closing 
+        WHERE closing_id = :closingId
+        AND location_code = :locationCode
+    `, {
+        replacements: { closingId, locationCode },
+        type: Sequelize.QueryTypes.SELECT
+    });
+
+    if (!shift.length) {
+        throw new Error(`Cannot ${operation} bill: Shift ${closingId} not found or does not belong to this location`);
+    }
+
+    if (shift[0].closing_status === 'CLOSED') {
+        const closedDate = new Date(shift[0].closing_date).toLocaleDateString('en-IN');
+        throw new Error(`Cannot ${operation} bills for closed shift (${closingId}). Shift was closed on ${closedDate}`);
+    }
+
+    return shift[0];
+};
+
+const validateProductPumpReadings = async (locationCode, closingId, items) => {
+    for (const item of items) {
+        if (!item.product_id) continue;
+
+        // Check if this product has any pumps configured
+        const productHasPumps = await db.sequelize.query(`
+            SELECT COUNT(*) as pump_count
+            FROM m_pump p
+            JOIN m_product prod ON p.product_code = prod.product_name
+            WHERE prod.product_id = :productId
+            AND p.location_code = :locationCode
+        `, {
+            replacements: { 
+                productId: item.product_id,
+                locationCode 
+            },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        // Only validate pump readings for products that have pumps
+        if (productHasPumps[0].pump_count > 0) {
+            const pumpReadings = await db.sequelize.query(`
+                SELECT COUNT(*) as reading_count
+                FROM t_reading tr
+                JOIN m_pump p ON tr.pump_id = p.pump_id
+                JOIN m_product prod ON p.product_code = prod.product_name
+                WHERE tr.closing_id = :closingId 
+                AND prod.product_id = :productId
+                AND p.location_code = :locationCode
+            `, {
+                replacements: {
+                    closingId,
+                    productId: item.product_id,
+                    locationCode
+                },
+                type: Sequelize.QueryTypes.SELECT
+            });
+
+            if (pumpReadings[0].reading_count === 0) {
+                const product = await db.sequelize.query(`
+                    SELECT product_name FROM m_product WHERE product_id = :productId
+                `, {
+                    replacements: { productId: item.product_id },
+                    type: Sequelize.QueryTypes.SELECT
+                });
+
+                throw new Error(`No pump readings found for ${product[0].product_name} in this shift. Cannot create bill as this will affect closing calculations.`);
+            }
+        }
+        // Products without pumps (retail items) pass validation automatically
+    }
 };
