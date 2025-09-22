@@ -63,6 +63,7 @@ block content
     // Include modals at the bottom
     include modals/odometer-edit-modal
     include modals/credit-party-edit-modal
+    include modals/vehicle-edit-modal
 
     script.       
             // Initialize page
@@ -189,6 +190,9 @@ block content
                                 <button class="btn btn-outline-primary btn-sm" onclick="editOdometer(${transaction.tcredit_id}, '${transaction.bill_no}', '${transaction.vehicle_number}', '${transaction.Company_Name}', ${transaction.odometer_reading || 0})">
                                     <i class="bi bi-speedometer2"></i> Odometer
                                 </button>
+                                <button class="btn btn-outline-success btn-sm" onclick="editVehicle(${transaction.tcredit_id}, '${transaction.bill_no}', '${transaction.Company_Name}', ${transaction.creditlist_id}, ${transaction.vehicle_id || 'null'}, '${transaction.vehicle_number || 'Not assigned'}')">
+                                    <i class="bi bi-truck"></i> Vehicle
+                                </button>
                                 ${canEditCreditParty() ? `
                                 <button class="btn btn-outline-warning btn-sm" onclick="editCreditParty(${transaction.tcredit_id}, '${transaction.bill_no}', '${transaction.Company_Name}', ${transaction.creditlist_id}, '${transaction.product_name}', '${amount}')">
                                     <i class="bi bi-people"></i> Customer
@@ -248,6 +252,9 @@ block content
                 
                 // Credit party modal save handler
                 document.getElementById('saveCreditPartyBtn').addEventListener('click', saveCreditPartyChange);
+
+                // Add vehicle handler
+                document.getElementById('saveVehicleBtn').addEventListener('click', saveVehicleChange);
             }
 
             // Edit odometer reading
@@ -267,6 +274,99 @@ block content
                 // Show modal
                 $('#odometerEditModal').modal('show');
                 
+            }
+
+            // Edit vehicle
+            function editVehicle(tcreditId, billNo, customerName, creditlistId, currentVehicleId, currentVehicleNumber) {
+                // Populate modal data
+                document.getElementById('modalBillNo3').textContent = billNo;
+                document.getElementById('modalCustomer3').textContent = customerName;
+                document.getElementById('modalCurrentVehicle').textContent = currentVehicleNumber;
+                
+                document.getElementById('vehicleReason').value = '';
+                
+                // Store tcredit ID for save
+                document.getElementById('saveVehicleBtn').setAttribute('data-tcredit-id', tcreditId);
+                document.getElementById('saveVehicleBtn').setAttribute('data-creditlist-id', creditlistId);
+                
+                // Load vehicles for this customer
+                loadVehiclesForCustomer(creditlistId, currentVehicleId);
+                
+                // Show modal
+                $('#vehicleEditModal').modal('show');
+            }
+
+            // Load vehicles for customer
+            async function loadVehiclesForCustomer(creditlistId, currentVehicleId) {
+                try {
+                    const response = await fetch(`/api/transaction-corrections/customers/${creditlistId}/vehicles`);
+                    const data = await response.json();
+                    
+                    const vehicleSelect = document.getElementById('newVehicle');
+                    vehicleSelect.innerHTML = '<option value="">No Vehicle</option>';
+                    
+                    if (data.success && data.vehicles) {
+                        data.vehicles.forEach(vehicle => {
+                            const option = document.createElement('option');
+                            option.value = vehicle.vehicle_id;
+                            option.textContent = `${vehicle.vehicle_number} (${vehicle.vehicle_type || 'Vehicle'})`;
+                            
+                            // Select current vehicle
+                            if (vehicle.vehicle_id == currentVehicleId) {
+                                option.selected = true;
+                            }
+                            
+                            vehicleSelect.appendChild(option);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading vehicles:', error);
+                    showAlert('danger', 'Error loading vehicles for customer');
+                }
+            }
+
+            // Save vehicle change
+            async function saveVehicleChange() {
+                const tcreditId = document.getElementById('saveVehicleBtn').getAttribute('data-tcredit-id');
+                const newVehicleId = document.getElementById('newVehicle').value;
+                const reason = document.getElementById('vehicleReason').value.trim();
+                
+                if (!reason) {
+                    showAlert('danger', 'Please enter a reason for the vehicle change');
+                    return;
+                }
+                
+                try {
+                    showLoading(true);
+                    
+                    const response = await fetch(`/api/transaction-corrections/credits/${tcreditId}/vehicle`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            newVehicleId: newVehicleId || null,
+                            reason: reason
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showAlert('success', 'Vehicle updated successfully');
+                        $('#vehicleEditModal').modal('hide');
+                        
+                        // Refresh the search results
+                        searchTransactions();
+                    } else {
+                        throw new Error(data.error || 'Failed to update vehicle');
+                    }
+                } catch (error) {
+                    console.error('Error updating vehicle:', error);
+                    showAlert('danger', 'Error updating vehicle: ' + error.message);
+                } finally {
+                    showLoading(false);
+                }
             }
 
             // Edit credit party

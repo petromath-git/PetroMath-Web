@@ -74,12 +74,13 @@ getMileageData: (locationCode, creditlistId, fromDate, toDate) => {
             closing_date as sort_date,
             CASE 
                 WHEN odometer_reading IS NULL OR odometer_reading = 0 THEN 0
-                WHEN prev_odometer_reading IS NULL THEN 0
+                WHEN prev_odometer_reading IS NULL OR prev_odometer_reading = 0 THEN 0
                 WHEN odometer_reading < prev_odometer_reading THEN 0
                 ELSE COALESCE(odometer_reading - prev_odometer_reading, 0)
             END as distance_run,
             CASE 
                 WHEN prev_odometer_reading IS NOT NULL 
+                     AND prev_odometer_reading > 0
                      AND fuel_quantity > 0 
                      AND odometer_reading > 0
                      AND odometer_reading >= prev_odometer_reading
@@ -90,7 +91,7 @@ getMileageData: (locationCode, creditlistId, fromDate, toDate) => {
             CASE 
                 WHEN odometer_reading IS NULL OR odometer_reading = 0 THEN 'missing_odometer'
                 WHEN transaction_sequence_number = 1 THEN 'first_entry'
-                WHEN prev_odometer_reading IS NULL THEN 'no_previous_reading'
+                WHEN prev_odometer_reading IS NULL OR prev_odometer_reading = 0 THEN 'no_previous_reading'
                 WHEN odometer_reading < prev_odometer_reading THEN 'invalid_reading'
                 ELSE 'valid_calculation'
             END as mileage_status
@@ -169,12 +170,13 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 transaction_sequence_number,
                 CASE 
                     WHEN odometer_reading IS NULL OR odometer_reading = 0 THEN 0
-                    WHEN prev_odometer_reading IS NULL THEN 0
+                    WHEN prev_odometer_reading IS NULL OR prev_odometer_reading = 0 THEN 0
                     WHEN odometer_reading < prev_odometer_reading THEN 0  -- Invalid reading
                     ELSE COALESCE(odometer_reading - prev_odometer_reading, 0)
                 END as distance_run,
                 CASE 
                     WHEN prev_odometer_reading IS NOT NULL 
+                         AND prev_odometer_reading > 0
                          AND fuel_quantity > 0 
                          AND odometer_reading IS NOT NULL 
                          AND odometer_reading > 0
@@ -186,7 +188,7 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 CASE 
                     WHEN odometer_reading IS NULL OR odometer_reading = 0 THEN 'missing_odometer'
                     WHEN transaction_sequence_number = 1 THEN 'first_entry'
-                    WHEN prev_odometer_reading IS NULL THEN 'no_previous_reading'
+                    WHEN prev_odometer_reading IS NULL OR prev_odometer_reading = 0 THEN 'no_previous_reading'
                     WHEN odometer_reading < prev_odometer_reading THEN 'invalid_reading'
                     ELSE 'valid_calculation'
                 END as transaction_status
@@ -267,11 +269,12 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 amount,
                 CASE 
                     WHEN odometer_reading IS NULL OR odometer_reading = 0 THEN 0
-                    WHEN prev_odometer_reading IS NULL THEN 0
+                    WHEN prev_odometer_reading IS NULL OR prev_odometer_reading = 0 THEN 0
                     ELSE COALESCE(odometer_reading - prev_odometer_reading, 0)
                 END as distance_run,
                 CASE 
                     WHEN prev_odometer_reading IS NOT NULL 
+                         AND prev_odometer_reading > 0
                          AND fuel_quantity > 0 
                          AND odometer_reading IS NOT NULL 
                          AND odometer_reading > 0
@@ -368,7 +371,7 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 vehicle_number,
                 ROUND(AVG(
                     CASE 
-                        WHEN prev_odometer IS NOT NULL AND qty > 0
+                        WHEN prev_odometer IS NOT NULL AND prev_odometer > 0 AND qty > 0
                         THEN (odometer_reading - prev_odometer) / qty
                         ELSE NULL
                     END
