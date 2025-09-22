@@ -1,0 +1,495 @@
+extends layout
+
+block content
+    .container-fluid.py-3
+        // Header Section
+        .row.mb-3
+            .col-12
+                .dashboard-header.text-white.p-3.rounded
+                    .row.align-items-center
+                        .col-md-8.col-12.text-center.text-md-left
+                            h4.mb-1
+                                i.bi.bi-graph-up.me-2
+                                | Application Usage Dashboard
+                            p.mb-0.small Real-time insights into PetroMath usage across all locations
+                        .col-md-4.col-12.text-center.text-md-right.mt-2.mt-md-0
+                            button#refreshBtn.btn.btn-light.btn-sm
+                                i.bi.bi-arrow-clockwise.me-1
+                                | Refresh Data
+
+        // Quick Stats Row
+        .row.mb-3
+            .col-lg-3.col-md-6.col-12.mb-2
+                .stats-card.h-100.text-center.p-3
+                    .stats-number#totalPageViews --
+                    .stats-label Today's Page Views
+            .col-lg-3.col-md-6.col-12.mb-2
+                .stats-card.h-100.text-center.p-3
+                    .stats-number#uniqueUsers --
+                    .stats-label Active Users Today
+            .col-lg-3.col-md-6.col-12.mb-2
+                .stats-card.h-100.text-center.p-3
+                    .stats-number#activeLocations --
+                    .stats-label Active Locations
+            .col-lg-3.col-md-6.col-12.mb-2
+                .stats-card.h-100.text-center.p-3
+                    .stats-number#avgResponseTime --
+                    .stats-label Avg Response (ms)
+
+        // Location Activity Row
+        .row.mb-3
+            .col-lg-8.col-12.mb-2
+                .stats-card
+                    h5.mb-3
+                        i.bi.bi-geo-alt.me-2
+                        | Usage by Location (Last 7 Days)
+                    .table-responsive
+                        table.table.table-sm
+                            thead.table-light
+                                tr
+                                    th Location
+                                    th Page Views
+                                    th Users
+                                    th Sessions
+                                    th Avg Response (ms)
+                            tbody#locationTableBody
+                                tr
+                                    td(colspan="5").text-center.text-muted
+                                        i.bi.bi-hourglass-split.me-1
+                                        | Loading...
+            .col-lg-4.col-12.mb-2
+                .stats-card
+                    h5.mb-3
+                        i.bi.bi-activity.me-2
+                        | Top Locations
+                    #topLocationsList
+                        .text-center.text-muted
+                            i.bi.bi-hourglass-split.me-1
+                            | Loading...
+
+        // Feature Usage & Time Patterns Row  
+        .row.mb-3
+            .col-lg-6.col-12.mb-2
+                .stats-card
+                    h5.mb-3
+                        i.bi.bi-list-check.me-2
+                        | Most Used Features (Last 7 Days)
+                    .table-responsive
+                        table.table.table-sm
+                            thead.table-light
+                                tr
+                                    th Feature
+                                    th Views
+                                    th Users
+                                    th Avg Time (ms)
+                            tbody#featureTableBody
+                                tr
+                                    td(colspan="4").text-center.text-muted
+                                        i.bi.bi-hourglass-split.me-1
+                                        | Loading...
+            .col-lg-6.col-12.mb-2
+                .stats-card
+                    h5.mb-3
+                        i.bi.bi-clock.me-2
+                        | Peak Usage Hours (Last 7 Days)
+                    .table-responsive
+                        table.table.table-sm
+                            thead.table-light
+                                tr
+                                    th Hour
+                                    th Page Views
+                                    th Users
+                                    th Sessions
+                            tbody#timeTableBody
+                                tr
+                                    td(colspan="4").text-center.text-muted
+                                        i.bi.bi-hourglass-split.me-1
+                                        | Loading...
+
+        // User Activity & Export Row
+        .row.mb-3
+            .col-lg-8.col-12.mb-2
+                .stats-card
+                    .d-flex.justify-content-between.align-items-center.mb-3
+                        h5.mb-0
+                            i.bi.bi-people.me-2
+                            | User Activity Summary
+                        .btn-group.btn-group-sm(role="group")
+                            button.btn.btn-outline-primary.active(data-timeframe="7") 7 Days
+                            button.btn.btn-outline-primary(data-timeframe="30") 30 Days
+                    .table-responsive
+                        table.table.table-sm
+                            thead.table-light
+                                tr
+                                    th User
+                                    th Role
+                                    th Location
+                                    th Page Views
+                                    th Pages Visited
+                                    th Last Active
+                            tbody#userTableBody
+                                tr
+                                    td(colspan="6").text-center.text-muted
+                                        i.bi.bi-hourglass-split.me-1
+                                        | Loading...
+            .col-lg-4.col-12.mb-2
+                .stats-card
+                    h5.mb-3
+                        i.bi.bi-download.me-2
+                        | Export Data
+                    .d-grid.gap-2
+                        button.btn.btn-success.btn-sm#exportBtn7
+                            i.bi.bi-file-earmark-excel.me-1
+                            | Export 7 Days
+                        button.btn.btn-info.btn-sm#exportBtn30
+                            i.bi.bi-file-earmark-excel.me-1
+                            | Export 30 Days
+                    .alert.alert-info.mt-3.small.mb-0
+                        i.bi.bi-info-circle.me-1
+                        | Data exports contain detailed activity logs for analysis.
+
+    // Loading Overlay
+    #loadingOverlay.loading-overlay
+        .loading-spinner
+            .spinner-border.text-primary
+            p.mt-2 Loading dashboard data...
+
+    style.
+        .dashboard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            border: 1px solid #e9ecef;
+            padding: 20px;
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            line-height: 1;
+        }
+        
+        .stats-label {
+            color: #6c757d;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 0.25rem;
+        }
+        
+        .location-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #10b981, #06b6d4);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 2px;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        
+        .loading-overlay.show {
+            display: flex;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            color: white;
+        }
+        
+        /* Table styling */
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table td, .table th {
+            padding: 0.5rem;
+            font-size: 0.9rem;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .table-light th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .table-responsive {
+            border-radius: 8px;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .stats-number {
+                font-size: 1.5rem;
+            }
+            
+            .dashboard-header {
+                padding: 15px !important;
+            }
+            
+            .stats-card {
+                padding: 15px !important;
+            }
+            
+            .location-badge {
+                padding: 4px 8px;
+                font-size: 0.75rem;
+            }
+            
+            .table td, .table th {
+                padding: 0.4rem;
+                font-size: 0.8rem;
+            }
+        }
+
+    script.
+        // Dashboard JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize dashboard
+            loadDashboardData();
+            
+            // Refresh button
+            document.getElementById('refreshBtn').addEventListener('click', function() {
+                loadDashboardData();
+            });
+            
+            // Export buttons
+            document.getElementById('exportBtn7').addEventListener('click', function() {
+                exportUsageData(7);
+            });
+            
+            document.getElementById('exportBtn30').addEventListener('click', function() {
+                exportUsageData(30);
+            });
+            
+            // Timeframe buttons for user activity
+            document.querySelectorAll('[data-timeframe]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('[data-timeframe]').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    loadUserActivity(this.dataset.timeframe);
+                });
+            });
+            
+            // Load all dashboard data
+            async function loadDashboardData() {
+                showLoading(true);
+                
+                try {
+                    await Promise.all([
+                        loadOverviewData(),
+                        loadLocationStats(),
+                        loadFeatureUsage(),
+                        loadTimePatterns(),
+                        loadUserActivity(7)
+                    ]);
+                } catch (error) {
+                    console.error('Error loading dashboard:', error);
+                    showError('Failed to load dashboard data');
+                } finally {
+                    showLoading(false);
+                }
+            }
+            
+            // Load overview statistics
+            async function loadOverviewData() {
+                const response = await fetch('/usage-dashboard/api/overview');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const data = result.data;
+                    document.getElementById('totalPageViews').textContent = data.today.total_page_views_today || '0';
+                    document.getElementById('uniqueUsers').textContent = data.today.unique_users_today || '0';
+                    document.getElementById('activeLocations').textContent = data.today.active_locations_today || '0';
+                    document.getElementById('avgResponseTime').textContent = Math.round(data.today.avg_response_time_today || 0);
+                }
+            }
+            
+            // Load location statistics
+            async function loadLocationStats() {
+                const response = await fetch('/usage-dashboard/api/location-stats');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateLocationTable(result.data);
+                    updateTopLocationsList(result.data);
+                }
+            }
+            
+            // Load feature usage
+            async function loadFeatureUsage() {
+                const response = await fetch('/usage-dashboard/api/feature-usage?timeframe=7');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateFeatureTable(result.data);
+                }
+            }
+            
+            // Load time patterns
+            async function loadTimePatterns() {
+                const response = await fetch('/usage-dashboard/api/time-patterns');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateTimeTable(result.data);
+                }
+            }
+            
+            // Load user activity
+            async function loadUserActivity(timeframe) {
+                const response = await fetch('/usage-dashboard/api/user-activity');
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateUserTable(result.data);
+                }
+            }
+            
+            // Update location table
+            function updateLocationTable(data) {
+                const tbody = document.getElementById('locationTableBody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No data available</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.map(location => 
+                    `<tr>
+                        <td><strong>${location.location_code}</strong></td>
+                        <td>${location.total_page_views}</td>
+                        <td>${location.unique_users}</td>
+                        <td>${location.unique_sessions}</td>
+                        <td>${Math.round(location.avg_response_time || 0)}</td>
+                    </tr>`
+                ).join('');
+            }
+            
+            // Update top locations list
+            function updateTopLocationsList(data) {
+                const container = document.getElementById('topLocationsList');
+                
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="text-center text-muted">No data available</div>';
+                    return;
+                }
+                
+                container.innerHTML = data.slice(0, 6).map(location => 
+                    `<span class="location-badge">${location.location_code} - ${location.total_page_views} views</span>`
+                ).join('');
+            }
+            
+            // Update feature table
+            function updateFeatureTable(data) {
+                const tbody = document.getElementById('featureTableBody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No data available</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.slice(0, 10).map(feature => 
+                    `<tr>
+                        <td><strong>${feature.page_title}</strong><br><small class="text-muted">${feature.route_path}</small></td>
+                        <td>${feature.page_views}</td>
+                        <td>${feature.unique_users}</td>
+                        <td>${Math.round(feature.avg_response_time || 0)}</td>
+                    </tr>`
+                ).join('');
+            }
+            
+            // Update time patterns table
+            function updateTimeTable(data) {
+                const tbody = document.getElementById('timeTableBody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No data available</td></tr>';
+                    return;
+                }
+                
+                // Sort by page views descending and take top 10 hours
+                const sortedData = data.sort((a, b) => b.page_views - a.page_views).slice(0, 10);
+                
+                tbody.innerHTML = sortedData.map(hour => 
+                    `<tr>
+                        <td><strong>${hour.hour_of_day}:00</strong></td>
+                        <td>${hour.page_views}</td>
+                        <td>${hour.unique_users}</td>
+                        <td>${hour.unique_sessions}</td>
+                    </tr>`
+                ).join('');
+            }
+            
+            // Update user activity table
+            function updateUserTable(data) {
+                const tbody = document.getElementById('userTableBody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No user activity data</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.slice(0, 15).map(user => {
+                    const lastActivity = user.last_activity ? new Date(user.last_activity).toLocaleDateString() : 'N/A';
+                    return `<tr>
+                        <td><strong>${user.User_Name || 'Unknown'}</strong></td>
+                        <td><span class="badge bg-secondary">${user.Role || 'N/A'}</span></td>
+                        <td>${user.location_code}</td>
+                        <td>${user.total_page_views}</td>
+                        <td>${user.unique_pages_visited}</td>
+                        <td><small>${lastActivity}</small></td>
+                    </tr>`;
+                }).join('');
+            }
+            
+            // Export usage data
+            function exportUsageData(days) {
+                const url = `/usage-dashboard/export/csv?timeframe=${days}`;
+                window.open(url, '_blank');
+            }
+            
+            // Show/hide loading overlay
+            function showLoading(show) {
+                const overlay = document.getElementById('loadingOverlay');
+                if (show) {
+                    overlay.classList.add('show');
+                } else {
+                    overlay.classList.remove('show');
+                }
+            }
+            
+            // Show error message
+            function showError(message) {
+                console.error(message);
+                alert('Error: ' + message);
+            }
+        });
