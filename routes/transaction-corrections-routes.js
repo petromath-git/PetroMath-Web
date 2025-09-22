@@ -25,4 +25,15 @@ router.put('/credits/:tcreditId/credit-party',
     transactionCorrectionsController.updateCreditParty
 );
 
+router.put('/credits/:tcreditId/vehicle', 
+    appSecurity.hasPermission('EDIT_VEHICLE_POST_CLOSING'),
+    transactionCorrectionsController.updateVehicleId
+);
+
+
+router.get('/customers/:creditlistId/vehicles', 
+    appSecurity.hasPermission('EDIT_VEHICLE_POST_CLOSING'),
+    transactionCorrectionsController.getCustomerVehicles
+);
+
 module.exports = router;
