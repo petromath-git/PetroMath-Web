@@ -5,11 +5,11 @@ block content
         .card
             .card-header
                 .d-flex.justify-content-between.align-items-center
-                    .d-flex.align-items-center.gap-3
-                        button.btn.btn-secondary(onclick="window.location.href='/bills'")
-                            i.bi.bi-arrow-left
+                    .d-flex.align-items-center.gap-3                        
+                        button.btn.btn-outline-secondary(onclick="window.location.href='/bills'" style="margin-right: 2rem;")
+                            i.bi.bi-arrow-left.me-1
                             |  Back to Bills
-                        h5.card-title.mb-0 Create New Bill
+                        h5.card-title.mb-0 Create Bill
                     .float-right.d-none.d-md-block
                         button.btn.btn-info#addRowDesktop(type='button')
                             i.bi.bi-plus
@@ -76,7 +76,7 @@ block content
                                 label(for='cashCustomerMobile').form-label.fw-bold Customer Name
                                 input#cashCustomerMobile.form-control.form-control-lg(
                                     type='text' 
-                                    name='customer_name'
+                                    name='customer_name_mobile'
                                     maxlength='80'
                                     style='text-transform: uppercase; font-size: 16px !important; height: 48px !important;'
                                     placeholder='Enter customer name'
@@ -97,7 +97,7 @@ block content
                                     label(for='cashVehicleMobile').form-label.fw-bold Vehicle Number
                                     input#cashVehicleMobile.form-control.form-control-lg(
                                         type='text'
-                                        name='bill_vehicle_number'
+                                        name='bill_vehicle_number_mobile'   
                                         maxlength='12'
                                         style='text-transform: uppercase; font-size: 16px !important; height: 48px !important;'
                                         placeholder='Enter vehicle number'
@@ -114,7 +114,7 @@ block content
                                 label(for='odometerMobile').form-label.fw-bold Odometer Reading
                                 input#odometerMobile.form-control.form-control-lg(
                                     type='number'
-                                    name='bill_odometer_reading'
+                                    name='bill_odometer_reading_mobile'  
                                     step='0.01'
                                     min='0'
                                     placeholder='0.00'
