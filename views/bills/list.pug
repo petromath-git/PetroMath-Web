@@ -87,14 +87,14 @@ block content
                                         title="Print Bill"
                                     )
                                         i.bi.bi-printer
-                                    if bill.bill_status === 'DRAFT' && bill.closing_status !== 'CLOSED'
+                                    if bill.closing_status !== 'CLOSED'
                                         button.btn.btn-danger.btn-sm.delete-bill(
                                             type='button'
                                             data-bill-id=bill.bill_id
                                             title="Delete Bill"
                                         )
                                             i.bi.bi-trash
-                                    else if bill.bill_status === 'DRAFT' && bill.closing_status === 'CLOSED'
+                                    else 
                                         button.btn.btn-danger.btn-sm(
                                             disabled
                                             title="Cannot delete - shift is closed"
@@ -173,7 +173,7 @@ block content
                 }
             });
 
-             $('.delete-bill').each(function() {
+            $('.delete-bill').each(function() {
                     $(this).on('click', function() {
                         const billId = $(this).data('bill-id');
                         
@@ -189,6 +189,15 @@ block content
                         }
                     });
                 });
+
+             // Print button click handler
+            $('.print-bill').click(function() {
+                const billId = $(this).data('bill-id');
+                console.log('Print button clicked for bill ID:', billId);
+                
+                // Open the HTML print page in new tab
+                window.open(`/bills/${billId}/print`, '_blank');
+            });    
 
             const $table = $('.table tbody');
         const $rows = $table.find('tr:not(.bill-details)'); // Exclude detail rows
