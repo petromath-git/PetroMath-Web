@@ -5,9 +5,9 @@ html(lang='en')
         meta(name='viewport', content='width=device-width, initial-scale=1.0')
         title Bill #{bill.bill_no} - Print
         style.
-            /* Quarter A4 size: 105mm x 148.5mm */
+            /* A5 paper size: 148mm x 210mm */
             @page {
-                size: 105mm 148.5mm;
+                size: A5;
                 margin: 5mm;
             }
             
@@ -19,40 +19,48 @@ html(lang='en')
             
             body {
                 font-family: 'Courier New', monospace;
-                font-size: 9px;
+                font-size: 8px;
                 line-height: 1.2;
-                width: 95mm;
+                width: 138mm; /* A5 width minus margins */
                 margin: 0 auto;
                 background: white;
                 color: black;
             }
             
-            .bill-container {
+            /* Container for each copy */
+            .copy-container {
                 width: 100%;
+                height: 95mm; /* Half of A5 height minus margins */
                 padding: 2mm;
+                border-bottom: 1px dashed #000;
+                page-break-inside: avoid;
+            }
+            
+            .copy-container:last-child {
+                border-bottom: none;
             }
             
             /* Header Section */
             .header {
                 text-align: center;
                 border-bottom: 1px solid #000;
-                padding-bottom: 2mm;
+                padding-bottom: 1mm;
                 margin-bottom: 2mm;
             }
             
             .company-name {
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
                 margin-bottom: 1mm;
             }
             
             .company-address {
-                font-size: 8px;
-                margin-bottom: 1mm;
+                font-size: 7px;
+                margin-bottom: 0.5mm;
             }
             
             .company-gst {
-                font-size: 8px;
+                font-size: 7px;
                 font-weight: bold;
             }
             
@@ -61,7 +69,7 @@ html(lang='en')
                 display: flex;
                 justify-content: space-between;
                 margin-bottom: 2mm;
-                font-size: 8px;
+                font-size: 7px;
             }
             
             .bill-info-left, .bill-info-right {
@@ -69,99 +77,94 @@ html(lang='en')
             }
             
             .bill-number {
-                font-size: 10px;
+                font-size: 9px;
                 font-weight: bold;
             }
             
             /* Customer Section */
             .customer-section {
                 margin-bottom: 2mm;
-                font-size: 8px;
+                font-size: 7px;
+                padding: 1mm;
+                border: 1px solid #ccc;
+                background: #f9f9f9;
             }
             
-            .customer-name {
-                font-weight: bold;
-            }
-
-            /* Vehicle Section */
-            .vehicle-section {
-                margin-bottom: 2mm;
-                font-size: 8px;
-            }
-            
-            /* Items Table */
+          /* Items Table - All thin borders */
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-bottom: 2mm;
-                font-size: 8px;
+                font-size: 6px;
             }
-            
+
             .items-table th {
-                background-color: #f0f0f0;
-                border: 1px solid #000;
+                background: #f0f0f0;
                 padding: 1mm;
-                text-align: center;
+                border: 0.3px solid #000;
                 font-weight: bold;
-            }
-            
-            .items-table td {
-                border: 1px solid #000;
-                padding: 0.5mm;
                 text-align: center;
             }
-            
-            .items-table td.left {
+
+            .items-table td {
+                padding: 1mm;
+                border: 0.3px solid #000;
                 text-align: left;
             }
             
-            .items-table td.right {
-                text-align: right;
-            }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
             
             /* Totals Section */
             .totals-section {
                 border-top: 1px solid #000;
                 padding-top: 1mm;
                 margin-bottom: 2mm;
+                font-size: 7px;
             }
             
             .total-row {
                 display: flex;
                 justify-content: space-between;
                 margin-bottom: 0.5mm;
-                font-size: 8px;
             }
             
             .grand-total {
-                font-weight: bold;
                 font-size: 10px;
+                font-weight: bold;
                 border-top: 1px solid #000;
                 padding-top: 1mm;
+                margin-top: 1mm;
+                display: flex;
+                justify-content: space-between;
             }
             
-            /* Footer Section */
+            /* Footer */
             .footer {
                 border-top: 1px solid #000;
-                padding-top: 2mm;
+                padding-top: 1mm;
                 text-align: center;
-                font-size: 7px;
+                font-size: 6px;
+                margin-top: 1mm;
             }
             
             .print-info {
                 display: flex;
                 justify-content: space-between;
                 margin-top: 1mm;
+                font-size: 6px;
             }
             
-            /* Utility Classes */
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .text-left { text-align: left; }
-            .bold { font-weight: bold; }
-            .small { font-size: 7px; }
+            /* Copy labels */
+            .copy-label {
+                text-align: center;
+                font-size: 8px;
+                font-weight: bold;
+                margin-bottom: 1mm;
+                color: #666;
+            }
             
-            /* Print-specific */
+            /* Print-specific settings */
             @media print {
                 body {
                     -webkit-print-color-adjust: exact;
@@ -170,7 +173,10 @@ html(lang='en')
             }
     
     body
-        .bill-container
+        //- FIRST COPY (TOP HALF)
+        .copy-container
+            .copy-label CUSTOMER COPY
+            
             //- Header Section
             .header
                 .company-name #{bill.location_name || 'Petrol Pump'}
@@ -192,93 +198,151 @@ html(lang='en')
                     div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
                     div Print ##{bill.print_count + 1}
             
-            
-            //- Customer Information
-            .customer-section
-                div
-                    span.bold Customer: 
-                    span.customer-name #{bill.customer_name || 'Cash Customer'}
-                if bill.cashier_name
-                    div
-                        span.bold Cashier: 
-                        span #{bill.cashier_name}
-
-            //- Vehicle Information (if available)
-            if bill.vehicle_info || (bill.odometer_reading && bill.odometer_reading > 0)
-                .vehicle-section
-                    if bill.vehicle_info
-                        div
-                            span.bold Vehicle: 
-                            span #{bill.vehicle_info}
-                    if bill.odometer_reading && bill.odometer_reading > 0
-                        div
-                            span.bold Odometer: 
-                            span #{parseFloat(bill.odometer_reading).toFixed(2)} km
+            //- Customer Section
+            if bill.customer_name
+                .customer-section
+                    strong Customer: #{bill.customer_name}
+                    if bill.cashier_name
+                        br
+                        | Cashier: #{bill.cashier_name}
             
             //- Items Table
-            table.items-table
-                thead
-                    tr
-                        th(style='width: 30%') Product
-                        th(style='width: 10%') Qty
-                        th(style='width: 15%') Rate
-                        th(style='width: 10%') Disc
-                        th(style='width: 15%') Subtotal
-                        th(style='width: 10%') Tax
-                        th(style='width: 15%') Total
-                
-                tbody
-                    each item in items
+            if items && items.length > 0
+                table.items-table
+                    thead
                         tr
-                            td.left 
-                                div.bold #{item.product_name}
-                                if item.notes
-                                    div.small #{item.notes}
-                            td #{parseFloat(item.qty).toFixed(2)} #{item.unit}
-                            td.right ₹#{parseFloat(item.price).toFixed(2)}
-                            td.right 
-                                if parseFloat(item.discount) > 0
-                                    | ₹#{parseFloat(item.discount).toFixed(2)}
-                                else
-                                    | -
-                            td.right ₹#{parseFloat(item.base_amount).toFixed(2)}
-                            td.right 
-                                if parseFloat(item.cgst_amount) > 0 || parseFloat(item.sgst_amount) > 0
-                                    | ₹#{(parseFloat(item.cgst_amount) + parseFloat(item.sgst_amount)).toFixed(2)}
-                                else
-                                    | -
-                            td.right ₹#{parseFloat(item.amount).toFixed(2)}
+                            th Product
+                            th Qty
+                            th Rate
+                            th Disc
+                            th Tax
+                            th Total
+                    tbody
+                        each item in items
+                            tr
+                                td= item.product_name
+                                td.text-right= parseFloat(item.qty).toFixed(2)
+                                td.text-right ₹#{parseFloat(item.price).toFixed(2)}
+                                td.text-right ₹#{parseFloat(item.discount || 0).toFixed(2)}
+                                td.text-right ₹#{parseFloat((item.cgst_amount || 0) + (item.sgst_amount || 0)).toFixed(2)}
+                                td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
             
             //- Totals Section
             .totals-section
-                .total-row
-                    span Subtotal:
-                    span ₹#{totals.subtotal.toFixed(2)}
-                
-                if totals.cgst > 0
+                if totals
+                    .total-row
+                        span Subtotal:
+                        span ₹#{totals.subtotal.toFixed(2)}
                     .total-row
                         span CGST:
                         span ₹#{totals.cgst.toFixed(2)}
-                
-                if totals.sgst > 0
                     .total-row
                         span SGST:
                         span ₹#{totals.sgst.toFixed(2)}
-                
-                if totals.tax > 0
-                    .total-row
-                        span Total Tax:
-                        span ₹#{totals.tax.toFixed(2)}
-                
-                .total-row.grand-total
-                    span.bold GRAND TOTAL:
-                    span.bold ₹#{totals.grandTotal.toFixed(2)}
+                    .grand-total
+                        span GRAND TOTAL:
+                        span ₹#{totals.grandTotal.toFixed(2)}
+                else
+                    .grand-total
+                        span GRAND TOTAL:
+                        span ₹#{parseFloat(bill.total_amount || 0).toFixed(2)}
             
             //- Footer
             .footer
                 div Thank you for your business!
-                div This is a computer-generated bill
-                
                 .print-info
-                    span Printed: #{printDate.toLocaleDateString('en-IN')} #{printDate.toLocaleTimeString('en-IN')}
+                    span Printed: #{new Date().toLocaleDateString('en-IN')} #{new Date().toLocaleTimeString('en-IN')}
                     span Print Count: #{bill.print_count + 1}
+
+        //- SECOND COPY (BOTTOM HALF) - IDENTICAL CONTENT
+        .copy-container
+            .copy-label OFFICE COPY
+            
+            //- Header Section
+            .header
+                .company-name #{bill.location_name || 'Petrol Pump'}
+                .company-address #{bill.location_address || 'Address not available'}
+                if bill.location_phone
+                    .company-address Phone: #{bill.location_phone}
+                if bill.location_gst
+                    .company-gst GST: #{bill.location_gst}
+            
+            //- Bill Information
+            .bill-info
+                .bill-info-left
+                    .bill-number Bill: #{bill.bill_no}
+                    div Type: #{bill.bill_type}
+                    div Status: #{bill.bill_status}
+                
+                .bill-info-right
+                    div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
+                    div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
+                    div Print ##{bill.print_count + 1}
+            
+            //- Customer Section
+            if bill.customer_name
+                .customer-section
+                    strong Customer: #{bill.customer_name}
+                    if bill.cashier_name
+                        br
+                        | Cashier: #{bill.cashier_name}
+            
+            //- Items Table
+            if items && items.length > 0
+                table.items-table
+                    thead
+                        tr
+                            th Product
+                            th Qty
+                            th Rate
+                            th Disc
+                            th Tax
+                            th Total
+                    tbody
+                        each item in items
+                            tr
+                                td= item.product_name
+                                td.text-right= parseFloat(item.qty).toFixed(2)
+                                td.text-right ₹#{parseFloat(item.price).toFixed(2)}
+                                td.text-right ₹#{parseFloat(item.discount || 0).toFixed(2)}
+                                td.text-right ₹#{parseFloat((item.cgst_amount || 0) + (item.sgst_amount || 0)).toFixed(2)}
+                                td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
+            
+            //- Totals Section
+            .totals-section
+                if totals
+                    .total-row
+                        span Subtotal:
+                        span ₹#{totals.subtotal.toFixed(2)}
+                    .total-row
+                        span CGST:
+                        span ₹#{totals.cgst.toFixed(2)}
+                    .total-row
+                        span SGST:
+                        span ₹#{totals.sgst.toFixed(2)}
+                    .grand-total
+                        span GRAND TOTAL:
+                        span ₹#{totals.grandTotal.toFixed(2)}
+                else
+                    .grand-total
+                        span GRAND TOTAL:
+                        span ₹#{parseFloat(bill.total_amount || 0).toFixed(2)}
+            
+            //- Footer
+            .footer
+                div Thank you for your business!
+                .print-info
+                    span Printed: #{new Date().toLocaleDateString('en-IN')} #{new Date().toLocaleTimeString('en-IN')}
+                    span Print Count: #{bill.print_count + 1}
+
+        //- Auto-print when page loads
+        script.
+            window.onload = function() {
+                setTimeout(function() {
+                    window.print();
+                }, 500);
+            };
+            
+            window.onafterprint = function() {
+                window.close();
+            };
