@@ -183,9 +183,14 @@ ajax-loading image changes - end
   background-color:lightblue
 }
 
-/* ===== NEW ELEGANT LOGIN PAGE STYLES ===== */
-.login-container {
-  background: linear-gradient(135deg, #7e8ff1 0%, #9b7bc2 100%);
+
+
+/* ===== UNIFIED LOGIN & LOCATION SELECTOR STYLES - DASHBOARD COLORS ===== */
+
+/* Update both login and location pages to use dashboard colors */
+.login-container,
+.location-container {
+  background: linear-gradient(135deg, #343a40 0%, #212529 100%);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -201,95 +206,54 @@ ajax-loading image changes - end
 .app-logo {
   width: 80px;
   height: 80px;
-  background: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
   border-radius: 25px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 15px;
   backdrop-filter: blur(15px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(244, 208, 63, 0.3);
+  box-shadow: 0 8px 32px rgba(244, 208, 63, 0.2);
+}
+
+.app-logo i {
+  color: #343a40 !important;
 }
 
 .app-title {
   color: white;
   font-weight: 700;
   font-size: 2rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .app-subtitle {
   font-size: 0.9rem;
   font-weight: 500;
   opacity: 0.9;
+  color: rgba(255, 255, 255, 0.8);
 }
 
-.login-card {
-  border-radius: 20px;
-  backdrop-filter: blur(20px);
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-}
-
-.login-container .form-control-lg {
-  padding: 14px 18px;
-  border-radius: 12px;
-  border: 2px solid #e1e5e9;
-  font-size: 16px;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.login-container .form-control-lg:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
-  background: white;
-}
-
-.login-btn {
-  background: linear-gradient(45deg, #667eea, #764ba2) !important;
-  border: none !important;
-  padding: 14px !important;
-  border-radius: 12px !important;
-  font-weight: 600 !important;
-  transition: all 0.3s ease !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.5px !important;
-}
-
-/* ===== LOCATION SELECTOR PAGE STYLES ===== */
-.location-container {
-  background: linear-gradient(135deg, #2dd4bf 0%, #06b6d4 100%);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 9999;
-}
-
+.login-card,
 .location-card {
   border-radius: 20px;
   backdrop-filter: blur(20px);
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 
+.login-card .card-header,
 .location-card .card-header {
   background: rgba(255, 255, 255, 0.1);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 20px 20px 0 0;
 }
 
+.login-container .form-control-lg,
 .location-container .form-control-lg {
-  padding: 12px 16px !important;
+  padding: 14px 18px !important;
   border-radius: 12px;
   border: 2px solid #e1e5e9;
   font-size: 16px !important;
@@ -300,6 +264,7 @@ ajax-loading image changes - end
   color: #333 !important;
 }
 
+.login-container .form-control-lg option,
 .location-container .form-control-lg option {
   background: white !important;
   color: #333 !important;
@@ -308,35 +273,82 @@ ajax-loading image changes - end
   line-height: 1.4 !important;
 }
 
+.login-container .form-control-lg:focus,
 .location-container .form-control-lg:focus {
-  border-color: #06b6d4;
-  box-shadow: 0 0 0 0.15rem rgba(6, 182, 212, 0.25);
+  border-color: #f4d03f;
+  box-shadow: 0 0 0 0.15rem rgba(244, 208, 63, 0.25);
   background: white !important;
   color: #333 !important;
 }
 
+.login-btn,
 .location-btn {
-  background: linear-gradient(45deg, #10b981, #06b6d4) !important;
+  background: linear-gradient(45deg, #f4d03f, #f7dc6f) !important;
   border: none !important;
-  padding: 12px 16px !important;
+  padding: 14px 16px !important;
   border-radius: 12px !important;
   font-weight: 600 !important;
   transition: all 0.3s ease !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #343a40 !important;
   height: 48px !important;
   line-height: 1.2 !important;
 }
 
+.login-container .btn-lg,
 .location-container .btn-lg {
-  padding: 12px 16px !important;
+  padding: 14px 16px !important;
   height: 48px !important;
   line-height: 1.2 !important;
   font-size: 14px !important;
 }
 
+.login-btn:hover,
 .location-btn:hover {
-  transform: translateY(-3px) !important;
-  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4) !important;
+  background: linear-gradient(45deg, #f1c40f, #f4d03f) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 30px rgba(244, 208, 63, 0.4) !important;
+  color: #343a40 !important;
 }
+
+/* ===== MOBILE RESPONSIVE STYLES ===== */
+@media (max-width: 768px) {
+  .login-container,
+  .location-container {
+    padding: 15px;
+  }
+  
+  .app-logo {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .app-title {
+    font-size: 1.6rem;
+  }
+  
+  .login-container .card-body,
+  .location-container .card-body {
+    padding: 1.5rem !important;
+  }
+  
+  .login-container .form-control-lg,
+  .location-container .form-control-lg {
+    font-size: 16px;
+    padding: 14px;
+    height: auto;
+  }
+  
+  .login-container .btn-lg,
+  .location-container .btn-lg {
+    padding: 14px;
+    font-size: 16px;
+  }
+}
+
+
+
 
 /* ===== MOBILE RESPONSIVE STYLES ===== */
 @media (max-width: 768px) {
