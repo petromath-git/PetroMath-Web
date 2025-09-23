@@ -58,6 +58,83 @@ module.exports = {
         });
         return result;
     },
+    findUserLocationRoleAccess: async (personId) => {
+        const result = await db.sequelize.query(`
+            SELECT 'PRIMARY' as source, location_code, role, 'Primary Location' as access_type
+            FROM m_persons 
+            WHERE Person_id = :personId
+            UNION
+            SELECT 'ADDITIONAL' as source, location_code, role, 'Additional Access' as access_type
+            FROM m_person_location 
+            WHERE person_id = :personId 
+            AND CURDATE() BETWEEN effective_start_date AND effective_end_date
+            ORDER BY source, location_code
+        `, {
+            replacements: { personId: personId },
+            type: db.sequelize.QueryTypes.SELECT
+        });
+        
+        return result;
+    },
+    // Helper method to check if user has access to multiple locations
+hasMultipleLocationAccess: async (personId) => {
+    try {
+        const locations = await module.exports.findUserLocationRoleAccess(personId);
+        return locations.length > 1;
+    } catch (error) {
+        console.error('Error in hasMultipleLocationAccess:', error);
+        return false;
+    }
+},
+
+// Get user's accessible locations with location names
+getUserAccessibleLocationsWithNames: async (personId) => {
+    try {
+        const result = await db.sequelize.query(`
+            SELECT DISTINCT
+                loc_access.source,
+                loc_access.location_code,
+                loc_access.role,
+                loc_access.access_type,
+                ml.location_name,
+                loc_access.person_name,
+                loc_access.person_id
+            FROM (
+                SELECT 
+                    'PRIMARY' as source, 
+                    location_code, 
+                    role, 
+                    'Primary Location' as access_type,
+                    Person_Name as person_name,
+                    Person_id as person_id
+                FROM m_persons 
+                WHERE Person_id = :personId
+                UNION
+                SELECT 
+                    'ADDITIONAL' as source, 
+                    pl.location_code, 
+                    pl.role, 
+                    'Additional Access' as access_type,
+                    p.Person_Name as person_name,
+                    p.Person_id as person_id
+                FROM m_person_location pl
+                JOIN m_persons p ON pl.person_id = p.Person_id
+                WHERE pl.person_id = :personId 
+                AND CURDATE() BETWEEN pl.effective_start_date AND pl.effective_end_date
+            ) loc_access
+            JOIN m_location ml ON loc_access.location_code = ml.location_code
+            ORDER BY loc_access.source, ml.location_name
+        `, {
+            replacements: { personId: personId },
+            type: db.sequelize.QueryTypes.SELECT
+        });
+        
+        return result;
+    } catch (error) {
+        console.error('Error in getUserAccessibleLocationsWithNames:', error);
+        throw error;
+    }
+},
     create: (user) => {
         return new Promise((resolve, reject) => {
             // Hash the user's password before saving

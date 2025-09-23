@@ -56,7 +56,18 @@ html
           .sidebar-user
             | Logged in as #{user.Person_Name}
             br
-            | Location: #{user.location_code}
+            // Check if user has multiple location access
+            if user.hasMultipleLocations
+              // Make location clickable with switch icon
+              a.location-switcher(href="/select-location", title="Click to switch location")
+                i.bi.bi-geo-alt.me-1
+                | Location: #{user.location_code}
+                i.bi.bi-chevron-down.ms-1(style="font-size: 0.8rem;")
+            else
+              // Regular location display for single-location users
+              span
+                i.bi.bi-geo-alt.me-1
+                | Location: #{user.location_code}
             if APP_VERSION === 'canary'
               br
               span(style='background-color: orange; color: white; font-size: 0.6rem; padding: 1px 3px; border-radius: 2px;') CANARY
