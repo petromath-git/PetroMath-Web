@@ -234,8 +234,37 @@ const bypassLoginInDev = async (req, res, next) => {
 };
 
 
+
 // Apply the bypass middleware
 app.use(bypassLoginInDev);
+
+
+const addUserLocationInfo = async (req, res, next) => {
+    if (req.user && req.user.Person_id) {
+        try {
+            const personId = req.user.Person_id;
+            
+            // Get user's accessible locations
+            const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
+            
+            // Add location info to user object
+            req.user.hasMultipleLocations = userLocations.length > 1;
+            req.user.availableLocations = userLocations;
+            
+        } catch (error) {
+            console.error('Error adding user location info:', error);
+            // Don't break the request - just set defaults
+            req.user.hasMultipleLocations = false;
+            req.user.availableLocations = [];
+        }
+    }
+    
+    next();
+};
+
+app.use(addUserLocationInfo);
+
+
 
 // Route logging middleware - tracks user navigation patterns for analytics
 app.use(routeLogger({
@@ -1391,51 +1420,96 @@ app.get('/enable-supplier', [isLoginEnsured, security.isAdmin()], function (req,
 app.get('/api/vehicles/:creditListId', HomeController.getVehiclesByCreditId);
 
 
+
+
 app.get('/select-location', isLoginEnsured, async function (req, res) {
-    
-    
-    
-    // Ensure only superusers can access this route
-    if (req.user.Role !== 'SuperUser') {
-        return res.redirect('/');
-    }
-
-    
-
     try {
-        // Fetch locations using the LocationDao
-        const availableLocations = await LocationDao.findAllLocations();
+        const personId = req.user.Person_id;
+        
+        // SuperUsers always get access to all locations (backward compatibility)
+        if (req.user.Role === 'SuperUser') {
+            const availableLocations = await LocationDao.findAllLocations();
+            return res.render('select-location', {
+                title: 'Select Location',
+                locations: availableLocations,
+                selectedLocation: req.user.location_code,
+                isSuperUser: true
+            });
+        }
+        
+        // For non-SuperUsers, check their accessible locations
+        const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
+        
+        // If user has only one location, redirect to home
+        if (userLocations.length <= 1) {
+            return res.redirect('/home');
+        }
+        
+        // Regular users see only their accessible locations
+        const availableLocations = userLocations.map(loc => ({
+            location_code: loc.location_code,
+            location_name: loc.location_name,
+            role: loc.role,
+            access_type: loc.access_type,
+            source: loc.source
+        }));
 
         // Render the select-location view with the available locations
         res.render('select-location', {
             title: 'Select Location',
             locations: availableLocations,
-            selectedLocation: req.user.location_code
+            selectedLocation: req.user.location_code,
+            userLocations: userLocations,
+            isSuperUser: false
         });
     } catch (error) {
-        console.error("Error fetching locations:", error);
+        console.error("Error fetching user locations:", error);
         res.status(500).send("An error occurred while fetching locations.");
     }
 });
 
+app.post('/select-location', isLoginEnsured, async function (req, res) {
+    try {
+        const personId = req.user.Person_id;
+        const selectedLocationCode = req.body.location;
+        
+        // Verify user has access to the selected location
+        const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
+        const hasAccess = userLocations.some(loc => loc.location_code === selectedLocationCode) || 
+                         req.user.Role === 'SuperUser';
+        
+        if (!hasAccess) {
+            return res.status(403).send("You don't have access to this location.");
+        }
+        
+        // Find the role for this location
+        let newRole = req.user.Role; // Default to current role
+        if (req.user.Role !== 'SuperUser') {
+            const locationAccess = userLocations.find(loc => loc.location_code === selectedLocationCode);
+            if (locationAccess) {
+                newRole = locationAccess.role;
+            }
+        }
+        
+        // Update user session with new location and role
+        req.user.location_code = selectedLocationCode;
+        req.user.Role = newRole;
+        req.session.selectedLocation = selectedLocationCode;
+        req.session.selectedRole = newRole;
 
-app.post('/select-location', isLoginEnsured, function (req, res) {
-    // Ensure only superusers can access this route
-    if (req.user.Role !== 'SuperUser') {
-        return res.redirect('/');
+        // Clear any cached menu data so it gets refreshed for new location/role
+        if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
+            req.session.menuCacheCleared = true; // Signal to bypass to refresh menus
+        }
+
+        console.log(`User ${req.user.User_Name} switched to location ${selectedLocationCode} with role ${newRole}`);
+
+        // Redirect to home or dashboard after selecting the location
+        res.redirect('/home');
+    } catch (error) {
+        console.error("Error processing location selection:", error);
+        res.status(500).send("An error occurred while processing your request.");
     }
-    // Store the selected location in the session
-    req.user.location_code = req.body.location;
-    req.session.selectedLocation = req.body.location; // Add this line
-
-    // Clear any cached menu data so it gets refreshed for new location
-    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
-        req.session.menuCacheCleared = true; // Signal to bypass to refresh menus
-    }
-
-
-    // Redirect to home or dashboard after selecting the location
-    res.redirect('/home');
 });
 
 // error handler - start.

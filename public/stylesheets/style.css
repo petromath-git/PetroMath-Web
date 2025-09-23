@@ -2385,3 +2385,25 @@ body {
 #deadlineWarning-table tbody tr:hover {
   background: #f8f9fa; /* Subtle hover */
 }
+
+
+/* Location Switcher Styles */
+.location-switcher {
+    color: #fff;
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.location-switcher:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.1);
+    text-decoration: none;
+}
+
+.location-switcher:active {
+    background-color: rgba(255, 255, 255, 0.2);
+}
