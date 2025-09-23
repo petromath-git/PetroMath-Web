@@ -18,6 +18,7 @@ const { getPDF } = require('./utils/app-pdf-generator');
 const { getBrowser } = require('./utils/browserHelper');
 const MenuAccessDao = require('./dao/menu-access-dao'); 
 const bcrypt = require('bcrypt');
+const { routeLogger } = require('./utils/route-logger');
 
 
 // Passport - configuration - start....
@@ -167,6 +168,7 @@ const systemHealthRoutes = require('./routes/system-health-routes');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
 const tankRoutes = require('./routes/tank-routes');
 const billsRoutes = require('./routes/bills-routes');
+const usageDashboardRoutes = require('./routes/usage-dashboard-routes');
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -187,6 +189,10 @@ app.use(bodyParser.json());
 app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+
+
+
 
 
 
@@ -231,7 +237,23 @@ const bypassLoginInDev = async (req, res, next) => {
 // Apply the bypass middleware
 app.use(bypassLoginInDev);
 
-
+// Route logging middleware - tracks user navigation patterns for analytics
+app.use(routeLogger({
+    enabled: process.env.NODE_ENV !== 'test', // Disable in test environment
+    excludeRoutes: [
+        '/api/',           // Skip API calls
+        '/stylesheets/',   // Skip CSS files  
+        '/javascripts/',   // Skip JS files
+        '/images/',        // Skip images
+        '.css',           
+        '.js',
+        '.png',
+        '.jpg',
+        '.ico',
+        '/health',        // Skip health checks
+        '/ping'           // Skip ping requests
+    ]
+}));
 
 
 
@@ -246,6 +268,8 @@ app.use('/system-health', systemHealthRoutes);
 app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
 app.use('/tank-master', tankRoutes);
 app.use('/bills', billsRoutes);
+app.use('/usage-dashboard', usageDashboardRoutes);
+
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
