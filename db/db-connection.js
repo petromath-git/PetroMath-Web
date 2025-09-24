@@ -67,6 +67,10 @@ db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 db.adjustments = require("./adjustments")(sequelize, Sequelize);
 db.dev_tracker = require("./dev-tracker")(sequelize, Sequelize);
 db.dev_tracker_tasks = require("./dev-tracker-tasks")(sequelize, Sequelize);
+db.menu_items = require("./menu-items")(sequelize, Sequelize);
+db.menu_groups = require("./menu-groups")(sequelize, Sequelize);
+db.menu_access_global = require("./menu-access-global")(sequelize, Sequelize);
+db.menu_access_override = require("./menu-access-override")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -130,6 +134,8 @@ db.tank.belongsTo(db.tank_dipchart_header, {foreignKey: 'dipchartid'});
 
 db.txn_credits.belongsTo(db.credit, {foreignKey: 'creditlist_id', sourceKey: 'creditlist_id'});
 db.credit.hasMany(db.txn_credits, {foreignKey: 'creditlist_id', targetKey: 'creditlist_id'});
+
+
 
 // Assuming you have db.t_lubes_inv_lines and db.product or db.m_product
 db.t_lubes_inv_lines.belongsTo(db.product, {
@@ -240,5 +246,9 @@ db.dev_tracker.belongsTo(db.location, {
     foreignKey: 'location_code', 
     targetKey: 'location_code'
 });
+
+
+db.menu_groups.hasMany(db.menu_items, {foreignKey: 'group_code', sourceKey: 'group_code'});
+db.menu_items.belongsTo(db.menu_groups, {foreignKey: 'group_code', targetKey: 'group_code'});
 
 module.exports = db;

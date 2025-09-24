@@ -1,0 +1,237 @@
+extends layout
+
+block content
+  .container-fluid.mt-3
+    .row
+      .col-12
+        .card
+          .card-header.d-flex.justify-content-between.align-items-center
+            h4.mb-0
+              i.bi.bi-gear.me-2
+              | Menu Management System
+            button.btn.btn-success.btn-sm#refresh-cache-btn
+              i.bi.bi-arrow-clockwise.me-1
+              | Refresh Cache
+
+          .card-body
+            // Alert for messages
+            .alert.alert-info.d-none#alert-message
+
+            // Tab Navigation
+            ul.nav.nav-tabs.mb-3#menu-tabs(role="tablist")
+              li.nav-item(role="presentation")
+                button.nav-link.active#menu-items-tab(data-bs-toggle="tab" data-bs-target="#menu-items-pane" type="button" role="tab") 
+                  i.bi.bi-list-ul.me-1
+                  | Menu Items
+              li.nav-item(role="presentation")
+                button.nav-link#menu-groups-tab(data-bs-toggle="tab" data-bs-target="#menu-groups-pane" type="button" role="tab")
+                  i.bi.bi-collection.me-1
+                  | Menu Groups
+              li.nav-item(role="presentation")
+                button.nav-link#menu-access-tab(data-bs-toggle="tab" data-bs-target="#menu-access-pane" type="button" role="tab")
+                  i.bi.bi-shield-lock.me-1
+                  | Access Control
+              li.nav-item(role="presentation")
+                button.nav-link#cache-tab(data-bs-toggle="tab" data-bs-target="#cache-pane" type="button" role="tab")
+                  i.bi.bi-hdd-stack.me-1
+                  | Cache Status
+
+            // Tab Content
+            .tab-content#menu-tab-content
+
+              // ===============================
+              // MENU ITEMS TAB
+              // ===============================
+              .tab-pane.fade.show.active#menu-items-pane(role="tabpanel")
+                .row.mb-3
+                  .col-md-8
+                    h5.mb-0 Manage Menu Items
+                  .col-md-4.text-end
+                    button.btn.btn-primary.btn-sm#add-menu-item-btn
+                      i.bi.bi-plus-circle.me-1
+                      | Add New Item
+
+                // Menu Items Table
+                .table-responsive
+                  table.table.table-striped.table-hover#menu-items-table
+                    thead.table-dark
+                      tr
+                        th Menu Code
+                        th Menu Name
+                        th URL Path
+                        th Group
+                        th Sequence
+                        th.text-center Actions
+                    tbody
+                      // Dynamic content loaded via JavaScript
+
+              // ===============================
+              // MENU GROUPS TAB
+              // ===============================
+              .tab-pane.fade#menu-groups-pane(role="tabpanel")
+                .row.mb-3
+                  .col-md-8
+                    h5.mb-0 Manage Menu Groups
+                  .col-md-4.text-end
+                    button.btn.btn-primary.btn-sm#add-menu-group-btn
+                      i.bi.bi-plus-circle.me-1
+                      | Add New Group
+
+                // Menu Groups Table
+                .table-responsive
+                  table.table.table-striped.table-hover#menu-groups-table
+                    thead.table-dark
+                      tr
+                        th Group Code
+                        th Group Name
+                        th Sequence
+                        th Icon
+                        th.text-center Actions
+                    tbody
+                      // Dynamic content loaded via JavaScript
+
+              // ===============================
+              // MENU ACCESS TAB
+              // ===============================
+              .tab-pane.fade#menu-access-pane(role="tabpanel")
+                .row.mb-3
+                  .col-12
+                    h5.mb-3 Menu Access Control Matrix
+                    p.text-muted Configure which roles can access which menu items. Changes apply immediately.
+
+                // Access Control Matrix
+                .table-responsive
+                  table.table.table-sm.table-bordered#menu-access-table
+                    thead.table-dark
+                      tr
+                        th.sticky-left Menu Item
+                        // Role columns will be added dynamically
+                    tbody
+                      // Dynamic content loaded via JavaScript
+
+              // ===============================
+              // CACHE STATUS TAB
+              // ===============================
+              .tab-pane.fade#cache-pane(role="tabpanel")
+                .row
+                  .col-md-6
+                    .card.h-100
+                      .card-header
+                        h6.mb-0
+                          i.bi.bi-info-circle.me-1
+                          | Cache Information
+                      .card-body
+                        #cache-info
+                          p.text-muted Loading cache information...
+
+                  .col-md-6
+                    .card.h-100
+                      .card-header
+                        h6.mb-0
+                          i.bi.bi-tools.me-1
+                          | Cache Actions
+                      .card-body
+                        p.mb-3 Use this to refresh the menu cache after making changes to menu items or permissions.
+                        button.btn.btn-warning.w-100#refresh-cache-btn-tab
+                          i.bi.bi-arrow-clockwise.me-1
+                          | Refresh Menu Cache Now
+
+  // ===============================
+  // MODAL: Add/Edit Menu Item
+  // ===============================
+  .modal.fade#menu-item-modal(tabindex="-1")
+    .modal-dialog.modal-lg
+      .modal-content
+        .modal-header
+          h5.modal-title#menu-item-modal-title Add Menu Item
+          button.button(type="button" class="btn-close" data-bs-dismiss="modal")
+        .modal-body
+          form#menu-item-form
+            .row
+              .col-md-6
+                .mb-3
+                  label.form-label Menu Code *
+                  input.form-control#menu-code(type="text" required maxlength="100")
+                  .form-text Unique identifier for this menu item
+              .col-md-6
+                .mb-3
+                  label.form-label Menu Name *
+                  input.form-control#menu-name(type="text" required maxlength="100")
+                  .form-text Display name shown in the menu
+            .row
+              .col-md-6
+                .mb-3
+                  label.form-label URL Path
+                  input.form-control#url-path(type="text" maxlength="255")
+                  .form-text e.g., /dashboard or /reports/sales
+              .col-md-6
+                .mb-3
+                  label.form-label Parent Code
+                  select.form-select#parent-code
+                    option(value="") None (Top Level)
+                    // Options loaded dynamically
+            .row
+              .col-md-4
+                .mb-3
+                  label.form-label Group Code *
+                  select.form-select#group-code(required)
+                    option(value="") Select Group
+                    // Options loaded dynamically
+              .col-md-4
+                .mb-3
+                  label.form-label Sequence
+                  input.form-control#sequence(type="number" value="1")
+                  .form-text Display order
+              .col-md-4
+                .mb-3
+                  label.form-label Status
+                  select.form-select#status
+                    option(value="active") Active
+                    option(value="inactive") Inactive
+
+        .modal-footer
+          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button.btn.btn-primary#save-menu-item-btn Save Menu Item
+
+  // ===============================
+  // MODAL: Add/Edit Menu Group
+  // ===============================
+  .modal.fade#menu-group-modal(tabindex="-1")
+    .modal-dialog
+      .modal-content
+        .modal-header
+          h5.modal-title#menu-group-modal-title Add Menu Group
+          button.button(type="button" class="btn-close" data-bs-dismiss="modal")
+        .modal-body
+          form#menu-group-form
+            .mb-3
+              label.form-label Group Code *
+              input.form-control#group-code-input(type="text" required maxlength="50")
+              .form-text Unique identifier (e.g., DAILY_OPS, REPORTS)
+            .mb-3
+              label.form-label Group Name *
+              input.form-control#group-name-input(type="text" required maxlength="100")
+              .form-text Display name (e.g., Daily Operations, Reports)
+            .row
+              .col-md-6
+                .mb-3
+                  label.form-label Sequence *
+                  input.form-control#group-sequence-input(type="number" required value="1")
+                  .form-text Display order
+              .col-md-6
+                .mb-3
+                  label.form-label Icon
+                  input.form-control#group-icon-input(type="text" maxlength="50")
+                  .form-text Bootstrap icon class (e.g., bi-clock)
+
+        .modal-footer
+          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button.btn.btn-primary#save-menu-group-btn Save Menu Group
+          
+  script.
+        const userLocationCode = '#{user.location_code}';
+        const userName = '#{user.User_Name}';
+            
+  script(src="/javascripts/menu-management.js")
+
+   
