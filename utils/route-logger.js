@@ -10,7 +10,8 @@ const EXCLUDED_ROUTES = [
     '/api/metrics',
     '/api/system-health',
     '/ping',
-    '/health'
+    '/health',
+    '/usage-dashboard'
 ];
 
 // Pages that should be logged with their friendly names
