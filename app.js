@@ -169,6 +169,7 @@ const transactionCorrectionsRoutes = require('./routes/transaction-corrections-r
 const tankRoutes = require('./routes/tank-routes');
 const billsRoutes = require('./routes/bills-routes');
 const usageDashboardRoutes = require('./routes/usage-dashboard-routes');
+const menuManagementRoutes = require('./routes/menu-management-routes');
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -244,12 +245,24 @@ const addUserLocationInfo = async (req, res, next) => {
         try {
             const personId = req.user.Person_id;
             
-            // Get user's accessible locations
-            const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
-            
-            // Add location info to user object
-            req.user.hasMultipleLocations = userLocations.length > 1;
-            req.user.availableLocations = userLocations;
+            // SuperUsers always get the location switcher (can access all locations)
+            if (req.user.Role === 'SuperUser') {
+                req.user.hasMultipleLocations = true;
+                // Get all locations for SuperUsers
+                const allLocations = await LocationDao.findAllLocations();
+                req.user.availableLocations = allLocations.map(loc => ({
+                    location_code: loc.location_code,
+                    location_name: loc.location_name,
+                    source: 'SUPERUSER',
+                    role: 'SuperUser'
+                }));
+            } else {
+                // Regular users: check their actual location access
+                const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
+                
+                req.user.hasMultipleLocations = userLocations.length > 1;
+                req.user.availableLocations = userLocations;
+            }
             
         } catch (error) {
             console.error('Error adding user location info:', error);
@@ -298,6 +311,7 @@ app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
 app.use('/tank-master', tankRoutes);
 app.use('/bills', billsRoutes);
 app.use('/usage-dashboard', usageDashboardRoutes);
+app.use('/menu-management', menuManagementRoutes);
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
