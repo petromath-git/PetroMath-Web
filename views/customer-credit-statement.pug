@@ -1,0 +1,605 @@
+extends layout-customer
+
+block content
+    .container-fluid.credit-statement-dashboard
+        // Mobile-friendly header
+        .row
+            .col-12
+                .dashboard-header.mb-4
+                    h4.text-center.mb-2
+                        i.bi.bi-credit-card.me-2
+                        | Credit Statement
+                    .text-center
+                        small Welcome back, #{companyName}
+
+        // Account Balance Card (Prominent Display)
+        .row.mb-4
+            .col-12
+                .card.balance-card.shadow-sm
+                    .card-body.text-center
+                        .balance-icon.mb-2
+                            i.bi.bi-wallet2.text-white
+                        h6.text-white.mb-1.opacity-75 Current Balance
+                        h3#currentBalance.balance-amount.text-white.mb-1 ₹0.00
+                        small.text-white.opacity-75 Last updated: 
+                            span#balanceDate Today
+
+        // Date Filter Section (Mobile Optimized)
+        .row.mb-4
+            .col-12
+                .card.filter-card
+                    .card-body.p-3
+                        .date-filter-mobile
+                            .row
+                                .col-6
+                                    label.form-label.fw-bold.small From Date
+                                    input#fromDate.form-control(type='date' value=defaultFromDate)
+                                .col-6
+                                    label.form-label.fw-bold.small To Date
+                                    input#toDate.form-control(type='date' value=defaultToDate)
+                            .row.mt-3
+                                .col-12
+                                    button#filterBtn.btn.btn-primary.w-100
+                                        i.bi.bi-search.me-1
+                                        | View Statement
+
+        // Summary Cards Row
+        .row.mb-4
+            .col-4
+                .card.summary-card.h-100
+                    .card-body.text-center.p-2
+                        .summary-icon.mb-2
+                            i.bi.bi-arrow-down-circle.text-success
+                        .summary-content
+                            small.text-muted.d-block.mb-1 Receipts
+                            h6#totalCredits.mb-0.fw-bold ₹0.00
+            .col-4
+                .card.summary-card.h-100
+                    .card-body.text-center.p-2
+                        .summary-icon.mb-2
+                            i.bi.bi-arrow-up-circle.text-danger
+                        .summary-content
+                            small.text-muted.d-block.mb-1 Purchases
+                            h6#totalDebits.mb-0.fw-bold ₹0.00
+            .col-4
+                .card.summary-card.h-100
+                    .card-body.text-center.p-2
+                        .summary-icon.mb-2
+                            i.bi.bi-list-check.text-info
+                        .summary-content
+                            small.text-muted.d-block.mb-1 Transactions
+                            h6#transactionCount.mb-0.fw-bold 0
+
+        // Recent Transactions Section
+        .row
+            .col-12
+                .card.transactions-card
+                    .card-header.d-flex.justify-content-between.align-items-center.py-3
+                        h6.mb-0.fw-bold
+                            i.bi.bi-clock-history.me-1
+                            | Transaction History
+                        .dropdown
+                            button.btn.btn-sm.btn-outline-primary.dropdown-toggle(type='button' data-bs-toggle='dropdown' aria-expanded='false')
+                                i.bi.bi-three-dots
+                            ul.dropdown-menu
+                                li
+                                    a.dropdown-item(href='javascript:void(0)' onclick='downloadStatement()')
+                                        i.bi.bi-download.me-1
+                                        | Download PDF
+                                li
+                                    a.dropdown-item(href='javascript:void(0)' onclick='refreshData()')
+                                        i.bi.bi-arrow-clockwise.me-1
+                                        | Refresh
+
+                    .card-body.p-0
+                        #transactionsList
+                            // Transactions will be loaded here via AJAX
+
+        // Loading Overlay
+        .loading-overlay#loadingOverlay(style='display: none;')
+            .loading-content
+                .spinner-border.text-primary.mb-3
+                .text-primary Loading your statement...
+
+        // Empty State
+        .empty-state#emptyState(style='display: none;')
+            .text-center.p-5
+                i.bi.bi-inbox.text-muted(style='font-size: 3rem;')
+                h5.text-muted.mt-3 No Transactions Found
+                p.text-muted.mb-0 Try adjusting your date range or check back later.
+
+    // Mobile-optimized CSS with Yellow/Black Theme
+    style.
+        .credit-statement-dashboard {
+            padding: 10px;
+            min-height: 100vh;
+            background: #f8f9fa;
+        }
+
+        .dashboard-header {
+            background: linear-gradient(135deg, #ffc107 0%, #ff8f00 100%);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(255, 193, 7, 0.3);
+            color: #212529 !important;
+        }
+
+        .dashboard-header h4, .dashboard-header small {
+            color: #212529 !important;
+        }
+
+        .balance-card {
+            background: linear-gradient(135deg, #212529 0%, #495057 100%);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(33, 37, 41, 0.3);
+        }
+
+        .balance-icon i {
+            font-size: 2.5rem;
+            opacity: 0.9;
+        }
+
+        .balance-amount {
+            font-size: 2.5rem !important;
+            font-weight: 700;
+        }
+
+        .filter-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .date-filter-mobile .form-control {
+            font-size: 16px !important;
+            padding: 14px 12px !important;
+            border-radius: 10px !important;
+            border: 2px solid #e1e5e9;
+            height: 50px !important;
+            transition: all 0.3s ease;
+        }
+
+        .date-filter-mobile .form-control:focus {
+            border-color: #ffc107;
+            box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.15);
+            transform: scale(1.02);
+        }
+
+        .date-filter-mobile .btn-primary {
+            background: linear-gradient(45deg, #ffc107, #ff8f00) !important;
+            border: none;
+            padding: 16px !important;
+            font-size: 16px !important;
+            border-radius: 10px !important;
+            height: 50px !important;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            color: #212529 !important;
+        }
+
+        .date-filter-mobile .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 193, 7, 0.4);
+        }
+
+       .summary-card {
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+            min-height: 110px;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+
+        .summary-card .card-body {
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .summary-icon i {
+            font-size: 1.3rem;
+        }
+
+        .summary-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .summary-card h6 {
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.1;
+            word-break: break-word;
+        }
+
+        .summary-card small {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .transactions-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
+
+        .transactions-card .card-header {
+            background: white;
+            border-bottom: 1px solid #f0f0f0;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .btn-outline-primary {
+            color: #ffc107;
+            border-color: #ffc107;
+        }
+
+        .btn-outline-primary:hover {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
+        }
+
+        .transaction-item {
+            border-bottom: 1px solid #f5f5f5;
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .transaction-item:hover {
+            background: #f8f9fa;
+        }
+
+        .transaction-item:last-child {
+            border-bottom: none;
+            border-radius: 0 0 15px 15px;
+        }
+
+        .transaction-date {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .transaction-desc {
+            font-size: 15px;
+            font-weight: 600;
+            color: #212529;
+            margin: 3px 0;
+        }
+
+        .transaction-product {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .transaction-amount {
+            font-size: 17px;
+            font-weight: 700;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        .amount-debit {
+            color: #dc3545;
+        }
+
+        .amount-credit {
+            color: #198754;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(3px);
+        }
+
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+
+        .loading-content .text-primary {
+            color: #ffc107 !important;
+        }
+
+        .loading-content .spinner-border.text-primary {
+            border-color: rgba(255, 193, 7, 0.25);
+            border-top-color: #ffc107;
+        }
+
+        .empty-state {
+            background: white;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        /* Mobile Specific Optimizations */
+        @media (max-width: 768px) {
+            .credit-statement-dashboard {
+                padding: 8px;
+            }
+
+            .balance-amount {
+                font-size: 2rem !important;
+            }
+            
+            .dashboard-header {
+                padding: 20px;
+            }
+            
+            .dashboard-header h4 {
+                font-size: 1.4rem;
+            }
+            
+            .summary-card {
+                min-height: 95px;
+            }
+            
+            .summary-card h6 {
+                font-size: 13px;
+            }
+            
+            .summary-card small {
+                font-size: 10px;
+            }
+            
+            .transaction-item {
+                padding: 15px;
+            }
+
+            .transaction-desc {
+                font-size: 14px;
+            }
+
+            .transaction-amount {
+                font-size: 15px;
+                min-width: 70px;
+            }
+
+            .balance-icon i {
+                font-size: 2rem;
+            }
+        }
+
+        /* Very small screens */
+        @media (max-width: 480px) {
+            .balance-amount {
+                font-size: 1.8rem !important;
+            }
+
+            .summary-card .card-body {
+                padding: 12px 6px;
+            }
+
+            .summary-card h6 {
+                font-size: 12px;
+            }
+        }
+
+    // JavaScript for dashboard functionality
+    script.
+        let currentData = null;
+
+        $(document).ready(function() {
+            // Load initial data on page load
+            refreshData();
+
+            // Filter button click
+            $('#filterBtn').click(function() {
+                refreshData();
+            });
+
+            // Add loading animation to button
+            $('#filterBtn').click(function() {
+                const btn = $(this);
+                const originalText = btn.html();
+                btn.html('<i class="bi bi-hourglass-split me-1"></i>Loading...').prop('disabled', true);
+                
+                setTimeout(() => {
+                    btn.html(originalText).prop('disabled', false);
+                }, 2000);
+            });
+        });
+
+        function refreshData() {
+            const fromDate = $('#fromDate').val();
+            const toDate = $('#toDate').val();
+
+            if (!fromDate || !toDate) {
+                showNotification('Please select both from and to dates', 'warning');
+                return;
+            }
+
+            if (new Date(fromDate) > new Date(toDate)) {
+                showNotification('From date cannot be later than to date', 'warning');
+                return;
+            }
+
+            showLoading();
+            hideEmptyState();
+
+            // Fetch credit statement data
+            $.ajax({
+                url: '/customer/api/credit-statement/data',
+                method: 'GET',
+                data: { fromDate, toDate },
+                success: function(response) {
+                    if (response.success) {
+                        currentData = response.data;
+                        updateDashboard(response.data);
+                    } else {
+                        showNotification('Failed to load data: ' + response.error, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Ajax error:', xhr.responseText);
+                    showNotification('Error loading data. Please try again.', 'error');
+                },
+                complete: function() {
+                    hideLoading();
+                }
+            });
+
+            // Also fetch current balance
+            fetchCurrentBalance();
+        }
+
+        function fetchCurrentBalance() {
+            $.ajax({
+                url: '/customer/api/credit-statement/balance',
+                method: 'GET',
+                success: function(response) {
+                    if (response.success) {
+                        $('#currentBalance').text('₹' + formatAmount(response.data.currentBalance));
+                        $('#balanceDate').text(formatDate(response.data.asOfDate));
+                    }
+                },
+                error: function() {
+                    console.log('Could not fetch current balance');
+                }
+            });
+        }
+
+        function updateDashboard(data) {
+            // Update summary cards
+            $('#totalCredits').text('₹' + formatAmount(data.totalCredits));
+            $('#totalDebits').text('₹' + formatAmount(data.totalDebits));
+            $('#transactionCount').text(data.transactionCount);
+
+            // Update transactions list
+            updateTransactionsList(data.transactions);
+        }
+
+        function updateTransactionsList(transactions) {
+            const container = $('#transactionsList');
+            container.empty();
+
+            if (transactions.length === 0) {
+                showEmptyState();
+                return;
+            }
+
+            transactions.forEach(function(txn) {
+                const item = $(`
+                    <div class="transaction-item">
+                        <div class="transaction-details">
+                            <div class="transaction-date">${formatDate(txn.date)}</div>
+                            <div class="transaction-desc">${escapeHtml(txn.description)}</div>
+                            ${txn.product ? `<div class="transaction-product">${escapeHtml(txn.product)} ${txn.quantity > 0 ? '• ' + formatQuantity(txn.quantity) + 'L' : ''}</div>` : ''}
+                        </div>
+                        <div class="transaction-amount ${txn.amount < 0 ? 'amount-credit' : 'amount-debit'}">
+                            ${txn.amount < 0 ? '-' : '+'}₹${formatAmount(Math.abs(txn.amount))}
+                        </div>
+                    </div>
+                `);
+                container.append(item);
+            });
+        }
+
+        // Helper functions
+        function formatAmount(amount) {
+            return parseFloat(amount || 0).toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function formatQuantity(qty) {
+            return parseFloat(qty || 0).toFixed(2);
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showLoading() {
+            $('#loadingOverlay').fadeIn(300);
+        }
+
+        function hideLoading() {
+            $('#loadingOverlay').fadeOut(300);
+        }
+
+        function showEmptyState() {
+            $('#emptyState').slideDown(300);
+        }
+
+        function hideEmptyState() {
+            $('#emptyState').hide();
+        }
+
+        function showNotification(message, type = 'info') {
+            // Simple alert for now - you can replace with toast notifications
+            const alertClass = type === 'error' ? 'danger' : type;
+            const alertHtml = `
+                <div class="alert alert-${alertClass} alert-dismissible fade show position-fixed" 
+                     style="top: 20px; right: 20px; z-index: 10000; min-width: 300px;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            $('body').append(alertHtml);
+            
+            // Auto dismiss after 5 seconds
+            setTimeout(() => {
+                $('.alert').alert('close');
+            }, 5000);
+        }
+
+        function downloadStatement() {
+            const fromDate = $('#fromDate').val();
+            const toDate = $('#toDate').val();
+            
+            if (!fromDate || !toDate) {
+                showNotification('Please select date range first', 'warning');
+                return;
+            }
+            
+            showNotification('Preparing your statement for download...', 'info');
+            
+            // Create form for PDF download
+            const form = $('<form method="post" action="/generate-pdf" target="_blank">');
+            form.append('<input type="hidden" name="reportType" value="CreditDetails">');
+            form.append('<input type="hidden" name="fromClosingDate" value="' + fromDate + '">');
+            form.append('<input type="hidden" name="toClosingDate" value="' + toDate + '">');
+            form.append('<input type="hidden" name="caller" value="pdf">');
+            $('body').append(form);
+            form.submit();
+            form.remove();
+        }

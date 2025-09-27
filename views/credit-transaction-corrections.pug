@@ -211,7 +211,7 @@ block content
 
             // Check if user can edit credit party
             function canEditCreditParty() {
-                return '#{userRole}' === 'SuperUser';
+                return '#{userRole}' === 'SuperUser' || '#{userRole}' === 'Admin';
             }
 
             // Show loading state

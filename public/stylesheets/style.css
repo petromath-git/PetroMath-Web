@@ -790,8 +790,309 @@ ajax-loading image changes - end
   }
 }
 
+/* ===== MILEAGE DASHBOARD COMPLETE STYLES ===== */
 
-/* ===== MILEAGE DASHBOARD MOBILE IMPROVEMENTS ===== */
+/* Base dashboard card styles */
+.dashboard-card {
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+  margin-bottom: 20px;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Metric cards with login theme */
+.metric-card {
+  background: linear-gradient(135deg, #343a40 0%, #212529 100%);
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: "";
+  display: block;
+  height: 6px;
+  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
+}
+
+.metric-card h4 { color: white; }
+.metric-card p { color: rgba(255, 255, 255, 0.8); }
+.metric-card i { color: #f4d03f; }
+
+/* Vehicle performance cards - updated styling */
+.vehicle-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: none;
+  border-left: 4px solid #28a745; /* Default good performance */
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: all 0.3s ease;
+  overflow: hidden;
+  position: relative;
+}
+
+.vehicle-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.vehicle-card.poor-performance {
+  border-left: 4px solid #dc3545;
+}
+
+.vehicle-card.average-performance {
+  border-left: 4px solid #ffc107;
+}
+
+/* Add subtle top accent strip like metric cards */
+.vehicle-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(135deg, rgba(244, 208, 63, 0.3) 0%, rgba(247, 220, 111, 0.3) 100%);
+}
+
+/* Vehicle card header styling */
+.vehicle-card .card-body h6 {
+  color: #343a40;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.vehicle-card .card-body h6 i {
+  color: #f4d03f;
+  margin-right: 8px;
+}
+
+/* Vehicle type subtitle */
+.vehicle-card .text-muted {
+  color: #6c757d !important;
+  font-size: 12px;
+  margin-bottom: 15px;
+}
+
+/* Vehicle card metrics styling */
+.vehicle-card .row {
+  margin: 8px 0;
+}
+
+.vehicle-card .col-6 small {
+  color: #6c757d;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.vehicle-card .col-6 h5,
+.vehicle-card .col-6 h6 {
+  color: #343a40;
+  font-weight: 700;
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+/* Chart container */
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
+
+/* Mileage performance classes */
+.mileage-good { 
+  color: #28a745 !important; 
+  font-weight: bold; 
+}
+
+.mileage-average { 
+  color: #ffc107 !important; 
+  font-weight: bold; 
+}
+
+.mileage-poor { 
+  color: #dc3545 !important; 
+  font-weight: bold; 
+}
+
+/* Fuel entry form */
+.fuel-entry-form {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+/* Vehicle header for grouped reports */
+.vehicle-header {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.vehicle-header:hover {
+  background-color: #f8f9fa;
+  transform: translateY(-1px);
+}
+
+/* Vehicle summary cards */
+.vehicle-summary {
+  background: #ffffff;
+  color: #333;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.vehicle-summary.poor-performance {
+  background: #ffffff;
+  border-left: 4px solid #dc3545;
+  color: #333;
+}
+
+.vehicle-summary.average-performance {
+  background: #ffffff;
+  border-left: 4px solid #ffc107;
+  color: #333;
+}
+
+.vehicle-summary:not(.poor-performance):not(.average-performance) {
+  border-left: 4px solid #28a745;
+}
+
+/* Number plate styling */
+.number-plate {
+  background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+  color: #000;
+  border: 3px solid #333;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-weight: 900;
+  font-size: 18px;
+  text-align: center;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.8);
+  display: inline-block;
+  min-width: 160px;
+  position: relative;
+  letter-spacing: 1px;
+}
+
+.number-plate::before {
+  content: "IND";
+  position: absolute;
+  top: -2px;
+  left: 8px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #000;
+  background: #ffffff;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+.number-plate::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: 8px;
+  width: 20px;
+  height: 12px;
+  background: linear-gradient(to right, #ff9933 0%, #ff9933 33%, #ffffff 33%, #ffffff 66%, #138808 66%, #138808 100%);
+  border: 1px solid #333;
+  border-radius: 2px;
+}
+
+/* Transaction details */
+.transaction-details {
+  background: #f8f9fa;
+  border-radius: 0 0 8px 8px;
+  border: 1px solid #dee2e6;
+  border-top: none;
+}
+
+/* Collapse icon animation */
+.collapse-icon {
+  transition: transform 0.3s ease;
+}
+
+.collapsed .collapse-icon {
+  transform: rotate(-90deg);
+}
+
+/* Vehicle summary text colors */
+.vehicle-summary small {
+  color: #6c757d !important;
+}
+
+.vehicle-summary .h6 {
+  color: #333 !important;
+}
+
+/* Badge styles */
+.badge-sm {
+  font-size: 0.75em;
+  padding: 0.25em 0.5em;
+}
+
+.vehicle-badge {
+  background: linear-gradient(45deg, #007bff, #0056b3);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.badge-success {
+  background-color: #28a745 !important;
+}
+
+.badge-info {
+  background-color: #17a2b8 !important;
+}
+
+.badge-warning {
+  background-color: #ffc107 !important;
+  color: #212529 !important;
+}
+
+.badge-secondary {
+  background-color: #6c757d !important;
+}
+
+.badge-light {
+  background-color: #f8f9fa !important;
+  color: #212529 !important;
+}
+
+/* Table hover effects */
+.table-hover tbody tr:hover {
+  background-color: rgba(0,123,255,.1);
+}
+
+/* Data quality badge positioning */
+.data-quality-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* ===== MOBILE RESPONSIVENESS FOR MILEAGE DASHBOARD ===== */
 
 /* Desktop: Keep existing layout */
 @media (min-width: 769px) {
@@ -810,32 +1111,33 @@ ajax-loading image changes - end
   
   .mileage-date-filter-mobile {
     display: block !important;
-    background: #f8f9fa;
+    background: linear-gradient(135deg, rgba(52, 58, 64, 0.05) 0%, rgba(33, 37, 41, 0.05) 100%);
     padding: 15px;
     border-radius: 10px;
     margin-bottom: 20px;
-    border: 1px solid #e1e5e9;
+    border: 1px solid rgba(244, 208, 63, 0.2);
   }
   
-  /* Mobile date inputs - larger tap targets */
+  /* Mobile date inputs - larger tap targets with login theme */
   .mileage-date-filter-mobile .form-control {
     font-size: 16px !important;
     padding: 14px 12px !important;
     border-radius: 8px !important;
     margin-bottom: 10px !important;
-    height: 48px !important; /* Minimum touch target size */
+    height: 48px !important;
     border: 2px solid #e1e5e9;
+    background: white !important;
   }
   
   .mileage-date-filter-mobile .form-control:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
+    border-color: #f4d03f;
+    box-shadow: 0 0 0 0.15rem rgba(244, 208, 63, 0.25);
   }
   
   .mileage-date-filter-mobile label {
     font-weight: 600;
     margin-bottom: 5px;
-    color: #1f2937;
+    color: #343a40;
     font-size: 14px;
   }
   
@@ -846,7 +1148,15 @@ ajax-loading image changes - end
     font-size: 16px !important;
     border-radius: 8px !important;
     height: 48px !important;
-    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+    background: linear-gradient(45deg, #f4d03f, #f7dc6f) !important;
+    border: none !important;
+    color: #343a40 !important;
+    font-weight: 600 !important;
+  }
+  
+  .mileage-date-filter-mobile .btn-primary:hover {
+    background: linear-gradient(45deg, #f1c40f, #f4d03f) !important;
+    transform: translateY(-1px) !important;
   }
   
   /* Summary cards - 2 per row on mobile */
@@ -870,15 +1180,18 @@ ajax-loading image changes - end
   .mileage-dashboard .metric-card h4 {
     font-size: 16px !important;
     margin-bottom: 5px;
+    color: white !important;
   }
   
   .mileage-dashboard .metric-card p {
     font-size: 11px !important;
     margin-bottom: 0;
+    color: rgba(255, 255, 255, 0.8) !important;
   }
   
   .mileage-dashboard .metric-card .fa-2x {
     font-size: 1.2em !important;
+    color: #f4d03f !important;
   }
   
   /* Vehicle cards - full width on mobile */
@@ -924,6 +1237,40 @@ ajax-loading image changes - end
   .mileage-dashboard .vehicle-card h6:not(:first-child) {
     font-size: 13px;
     margin-bottom: 0;
+  }
+  
+  /* Mobile vehicle card adjustments */
+  .vehicle-card .card-body {
+    padding: 15px;
+  }
+  
+  .vehicle-card .col-6 {
+    margin-bottom: 12px;
+  }
+  
+  .vehicle-card .col-6 small {
+    font-size: 10px;
+  }
+  
+  .vehicle-card .col-6 h5,
+  .vehicle-card .col-6 h6 {
+    font-size: 13px;
+  }
+  
+  /* Mobile number plate adjustments */
+  .number-plate {
+    font-size: 14px;
+    min-width: 120px;
+    padding: 4px 8px;
+  }
+  
+  .number-plate::before {
+    font-size: 8px;
+  }
+  
+  .number-plate::after {
+    width: 16px;
+    height: 10px;
   }
 }
 
