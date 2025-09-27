@@ -8,7 +8,7 @@ html(lang='en')
             /* A5 paper size: 148mm x 210mm */
             @page {
                 size: A5;
-                margin: 5mm;
+                margin: 4mm;
             }
             
             * {
@@ -19,9 +19,9 @@ html(lang='en')
             
             body {
                 font-family: 'Courier New', monospace;
-                font-size: 8px;
+                font-size: 10px;
                 line-height: 1.2;
-                width: 138mm; /* A5 width minus margins */
+                width: 140mm; /* A5 width minus margins */
                 margin: 0 auto;
                 background: white;
                 color: black;
@@ -30,7 +30,7 @@ html(lang='en')
             /* Container for each copy */
             .copy-container {
                 width: 100%;
-                height: 95mm; /* Half of A5 height minus margins */
+                height: 101mm; /* Half of A5 height minus margins */
                 padding: 2mm;
                 border-bottom: 1px dashed #000;
                 page-break-inside: avoid;
@@ -44,23 +44,23 @@ html(lang='en')
             .header {
                 text-align: center;
                 border-bottom: 1px solid #000;
-                padding-bottom: 1mm;
+                padding-bottom: 2mm;
                 margin-bottom: 2mm;
             }
             
             .company-name {
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: bold;
                 margin-bottom: 1mm;
             }
             
             .company-address {
-                font-size: 7px;
+                font-size: 8px;
                 margin-bottom: 0.5mm;
             }
             
             .company-gst {
-                font-size: 7px;
+                font-size: 8px;
                 font-weight: bold;
             }
             
@@ -69,7 +69,7 @@ html(lang='en')
                 display: flex;
                 justify-content: space-between;
                 margin-bottom: 2mm;
-                font-size: 7px;
+                font-size: 8px;
             }
             
             .bill-info-left, .bill-info-right {
@@ -84,32 +84,34 @@ html(lang='en')
             /* Customer Section */
             .customer-section {
                 margin-bottom: 2mm;
-                font-size: 7px;
+                font-size: 8px;
                 padding: 1mm;
                 border: 1px solid #ccc;
                 background: #f9f9f9;
             }
             
-          /* Items Table - All thin borders */
+            /* Items Table - Larger font for better readability */
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-bottom: 2mm;
-                font-size: 6px;
+                font-size: 8px; /* Increased from 6px */
             }
-
+            
             .items-table th {
                 background: #f0f0f0;
-                padding: 1mm;
+                padding: 1.5mm;
                 border: 0.3px solid #000;
                 font-weight: bold;
                 text-align: center;
+                font-size: 8px;
             }
-
+            
             .items-table td {
-                padding: 1mm;
+                padding: 1.5mm;
                 border: 0.3px solid #000;
                 text-align: left;
+                font-size: 8px;
             }
             
             .text-right { text-align: right; }
@@ -118,19 +120,19 @@ html(lang='en')
             /* Totals Section */
             .totals-section {
                 border-top: 1px solid #000;
-                padding-top: 1mm;
+                padding-top: 2mm;
                 margin-bottom: 2mm;
-                font-size: 7px;
+                font-size: 9px; /* Increased font size */
             }
             
             .total-row {
                 display: flex;
                 justify-content: space-between;
-                margin-bottom: 0.5mm;
+                margin-bottom: 1mm;
             }
             
             .grand-total {
-                font-size: 10px;
+                font-size: 11px; /* Larger grand total */
                 font-weight: bold;
                 border-top: 1px solid #000;
                 padding-top: 1mm;
@@ -144,7 +146,7 @@ html(lang='en')
                 border-top: 1px solid #000;
                 padding-top: 1mm;
                 text-align: center;
-                font-size: 6px;
+                font-size: 7px;
                 margin-top: 1mm;
             }
             
@@ -152,13 +154,13 @@ html(lang='en')
                 display: flex;
                 justify-content: space-between;
                 margin-top: 1mm;
-                font-size: 6px;
+                font-size: 7px;
             }
             
             /* Copy labels */
             .copy-label {
                 text-align: center;
-                font-size: 8px;
+                font-size: 9px;
                 font-weight: bold;
                 margin-bottom: 1mm;
                 color: #666;
@@ -171,7 +173,6 @@ html(lang='en')
                     print-color-adjust: exact;
                 }
             }
-    
     body
         //- FIRST COPY (TOP HALF)
         .copy-container
