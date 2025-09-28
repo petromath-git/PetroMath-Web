@@ -1347,7 +1347,248 @@ printBillPDF: async (req, res, next) => {
         }
         res.status(500).send('PDF Error: ' + error.message);
     }
-}
+},
+
+
+
+
+getBillsApi: async (req, res, next) => {
+    try {
+        const locationCode = req.location_code; // Now always from token
+        console.log("locationCode",locationCode);
+
+        const bills = await db.sequelize.query(`
+            SELECT b.*, 
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN c.Company_Name
+                    ELSE NULL
+                END as customer_name,
+                p.Person_Name as cashier_name
+            FROM t_bills b
+            LEFT JOIN t_credits tc ON b.bill_id = tc.bill_id
+            LEFT JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id
+            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+            WHERE b.location_code = :locationCode
+            ORDER BY b.creation_date DESC
+        `, {
+            replacements: { locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        res.status(200).json({
+            success: true,
+            count: bills.length,
+            bills
+        });
+    } catch (error) {
+        console.error("Error fetching bills:", error);
+        res.status(203).json({
+            success: false,
+        });
+    }
+},
+
+getNewBillApi: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+
+        if (!locationCode) {
+            return res.status(400).json({
+                success: false,
+                message: "Location code missing in token"
+            });
+        }
+
+        // Get active shifts with cashier name
+        const activeShifts = await db.sequelize.query(`
+            SELECT c.closing_id, c.creation_date, c.cashier_id,
+                   p.Person_Name as cashier_name
+            FROM t_closing c
+            LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
+            WHERE c.location_code = :locationCode 
+            AND c.closing_status != 'CLOSED'
+            ORDER BY c.creation_date DESC
+        `, {
+            replacements: { locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        // Get products for the location
+        const products = await ProductDao.findProducts(locationCode);
+
+        // Get credit customers for the location
+        const credits = await CreditDao.findCredits(locationCode);
+
+        // Return JSON response
+        res.status(200).json({
+            success: true,
+            locationCode,
+            shifts: activeShifts,
+            products,
+            credits
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(203).json({
+            success: false,
+        });
+    }
+},
+
+createBillApi: async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+
+    try {
+        // 1️⃣ Validate closing status
+        const closing = await db.sequelize.query(`
+            SELECT closing_status 
+            FROM t_closing 
+            WHERE closing_id = :closingId
+            AND location_code = :locationCode
+        `, {
+            replacements: { 
+                closingId: req.body.closing_id,
+                locationCode: req.user.location_code 
+            },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!closing.length || closing[0].closing_status === 'CLOSED') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot create bills for closed or invalid shifts'
+            });
+        }
+
+        // 2️⃣ Get next bill number
+        const maxBillResult = await db.sequelize.query(`
+            SELECT COALESCE(MAX(CAST(SUBSTRING(bill_no, 4) AS UNSIGNED)), 0) as max_bill 
+            FROM t_bills 
+            WHERE location_code = :locationCode
+            AND bill_no LIKE :prefix
+        `, {
+            replacements: { 
+                locationCode: req.user.location_code,
+                prefix: req.body.bill_type === 'CREDIT' ? 'CR/%' : 'CS/%'
+            },
+            type: Sequelize.QueryTypes.SELECT
+        });
+        
+        const nextNumber = maxBillResult[0].max_bill + 1;
+        const prefix = req.body.bill_type === 'CREDIT' ? 'CR/' : 'CS/';
+        const paddedNumber = String(nextNumber).padStart(6, '0');
+        const nextBillNo = `${prefix}${paddedNumber}`;
+
+        // 3️⃣ Create bill
+        const [billResult] = await db.sequelize.query(`
+            INSERT INTO t_bills (
+                location_code, bill_no, bill_type, closing_id,
+                total_amount, created_by, creation_date
+            ) VALUES (
+                :locationCode, :billNo, :billType, :closingId,
+                :totalAmount, :createdBy, NOW()
+            )
+        `, {
+            replacements: {
+                locationCode: req.user.location_code,
+                billNo: nextBillNo,
+                billType: req.body.bill_type,
+                closingId: req.body.closing_id,
+                totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
+                createdBy: req.user.person_id // ✅ from token
+            },
+            type: Sequelize.QueryTypes.INSERT,
+            transaction
+        });
+
+        const billId = billResult;
+
+        // 4️⃣ Create bill items
+        for (const item of req.body.items) {
+            if (req.body.bill_type === 'CREDIT') {
+                await db.sequelize.query(`
+                    INSERT INTO t_credits (
+                        closing_id, bill_no, bill_id, creditlist_id,
+                        product_id, price, price_discount, qty, amount,
+                        notes, created_by, creation_date
+                    ) VALUES (
+                        :closingId, :billNo, :billId, :creditlistId,
+                        :productId, :price, :discount, :qty, :amount,
+                        :notes, :createdBy, NOW()
+                    )
+                `, {
+                    replacements: {
+                        closingId: req.body.closing_id,
+                        billNo: nextBillNo,
+                        billId: billId,
+                        creditlistId: req.body.creditlist_id,
+                        productId: parseInt(item.product_id),
+                        price: parseFloat(item.price),
+                        discount: parseFloat(item.price_discount || 0),
+                        qty: parseFloat(item.qty),
+                        amount: parseFloat(item.amount),
+                        notes: item.notes || '',
+                        createdBy: req.user.person_id // ✅ from token
+                    },
+                    type: Sequelize.QueryTypes.INSERT,
+                    transaction
+                });
+            } else {
+                await db.sequelize.query(`
+                    INSERT INTO t_cashsales (
+                        closing_id, bill_no, bill_id,
+                        product_id, price, price_discount, qty, amount,
+                        notes, created_by, creation_date
+                    ) VALUES (
+                        :closingId, :billNo, :billId,
+                        :productId, :price, :discount, :qty, :amount,
+                        :notes, :createdBy, NOW()
+                    )
+                `, {
+                    replacements: {
+                        closingId: req.body.closing_id,
+                        billNo: nextBillNo,
+                        billId: billId,
+                        productId: parseInt(item.product_id),
+                        price: parseFloat(item.price),
+                        discount: parseFloat(item.price_discount || 0),
+                        qty: parseFloat(item.qty),
+                        amount: parseFloat(item.amount),
+                        notes: item.notes || '',
+                        createdBy: req.user.person_id // ✅ from token
+                    },
+                    type: Sequelize.QueryTypes.INSERT,
+                    transaction
+                });
+            }
+        }
+
+        await transaction.commit();
+
+        return res.status(201).json({
+            success: true,
+            message: `Bill ${nextBillNo} created successfully`,
+            bill_no: nextBillNo,
+            bill_id: billId
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Bill creation error details:', {
+            error: error.message,
+            items: req.body.items,
+            billType: req.body.bill_type
+        });
+
+        return res.status(500).json({
+            success: false,
+            message: 'Error creating bill',
+            error: error.message
+        });
+    }
+},
 
     
 };
