@@ -196,4 +196,54 @@ module.exports = {
             });
         }
     },
+
+    getCreditStatementDashboardApi: async (req, res) => {
+    try {
+        const locationCode = req.user.location_code;
+        const creditlistId = req.user.creditlist_id;
+
+        // DAO import
+        const CreditDao = require("../dao/credits-dao");
+        let companyName = 'Customer'; // fallback
+
+        try {
+            const creditDetails = await CreditDao.findCreditDetails(creditlistId);
+            if (creditDetails && creditDetails.length > 0) {
+                companyName = creditDetails[0].Company_Name;
+                console.log('Dashboard using company name:', companyName);
+            }
+        } catch (error) {
+            console.log('Could not fetch company name for dashboard:', error);
+        }
+
+        // Get current date (IST)
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth(); // 0-based
+        const currentDate = today.getDate();
+
+        const defaultFromDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+        const defaultToDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDate).padStart(2, '0')}`;
+
+        // Send JSON instead of rendering template
+        return res.status(200).json({
+            success: true,
+            title: 'Credit Statement',
+            user: req.user,
+            companyName: companyName,
+            defaultFromDate: defaultFromDate,
+            defaultToDate: defaultToDate,
+            creditlistId: creditlistId
+        });
+
+    } catch (error) {
+        console.error('Error in getCreditStatementDashboard:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error loading credit statement dashboard',
+            error: error.message
+        });
+    }
+},
+
 };

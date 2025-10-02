@@ -66,7 +66,7 @@ module.exports = {
     },
 
     // API endpoint for AJAX requests to refresh dashboard data
-   getMileageDataAPI: async (req, res) => {
+    getMileageDataAPI: async (req, res) => {
     try {
         const locationCode = req.user.location_code;
         const creditlistId = req.user.creditlist_id;
@@ -191,7 +191,67 @@ module.exports = {
                 error: 'Failed to save external fuel purchase: ' + error.message
             });
         }
+    },
+
+
+    // Main dashboard page for customers - JSON API
+    getMileageDashboardApi: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const creditlistId = req.user.creditlist_id;
+
+        // Default to last 3 months if no dates provided
+        const today = new Date();
+        const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+        const lastDayOfCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+        const fromDate = req.query.fromDate || dateFormat(threeMonthsAgo, "yyyy-mm-dd");
+        const toDate = req.query.toDate || dateFormat(lastDayOfCurrentMonth, "yyyy-mm-dd");
+
+        // Time DB queries
+        const dbStartTime = performance.now();
+
+        const fleetSummary = await MileageDao.getFleetSummary(locationCode, creditlistId, fromDate, toDate);
+        const vehicleSummaries = await MileageDao.getVehicleMileageSummary(locationCode, creditlistId, fromDate, toDate);
+        const detailedData = await MileageDao.getMileageData(locationCode, creditlistId, fromDate, toDate);
+        const trendData = await MileageDao.getMileageTrendData(locationCode, creditlistId, fromDate, toDate);
+        const vehiclesWithoutData = await MileageDao.getVehiclesWithoutMileageData(locationCode, creditlistId, fromDate, toDate);
+
+        const totalDbTime = performance.now() - dbStartTime;
+        console.log(`   TOTAL DB TIME:        ${msToSeconds(totalDbTime)}s`);
+
+        // Process data
+        const dashboardData = processMileageDataForDashboard({
+            fleetSummary: fleetSummary[0] || {},
+            vehicleSummaries,
+            detailedData,
+            trendData,
+            vehiclesWithoutData
+        });
+
+        // Return JSON instead of rendering
+        return res.status(200).json({
+            success: true,
+            title: 'Vehicle Mileage Dashboard',
+            user: req.user,
+            fromDate,
+            toDate,
+            formattedFromDate: moment(fromDate).format('DD/MM/YYYY'),
+            formattedToDate: moment(toDate).format('DD/MM/YYYY'),
+            dbQueryTimeSeconds: msToSeconds(totalDbTime),
+            ...dashboardData
+        });
+
+    } catch (error) {
+        console.error('Error in getMileageDashboard:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to load mileage dashboard',
+            error: error.message
+        });
     }
+    },
+
 };
 
 // Helper function to process raw data for dashboard display
