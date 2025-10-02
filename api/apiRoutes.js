@@ -1,6 +1,6 @@
 const express = require("express");
 const passport = require("passport");
-const { generateToken, verifyToken,apiLoginLimiter } = require("./apiAuthConfig");
+const { generateToken, verifyToken,apiLoginLimiter,isCustomerOnly } = require("./apiAuthConfig");
 require("./apiAuthConfig"); // Load API strategy
 const router = express.Router();
 const LoginLogDao = require("../dao/login-log-dao");
@@ -47,6 +47,7 @@ router.post("/login", apiLoginLimiter, async (req, res, next) => {
 
             return res.status(203).json({
                 success: false,
+                message: info?.message || "Invalid username or password"
             });
         }
 
@@ -117,5 +118,35 @@ router.post('/bills/create', verifyToken, (req, res, next) => {
     req.location_code = req.user.location_code;
     billController.createBillApi(req, res, next);
 });
+
+
+
+///Customer related api
+const customerController = require('../controllers/customer-dashboard-controller');
+
+router.get('/customer/d_getCreditList', verifyToken,isCustomerOnly, (req, res, next) => {
+    customerController.getCreditStatementDashboardApi(req, res, next);
+});
+
+router.get('/customer/getCreditList', verifyToken,isCustomerOnly, (req, res, next) => {
+    customerController.getCreditStatementDataAPI(req, res, next);
+});
+
+
+///Mileage related api
+const vehicleController = require('../controllers/mileage-controller');
+
+router.get('/customer/d_mileage', verifyToken, (req, res, next) => {
+    vehicleController.getMileageDashboardApi(req, res, next);
+});
+
+router.get('/customer/mileage', verifyToken, (req, res, next) => {
+    vehicleController.getMileageDataAPI(req, res, next);
+});
+
+router.get('/customer/mileage/:vehicleId', verifyToken, (req, res, next) => {
+    vehicleController.getVehicleMileageDetails(req, res, next);
+});
+
 
 module.exports = router;
