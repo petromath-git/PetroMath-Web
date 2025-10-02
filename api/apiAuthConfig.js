@@ -48,7 +48,8 @@ module.exports.generateToken = (user) => {
             person_id: user.Person_id,
             username: user.User_name,
             role: user.Role,
-            location_code: user.location_code
+            location_code: user.location_code,
+            creditlist_id: user.creditlist_id
         },
         process.env.JWT_SECRET,
         { expiresIn: "1d" }
@@ -69,6 +70,23 @@ module.exports.verifyToken = (req, res, next) => {
         next();
     });
 };
+
+// Middleware to ensure only customers can access customer API routes
+module.exports.isCustomerOnly = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ success: false, message: "Unauthorized: No user in request" });
+    }
+
+    if (req.user.role !== 'Customer') {  // use lowercase 'role' from token payload
+        return res.status(403).json({
+            success: false,
+            message: 'Access denied. This feature is only available for customers.'
+        });
+    }
+
+    next();
+};
+
 
 module.exports.apiLoginLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
