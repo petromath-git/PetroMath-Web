@@ -1,31 +1,32 @@
 const UtilsDao = require("../dao/utilities-dao");
 const utils = require("../utils/app-utils");
 const dateFormat = require('dateformat');
+const archiver = require('archiver');   // 👈 add this
 
 module.exports = {
-get: (req, res, next) => {
-    // Calculate available years
-    const currentYear = new Date().getFullYear();
-    const availableYears = [];
-    for (let year = 2020; year <= currentYear; year++) {
-        availableYears.push(year);
-    }
+    get: (req, res, next) => {
+        const currentYear = new Date().getFullYear();
+        const availableYears = [];
+        for (let year = 2020; year <= currentYear; year++) {
+            availableYears.push(year);
+        }
 
-    Promise.allSettled([getChartNames(req.user.location_code, 'DipChartName')])
-        .then((values) => {
-            res.render('utilities', {
-                title: 'Utilities',
-                user: req.user,
-                currentDate: utils.currentDate(),
-                currentYear: currentYear,
-                availableYears: availableYears,
-                chartNames: values[0].value,
+        Promise.allSettled([getChartNames(req.user.location_code, 'DipChartName')])
+            .then((values) => {
+                res.render('utilities', {
+                    title: 'Utilities',
+                    user: req.user,
+                    currentDate: utils.currentDate(),
+                    currentYear: currentYear,
+                    availableYears: availableYears,
+                    chartNames: values[0].value,
+                });
+            }).catch((err) => {
+                console.warn("Error while getting data using promises " + err.toString());
+                Promise.reject(err);
             });
-        }).catch((err) => {
-        console.warn("Error while getting data using promises " + err.toString());
-        Promise.reject(err);
-    });
-},
+    },
+
     getDensity: (req, res, next) => {
         UtilsDao.getDensity(req.query.temperature, req.query.density).then((result) => {
             if (result && !result.error) {
@@ -35,6 +36,7 @@ get: (req, res, next) => {
             }
         });
     },
+
     getDipChart: (req, res, next) => {
         UtilsDao.getDipChart(req.query.chart_name, req.query.dip_reading).then((result) => {
             if (result && !result.error) {
@@ -44,38 +46,28 @@ get: (req, res, next) => {
             }
         });
     },
-  getTallyExport: (req, res, next) => {
-    // Get month and year from form
+
+    // ========== Single month export ==========
+   getTallyExport: (req, res, next) => {
     let exportMonth = req.body.exportMonth;
     let exportYear = req.body.exportYear;
-    
-    // Validate inputs
+
     if (!exportMonth || !exportYear) {
         return res.status(400).send({ error: 'Month and year are required.' });
     }
-    
-    // Create date as first day of the month in YYYY-MM-DD format
-    // The DB function expects a DATE, so we'll send it as first day of month
+
     let exportDate = `${exportYear}-${exportMonth}-01`;
-    
     let locationCode = req.user.location_code;
 
-    UtilsDao.getTallyXmlData(exportDate, locationCode).then((rows) => {
-        if (rows && rows[0] && !rows.error) {
-            // Create a nice filename with month name
-            let monthNames = [
-                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-            ];
-            let monthName = monthNames[parseInt(exportMonth) - 1];
-            
+    UtilsDao.getTallyXmlData(exportDate, locationCode).then((result) => {
+        if (result) {
             res.set({
-                'Content-Disposition': `attachment; filename="tallyexp-${locationCode}-${monthName}${exportYear}.xml"`,
+                'Content-Disposition': `attachment; filename="${result.fileName}"`,
                 'Content-type': 'application/xml'
             });
-            res.send(rows[0].xmlData);
+            res.send(result.xmlData);
         } else {
-            res.status(400).send({ error: rows ? rows.error : 'No results found.' });
+            res.status(400).send({ error: 'No results found.' });
         }
     }).catch((err) => {
         res.status(500).send({ error: err.message });
@@ -83,7 +75,48 @@ get: (req, res, next) => {
 },
 
 
+    // ========== Financial year ZIP export ==========
+    getTallyExportRange: async (req, res, next) => {
+    try {
+        const { financialYear } = req.body;
+        const locationCode = req.user.location_code;
+
+        if (!financialYear || !locationCode) {
+            return res.status(400).send({ error: "Missing required parameters" });
+        }
+
+        const [startDate, endDate] = financialYear.split(":");
+
+        res.setHeader('Content-Disposition', `attachment; filename="tallyexp-${locationCode}.zip"`);
+        res.setHeader('Content-Type', 'application/zip');
+
+        const archiver = require('archiver');
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        archive.pipe(res);
+
+        let current = new Date(startDate);
+        const end = new Date(endDate);
+
+        while (current <= end) {
+            let exportDate = current.toISOString().slice(0, 10);
+            let result = await UtilsDao.getTallyXmlData(exportDate, locationCode);
+
+            if (result) {
+                archive.append(result.xmlData, { name: result.fileName });
+            }
+
+            current.setMonth(current.getMonth() + 1);
+        }
+
+        await archive.finalize();
+    } catch (err) {
+        res.status(500).send({ error: err.message });
+    }
 }
+
+
+
+};
 
 const getChartNames = (locationCode, lookUpCode) => {
     return new Promise((resolve, reject) => {
@@ -99,4 +132,4 @@ const getChartNames = (locationCode, lookUpCode) => {
                 resolve(chartNames);
             });
     });
-}
+};
