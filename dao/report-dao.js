@@ -163,7 +163,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             END AS transaction_type
         FROM t_adjustments ta
         JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
-        WHERE ta.external_source = 'CREDIT'
+        WHERE ta.external_source IN ('CUSTOMER', 'DIGITAL_VENDOR')  -- Changed from 'CREDIT'
           AND ta.external_id = :creditId
           AND ta.status = 'ACTIVE'
           AND ta.location_code = :locationCode
