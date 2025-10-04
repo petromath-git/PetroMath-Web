@@ -1216,6 +1216,11 @@ app.post('/tally-export', isLoginEnsured, function (req, res) {
     utilitiesController.getTallyExport(req, res);    // response returned inside controller
 });
 
+// Financial year ZIP export
+app.post('/tally/export-range', isLoginEnsured, function (req, res) {
+    utilitiesController.getTallyExportRange(req, res);
+});
+
 app.get('/bank-transaction', isLoginEnsured, function (req, res) {
     bankAccountController.getAccountData(req, res);   // response returned inside controller
 });

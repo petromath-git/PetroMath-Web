@@ -16,6 +16,7 @@ block content
                         br
                         div.text-center
                             button.btn.btn-primary(type="button" onclick="getDensity()") Go
+
         div.col-4
             div.card
                 div.card-header.text-white.bg-dark Dip Chart
@@ -32,10 +33,12 @@ block content
                     br
                     div.text-center
                         button.btn.btn-primary(type="button" onclick="getDipChart()") Go
+
         div.col-4
             div.card
                 div.card-header.text-white.bg-dark Tally Export
                 div.card-body
+                    // ========== Single month export ==========
                     form(method='POST' action='/tally-export' id='form-tally-export')
                         div.row
                             div.col-6
@@ -70,7 +73,24 @@ block content
                                         option(value='12') December
                         br
                         div.text-center
-                            button.btn.btn-primary(type='submit') Download
+                            button.btn.btn-primary(type='submit') Download XML
+
+                    hr
+
+                    // ========== Financial year export ==========
+                    h6.text-primary Export Financial Year (ZIP)
+                    form(method='POST' action='/tally/export-range' id='form-tally-export-range')
+                        div.row
+                            div.col-12
+                                label(for='financialYear') Financial Year:
+                                select#financialYear.form-control(name='financialYear' required)
+                                    option(value='') Select Year
+                                    - for (let year = 2020; year <= currentYear; year++)
+                                        - let nextYear = year + 1;
+                                        option(value=`${year}-04-01:${nextYear}-03-31`)= `${year}-${(nextYear+'').slice(-2)}`
+                        br
+                        div.text-center
+                            button.btn.btn-success(type='submit') Download ZIP
 
     script.
         // Handle year change to update available months
@@ -101,9 +121,6 @@ block content
             // Add months based on selected year
             months.forEach(function(month) {
                 const monthValue = parseInt(month.value);
-                
-                // If current year, only show months up to current month
-                // If previous year, show all months
                 if (selectedYear < currentYear || monthValue <= currentMonth) {
                     const option = document.createElement('option');
                     option.value = month.value;
@@ -112,7 +129,7 @@ block content
                 }
             });
         });
-        
+
         // Initialize months on page load if year is already selected
         document.addEventListener('DOMContentLoaded', function() {
             const yearSelect = document.getElementById('exportYear');
