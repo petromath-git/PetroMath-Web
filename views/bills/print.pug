@@ -5,10 +5,10 @@ html(lang='en')
         meta(name='viewport', content='width=device-width, initial-scale=1.0')
         title Bill #{bill.bill_no} - Print
         style.
-            /* A5 paper size: 148mm x 210mm */
+            /* A6 paper size: 105mm x 148mm */
             @page {
-                size: A5;
-                margin: 5mm;
+                size: A6;
+                margin: 3mm;
             }
             
             * {
@@ -19,19 +19,20 @@ html(lang='en')
             
             body {
                 font-family: 'Courier New', monospace;
-                font-size: 8px;
+                font-size: 9px;
                 line-height: 1.2;
-                width: 138mm; /* A5 width minus margins */
+                width: 99mm; /* A6 width minus margins */
                 margin: 0 auto;
                 background: white;
                 color: black;
+                font-weight: bold; /* Make all text bold */
             }
             
             /* Container for each copy */
             .copy-container {
                 width: 100%;
-                height: 95mm; /* Half of A5 height minus margins */
-                padding: 2mm;
+                height: 71mm; /* Half of A6 height minus margins */
+                padding: 1.5mm;
                 border-bottom: 1px dashed #000;
                 page-break-inside: avoid;
             }
@@ -44,23 +45,24 @@ html(lang='en')
             .header {
                 text-align: center;
                 border-bottom: 1px solid #000;
-                padding-bottom: 1mm;
-                margin-bottom: 2mm;
+                padding-bottom: 1.5mm;
+                margin-bottom: 1.5mm;
             }
             
             .company-name {
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: bold;
                 margin-bottom: 1mm;
             }
             
             .company-address {
-                font-size: 7px;
+                font-size: 8px;
                 margin-bottom: 0.5mm;
+                font-weight: bold;
             }
             
             .company-gst {
-                font-size: 7px;
+                font-size: 8px;
                 font-weight: bold;
             }
             
@@ -68,8 +70,9 @@ html(lang='en')
             .bill-info {
                 display: flex;
                 justify-content: space-between;
-                margin-bottom: 2mm;
-                font-size: 7px;
+                margin-bottom: 1.5mm;
+                font-size: 8px;
+                font-weight: bold;
             }
             
             .bill-info-left, .bill-info-right {
@@ -83,33 +86,38 @@ html(lang='en')
             
             /* Customer Section */
             .customer-section {
-                margin-bottom: 2mm;
-                font-size: 7px;
+                margin-bottom: 1.5mm;
+                font-size: 8px;
                 padding: 1mm;
                 border: 1px solid #ccc;
                 background: #f9f9f9;
+                font-weight: bold;
             }
             
-          /* Items Table - All thin borders */
+            /* Items Table - Optimized for A6 */
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 2mm;
-                font-size: 6px;
+                margin-bottom: 1.5mm;
+                font-size: 8px;
+                font-weight: bold;
             }
-
+            
             .items-table th {
                 background: #f0f0f0;
                 padding: 1mm;
-                border: 0.3px solid #000;
+                border: 0.2px solid #999;
                 font-weight: bold;
                 text-align: center;
+                font-size: 8px;
             }
-
+            
             .items-table td {
                 padding: 1mm;
-                border: 0.3px solid #000;
+                border: 0.2px solid #ccc;
                 text-align: left;
+                font-size: 8px;
+                font-weight: bold;
             }
             
             .text-right { text-align: right; }
@@ -118,9 +126,9 @@ html(lang='en')
             /* Totals Section */
             .totals-section {
                 border-top: 1px solid #000;
-                padding-top: 1mm;
-                margin-bottom: 2mm;
-                font-size: 7px;
+                padding-top: 1.5mm;
+                margin-bottom: 1.5mm;
+                font-size: 8px;
             }
             
             .total-row {
@@ -171,7 +179,6 @@ html(lang='en')
                     print-color-adjust: exact;
                 }
             }
-    
     body
         //- FIRST COPY (TOP HALF)
         .copy-container
