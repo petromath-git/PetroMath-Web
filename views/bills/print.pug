@@ -56,27 +56,29 @@ html(lang='en')
             }
             
             .company-address {
-                font-size: 8px;
+                font-size: 7px;
                 margin-bottom: 0.5mm;
                 font-weight: bold;
             }
             
-            .company-gst {
-                font-size: 8px;
+            .company-contact {
+                font-size: 7px;
                 font-weight: bold;
             }
             
-            /* Bill Info Section */
+            /* Bill Info Section - 3 columns */
             .bill-info {
-                display: flex;
-                justify-content: space-between;
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 2mm;
                 margin-bottom: 1.5mm;
                 font-size: 8px;
                 font-weight: bold;
             }
             
-            .bill-info-left, .bill-info-right {
-                width: 48%;
+            .bill-info-col {
+                display: flex;
+                flex-direction: column;
             }
             
             .bill-number {
@@ -84,7 +86,7 @@ html(lang='en')
                 font-weight: bold;
             }
             
-            /* Customer Section */
+            /* Customer Section - Combined with Cashier */
             .customer-section {
                 margin-bottom: 1.5mm;
                 font-size: 8px;
@@ -92,6 +94,8 @@ html(lang='en')
                 border: 1px solid #ccc;
                 background: #f9f9f9;
                 font-weight: bold;
+                display: flex;
+                justify-content: space-between;
             }
             
             /* Items Table - Optimized for A6 */
@@ -128,7 +132,8 @@ html(lang='en')
                 border-top: 1px solid #000;
                 padding-top: 1.5mm;
                 margin-bottom: 1.5mm;
-                font-size: 8px;
+                font-size: 9px;
+                font-weight: bold;
             }
             
             .total-row {
@@ -138,7 +143,7 @@ html(lang='en')
             }
             
             .grand-total {
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: bold;
                 border-top: 1px solid #000;
                 padding-top: 1mm;
@@ -147,26 +152,29 @@ html(lang='en')
                 justify-content: space-between;
             }
             
-            /* Footer */
+            /* Footer - Signature lines */
             .footer {
                 border-top: 1px solid #000;
                 padding-top: 1mm;
-                text-align: center;
-                font-size: 6px;
                 margin-top: 1mm;
+                font-weight: bold;
             }
             
-            .print-info {
+            .signature-section {
                 display: flex;
                 justify-content: space-between;
-                margin-top: 1mm;
-                font-size: 6px;
+                margin-top: 2mm;
+                font-size: 7px;
+            }
+            
+            .signature-line {
+                width: 45%;
             }
             
             /* Copy labels */
             .copy-label {
                 text-align: center;
-                font-size: 8px;
+                font-size: 9px;
                 font-weight: bold;
                 margin-bottom: 1mm;
                 color: #666;
@@ -188,30 +196,28 @@ html(lang='en')
             .header
                 .company-name #{bill.location_name || 'Petrol Pump'}
                 .company-address #{bill.location_address || 'Address not available'}
-                if bill.location_phone
-                    .company-address Phone: #{bill.location_phone}
-                if bill.location_gst
-                    .company-gst GST: #{bill.location_gst}
+                .company-contact
+                    if bill.location_gst
+                        span GST: #{bill.location_gst}
+                        span  | 
+                    if bill.location_phone
+                        span Phone: #{bill.location_phone}
             
-            //- Bill Information
+            //- Bill Information (3 columns)
             .bill-info
-                .bill-info-left
+                .bill-info-col
                     .bill-number Bill: #{bill.bill_no}
+                .bill-info-col
                     div Type: #{bill.bill_type}
-                    div Status: #{bill.bill_status}
-                
-                .bill-info-right
+                .bill-info-col
                     div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
-                    div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
-                    div Print ##{bill.print_count + 1}
             
-            //- Customer Section
-            if bill.customer_name
-                .customer-section
-                    strong Customer: #{bill.customer_name}
-                    if bill.cashier_name
-                        br
-                        | Cashier: #{bill.cashier_name}
+            //- Customer and Cashier Section (same line)
+            .customer-section
+                if bill.customer_name
+                    span Customer: #{bill.customer_name}
+                if bill.vehicle_info
+                    span Vehicle: #{bill.vehicle_info}
             
             //- Items Table
             if items && items.length > 0
@@ -221,8 +227,6 @@ html(lang='en')
                             th Product
                             th Qty
                             th Rate
-                            th Disc
-                            th Tax
                             th Total
                     tbody
                         each item in items
@@ -230,8 +234,6 @@ html(lang='en')
                                 td= item.product_name
                                 td.text-right= parseFloat(item.qty).toFixed(2)
                                 td.text-right ₹#{parseFloat(item.price).toFixed(2)}
-                                td.text-right ₹#{parseFloat(item.discount || 0).toFixed(2)}
-                                td.text-right ₹#{parseFloat((item.cgst_amount || 0) + (item.sgst_amount || 0)).toFixed(2)}
                                 td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
             
             //- Totals Section
@@ -257,11 +259,11 @@ html(lang='en')
             //- Footer
             .footer
                 div Thank you for your business!
-                .print-info
-                    span Printed: #{new Date().toLocaleDateString('en-IN')} #{new Date().toLocaleTimeString('en-IN')}
-                    span Print Count: #{bill.print_count + 1}
+                .signature-section
+                    .signature-line Received by: __________
+                    .signature-line Cashier: #{bill.cashier_name || '__________'}
 
-        //- SECOND COPY (BOTTOM HALF) - IDENTICAL CONTENT
+        //- SECOND COPY (BOTTOM HALF) - IDENTICAL TO CUSTOMER COPY
         .copy-container
             .copy-label OFFICE COPY
             
@@ -269,30 +271,28 @@ html(lang='en')
             .header
                 .company-name #{bill.location_name || 'Petrol Pump'}
                 .company-address #{bill.location_address || 'Address not available'}
-                if bill.location_phone
-                    .company-address Phone: #{bill.location_phone}
-                if bill.location_gst
-                    .company-gst GST: #{bill.location_gst}
+                .company-contact
+                    if bill.location_gst
+                        span GST: #{bill.location_gst}
+                        span  | 
+                    if bill.location_phone
+                        span Phone: #{bill.location_phone}
             
-            //- Bill Information
+            //- Bill Information (3 columns)
             .bill-info
-                .bill-info-left
+                .bill-info-col
                     .bill-number Bill: #{bill.bill_no}
+                .bill-info-col
                     div Type: #{bill.bill_type}
-                    div Status: #{bill.bill_status}
-                
-                .bill-info-right
+                .bill-info-col
                     div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
-                    div Time: #{new Date(bill.creation_date).toLocaleTimeString('en-IN')}
-                    div Print ##{bill.print_count + 1}
             
-            //- Customer Section
-            if bill.customer_name
-                .customer-section
-                    strong Customer: #{bill.customer_name}
-                    if bill.cashier_name
-                        br
-                        | Cashier: #{bill.cashier_name}
+            //- Customer and Cashier Section (same line)
+            .customer-section
+                if bill.customer_name
+                    span Customer: #{bill.customer_name}
+                if bill.vehicle_info
+                    span Vehicle: #{bill.vehicle_info}
             
             //- Items Table
             if items && items.length > 0
@@ -302,8 +302,6 @@ html(lang='en')
                             th Product
                             th Qty
                             th Rate
-                            th Disc
-                            th Tax
                             th Total
                     tbody
                         each item in items
@@ -311,8 +309,6 @@ html(lang='en')
                                 td= item.product_name
                                 td.text-right= parseFloat(item.qty).toFixed(2)
                                 td.text-right ₹#{parseFloat(item.price).toFixed(2)}
-                                td.text-right ₹#{parseFloat(item.discount || 0).toFixed(2)}
-                                td.text-right ₹#{parseFloat((item.cgst_amount || 0) + (item.sgst_amount || 0)).toFixed(2)}
                                 td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
             
             //- Totals Section
@@ -338,9 +334,9 @@ html(lang='en')
             //- Footer
             .footer
                 div Thank you for your business!
-                .print-info
-                    span Printed: #{new Date().toLocaleDateString('en-IN')} #{new Date().toLocaleTimeString('en-IN')}
-                    span Print Count: #{bill.print_count + 1}
+                .signature-section
+                    .signature-line Received by: __________
+                    .signature-line Cashier: #{bill.cashier_name || '__________'}
 
         //- Auto-print when page loads
         script.

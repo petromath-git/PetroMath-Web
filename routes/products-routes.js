@@ -85,7 +85,24 @@ router.get('/api/data', [isLoginEnsured, security.isAdmin()], function (req, res
 // API endpoint for creating new product
 router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
     try {
-        ProductDao.create(dbMapping.newProduct(req))
+        // Map the request body to match dbMapping.newProduct expectations
+        const mappedReq = {
+            body: {
+                m_product_name_0: req.body.product_name,
+                m_product_qty_0: req.body.qty || 0,
+                m_product_unit_0: req.body.unit,
+                m_product_price_0: req.body.price,
+                m_product_ledger_name_0: req.body.ledger_name,
+                m_product_cgst_0: req.body.cgst_percent || 0,
+                m_product_sgst_0: req.body.sgst_percent || 0,
+                m_product_sku_name_0: req.body.sku_name || '',
+                m_product_sku_number_0: req.body.sku_number || '',
+                m_product_hsn_code_0: req.body.hsn_code || ''
+            },
+            user: req.user
+        };
+
+        ProductDao.create(dbMapping.newProduct(mappedReq))
             .then(result => {
                 res.json({
                     success: true,
