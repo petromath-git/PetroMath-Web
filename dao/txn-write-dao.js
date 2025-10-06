@@ -161,7 +161,7 @@ module.exports = {
         const result = await db.sequelize.query(
             `SELECT COUNT(*) as bill_count 
             FROM t_bills 
-            WHERE shift_id = ?`,
+            WHERE closing_id = ?`,
             {
                 replacements: [closingId],
                 type: db.Sequelize.QueryTypes.SELECT
