@@ -246,27 +246,19 @@ html
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
         
-        // Restore sidebar state from localStorage on page load
-        if (sidebar && mainContent) {
-          const sidebarHidden = localStorage.getItem('sidebarHidden') === 'true';
-          if (sidebarHidden && window.innerWidth > 768) {
-            sidebar.classList.add('hidden');
-            mainContent.classList.add('expanded');
-          }
-        }
-        
         if (sidebarToggle && sidebar && mainContent) {
           sidebarToggle.addEventListener('click', function() {
             if (window.innerWidth <= 768) {
+              // Mobile: toggle sidebar visibility
               sidebar.classList.toggle('show');
             } else {
+              // Desktop: toggle sidebar collapse
               sidebar.classList.toggle('hidden');
               mainContent.classList.toggle('expanded');
-              // Save state to localStorage
-              localStorage.setItem('sidebarHidden', sidebar.classList.contains('hidden'));
             }
           });
 
+          // Close sidebar when clicking outside on mobile
           document.addEventListener('click', function(event) {
             if (window.innerWidth <= 768 && 
                 sidebar.classList.contains('show') &&
@@ -276,37 +268,25 @@ html
             }
           });
 
+          // Handle window resize
           window.addEventListener('resize', function() {
             if (window.innerWidth > 768) {
               sidebar.classList.remove('show');
             }
           });
-
-          // Auto-hide sidebar when clicking menu items
-          const menuItems = document.querySelectorAll('.menu-item');
-          menuItems.forEach(item => {
-            item.addEventListener('click', function() {
-              if (window.innerWidth <= 768) {
-                sidebar.classList.remove('show');
-              } else {
-                sidebar.classList.add('hidden');
-                mainContent.classList.add('expanded');
-                // Save collapsed state to localStorage
-                localStorage.setItem('sidebarHidden', 'true');
-              }
-            });
-          });
         }
 
         // Auto-expand submenu if current page is in it
-        const activeMenuItems = document.querySelectorAll('.menu-item.active');
-        activeMenuItems.forEach(item => {
+        const menuItems = document.querySelectorAll('.menu-item.active');
+        menuItems.forEach(item => {
           const submenu = item.closest('.menu-submenu');
           if (submenu) {
             const menuCode = submenu.id.replace('submenu-', '');
             expandMenuSection(menuCode);
           }
         });
+
+      
       });
 
       // Toggle menu section function
@@ -315,8 +295,7 @@ html
         const icon = document.getElementById('icon-' + menuCode);
         
         if (submenu && icon) {
-          const isCollapsed = submenu.style.maxHeight === '0px' || submenu.style.maxHeight === '';
-          if (isCollapsed) {
+          if (submenu.style.maxHeight === '0px' || submenu.style.maxHeight === '') {
             expandMenuSection(menuCode);
           } else {
             collapseMenuSection(menuCode);
