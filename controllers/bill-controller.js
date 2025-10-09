@@ -976,12 +976,12 @@ printBill: async (req, res, next) => {
                     b.bill_status,
                     b.print_count,
                     b.total_amount,
-                    b.creation_date,
-                    
-                    -- Location details
+                    b.creation_date,                    
+                     -- Location details WITH GST AND PHONE
                     l.location_name,
                     l.address as location_address,
-                    
+                    l.gst_number as location_gst,
+                    l.phone as location_phone,                    
                     -- Customer details (for credit bills)
                     CASE 
                         WHEN b.bill_type = 'CREDIT' THEN (
@@ -1174,8 +1174,11 @@ printBillPDF: async (req, res, next) => {
         const billData = await db.sequelize.query(`
             SELECT 
                 b.bill_id, b.location_code, b.bill_no, b.bill_type, b.bill_status,
-                b.print_count, b.total_amount, b.creation_date,
-                l.location_name, l.address as location_address,
+                b.print_count, b.total_amount, b.creation_date,                
+                l.location_name,
+                l.address as location_address,
+                l.gst_number as location_gst,
+                l.phone as location_phone,
                 CASE 
                     WHEN b.bill_type = 'CREDIT' THEN (
                         SELECT c.Company_Name 

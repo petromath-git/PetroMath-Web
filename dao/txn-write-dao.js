@@ -157,4 +157,44 @@ module.exports = {
         const attendanceTxn = TxnAttendance.destroy({ where: { tattendance_id: attendanceId } });
         return attendanceTxn;
     },
+    checkBillsExistForShift: async (closingId) => {
+        const result = await db.sequelize.query(
+            `SELECT COUNT(*) as bill_count 
+            FROM t_bills 
+            WHERE closing_id = ?`,
+            {
+                replacements: [closingId],
+                type: db.Sequelize.QueryTypes.SELECT
+            }
+        );
+        
+        return result[0].bill_count > 0;
+    },
+    checkCashSaleHasBill: async (saleId) => {
+        const result = await db.sequelize.query(
+            `SELECT bill_id 
+            FROM t_cashsales 
+            WHERE cashsales_id = ?`,
+            {
+                replacements: [saleId],
+                type: db.Sequelize.QueryTypes.SELECT
+            }
+        );
+        
+        return result.length > 0 && result[0].bill_id !== null;
+    },
+
+    checkCreditSaleHasBill: async (saleId) => {
+        const result = await db.sequelize.query(
+            `SELECT bill_id 
+            FROM t_credits 
+            WHERE tcredit_id = ?`,
+            {
+                replacements: [saleId],
+                type: db.Sequelize.QueryTypes.SELECT
+            }
+        );
+        
+        return result.length > 0 && result[0].bill_id !== null;
+    },
 }

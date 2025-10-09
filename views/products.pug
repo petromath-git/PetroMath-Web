@@ -51,32 +51,36 @@ block content
                                 td(scope="row")
                                     strong= val.name
                                 td(scope="row")
-                                    input.form-control.form-control-sm(
+                                    input.form-control.form-control-sm.text-uppercase(
                                         type="text", 
                                         id=`product-sku-name-${index}`, 
                                         value=val.sku_name, 
-                                        readonly
+                                        readonly,
+                                        style="text-transform: uppercase;"
                                     )
                                 td(scope="row")
-                                    input.form-control.form-control-sm(
+                                    input.form-control.form-control-sm.text-uppercase(
                                         type="text", 
                                         id=`product-sku-number-${index}`, 
                                         value=val.sku_number, 
-                                        readonly
+                                        readonly,
+                                        style="text-transform: uppercase;"
                                     )
                                 td(scope="row")
-                                    input.form-control.form-control-sm(
+                                    input.form-control.form-control-sm.text-uppercase(
                                         type="text", 
                                         id=`product-hsn-code-${index}`, 
                                         value=val.hsn_code, 
-                                        readonly
+                                        readonly,
+                                        style="text-transform: uppercase;"
                                     )
                                 td(scope="row")
-                                    input.form-control.form-control-sm(
+                                    input.form-control.form-control-sm.text-uppercase(
                                         type="text", 
                                         id=`product-unit-${index}`, 
                                         value=val.unit, 
-                                        readonly
+                                        readonly,
+                                        style="text-transform: uppercase;"
                                     )
                                 td(scope="row")
                                     .input-group.input-group-sm
@@ -90,11 +94,12 @@ block content
                                             step=0.01
                                         )
                                 td(scope="row")
-                                    input.form-control.form-control-sm(
+                                    input.form-control.form-control-sm.text-uppercase(
                                         type="text", 
                                         id=`product-ledger-name-${index}`, 
                                         value=val.ledger_name, 
-                                        readonly
+                                        readonly,
+                                        style="text-transform: uppercase;"
                                     )
                                 td(scope="row")
                                     .input-group.input-group-sm
@@ -130,14 +135,14 @@ block content
             .row
                 each val, index in products
                     .col-12.mb-3
-                        .card.product-card.shadow-sm
+                        .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
                                 .product-name
                                     strong= val.name
                                 .product-actions
                                     button.btn.btn-primary.btn-sm(
                                         type="button", 
-                                        onclick=`editProduct(${index}, ${val.id})`
+                                        onclick=`editProductMobile(${index}, ${val.id})`
                                     )
                                         i.bi.bi-pencil
                             .card-body.p-3
@@ -145,35 +150,95 @@ block content
                                     .col-6
                                         .product-detail
                                             small.text-muted SKU Name
-                                            .fw-bold= val.sku_name || 'N/A'
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-sku-name-${index}`,
+                                                value=val.sku_name || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted SKU Number
-                                            .fw-bold= val.sku_number || 'N/A'
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-sku-number-${index}`,
+                                                value=val.sku_number || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted HSN Code
-                                            .fw-bold= val.hsn_code || 'N/A'
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-hsn-code-${index}`,
+                                                value=val.hsn_code || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted Unit
-                                            .fw-bold= val.unit || 'N/A'
+                                            input.mobile-input.fw-bold.text-uppercase(
+                                                type="text",
+                                                id=`mobile-unit-${index}`,
+                                                value=val.unit || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
+                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted Price
-                                            .fw-bold.text-success ₹#{val.price}
+                                            .input-group.input-group-sm
+                                                .input-group-prepend
+                                                    span.input-group-text.mobile-currency ₹
+                                                input.mobile-input.fw-bold.text-success(
+                                                    type="number",
+                                                    id=`mobile-price-${index}`,
+                                                    value=val.price,
+                                                    readonly,
+                                                    step="0.01",
+                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
+                                                )
                                     .col-6
                                         .product-detail
                                             small.text-muted Ledger
-                                            .fw-bold= val.ledger_name || 'N/A'
+                                            input.mobile-input.fw-bold.text-uppercase(
+                                                type="text",
+                                                id=`mobile-ledger-${index}`,
+                                                value=val.ledger_name || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
+                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted CGST
-                                            .fw-bold= val.cgst_percent + '%'
+                                            .input-group.input-group-sm
+                                                input.mobile-input.fw-bold(
+                                                    type="number",
+                                                    id=`mobile-cgst-${index}`,
+                                                    value=val.cgst_percent,
+                                                    readonly,
+                                                    step="0.01",
+                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
+                                                )
+                                                .input-group-append
+                                                    span.input-group-text %
                                     .col-6
                                         .product-detail
                                             small.text-muted SGST
-                                            .fw-bold= val.sgst_percent + '%'
+                                            .input-group.input-group-sm
+                                                input.mobile-input.fw-bold(
+                                                    type="number",
+                                                    id=`mobile-sgst-${index}`,
+                                                    value=val.sgst_percent,
+                                                    readonly,
+                                                    step="0.01",
+                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
+                                                )
+                                                .input-group-append
+                                                    span.input-group-text %
 
     // Add Product Modal
     .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
@@ -188,25 +253,28 @@ block content
                         .row
                             .col-md-6.mb-3
                                 label.form-label Product Name
-                                input.form-control(type="text", name="product_name", required)
+                                input.form-control.text-uppercase(type="text", name="product_name", required, style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label SKU Name
-                                input.form-control(type="text", name="sku_name")
+                                input.form-control.text-uppercase(type="text", name="sku_name", style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label SKU Number
-                                input.form-control(type="text", name="sku_number")
+                                input.form-control.text-uppercase(type="text", name="sku_number", style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label HSN Code
-                                input.form-control(type="text", name="hsn_code")
-                            .col-md-4.mb-3
+                                input.form-control.text-uppercase(type="text", name="hsn_code", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
                                 label.form-label Unit
-                                input.form-control(type="text", name="unit", required)
-                            .col-md-4.mb-3
+                                select.form-control(name="unit", required)
+                                    option(value="", disabled, selected) Select Unit
+                                    option(value="NOS") NOS
+                                    option(value="LIT") LIT
+                            .col-md-6.mb-3
                                 label.form-label Price
                                 input.form-control(type="number", name="price", step="0.01", required)
-                            .col-md-4.mb-3
+                            .col-md-12.mb-3
                                 label.form-label Ledger Name
-                                input.form-control(type="text", name="ledger_name")
+                                input.form-control.text-uppercase(type="text", name="ledger_name", style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input.form-control(type="number", name="cgst_percent", step="0.01", min="0", max="100")
@@ -215,40 +283,12 @@ block content
                                 input.form-control(type="number", name="sgst_percent", step="0.01", min="0", max="100")
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
-                    button.btn.btn-success(type="submit", form="addProductForm") Add Product
+                                            button.btn.btn-success(type="submit", form="addProductForm") Add Product
 
+        // End of main-content wrapper
+    
     // CSS for mobile responsiveness and sticky header
     style.
-        /* Uppercase field styling */
-        .uppercase-field {
-            font-family: 'Courier New', monospace;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        .uppercase-field::placeholder {
-            text-transform: uppercase;
-            font-size: 0.9em;
-            opacity: 0.7;
-        }
-
-        /* Visual indicator for uppercase fields */
-        .uppercase-field:focus {
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-            border-color: #80bdff;
-        }
-
-        /* Add small uppercase indicator */
-        .form-group.uppercase::after {
-            content: "ABC";
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 10px;
-            color: #6c757d;
-            pointer-events: none;
-        }
         .products-header-sticky {
             position: sticky;
             top: 0;
@@ -256,10 +296,44 @@ block content
             background: white;
             border-bottom: 2px solid #dee2e6;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-left: 0;
+            margin-right: 0;
         }
         
         .products-container {
             padding-top: 15px;
+        }
+        
+        /* Fix for sidebar layout - ensure header doesn't overlap menu */
+        @media (min-width: 992px) {
+            .products-header-sticky {
+                margin-left: 260px;
+            }
+        }
+        
+        /* Mobile header adjustments */
+        @media (max-width: 991.98px) {
+            .products-header-sticky {
+                margin-left: 0;
+            }
+            
+            .products-header-sticky h4 {
+                font-size: 18px;
+            }
+            
+            .products-header-sticky .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+        }
+        
+        /* Button spacing and mobile adjustments */
+        .me-2 {
+            margin-right: 0.5rem !important;
+        }
+        
+        .ms-1 {
+            margin-left: 0.25rem !important;
         }
         
         .product-card {
@@ -304,10 +378,6 @@ block content
             .mobile-cards-view {
                 display: block !important;
             }
-            
-            .products-header-sticky h4 {
-                font-size: 18px;
-            }
         }
         
         @media (min-width: 992px) {
@@ -331,48 +401,35 @@ block content
             top: 0;
             z-index: 10;
         }
+        
+        /* Mobile input styling */
+        .mobile-input:focus {
+            outline: none;
+            border-color: #007bff !important;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+        }
+        
+        .mobile-input.editable {
+            border: 1px solid #007bff !important;
+            background: #f8f9fa !important;
+            padding: 4px 8px !important;
+            border-radius: 4px;
+        }
+        
+        .mobile-currency {
+            font-size: 12px;
+            padding: 4px 6px;
+        }
 
     // JavaScript for product management
-    script.       
-        function convertToUppercase(input) {
-            const start = input.selectionStart;
-            const end = input.selectionEnd;
+    script.
+        // Auto-uppercase function for text inputs
+        function makeUppercase(input) {
             input.value = input.value.toUpperCase();
-            input.setSelectionRange(start, end);
         }
-
-        function setupUppercaseFields() {
-            const uppercaseFields = [
-                'input[name="product_name"]',
-                'input[name="sku_name"]', 
-                'input[name="sku_number"]',
-                'input[name="hsn_code"]',
-                'input[name="unit"]',
-                'input[name="ledger_name"]',
-                'input[id*="product-sku-name-"]',
-                'input[id*="product-sku-number-"]', 
-                'input[id*="product-hsn-code-"]',
-                'input[id*="product-unit-"]',
-                'input[id*="product-ledger-name-"]'
-            ];
-            
-            uppercaseFields.forEach(selector => {
-                const elements = document.querySelectorAll(selector);
-                elements.forEach(element => {
-                    element.value = element.value.toUpperCase();
-                    
-                    element.addEventListener('input', function(e) {
-                        convertToUppercase(e.target);
-                    });
-                    
-                    element.addEventListener('paste', function(e) {
-                        setTimeout(() => convertToUppercase(e.target), 10);
-                    });
-                });
-            });
-        }
-
+        
         function editProduct(index, productId) {
+            // Enable editing for the specific product row
             const row = document.getElementById(`product-row-${index}`);
             const inputs = row.querySelectorAll('input[readonly]');
             
@@ -380,23 +437,97 @@ block content
                 if (!input.id.includes('sku-name') && !input.id.includes('sku-number') && !input.id.includes('hsn-code')) {
                     input.removeAttribute('readonly');
                     input.classList.add('bg-light');
+                    
+                    // Add uppercase input listener for text fields
+                    if (input.type === 'text') {
+                        input.addEventListener('input', function() {
+                            makeUppercase(this);
+                        });
+                    }
                 }
             });
             
-            // Re-apply uppercase conversion to editable fields
-            setupUppercaseFields();
-            
+            // Change edit button to save button
             const editBtn = row.querySelector('button');
             editBtn.innerHTML = '<i class="bi bi-check"></i>';
             editBtn.classList.remove('btn-primary');
             editBtn.classList.add('btn-success');
             editBtn.setAttribute('onclick', `saveProduct(${index}, ${productId})`);
         }
-
+        
+        function editProductMobile(index, productId) {
+            // Enable editing for mobile card inputs
+            const card = document.getElementById(`mobile-product-card-${index}`);
+            const inputs = card.querySelectorAll('input[readonly]');
+            
+            inputs.forEach(input => {
+                if (!input.id.includes('sku-name') && !input.id.includes('sku-number') && !input.id.includes('hsn-code')) {
+                    input.removeAttribute('readonly');
+                    input.classList.add('editable');
+                    
+                    // Add uppercase input listener for text fields
+                    if (input.type === 'text') {
+                        input.addEventListener('input', function() {
+                            makeUppercase(this);
+                        });
+                    }
+                }
+            });
+            
+            // Change edit button to save button
+            const editBtn = card.querySelector('button');
+            editBtn.innerHTML = '<i class="bi bi-check"></i>';
+            editBtn.classList.remove('btn-primary');
+            editBtn.classList.add('btn-success');
+            editBtn.setAttribute('onclick', `saveProductMobile(${index}, ${productId})`);
+        }
+        
+        function saveProductMobile(index, productId) {
+            const updateData = {
+                m_product_price: document.getElementById(`mobile-price-${index}`).value,
+                m_product_unit: document.getElementById(`mobile-unit-${index}`).value.toUpperCase(),
+                m_product_ledger_name: document.getElementById(`mobile-ledger-${index}`).value.toUpperCase(),
+                m_product_cgst: document.getElementById(`mobile-cgst-${index}`).value,
+                m_product_sgst: document.getElementById(`mobile-sgst-${index}`).value
+            };
+            
+            fetch(`/products/api/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Product updated successfully', 'success');
+                    // Reset mobile card to readonly state
+                    const card = document.getElementById(`mobile-product-card-${index}`);
+                    const inputs = card.querySelectorAll('input');
+                    inputs.forEach(input => {
+                        input.setAttribute('readonly', true);
+                        input.classList.remove('editable');
+                    });
+                    
+                    // Change save button back to edit button
+                    const saveBtn = card.querySelector('button');
+                    saveBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+                    saveBtn.classList.remove('btn-success');
+                    saveBtn.classList.add('btn-primary');
+                    saveBtn.setAttribute('onclick', `editProductMobile(${index}, ${productId})`);
+                } else {
+                    showMessage('Error updating product: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                showMessage('Error updating product: ' + error.message, 'danger');
+            });
+        }
+        
         function saveProduct(index, productId) {
             const row = document.getElementById(`product-row-${index}`);
             
-            // Ensure all text values are uppercase before saving
             const updateData = {
                 m_product_price: document.getElementById(`product-price-${index}`).value,
                 m_product_unit: document.getElementById(`product-unit-${index}`).value.toUpperCase(),
@@ -416,12 +547,14 @@ block content
             .then(data => {
                 if (data.success) {
                     showMessage('Product updated successfully', 'success');
+                    // Reset the row to readonly state
                     const inputs = row.querySelectorAll('input');
                     inputs.forEach(input => {
                         input.setAttribute('readonly', true);
                         input.classList.remove('bg-light');
                     });
                     
+                    // Change save button back to edit button
                     const saveBtn = row.querySelector('button');
                     saveBtn.innerHTML = '<i class="bi bi-pencil"></i>';
                     saveBtn.classList.remove('btn-success');
@@ -435,11 +568,11 @@ block content
                 showMessage('Error updating product: ' + error.message, 'danger');
             });
         }
-
+        
         function refreshData() {
             location.reload();
         }
-
+        
         function showMessage(message, type) {
             const alertDiv = document.getElementById('messageAlert');
             const messageText = document.getElementById('messageText');
@@ -455,13 +588,18 @@ block content
                 }, 150);
             }, 3000);
         }
-
+        
         // Event listeners
         document.addEventListener('DOMContentLoaded', function() {
-            // Setup uppercase conversion
-            setupUppercaseFields();
-            
             document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+            
+            // Add uppercase event listeners to all text inputs in the modal
+            const textInputs = document.querySelectorAll('input[type="text"].text-uppercase');
+            textInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    makeUppercase(this);
+                });
+            });
             
             // Handle form submission for new products
             document.getElementById('addProductForm').addEventListener('submit', function(e) {
@@ -472,8 +610,7 @@ block content
                 
                 // Convert text fields to uppercase before sending
                 for (let [key, value] of formData.entries()) {
-                    if (key === 'product_name' || key === 'sku_name' || key === 'sku_number' || 
-                        key === 'hsn_code' || key === 'unit' || key === 'ledger_name') {
+                    if (typeof value === 'string' && key !== 'price' && key !== 'cgst_percent' && key !== 'sgst_percent') {
                         jsonData[key] = value.toUpperCase();
                     } else {
                         jsonData[key] = value;

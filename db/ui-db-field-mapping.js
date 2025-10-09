@@ -8,20 +8,23 @@ var dateFormat = require('dateformat');
 
 module.exports = {
     newProduct : function (req) {
-        const data = {
-            product_name: req.body.m_product_name_0,
-            location_code: req.user.location_code,
-            qty: req.body.m_product_qty_0,
-            unit: req.body.m_product_unit_0,
-            price: req.body.m_product_price_0,
-            ledger_name:req.body.m_product_ledger_name_0,
-            cgst_percent:req.body.m_product_cgst_0,
-            sgst_percent:req.body.m_product_sgst_0,
-            created_by: req.user.Person_id,
-            updated_by: req.user.Person_id
-        };
-        return data;
-    },
+    const data = {
+        product_name: req.body.m_product_name_0,
+        location_code: req.user.location_code,
+        qty: req.body.m_product_qty_0,
+        unit: req.body.m_product_unit_0,
+        price: req.body.m_product_price_0,
+        ledger_name: req.body.m_product_ledger_name_0,
+        cgst_percent: req.body.m_product_cgst_0,
+        sgst_percent: req.body.m_product_sgst_0,
+        sku_name: req.body.m_product_sku_name_0,
+        sku_number: req.body.m_product_sku_number_0,
+        hsn_code: req.body.m_product_hsn_code_0,
+        created_by: req.user.Person_id,
+        updated_by: req.user.Person_id
+    };
+    return data;
+},
     newCredit : function (req) {
         const data = {
             Company_Name: req.body.m_credit_name_0,
