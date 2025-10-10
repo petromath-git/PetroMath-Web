@@ -1,0 +1,47 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports/stock/summary')
+        table.center
+            tr
+                td Date:
+                td
+                    input#reportDate.form-control(type='date', name='reportDate', value=reportDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                include report-print-download.pug
+    div &nbsp;
+    div
+        div.row &nbsp;
+        h4.font-weight-bold.text-center Stock Summary Report
+        h4.text-center.text-muted= formattedDate
+        h4.font-weight-bold.text-success.text-center
+        if stockSummary && stockSummary.length > 0
+            div.row
+            div.col-md-12
+                div.row &nbsp;
+                div.table-responsive
+                    table.table.table-bordered.table-hover
+                        thead.thead-light
+                            tr
+                                th.text-center #
+                                th Product Name
+                                th.text-center Unit
+                                th.text-right Closing Stock
+                        tbody
+                            each item, index in stockSummary
+                                tr
+                                    td.text-center= index + 1
+                                    td= item.product_name
+                                    td.text-center= item.unit
+                                    td.text-right(class=parseFloat(item.closing_stock) < 0 ? 'text-danger font-weight-bold' : '')
+                                        = parseFloat(item.closing_stock).toFixed(2)
+                        tfoot.bg-light
+                            tr.font-weight-bold
+                                td(colspan='3') Total Products: #{stockSummary.length}
+                                td &nbsp;
+        else
+            div.row &nbsp;
+            div.row.bg-light No records to display.
+    
+    // Include the overlay
+    include overlay.pug

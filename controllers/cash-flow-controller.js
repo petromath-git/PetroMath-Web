@@ -69,7 +69,7 @@ module.exports = {
                     if (data[0] != null) {
                         gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
                             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                            { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + previousDateString });
+                            { error: "Cannot Generate Cashflow for " + dateFormat(generateDate, 'dd-mm-yyyy') + ". Please ensure Cashflow is closed for " + dateFormat(previousDateString) });
                     } else if (data[0] == null) {
                         cashflowDao.addNew({
                             'location': req.user.location_code,
