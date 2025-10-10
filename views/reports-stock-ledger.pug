@@ -1,0 +1,112 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports/stock/ledger')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td Product:
+                td
+                    select#productId.form-control(name='productId', required)
+                        option(value='') Select Product
+                        each product in products
+                            option(value=product.product_id, selected=selectedProductId == product.product_id)= product.product_name
+                td &nbsp;
+                include report-print-download.pug
+    div &nbsp;
+    div
+        if ledgerData && ledgerData.length > 0
+            div.row &nbsp;
+            h6.font-weight-bold.text-center Stock Ledger
+            h5.font-weight-bold.text-center.text-uppercase= productInfo.product_name
+            h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+            h4.font-weight-bold.text-success.text-center
+            
+            .container
+                .row.justify-content-center
+                    .col-12
+                        .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                            div(style="font-size: 1.1em; color: #495057; margin-bottom: 10px;")
+                                strong Period Summary
+                            .row
+                                .col-md-4
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Opening Balance
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #007bff;")= openingBalance + ' ' + productInfo.unit
+                                .col-md-4
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Total IN
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #28a745;")= totalIn + ' ' + productInfo.unit
+                                .col-md-4
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Total OUT
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #dc3545;")= totalOut + ' ' + productInfo.unit
+                            .row.mt-2
+                                .col-12
+                                    div(style="padding: 15px; background: #e7f3ff; border-radius: 4px; border-left: 4px solid #007bff;")
+                                        div(style="color: #495057; font-size: 0.9em;") Closing Balance
+                                        div(style="font-size: 1.5em; font-weight: bold; color: #007bff;")= closingBalance + ' ' + productInfo.unit
+                        
+                        .table-responsive
+                            table.table.table-bordered.table-hover
+                                thead.thead-light
+                                    tr
+                                        th Date
+                                        th Type
+                                        th Reference
+                                        th Party/Remarks
+                                        th.text-right IN
+                                        th.text-right OUT
+                                        th.text-right Balance
+                                tbody
+                                    // Opening Balance Row
+                                    - var runningBalance = parseFloat(openingBalance)
+                                    tr.table-info
+                                        td(colspan='6')
+                                            strong Opening Balance
+                                        td.text-right
+                                            strong= runningBalance.toFixed(2)
+                                    
+                                    // Transaction Rows
+                                    each txn in ledgerData
+                                        - runningBalance = runningBalance + parseFloat(txn.in_qty || 0) - parseFloat(txn.out_qty || 0)
+                                        tr
+                                            td= new Date(txn.txn_date).toLocaleDateString('en-GB')
+                                            td= txn.txn_type
+                                            td= txn.reference_no || '-'
+                                            td= txn.party_name || '-'
+                                            td.text-right
+                                                if parseFloat(txn.in_qty) > 0
+                                                    span.text-success= parseFloat(txn.in_qty).toFixed(2)
+                                                else
+                                                    | -
+                                            td.text-right
+                                                if parseFloat(txn.out_qty) > 0
+                                                    span.text-danger= parseFloat(txn.out_qty).toFixed(2)
+                                                else
+                                                    | -
+                                            td.text-right(class=runningBalance < 0 ? 'text-danger font-weight-bold' : '')
+                                                = runningBalance.toFixed(2)
+                                
+                                tfoot.bg-light
+                                    tr.font-weight-bold
+                                        td(colspan='4') Total
+                                        td.text-right.text-success= totalIn
+                                        td.text-right.text-danger= totalOut
+                                        td.text-right Closing: #{closingBalance}
+                        
+                        div.col-12.text-right E &amp; OE
+                        div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
+        else
+            div.row &nbsp;
+            div.row.bg-light No Transactions.
+    
+    // Include the overlay
+    include overlay.pug

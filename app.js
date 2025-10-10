@@ -183,7 +183,10 @@ const tankRoutes = require('./routes/tank-routes');
 const billsRoutes = require('./routes/bills-routes');
 const usageDashboardRoutes = require('./routes/usage-dashboard-routes');
 const menuManagementRoutes = require('./routes/menu-management-routes');
+const stockAdjustmentRoutes = require('./routes/stock-adjustment');
+const stockReportsRoutes = require('./routes/stock-reports-routes');
 const apiRoutes = require('./api/apiRoutes');
+
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -326,6 +329,8 @@ app.use('/tank-master', tankRoutes);
 app.use('/bills', billsRoutes);
 app.use('/usage-dashboard', usageDashboardRoutes);
 app.use('/menu-management', menuManagementRoutes);
+app.use('/reports/stock', stockReportsRoutes);
+app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 
 

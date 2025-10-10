@@ -35,6 +35,14 @@ function generatePDF(currentPage,isPrint = 'N') {
         const locationCodeElement = document.getElementById('locationCode');
         requestBody.locationCode = locationCodeElement ? locationCodeElement.value:'';  // if no location code obtained
                                                                                         // subsequent code will use req.user.location_code       
+    }else if (currentPage.includes('reports/stock/summary')) {
+    requestBody.reportType = 'StockSummary';
+    requestBody.reportDate = document.getElementById('reportDate').value;
+    }else if (currentPage.includes('reports/stock/ledger')) {
+        requestBody.reportType = 'StockLedger';
+        requestBody.fromDate = document.getElementById('fromDate').value;
+        requestBody.toDate = document.getElementById('toDate').value;
+        requestBody.productId = document.getElementById('productId').value;
     }else if (currentPage.includes('reports-digital-recon')) {
         requestBody.reportType = 'DigitalRecon';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;

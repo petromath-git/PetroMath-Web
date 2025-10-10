@@ -7,6 +7,7 @@ const dsrReportsController = require("../controllers/reports-dsr-controller");
 const gstReportsController = require("../controllers/reports-gst-summary-controller");
 const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
 const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
+const stockReportsController = require("../controllers/stock-reports-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 const { getBrowser } = require('./browserHelper');
@@ -60,6 +61,12 @@ module.exports = {
         else if (req.body.reportType == 'TallyDaybook') {    
             htmlContent = await tallyDaybookReportsController.getTallyDaybookReport(req, res, next);
        }
+       else if (req.body.reportType == 'StockSummary') {
+            htmlContent = await stockReportsController.getStockSummaryReport(req, res, next);
+        }
+        else if (req.body.reportType == 'StockLedger') {
+            htmlContent = await stockReportsController.getStockLedgerReport(req, res, next);
+        }
 
         const contentEnd = performance.now();
         console.log(`HTML content generation took: ${contentEnd - contentStart}ms`);
