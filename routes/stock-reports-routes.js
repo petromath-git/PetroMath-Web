@@ -4,9 +4,11 @@ const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const stockReportsController = require('../controllers/stock-reports-controller');
 
+
 // Stock Summary Report - GET (initial load)
 router.get('/summary', isLoginEnsured, function (req, res, next) {
-    req.body.reportDate = new Date(Date.now());
+    req.body.fromDate = new Date(Date.now());
+    req.body.toDate = new Date(Date.now());
     req.body.caller = 'notpdf';
     stockReportsController.getStockSummaryReport(req, res, next);
 });

@@ -4,44 +4,115 @@ block content
     form(method='POST' action='/reports/stock/summary')
         table.center
             tr
-                td Date:
+                td From Date:
                 td
-                    input#reportDate.form-control(type='date', name='reportDate', value=reportDate, max=currentDate, format="dd/mm/yyyy", required)
+                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;
                 include report-print-download.pug
     div &nbsp;
     div
         div.row &nbsp;
         h4.font-weight-bold.text-center Stock Summary Report
-        h4.text-center.text-muted= formattedDate
+        if formattedFromDate && formattedToDate
+            h4.text-center.text-muted= `${formattedFromDate} to ${formattedToDate}`
         h4.font-weight-bold.text-success.text-center
         if stockSummary && stockSummary.length > 0
             div.row
             div.col-md-12
                 div.row &nbsp;
                 div.table-responsive
-                    table.table.table-bordered.table-hover
+                    table.table.table-bordered.table-hover.table-sm
                         thead.thead-light
                             tr
-                                th.text-center #
-                                th Product Name
-                                th.text-center Unit
-                                th.text-right Closing Stock
+                                th.text-center(rowspan='2') #
+                                th.text-center(rowspan='2') Product Name
+                                th.text-center(rowspan='2') Unit
+                                th.text-center(colspan='4') Stock Movement
+                            tr
+                                th.text-right Opening
+                                th.text-right IN
+                                th.text-right OUT
+                                th.text-right Closing
                         tbody
+                            - var productsWithStock = 0
+                            - var productsWithMovement = 0
+                            - var totalOpeningValue = 0
+                            - var totalInValue = 0
+                            - var totalOutValue = 0
+                            - var totalClosingValue = 0
+                            
                             each item, index in stockSummary
-                                tr
+                                - var rowClass = ''
+                                if item.opening_balance === null || item.opening_balance === undefined
+                                    - rowClass = 'table-warning'
+                                else if item.has_movement
+                                    - rowClass = 'table-success-light'
+                                    - productsWithMovement++
+                                
+                                if item.opening_balance !== null && item.opening_balance !== undefined
+                                    - productsWithStock++
+                                    - totalOpeningValue += parseFloat(item.opening_balance || 0)
+                                    - totalInValue += parseFloat(item.total_in || 0)
+                                    - totalOutValue += parseFloat(item.total_out || 0)
+                                    - totalClosingValue += parseFloat(item.closing_balance || 0)
+                                
+                                tr(class=rowClass)
                                     td.text-center= index + 1
                                     td= item.product_name
                                     td.text-center= item.unit
-                                    td.text-right(class=parseFloat(item.closing_stock) < 0 ? 'text-danger font-weight-bold' : '')
-                                        = parseFloat(item.closing_stock).toFixed(2)
+                                    if item.opening_balance === null || item.opening_balance === undefined
+                                        td.text-center(colspan='4')
+                                            span.text-warning.font-italic
+                                                i.fas.fa-exclamation-triangle
+                                                |  No opening stock
+                                    else
+                                        td.text-right
+                                            = parseFloat(item.opening_balance || 0).toFixed(2)
+                                        td.text-right
+                                            if item.total_in > 0
+                                                span.text-success.font-weight-bold= parseFloat(item.total_in).toFixed(2)
+                                            else
+                                                span.text-muted -
+                                        td.text-right
+                                            if item.total_out > 0
+                                                span.text-danger.font-weight-bold= parseFloat(item.total_out).toFixed(2)
+                                            else
+                                                span.text-muted -
+                                        td.text-right
+                                            if item.closing_balance === null || item.closing_balance === undefined
+                                                span.text-warning.font-italic N/A
+                                            else if parseFloat(item.closing_balance) < 0
+                                                span.text-danger.font-weight-bold= parseFloat(item.closing_balance || 0).toFixed(2)
+                                            else
+                                                = parseFloat(item.closing_balance || 0).toFixed(2)
                         tfoot.bg-light
                             tr.font-weight-bold
-                                td(colspan='3') Total Products: #{stockSummary.length}
-                                td &nbsp;
+                                td(colspan='3') 
+                                    div Total Products: #{stockSummary.length}
+                                    div.small.text-muted With Stock: #{productsWithStock} | With Movement: #{productsWithMovement}
+                                td.text-right= totalOpeningValue.toFixed(2)
+                                td.text-right.text-success= totalInValue.toFixed(2)
+                                td.text-right.text-danger= totalOutValue.toFixed(2)
+                                td.text-right= totalClosingValue.toFixed(2)
+                
+                if stockSummary.some(item => item.opening_balance === null || item.opening_balance === undefined)
+                    div.row &nbsp;
+                    div.alert.alert-info.mt-3
+                        i.fas.fa-info-circle
+                        strong  Note: 
+                        | Products highlighted in yellow do not have opening stock recorded. Please add opening stock via Stock Adjustment before using these products in reports.
         else
             div.row &nbsp;
             div.row.bg-light No records to display.
     
     // Include the overlay
     include overlay.pug
+    
+    style.
+        .table-success-light {
+            background-color: #f0f9ff !important;
+        }
