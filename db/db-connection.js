@@ -71,6 +71,7 @@ db.menu_items = require("./menu-items")(sequelize, Sequelize);
 db.menu_groups = require("./menu-groups")(sequelize, Sequelize);
 db.menu_access_global = require("./menu-access-global")(sequelize, Sequelize);
 db.menu_access_override = require("./menu-access-override")(sequelize, Sequelize);
+db.stock_adjustment = require("./stock-adjustment")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -245,6 +246,16 @@ db.location.hasMany(db.dev_tracker, {
 db.dev_tracker.belongsTo(db.location, {
     foreignKey: 'location_code', 
     targetKey: 'location_code'
+});
+
+// Stock adjustment relationships
+db.stock_adjustment.belongsTo(db.product, {
+    foreignKey: 'product_id',
+    targetKey: 'product_id'
+});
+db.product.hasMany(db.stock_adjustment, {
+    foreignKey: 'product_id',
+    sourceKey: 'product_id'
 });
 
 

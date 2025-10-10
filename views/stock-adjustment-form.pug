@@ -1,0 +1,150 @@
+extends layout
+
+block content
+    .container-fluid
+        .row.justify-content-center
+            .col-md-8
+                .card
+                    .card-header.bg-dark.text-white
+                        h5.mb-0 Add Stock Adjustment
+                    .card-body
+                        if messages.error
+                            .alert.alert-danger.alert-dismissible.fade.show
+                                button.close(type='button' data-dismiss='alert') ×
+                                = messages.error
+                        if messages.success
+                            .alert.alert-success.alert-dismissible.fade.show
+                                button.close(type='button' data-dismiss='alert') ×
+                                = messages.success
+
+                        form(method='POST' action='/stock-adjustment/add' id='adjustmentForm')
+                            .form-row
+                                .form-group.col-md-6
+                                    label(for='adjustment_date') Date
+                                        span.text-danger *
+                                    input.form-control(
+                                        type='date'
+                                        id='adjustment_date'
+                                        name='adjustment_date'
+                                        value=currentDate
+                                        required
+                                    )
+                                
+                                .form-group.col-md-6
+                                    label(for='product_id') Product
+                                        span.text-danger *
+                                    select.form-control(
+                                        id='product_id'
+                                        name='product_id'
+                                        required
+                                    )
+                                        option(value='') Select Product
+                                        each product in products
+                                            option(
+                                                value=product.product_id
+                                                data-unit=product.unit
+                                            )= product.product_name
+
+                            .form-row
+                                .form-group.col-md-6
+                                    label(for='adjustment_type') Adjustment Type
+                                        span.text-danger *
+                                    select.form-control(
+                                        id='adjustment_type'
+                                        name='adjustment_type'
+                                        required
+                                    )
+                                        option(value='') Select Type
+                                        option(value='IN') Stock IN (+)
+                                        option(value='OUT') Stock OUT (-)
+
+                                .form-group.col-md-6
+                                    label(for='qty') Quantity
+                                        span.text-danger *
+                                    input.form-control(
+                                        type='number'
+                                        id='qty'
+                                        name='qty'
+                                        step='0.01'
+                                        min='0.01'
+                                        required
+                                    )
+                                    small.form-text.text-muted#unit-display Unit: -
+
+                            .form-row
+                                .form-group.col-md-12
+                                    label Current Stock
+                                    .input-group
+                                        input.form-control(
+                                            type='text'
+                                            id='current_stock'
+                                            readonly
+                                            placeholder='Select product to view current stock'
+                                        )
+                                        .input-group-append
+                                            button.btn.btn-outline-secondary(
+                                                type='button'
+                                                id='refreshStock'
+                                                disabled
+                                            )
+                                                i.fas.fa-sync-alt
+
+                            .form-group
+                                label(for='remarks') Remarks
+                                textarea.form-control(
+                                    id='remarks'
+                                    name='remarks'
+                                    rows='3'
+                                    placeholder='Enter reason for adjustment'
+                                )
+
+                            .form-group
+                                button.btn.btn-primary(type='submit')
+                                    i.fas.fa-save
+                                    |  Save Adjustment
+                                a.btn.btn-secondary.ml-2(href='/stock-adjustment') Cancel
+
+    script.
+        document.addEventListener('DOMContentLoaded', function() {
+            const productSelect = document.getElementById('product_id');
+            const currentStockInput = document.getElementById('current_stock');
+            const refreshBtn = document.getElementById('refreshStock');
+            const unitDisplay = document.getElementById('unit-display');
+
+            // Function to fetch current stock
+            async function fetchCurrentStock() {
+                const productId = productSelect.value;
+                if (!productId) {
+                    currentStockInput.value = '';
+                    refreshBtn.disabled = true;
+                    return;
+                }
+
+                try {
+                    currentStockInput.value = 'Loading...';
+                    const response = await fetch(`/stock-adjustment/api/current-stock/${productId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        currentStockInput.value = data.currentStock;
+                        refreshBtn.disabled = false;
+                    } else {
+                        currentStockInput.value = 'Error loading stock';
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    currentStockInput.value = 'Error loading stock';
+                }
+            }
+
+            // Update unit display when product changes
+            productSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                const unit = selectedOption.dataset.unit || '-';
+                unitDisplay.textContent = `Unit: ${unit}`;
+                fetchCurrentStock();
+            });
+
+            // Refresh button click
+            refreshBtn.addEventListener('click', fetchCurrentStock);
+        });
