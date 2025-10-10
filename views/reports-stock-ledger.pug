@@ -22,7 +22,36 @@ block content
                 include report-print-download.pug
     div &nbsp;
     div
-        if ledgerData && ledgerData.length > 0
+        if selectedProductId && openingBalance === null
+            // No opening stock recorded
+            div.row &nbsp;
+            h6.font-weight-bold.text-center Stock Ledger
+            h5.font-weight-bold.text-center.text-uppercase= productInfo.product_name
+            h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+            
+            .container
+                .row.justify-content-center
+                    .col-12
+                        .alert.alert-warning.text-center(style="padding: 30px;")
+                            i.fas.fa-exclamation-triangle(style="font-size: 2em; color: #856404;")
+                            h5.mt-3 Cannot Generate Stock Report
+                            p.mb-3 No opening stock has been recorded for this product for the selected date range.
+                            hr
+                            div.text-left(style="max-width: 600px; margin: 0 auto;")
+                                p.mb-2
+                                    strong Possible reasons:
+                                ul.text-left
+                                    li This is a new product and opening stock has not been entered yet
+                                    li The selected date range is before the opening stock adjustment date
+                                    li No stock adjustment (IN) has been recorded for this product
+                                p.mt-3.mb-2
+                                    strong To resolve this issue:
+                                ol.text-left
+                                    li Go to 
+                                        strong Transactions → Stock Adjustment
+                                    li Enter opening stock for this product (quantity can be 0 if starting fresh)
+                                    li After recording opening stock, generate reports from that date onwards
+        else if ledgerData && ledgerData.length > 0
             div.row &nbsp;
             h6.font-weight-bold.text-center Stock Ledger
             h5.font-weight-bold.text-center.text-uppercase= productInfo.product_name
@@ -100,13 +129,16 @@ block content
                                         td(colspan='4') Total
                                         td.text-right.text-success= totalIn
                                         td.text-right.text-danger= totalOut
-                                        td.text-right Closing: #{closingBalance}
+                                        td.text-right Closing: #{closingBalance}                       
                         
-                        div.col-12.text-right E &amp; OE
-                        div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
+        else if selectedProductId
+            div.row &nbsp;
+            div.row.bg-light No Transactions for the selected period.
         else
             div.row &nbsp;
-            div.row.bg-light No Transactions.
+            div.alert.alert-info.text-center
+                i.fas.fa-info-circle
+                |  Please select a product and date range to view the stock ledger.
     
     // Include the overlay
     include overlay.pug

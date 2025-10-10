@@ -36,8 +36,9 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.locationCode = locationCodeElement ? locationCodeElement.value:'';  // if no location code obtained
                                                                                         // subsequent code will use req.user.location_code       
     }else if (currentPage.includes('reports/stock/summary')) {
-    requestBody.reportType = 'StockSummary';
-    requestBody.reportDate = document.getElementById('reportDate').value;
+        requestBody.reportType = 'StockSummary';
+        requestBody.fromDate = document.getElementById('fromDate').value;
+        requestBody.toDate = document.getElementById('toDate').value;
     }else if (currentPage.includes('reports/stock/ledger')) {
         requestBody.reportType = 'StockLedger';
         requestBody.fromDate = document.getElementById('fromDate').value;
