@@ -126,7 +126,7 @@ module.exports = {
 
   // App timezone
   //TIMEZONE: '-07:00', // PST timezone - for writing to database
-  TIMEZONE: "+05:50", // India timezone - for writing to database
+  TIMEZONE: "+05:30", // India timezone - for writing to database
 
   // DB table config
   PERSON_TABLE: "m_persons",
