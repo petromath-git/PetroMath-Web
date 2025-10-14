@@ -185,6 +185,7 @@ const usageDashboardRoutes = require('./routes/usage-dashboard-routes');
 const menuManagementRoutes = require('./routes/menu-management-routes');
 const stockAdjustmentRoutes = require('./routes/stock-adjustment');
 const stockReportsRoutes = require('./routes/stock-reports-routes');
+const creditMasterRoutes = require('./routes/credit-master-routes');
 const apiRoutes = require('./api/apiRoutes');
 
 
@@ -330,6 +331,7 @@ app.use('/bills', billsRoutes);
 app.use('/usage-dashboard', usageDashboardRoutes);
 app.use('/menu-management', menuManagementRoutes);
 app.use('/reports/stock', stockReportsRoutes);
+app.use('/credit-master', creditMasterRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 
@@ -555,32 +557,9 @@ app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res
         });
 });
 
-app.get('/enable_credit', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findDisableCreditCustomersOnly(req.user.location_code)
-        .then(data => {
-            res.render('enable_credit', {
-                title: 'Disabled Credits',
-                user: req.user,
-                users: data
-            });
-        })
-        .catch(err => {
-            console.error("Error fetching users:", err);
-            res.status(500).send("An error occurred.");
-        });
-});
 
-app.put('/enable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const creditID = req.params.id;
-    CreditDao.enableCredit(creditID)
-        .then(data => {
-            if (data == 1) {
-                res.status(200).send({ success: true, message: 'Credit enabled successfully.' });
-            } else {
-                res.status(400).send({ success: false, error: 'Error enabling user.' });
-            }
-        })
-});
+
+
 
 app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
     const userId = req.params.id;
@@ -594,32 +573,10 @@ app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req,
         })
 });
 
-// Disable Credit
-app.put('/disable-credit/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const creditID = req.params.id;
-    CreditDao.disableCredit(creditID).then(data => {
-        if (data == 1) {
-            res.status(200).send({ message: 'Credit disabled successfully.' });
-        } else {
-            res.status(500).send({ error: 'Error disabling user.' });
-        }
-    })
-});
 
 
 
-app.get('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findDigitalCustomers(req.user.location_code).then(data => {
-        res.render('digital', { 
-            title: 'Digital Master', 
-            user: req.user, 
-            digitalCustomers: data 
-        });
-    }).catch(err => {
-        console.error('Error fetching digital customers:', err);
-        res.status(500).send('Error loading digital customers');
-    });
-});
+
 
 
 // Digital Master - POST route (for saving new digital customers)
@@ -631,54 +588,10 @@ app.post('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
 });
 
 
-// Enable Digital Customer page
-app.get('/enable_digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findDisableDigitalCustomers(req.user.location_code)
-        .then(data => {
-            res.render('enable_digital', {
-                title: 'Disabled Digital Customers',
-                user: req.user,
-                digitalCustomers: data
-            });
-        })
-        .catch(err => {
-            console.error("Error fetching disabled digital customers:", err);
-            res.status(500).send("An error occurred.");
-        });
-});
 
-// Enable specific digital customer
-app.put('/enable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const digitalId = req.params.id;
-    CreditDao.enableCredit(digitalId)
-        .then(data => {
-            if (data == 1) {
-                res.status(200).send({ success: true, message: 'Digital customer enabled successfully.' });
-            } else {
-                res.status(400).send({ success: false, error: 'Error enabling digital customer.' });
-            }
-        })
-        .catch(err => {
-            console.error('Error enabling digital customer:', err);
-            res.status(500).send({ success: false, error: 'Error enabling digital customer.' });
-        });
-});
 
-// Disable specific digital customer
-app.put('/disable-digital/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const digitalId = req.params.id;
-    CreditDao.disableCredit(digitalId).then(data => {
-        if (data == 1) {
-            res.status(200).send({ message: 'Digital customer disabled successfully.' });
-        } else {
-            res.status(500).send({ error: 'Error disabling digital customer.' });
-        }
-    })
-    .catch(err => {
-        console.error('Error disabling digital customer:', err);
-        res.status(500).send({ error: 'Error disabling digital customer.' });
-    });
-});
+
+
 
 
 app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
@@ -692,28 +605,6 @@ app.post('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
     masterController.createUser(req, res);
 });
 
-app.get('/credits', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    creditController.findCreditCustomersOnly(req.user.location_code).then(data => {
-        res.render('credits', { title: 'Credits', user: req.user, credits: data });
-    });
-});
-
-
-app.post('/credits', [isLoginEnsured, security.isAdmin()], async function (req, res) {
-    try {
-        // Create the credit customer first
-        const newCredit = await CreditDao.create(dbMapping.newCredit(req));
-        
-        // Create the corresponding user account via DAO
-        await PersonDao.createUserForCredit(newCredit, req.user);
-        
-        res.redirect('/credits');
-    } catch (error) {
-        console.error('Error creating credit:', error);
-        req.flash('error', 'Error creating credit customer');
-        res.redirect('/credits');
-    }
-});
 
 
 app.get('/home', isLoginEnsured, function (req, res, next) {

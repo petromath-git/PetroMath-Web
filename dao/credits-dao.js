@@ -125,4 +125,43 @@ module.exports = {
             order: [Sequelize.literal('Company_Name')],
         });
     },
+findCustomerByPhone: async (phone) => {
+        const query = `
+            SELECT 
+                mcl.creditlist_id,
+                mcl.Company_Name,
+                mcl.location_code,
+                mcl.phoneno phone,
+                mcl.card_flag
+            FROM m_credit_list mcl
+            WHERE mcl.phoneno = :phone            
+            LIMIT 1
+        `;
+        
+        const result = await db.sequelize.query(query, {
+            replacements: { phone: phone },
+            type: Sequelize.QueryTypes.SELECT
+        });
+        
+        return result.length > 0 ? result[0] : null;
+    },
+    update: (creditlistId, updateData) => {
+    return Credit.update(updateData, {
+        where: { creditlist_id: creditlistId }
+    });
+    },    
+    findByNameAndLocation: async (companyName, locationCode) => {
+        try {
+            const customer = await Credit.findOne({
+                where: {
+                    Company_Name: companyName,
+                    location_code: locationCode
+                }
+            });
+            return customer;
+        } catch (error) {
+            console.error('Error finding customer by name:', error);
+            throw error;
+        }
+    },
 };
