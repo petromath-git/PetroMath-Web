@@ -186,6 +186,7 @@ const menuManagementRoutes = require('./routes/menu-management-routes');
 const stockAdjustmentRoutes = require('./routes/stock-adjustment');
 const stockReportsRoutes = require('./routes/stock-reports-routes');
 const creditMasterRoutes = require('./routes/credit-master-routes');
+const locationMasterRoutes = require('./routes/location-master-routes');
 const apiRoutes = require('./api/apiRoutes');
 
 
@@ -332,6 +333,7 @@ app.use('/usage-dashboard', usageDashboardRoutes);
 app.use('/menu-management', menuManagementRoutes);
 app.use('/reports/stock', stockReportsRoutes);
 app.use('/credit-master', creditMasterRoutes);
+app.use('/location-master', locationMasterRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 

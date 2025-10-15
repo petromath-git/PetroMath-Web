@@ -61,12 +61,70 @@ module.exports = {
      */
     getDefaultCustomerType: async (locationCode) => {
         try {
-            const types = await this.getCustomerTypes(locationCode);
+            const types = await module.exports.getCustomerTypes(locationCode);
             const defaultType = types.find(t => t.is_default);
             return defaultType ? defaultType.description : (types[0]?.description || 'Credit');
         } catch (error) {
             console.error('Error fetching default customer type:', error);
             return 'Credit'; // Fallback
+        }
+    },
+
+    /**
+     * Get oil companies for location master
+     * Returns companies like IOCL, BPCL, HPCL, NAYARA
+     */
+    getOilCompanies: async () => {
+        try {
+            const currentDate = new Date();
+            
+            const companies = await Lookup.findAll({
+                attributes: ['description'],
+                where: {
+                    lookup_type: 'OIL_COMPANY',
+                    start_date_active: {
+                        [Op.lte]: currentDate
+                    },
+                    end_date_active: {
+                        [Op.gte]: currentDate
+                    }
+                },
+                order: [['description', 'ASC']]
+            });
+            
+            return companies.map(c => c.description);
+        } catch (error) {
+            console.error('Error fetching oil companies:', error);
+            // Return default list if lookup fails
+            return ['IOCL', 'BPCL', 'HPCL', 'NAYARA'];
+        }
+    },
+
+    /**
+     * Get lookup values by type (generic method)
+     */
+    getLookupByType: async (lookupType) => {
+        try {
+            const currentDate = new Date();
+            
+            const values = await Lookup.findAll({
+                attributes: ['lookup_id', 'description', 'tag', 'attribute1', 'attribute2', 'attribute3'],
+                where: {
+                    lookup_type: lookupType,
+                    start_date_active: {
+                        [Op.lte]: currentDate
+                    },
+                    end_date_active: {
+                        [Op.gte]: currentDate
+                    }
+                },
+                order: [['description', 'ASC']]
+            });
+            
+            return values;
+        } catch (error) {
+            console.error(`Error fetching lookup type ${lookupType}:`, error);
+            throw error;
         }
     }
 };
