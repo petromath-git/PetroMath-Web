@@ -3,6 +3,41 @@ const dateFormat = require('dateformat');  // Import dateFormat to format dates 
 const db = require("../db/db-connection");  // Import db connection
 const dbMapping = require("../db/ui-db-field-mapping");  // Import the field mappings if necessary
 
+
+// Get vehicles formatted for display (existing method - update it)
+exports.getVehiclesForDisplay = async function (creditlistId) {
+    try {
+        const vehicles = await CreditVehiclesDao.findAll(creditlistId);
+        
+        return vehicles.map(vehicle => ({
+            vehicle_id: vehicle.vehicle_id,
+            vehicle_number: vehicle.vehicle_number,
+            vehicle_type: vehicle.vehicle_type || "",
+            product_id: vehicle.product_id || null,
+            product_name: vehicle.product_name || "Not Set",
+            created_by: vehicle.created_by,
+            updated_by: vehicle.updated_by,
+            creation_date: dateFormat(vehicle.creation_date, "yyyy-mm-dd"),
+            updation_date: dateFormat(vehicle.updation_date, "yyyy-mm-dd")
+        }));
+    } catch (error) {
+        console.error('Error getting vehicles for display:', error);
+        throw error;
+    }
+};
+
+
+// Update vehicle data (new method)
+exports.updateVehicleData = async function (vehicleId, updateData) {
+    try {
+        const result = await CreditVehiclesDao.update(vehicleId, updateData);
+        return result && result[0] === 1;
+    } catch (error) {
+        console.error('Error updating vehicle data:', error);
+        throw error;
+    }
+};
+
 // Fetch vehicles for a specific credit party
 exports.getVehiclesByCreditlist = async function (req, res, next) {
     try {

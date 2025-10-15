@@ -1,140 +1,81 @@
+// Update your dao/credit-vehicles-dao.js
+
 const db = require("../db/db-connection");
 const CreditListVehicle = db.creditlistvehicle;
 const { Op } = require("sequelize");
-const Sequelize = require("sequelize");
-const config = require("../config/app-config");
-const utils = require('../utils/app-utils');
 const dateFormat = require('dateformat');
 
 module.exports = {
-    // Get all vehicles for a given credit party (only active vehicles)
+    // Find all vehicles for a credit party (UPDATE THIS METHOD)
     findAll: (creditlistId) => {
-        if (creditlistId) {
-            return CreditListVehicle.findAll({
-                where: { 
-                    creditlist_id: creditlistId,
-                    [Op.or]: [
-                        { effective_end_date: null },
-                        { effective_end_date: { [Op.gt]: new Date() } }
-                    ]
-                },
-                order: [Sequelize.literal('vehicle_number')]
-            });
-        } else {
-            return CreditListVehicle.findAll({
-                where: {
-                    [Op.or]: [
-                        { effective_end_date: null },
-                        { effective_end_date: { [Op.gt]: new Date() } }
-                    ]
-                }
-            });
-        }
-    },
-
-    // Get all vehicles including disabled ones (for enable vehicle page)
-    findAllIncludingDisabled: (creditlistId) => {
-        if (creditlistId) {
-            return CreditListVehicle.findAll({
-                where: { creditlist_id: creditlistId },
-                order: [Sequelize.literal('vehicle_number')]
-            });
-        } else {
-            return CreditListVehicle.findAll({});
-        }
-    },
-
-    // Get disabled vehicles only
-    findDisabled: (creditlistId) => {
-        const whereClause = {
-            effective_end_date: { [Op.lte]: new Date() }
-        };
-        
-        if (creditlistId) {
-            whereClause.creditlist_id = creditlistId;
-        }
-
-        return CreditListVehicle.findAll({
-            where: whereClause,
-            order: [Sequelize.literal('vehicle_number')]
-        });
-    },
-
-    // Get vehicles linked to a specific credit party and location (optional filter by location)
-    findByCreditlistAndLocation: (creditlistId, locationCode) => {
-        if (creditlistId && locationCode) {
-            return CreditListVehicle.findAll({
-                where: {
-                    creditlist_id: creditlistId,
-                    location_code: locationCode,
-                    [Op.or]: [
-                        { effective_end_date: null },
-                        { effective_end_date: { [Op.gt]: new Date() } }
-                    ]
-                },
-                order: [Sequelize.literal('vehicle_number')]
-            });
-        } else {
-            return CreditListVehicle.findAll({
-                where: {
-                    [Op.or]: [
-                        { effective_end_date: null },
-                        { effective_end_date: { [Op.gt]: new Date() } }
-                    ]
-                }
-            });
-        }
-    },
-
-    findAllVehiclesForLocation: (locationCode) => {
-        return db.sequelize.query(
-            `SELECT 
+        const now = new Date();
+        return db.sequelize.query(`
+            SELECT 
                 v.vehicle_id,
                 v.creditlist_id,
                 v.vehicle_number,
                 v.vehicle_type,
-                c.Company_Name as company_name
+                v.product_id,
+                p.product_name,
+                v.notes,
+                v.created_by,
+                v.updated_by,
+                v.creation_date,
+                v.updation_date,
+                v.effective_start_date,
+                v.effective_end_date
             FROM m_creditlist_vehicles v
-            INNER JOIN m_credit_list c ON v.creditlist_id = c.creditlist_id
-            WHERE c.location_code = :locationCode
-                AND (v.effective_end_date IS NULL OR v.effective_end_date >= CURDATE())
-                AND (c.effective_end_date IS NULL OR c.effective_end_date >= CURDATE())
-            ORDER BY v.vehicle_number`,
-            {
-                replacements: { locationCode },
-                type: db.sequelize.QueryTypes.SELECT
-            }
-        );
-    },
-
-    // Get vehicle details by vehicle_id
-    findByVehicleId: (vehicleId) => {
-        return CreditListVehicle.findOne({
-            where: { vehicle_id: vehicleId }
+            LEFT JOIN m_product p ON v.product_id = p.product_id
+            WHERE v.creditlist_id = :creditlistId
+              AND (v.effective_end_date IS NULL OR v.effective_end_date >= :now)
+            ORDER BY v.vehicle_number
+        `, {
+            replacements: { creditlistId, now },
+            type: db.Sequelize.QueryTypes.SELECT
         });
     },
 
+    // Find vehicle by number and customer (NEW METHOD)
+    findByNumberAndCustomer: async (vehicleNumber, creditlistId) => {
+        try {
+            const now = new Date();
+            const result = await db.sequelize.query(`
+                SELECT vehicle_id, vehicle_number, creditlist_id
+                FROM m_creditlist_vehicles
+                WHERE vehicle_number = :vehicleNumber
+                  AND creditlist_id = :creditlistId
+                  AND (effective_end_date IS NULL OR effective_end_date >= :now)
+                LIMIT 1
+            `, {
+                replacements: { vehicleNumber, creditlistId, now },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+            
+            return result && result[0] ? result[0] : null;
+        } catch (error) {
+            console.error('Error finding vehicle by number:', error);
+            throw error;
+        }
+    },
 
-    findByVehicleIds: (vehicleIds) => {
-        return CreditListVehicle.findAll({
-            where: { 
-                vehicle_id: vehicleIds
-            },
-            attributes: ['vehicle_id', 'vehicle_number', 'vehicle_type', 'creditlist_id']
+    // Create a new vehicle (UPDATE THIS METHOD to include product_id)
+    create: (vehicleData) => {
+        return CreditListVehicle.create({
+            creditlist_id: vehicleData.creditlist_id,
+            vehicle_number: vehicleData.vehicle_number,
+            vehicle_type: vehicleData.vehicle_type,
+            product_id: vehicleData.product_id || null,
+            notes: vehicleData.notes,
+            created_by: vehicleData.created_by,
+            updated_by: vehicleData.updated_by,
+            creation_date: new Date(),
+            updation_date: new Date(),
+            effective_start_date: new Date(),
+            effective_end_date: null
         });
     },
 
-    // Create a new vehicle for a credit party
-    create: (vehicle) => {
-        return CreditListVehicle.create(vehicle);
-    },
-
-    // Bulk create multiple vehicles (useful for your form submission)
-    bulkCreate: (vehicles) => {
-        return CreditListVehicle.bulkCreate(vehicles);
-    },
-
-    // Update vehicle details by vehicle_id
+    // Update a vehicle (UPDATE THIS METHOD)
     update: (vehicleId, updatedData) => {
         return CreditListVehicle.update(updatedData, {
             where: { vehicle_id: vehicleId }
@@ -148,7 +89,7 @@ module.exports = {
         });
     },
 
-    // Disable a vehicle by setting effective_end_date to current date (soft delete)
+    // Disable a vehicle (soft delete)
     disableVehicle: (vehicleId) => {
         const now = new Date();
         const formattedDate = dateFormat(now, "yyyy-mm-dd");
@@ -160,9 +101,9 @@ module.exports = {
         });
     },
 
-    // Enable a vehicle (reset effective_end_date to far future date)
+    // Enable a vehicle
     enableVehicle: (vehicleId) => {
-        const updateDate = "2400-01-01"; // Use a far future date for enabling
+        const updateDate = "2400-01-01";
         return CreditListVehicle.update({
             effective_end_date: updateDate,
             updation_date: new Date()

@@ -1,54 +1,532 @@
 extends layout
-include mixins/mixins
 
 block content
-    form(method='POST' action='/vehicles')
-        input(type="hidden", name="creditlist_id", value=creditlist_id)
-        
-        // Header with back button
-        .d-flex.justify-content-between.align-items-center.mb-3
-            span Vehicles for Credit Party ##{creditlist_id}
-            a.btn.btn-secondary(href="/credit-master") 
-                span.oi.oi-arrow-left
-                |  Back to Credits
-        
-        table(class="table" id="vehicles-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Vehicle Number
-                    th(scope="col") Vehicle Type
-                    th(scope="col") Disable Vehicle
-            tbody
-                each vehicle, index in vehicles
-                    tr(id='vehicle-' + index)
-                        th(scope="row")= index + 1
-                        td= vehicle.vehicle_number
-                        td= vehicle.vehicle_type
-                        td
-                            div.align-items-start
-                                button.btn.btn-info(id="disable-vehicle-"+index, onclick="disableVehicle('"+index+"', '"+ vehicle.vehicle_id +"')", title="Disable Vehicle")
-                                    span.oi.oi-delete
-                
-                // Add new vehicle row (initially hidden)
-                - var rowCnt = 0
-                while rowCnt < 1
-                    +addNewVehicle(rowCnt++)
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button", data-dismiss="alert", aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header
+    .vehicles-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col
+                    h4.mb-0.text-primary 
+                        | Vehicles for 
+                        if customer
+                            strong= customer.Company_Name
+                        else
+                            | Customer ##{creditlist_id}
+                .col-auto
+                    if canAdd
+                        button.btn.btn-success.btn-sm#addVehicleBtn(type="button", data-toggle="modal", data-target="#addVehicleModal", style="margin-right: 8px;")
+                            i.bi.bi-plus-circle
+                            span.d-none.d-md-inline.ms-1 Add Vehicle
+                            span.d-inline.d-md-none.ms-1 Add
                     
-        div(align="center")
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'vehicles')", id='vehicles-add-new', title="Add a new vehicle") Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='vehicles-save') Save            
-    // JavaScript functions
+                    button.btn.btn-secondary.btn-sm#backBtn(type="button", onclick="window.location.href='/credit-master'", style="margin-right: 8px;")
+                        i.bi.bi-arrow-left
+                        span.d-none.d-md-inline.ms-1 Back to Customers
+                        span.d-inline.d-md-none.ms-1 Back
+                    
+                    button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                        i.bi.bi-arrow-clockwise
+                        span.d-none.d-md-inline.ms-1 Refresh
+
+    // Vehicles content
+    .vehicles-container
+        // Search Box
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(
+                        type="text",
+                        placeholder="Search by vehicle number, type, fuel...",
+                        autocomplete="off"
+                    )
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
+                            i.bi.bi-x-circle
+        
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive.table-desktop-container
+                table.table.table-hover.table-striped(id="vehicles-master-table")
+                    thead.thead-dark.sticky-top
+                        tr
+                            th #
+                            th Vehicle Number
+                            th Vehicle Type
+                            th Fuel Type
+                            if canEdit
+                                th Edit
+                            if canDisable
+                                th Disable
+                    tbody
+                        each val, index in vehicles
+                            tr(id=`vehicle-row-${index}`)
+                                th(scope="row")= index + 1
+                                td(scope="row")
+                                    input.form-control.form-control-sm.text-uppercase(
+                                        type="text", 
+                                        id=`vehicle-number-${index}`, 
+                                        value=val.vehicle_number || '', 
+                                        readonly,
+                                        style="text-transform: uppercase;"
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm.text-uppercase(
+                                        type="text", 
+                                        id=`vehicle-type-${index}`, 
+                                        value=val.vehicle_type || '', 
+                                        readonly,
+                                        style="text-transform: uppercase;"
+                                    )
+                                td(scope="row")
+                                    select.form-control.form-control-sm(
+                                        id=`vehicle-product-${index}`,
+                                        disabled
+                                    )
+                                        option(value="") Not Set
+                                        each product in products
+                                            option(
+                                                value=product.product_id,
+                                                selected=product.product_id == val.product_id
+                                            )= product.product_name
+                                
+                                if canEdit
+                                    td(scope="row")
+                                        button.btn.btn-primary.btn-sm(type="button", onclick=`editVehicle(${index}, ${val.vehicle_id})`)
+                                            i.bi.bi-pencil
+                                
+                                if canDisable
+                                    td(scope="row")
+                                        button.btn.btn-danger.btn-sm(type="button", onclick=`disableVehicle(${index}, ${val.vehicle_id})`)
+                                            i.bi.bi-trash
+
+        // Mobile cards view
+        .mobile-cards-view.d-block.d-lg-none
+            .row
+                each val, index in vehicles
+                    .col-12.mb-3
+                        .card.vehicle-card.shadow-sm(id=`mobile-vehicle-card-${index}`)
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                .vehicle-name
+                                    input.mobile-input.fw-bold.text-uppercase(
+                                        type="text",
+                                        id=`mobile-number-${index}`,
+                                        value=val.vehicle_number || '',
+                                        readonly,
+                                        style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
+                                    )
+                                .vehicle-actions
+                                    if canEdit
+                                        button.btn.btn-primary.btn-sm.me-1(type="button", onclick=`editVehicleMobile(${index}, ${val.vehicle_id})`)
+                                            i.bi.bi-pencil
+                                    if canDisable
+                                        button.btn.btn-danger.btn-sm(type="button", onclick=`disableVehicle(${index}, ${val.vehicle_id})`)
+                                            i.bi.bi-trash
+                            .card-body.p-3
+                                .row.g-2
+                                    .col-6
+                                        .vehicle-detail
+                                            small.text-muted Vehicle Type
+                                            input.mobile-input.fw-bold.text-uppercase(
+                                                type="text", 
+                                                id=`mobile-type-${index}`, 
+                                                value=val.vehicle_type || '', 
+                                                readonly, 
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
+                                            )
+                                    .col-6
+                                        .vehicle-detail
+                                            small.text-muted Fuel Type
+                                            select.mobile-input.fw-bold(
+                                                id=`mobile-product-${index}`,
+                                                disabled,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                                option(value="") Not Set
+                                                each product in products
+                                                    option(
+                                                        value=product.product_id,
+                                                        selected=product.product_id == val.product_id
+                                                    )= product.product_name
+
+    // Add Vehicle Modal
+    .modal.fade#addVehicleModal(tabindex="-1", role="dialog", aria-labelledby="addVehicleModalLabel", aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#addVehicleModalLabel Add New Vehicle
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#addVehicleForm(method='POST', action='/vehicles')
+                        input(type="hidden", name="creditlist_id", value=creditlist_id)
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Vehicle Number *
+                                input.form-control.text-uppercase(
+                                    type="text", 
+                                    name="mvehiclenumber_0", 
+                                    required,
+                                    maxlength="20",
+                                    style="text-transform: uppercase;"
+                                )
+                            .col-md-6.mb-3
+                                label.form-label Vehicle Type
+                                input.form-control.text-uppercase(
+                                    type="text", 
+                                    name="mvehicletype_0",
+                                    maxlength="50",
+                                    placeholder="e.g., Car, Truck, Bike",
+                                    style="text-transform: uppercase;"
+                                )
+                            .col-md-12.mb-3
+                                label.form-label Fuel Type
+                                select.form-control(name="mproduct_0")
+                                    option(value="") Not Set
+                                    each product in products
+                                        option(value=product.product_id)= product.product_name
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="submit", form="addVehicleForm") Add Vehicle
+
+    // CSS
+    style.
+        /* Sticky header styles */
+        .vehicles-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: -20px -15px 20px -15px;
+            padding: 0 15px;
+        }
+        
+        /* Adjust for sidebar */
+        @media (min-width: 768px) {
+            .vehicles-header-sticky {
+                margin-left: 0;
+            }
+        }
+        
+        /* Container spacing */
+        .vehicles-container {
+            margin-top: 20px;
+        }
+        
+        /* Desktop table */
+        .table-desktop-container {
+            max-height: calc(100vh - 250px);
+            overflow-y: auto;
+        }
+        
+        /* Mobile cards */
+        .vehicle-card {
+            border-left: 4px solid #007bff;
+            transition: transform 0.2s;
+        }
+        
+        .vehicle-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        }
+        
+        .vehicle-detail {
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Search box styling */
+        #searchInput { border-radius: 0; }
+        #searchInput:focus { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); border-color: #80bdff; }
+        .input-group-text { background-color: #f8f9fa; border-right: 0; }
+        #clearSearch { border-left: 0; }
+        #searchInput::placeholder { color: #6c757d; opacity: 0.8; font-style: italic; }
+        
+        /* Validation styles */
+        .is-invalid { 
+            border-color: #dc3545 !important; 
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e"); 
+            background-repeat: no-repeat;
+            background-position: right .5em center;
+            background-size: .75em .75em;
+        }
+        .is-valid { 
+            border-color: #28a745 !important; 
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e"); 
+            background-repeat: no-repeat;
+            background-position: right .5em center;
+            background-size: .75em .75em;
+        }
+        
+        /* Smooth transitions */
+        #vehicles-master-table tbody tr,
+        .mobile-cards-view .col-12 { 
+            transition: opacity 0.2s ease; 
+        }
+
+    // JavaScript
     script.
-        // Function to disable a vehicle (similar to disableUser)
-        function disableVehicle(index, vehicleId) {
-            const r = confirm("Please confirm if you want to disable the vehicle?");
-            if (r == true) {
-                putAjax('vehicles/disable-vehicle/' + vehicleId, {}).then(success => {
-                    if (success) {
-                        document.getElementById('vehicle-' + index).className = 'd-md-none';
+        function makeUppercase(input) { input.value = input.value.toUpperCase(); }
+
+        // Duplicate check on Add Vehicle
+        let checkTimeout;
+        function setupDuplicateCheck() {
+            const vehicleNumber = document.querySelector('input[name="mvehiclenumber_0"]');
+            const submit = document.querySelector('#addVehicleForm button[type="submit"]');
+            if (vehicleNumber) {
+                vehicleNumber.addEventListener('input', function() {
+                    clearTimeout(checkTimeout);
+                    const val = this.value.trim().toUpperCase();
+                    this.classList.remove('is-valid', 'is-invalid');
+                    if (val.length > 0) {
+                        checkTimeout = setTimeout(() => checkDuplicateVehicle(val, this, submit), 500);
+                    } else {
+                        submit.disabled = false;
                     }
                 });
             }
         }
+        
+        function checkDuplicateVehicle(vehicleNumber, input, btn) {
+            fetch(`/vehicles/check-duplicate?vehicle_number=${encodeURIComponent(vehicleNumber)}&creditlist_id=#{creditlist_id}`)
+            .then(r => r.json()).then(d => {
+                if (d.exists) {
+                    input.classList.add('is-invalid');
+                    btn.disabled = true;
+                    showMessage('Vehicle number already exists for this customer', 'warning');
+                } else {
+                    input.classList.add('is-valid');
+                    btn.disabled = false;
+                }
+            }).catch(() => btn.disabled = false);
+        }
+
+        // Duplicate check during Edit
+        function checkDuplicateForEdit(vehicleNumber, excludeId, input) {
+            fetch(`/vehicles/check-duplicate?vehicle_number=${encodeURIComponent(vehicleNumber)}&creditlist_id=#{creditlist_id}&excludeId=${excludeId}`)
+            .then(r => r.json()).then(d => {
+                if (d.exists) {
+                    input.classList.add('is-invalid');
+                    showMessage('Vehicle number already exists for this customer', 'warning');
+                } else {
+                    input.classList.add('is-valid');
+                    input.classList.remove('is-invalid');
+                }
+            }).catch(() => input.classList.remove('is-valid', 'is-invalid'));
+        }
+
+        function editVehicle(i, id) {
+            const row = document.getElementById(`vehicle-row-${i}`);
+            const inputs = row.querySelectorAll('input[readonly]');
+            const productSelect = document.getElementById(`vehicle-product-${i}`);
+            
+            inputs.forEach(inp => {
+                inp.removeAttribute('readonly');
+                inp.classList.add('bg-light');
+                inp.addEventListener('input', () => makeUppercase(inp));
+                
+                if (inp.id === `vehicle-number-${i}`) {
+                    let t;
+                    inp.addEventListener('input', function() {
+                        clearTimeout(t);
+                        const val = this.value.trim().toUpperCase();
+                        this.classList.remove('is-valid', 'is-invalid');
+                        if (val.length > 0) {
+                            t = setTimeout(() => checkDuplicateForEdit(val, id, this), 500);
+                        }
+                    });
+                }
+            });
+            
+            productSelect.removeAttribute('disabled');
+            productSelect.classList.add('bg-light');
+            
+            const btn = row.querySelector('button.btn-primary');
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            btn.classList.replace('btn-primary', 'btn-success');
+            btn.setAttribute('onclick', `saveVehicle(${i}, ${id})`);
+        }
+
+        function editVehicleMobile(i, id) {
+            const card = document.getElementById(`mobile-vehicle-card-${i}`);
+            const inputs = card.querySelectorAll('input[readonly]');
+            const productSelect = document.getElementById(`mobile-product-${i}`);
+            
+            inputs.forEach(inp => {
+                inp.removeAttribute('readonly');
+                inp.classList.add('editable');
+                inp.addEventListener('input', () => makeUppercase(inp));
+                
+                if (inp.id === `mobile-number-${i}`) {
+                    let t;
+                    inp.addEventListener('input', function() {
+                        clearTimeout(t);
+                        const val = this.value.trim().toUpperCase();
+                        this.classList.remove('is-valid', 'is-invalid');
+                        if (val.length > 0) {
+                            t = setTimeout(() => checkDuplicateForEdit(val, id, this), 500);
+                        }
+                    });
+                }
+            });
+            
+            productSelect.removeAttribute('disabled');
+            productSelect.classList.add('editable');
+            
+            const btn = card.querySelector('button.btn-primary');
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            btn.classList.replace('btn-primary', 'btn-success');
+            btn.setAttribute('onclick', `saveVehicleMobile(${i}, ${id})`);
+        }
+
+        function saveVehicle(i, id) {
+            const data = {
+                vehicle_number: document.getElementById(`vehicle-number-${i}`).value.toUpperCase(),
+                vehicle_type: document.getElementById(`vehicle-type-${i}`).value.toUpperCase(),
+                product_id: document.getElementById(`vehicle-product-${i}`).value || null
+            };
+            
+            fetch(`/vehicles/api/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json()).then(d => {
+                if (d.success) {
+                    showMessage('Vehicle updated successfully', 'success');
+                    const row = document.getElementById(`vehicle-row-${i}`);
+                    row.querySelectorAll('input').forEach(x => {x.readOnly = true; x.classList.remove('bg-light');});
+                    document.getElementById(`vehicle-product-${i}`).disabled = true;
+                    document.getElementById(`vehicle-product-${i}`).classList.remove('bg-light');
+                    const b = row.querySelector('button.btn-success');
+                    b.innerHTML = '<i class="bi bi-pencil"></i>';
+                    b.classList.replace('btn-success', 'btn-primary');
+                    b.setAttribute('onclick', `editVehicle(${i}, ${id})`);
+                } else {
+                    showMessage('Error updating: ' + d.error, 'danger');
+                }
+            }).catch(e => showMessage('Error updating: ' + e.message, 'danger'));
+        }
+
+        function saveVehicleMobile(i, id) {
+            const data = {
+                vehicle_number: document.getElementById(`mobile-number-${i}`).value.toUpperCase(),
+                vehicle_type: document.getElementById(`mobile-type-${i}`).value.toUpperCase(),
+                product_id: document.getElementById(`mobile-product-${i}`).value || null
+            };
+            
+            fetch(`/vehicles/api/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json()).then(d => {
+                if (d.success) {
+                    showMessage('Vehicle updated successfully', 'success');
+                    const card = document.getElementById(`mobile-vehicle-card-${i}`);
+                    card.querySelectorAll('input').forEach(x => {x.readOnly = true; x.classList.remove('editable');});
+                    document.getElementById(`mobile-product-${i}`).disabled = true;
+                    document.getElementById(`mobile-product-${i}`).classList.remove('editable');
+                    const b = card.querySelector('button.btn-success');
+                    b.innerHTML = '<i class="bi bi-pencil"></i>';
+                    b.classList.replace('btn-success', 'btn-primary');
+                    b.setAttribute('onclick', `editVehicleMobile(${i}, ${id})`);
+                } else {
+                    showMessage('Error updating: ' + d.error, 'danger');
+                }
+            }).catch(e => showMessage('Error updating: ' + e.message, 'danger'));
+        }
+
+        function disableVehicle(i, id) {
+            if (confirm('Are you sure you want to disable this vehicle?')) {
+                fetch(`/vehicles/disable-vehicle/${id}`, {method: 'PUT'})
+                .then(r => r.json()).then(d => {
+                    if (d.success || d.message) {
+                        showMessage('Vehicle disabled successfully', 'success');
+                        document.getElementById(`vehicle-row-${i}`).style.display = 'none';
+                        const c = document.getElementById(`mobile-vehicle-card-${i}`);
+                        if (c) c.parentElement.style.display = 'none';
+                    } else {
+                        showMessage('Error: ' + (d.error || 'Unknown error'), 'danger');
+                    }
+                }).catch(e => showMessage('Error: ' + e.message, 'danger'));
+            }
+        }
+        
+        function refreshData() { location.reload(); }
+        
+        function showMessage(m, t) {
+            const a = document.getElementById('messageAlert');
+            const tx = document.getElementById('messageText');
+            a.className = `alert alert-${t} alert-dismissible fade show`;
+            tx.textContent = m;
+            a.style.display = 'block';
+            setTimeout(() => {
+                a.classList.remove('show');
+                setTimeout(() => a.style.display = 'none', 150);
+            }, 3000);
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            setupDuplicateCheck();
+            document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+            document.querySelectorAll('input.text-uppercase').forEach(x => x.addEventListener('input', () => makeUppercase(x)));
+            
+            // Search functionality
+            const searchInput = document.getElementById('searchInput');
+            const clearSearchBtn = document.getElementById('clearSearch');
+            const desktopRows = document.querySelectorAll('#vehicles-master-table tbody tr');
+            const mobileCards = document.querySelectorAll('.mobile-cards-view .card');
+            
+            searchInput.addEventListener('input', function() {
+                const term = this.value.toLowerCase().trim();
+                clearSearchBtn.style.display = term ? 'block' : 'none';
+                
+                // Search desktop table
+                desktopRows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    const inputs = Array.from(row.querySelectorAll('input')).map(i => (i.value || '').toLowerCase()).join(' ');
+                    const selects = Array.from(row.querySelectorAll('select')).map(s => (s.options[s.selectedIndex]?.text || '').toLowerCase()).join(' ');
+                    row.style.display = (text + ' ' + inputs + ' ' + selects).includes(term) ? '' : 'none';
+                });
+                
+                // Search mobile cards
+                mobileCards.forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    const inputs = Array.from(card.querySelectorAll('input')).map(i => (i.value || '').toLowerCase()).join(' ');
+                    const selects = Array.from(card.querySelectorAll('select')).map(s => (s.options[s.selectedIndex]?.text || '').toLowerCase()).join(' ');
+                    card.closest('.col-12').style.display = (text + ' ' + inputs + ' ' + selects).includes(term) ? '' : 'none';
+                });
+                
+                updateNoResults(term);
+            });
+            
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                searchInput.focus();
+            });
+            
+            function updateNoResults(term) {
+                const msg = document.getElementById('noResultsMessage');
+                if (msg) msg.remove();
+                if (!term) return;
+                const visD = Array.from(desktopRows).some(r => r.style.display !== 'none');
+                const visM = Array.from(mobileCards).some(c => c.closest('.col-12').style.display !== 'none');
+                if (!visD && !visM) {
+                    const html = '<div id="noResultsMessage" class="col-12 text-center py-5"><i class="bi bi-search" style="font-size:3rem;color:#ccc;"></i><h5 class="text-muted mt-3">No vehicles found</h5><p class="text-muted">Try adjusting your search terms</p></div>';
+                    const dt = document.querySelector('.desktop-table-view');
+                    const mt = document.querySelector('.mobile-cards-view .row');
+                    if (dt) dt.insertAdjacentHTML('beforeend', html);
+                    if (mt) mt.insertAdjacentHTML('beforeend', html);
+                }
+            }
+        });

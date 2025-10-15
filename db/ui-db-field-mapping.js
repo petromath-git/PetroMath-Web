@@ -284,5 +284,24 @@ updateTank: function (req) {
         updated_by: req.user.User_Name,
         updation_date: new Date()
     };
-}
+},
+
+newVehicle: function (req) {
+    const index = 0; // Assuming single vehicle entry at a time
+    const data = {
+        creditlist_id: req.body.creditlist_id,
+        vehicle_number: req.body[`mvehiclenumber_${index}`],
+        vehicle_type: req.body[`mvehicletype_${index}`],
+        product_id: req.body[`mproduct_${index}`] || null,
+        notes: req.body[`mvehiclenotes_${index}`] || '',
+        created_by: req.user.Person_id,
+        updated_by: req.user.Person_id,
+        creation_date: new Date(),
+        updation_date: new Date(),
+        effective_start_date: dateFormat(new Date(), "yyyy-mm-dd"),
+        effective_end_date: null
+    };
+    return data;
+},
+
 }
