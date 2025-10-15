@@ -15,7 +15,7 @@ module.exports = {
                     location_code: locationCode,
                     effective_end_date: {
                         [Op.or]: {
-                            [Op.gte]: currentDate,
+                            [Op.gt]: currentDate,
                             [Op.is]: null
                         }
                     }
@@ -85,7 +85,7 @@ module.exports = {
             where: {
                 [Op.and]: [
                     { location_code: locationCode }, // Match location code
-                    { effective_end_date: { [Op.lt]: now } } // effective_end_date < current date
+                    { effective_end_date: { [Op.lte]: now } } // effective_end_date < current date
                 ]
             },
             order: [
