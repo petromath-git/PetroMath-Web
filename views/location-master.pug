@@ -1,0 +1,660 @@
+extends layout
+
+block content
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header for location master
+    .locations-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-center.justify-content-md-between
+                .col-auto.order-2.order-md-1
+                    h4.mb-0.text-primary.text-center.text-md-left Location Master
+                .col-auto.order-1.order-md-2.ml-auto
+                    .btn-group
+                        button.btn.btn-success.btn-sm#addLocationBtn(type="button", data-toggle="modal", data-target="#addLocationModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Location
+                            span.d-inline.d-sm-none Add
+                        button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                            i.bi.bi-arrow-clockwise.me-1
+                            span.d-none.d-sm-inline Refresh
+                            span.d-inline.d-sm-none Refresh
+
+    // Locations content with responsive design
+    .locations-container
+        // Search Box
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(
+                        type="text",
+                        placeholder="Search by code, name, company, phone, GST...",
+                        autocomplete="off"
+                    )
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
+                            i.bi.bi-x-circle
+        
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive
+                table.table.table-hover.table-striped(id="location-master-table")
+                    thead.thead-dark.sticky-top
+                        tr
+                            th(scope="col") #
+                            th(scope="col") Code
+                            th(scope="col") Name
+                            th(scope="col") Company
+                            th(scope="col") Phone
+                            th(scope="col") GST
+                            th(scope="col") Start Date
+                            th(scope="col") Status
+                            th(scope="col") Actions
+                    tbody
+                        each location, index in locations
+                            tr(id=`location-row-${index}`, class=location.is_active ? '' : 'table-secondary')
+                                th(scope="row")= index + 1
+                                td(scope="row")
+                                    strong.text-primary= location.location_code
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`location-name-${index}`, 
+                                        value=location.location_name, 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`location-company-${index}`, 
+                                        value=location.company_name || '', 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`location-phone-${index}`, 
+                                        value=location.phone, 
+                                        readonly,
+                                        pattern="[0-9]{10}",
+                                        maxlength="10"
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text", 
+                                        id=`location-gst-${index}`, 
+                                        value=location.gst_number || '', 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="date", 
+                                        id=`location-start-${index}`, 
+                                        value=new Date(location.start_date).toISOString().split('T')[0], 
+                                        readonly
+                                    )
+                                td(scope="row")
+                                    if location.is_active
+                                        span.badge.badge-success Active
+                                    else
+                                        span.badge.badge-secondary Inactive
+                                td(scope="row")
+                                    .btn-group.btn-group-sm
+                                        if location.is_active
+                                            button.btn.btn-primary.btn-sm(
+                                                type="button", 
+                                                onclick=`editLocation(${index}, ${location.location_id})`
+                                            )
+                                                i.bi.bi-pencil
+                                        else
+                                            button.btn.btn-secondary.btn-sm(
+                                                type="button",
+                                                disabled,
+                                                title="Cannot edit inactive location"
+                                            )
+                                                i.bi.bi-pencil
+                                        if location.is_active
+                                            button.btn.btn-warning.btn-sm(
+                                                type="button",
+                                                onclick=`deactivateLocation(${location.location_id}, '${location.location_name}')`
+                                            )
+                                                i.bi.bi-x-circle
+                                        else
+                                            button.btn.btn-success.btn-sm(
+                                                type="button",
+                                                onclick=`reactivateLocation(${location.location_id}, '${location.location_name}')`
+                                            )
+                                                i.bi.bi-check-circle
+
+        // Mobile cards view
+        .mobile-cards-view.d-block.d-lg-none
+            .row
+                each location, index in locations
+                    .col-12.mb-3
+                        .card.location-card.shadow-sm(id=`mobile-location-card-${index}`, class=location.is_active ? '' : 'border-secondary')
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                .location-info
+                                    strong= location.location_name
+                                    .badge.badge-primary.ml-2= location.location_code
+                                .location-actions
+                                    if location.is_active
+                                        span.badge.badge-success.mr-2 Active
+                                        button.btn.btn-primary.btn-sm(
+                                            type="button", 
+                                            onclick=`editLocationMobile(${index}, ${location.location_id})`
+                                        )
+                                            i.bi.bi-pencil
+                                    else
+                                        span.badge.badge-secondary.mr-2 Inactive
+                                        button.btn.btn-secondary.btn-sm(
+                                            type="button",
+                                            disabled,
+                                            title="Cannot edit inactive location"
+                                        )
+                                            i.bi.bi-pencil
+                            .card-body.p-3
+                                .row.g-2
+                                    .col-6
+                                        .location-detail
+                                            small.text-muted Company
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-company-${index}`,
+                                                value=location.company_name || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                    .col-6
+                                        .location-detail
+                                            small.text-muted Phone
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-phone-${index}`,
+                                                value=location.phone,
+                                                readonly,
+                                                pattern="[0-9]{10}",
+                                                maxlength="10",
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                    .col-12
+                                        .location-detail
+                                            small.text-muted GST Number
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-gst-${index}`,
+                                                value=location.gst_number || 'N/A',
+                                                readonly,
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                    .col-12
+                                        .location-detail
+                                            small.text-muted Address
+                                            textarea.mobile-input.fw-bold(
+                                                id=`mobile-address-${index}`,
+                                                readonly,
+                                                rows="2",
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold; width: 100%;"
+                                            )= location.address
+                                    .col-6
+                                        .location-detail
+                                            small.text-muted Start Date
+                                            div.fw-bold= new Date(location.start_date).toLocaleDateString('en-IN')
+                                    .col-12.mt-2
+                                        if location.is_active
+                                            button.btn.btn-warning.btn-sm.btn-block(
+                                                onclick=`deactivateLocation(${location.location_id}, '${location.location_name}')`
+                                            )
+                                                i.bi.bi-x-circle.me-1
+                                                | Deactivate
+                                        else
+                                            button.btn.btn-success.btn-sm.btn-block(
+                                                onclick=`reactivateLocation(${location.location_id}, '${location.location_name}')`
+                                            )
+                                                i.bi.bi-check-circle.me-1
+                                                | Reactivate
+
+    // Add Location Modal
+    .modal.fade#addLocationModal(tabindex="-1", role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Location
+                    button.close(type="button", data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    form#addLocationForm(method='POST', action='/location-master')
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Location Code *
+                                input.form-control.text-uppercase#add_location_code(
+                                    type="text", 
+                                    name="location_code", 
+                                    required,
+                                    maxlength="5",
+                                    pattern="[A-Z0-9]{4,5}",
+                                    style="text-transform: uppercase;"
+                                )
+                                small.form-text.text-muted 4-5 chars, uppercase, no spaces
+                            .col-md-6.mb-3
+                                label.form-label Location Name *
+                                input.form-control(type="text", name="location_name", required, maxlength="300")
+                            .col-md-6.mb-3
+                                label.form-label Company Name *
+                                select.form-control(name="company_name", required)
+                                    option(value="") Select Company
+                                    each company in oilCompanies
+                                        option(value=company)= company
+                            .col-md-6.mb-3
+                                label.form-label Phone Number *
+                                input.form-control(
+                                    type="tel", 
+                                    name="phone", 
+                                    required,
+                                    pattern="[0-9]{10}",
+                                    maxlength="10",
+                                    placeholder="10 digits"
+                                )
+                            .col-md-6.mb-3
+                                label.form-label GST Number
+                                input.form-control(type="text", name="gst_number", maxlength="50")
+                            .col-md-6.mb-3
+                                label.form-label Start Date *
+                                input.form-control(
+                                    type="date", 
+                                    name="start_date", 
+                                    required,
+                                    value=new Date().toISOString().split('T')[0]
+                                )
+                            .col-12.mb-3
+                                label.form-label Address *
+                                textarea.form-control(name="address", required, rows="3", maxlength="1000")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="submit", form="addLocationForm") Add Location
+
+    // CSS for mobile responsiveness and sticky header
+    style.
+        .locations-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-left: 0;
+            margin-right: 0;
+        }
+        
+        .locations-container {
+            padding-top: 15px;
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+        
+        @media (min-width: 992px) {
+            .locations-header-sticky {
+                margin-left: 0;
+            }
+            
+            .locations-header-sticky .container-fluid {
+                padding-left: 15px;
+                padding-right: 15px;
+                max-width: 100%;
+            }
+            
+            .locations-container {
+                padding-left: 15px;
+                padding-right: 15px;
+            }
+        }
+        
+        @media (max-width: 991.98px) {
+            .locations-header-sticky h4 {
+                font-size: 18px;
+            }
+            
+            .locations-header-sticky .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+        }
+        
+        .location-card {
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .location-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        
+        .location-card .card-header {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 12px 16px;
+        }
+        
+        .location-detail {
+            margin-bottom: 8px;
+        }
+        
+        .location-detail small {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            
+            .mobile-cards-view {
+                display: block !important;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .desktop-table-view {
+                display: block !important;
+            }
+            
+            .mobile-cards-view {
+                display: none !important;
+            }
+        }
+        
+        .table-responsive {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .mobile-input.editable {
+            border: 1px solid #007bff !important;
+            background: #f8f9fa !important;
+            padding: 4px 8px !important;
+            border-radius: 4px;
+        }
+        
+        /* Search box styling */
+        #searchInput {
+            border-radius: 0;
+        }
+        
+        #searchInput:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+            border-color: #80bdff;
+        }
+        
+        .input-group-text {
+            background-color: #f8f9fa;
+            border-right: 0;
+        }
+        
+        #clearSearch {
+            border-left: 0;
+        }
+        
+        /* Smooth transitions for search results */
+        #location-master-table tbody tr,
+        .mobile-cards-view .col-12 {
+            transition: opacity 0.2s ease;
+        }
+
+        
+
+    // JavaScript for location management
+    script.
+        function editLocation(index, locationId) {
+            const row = document.getElementById(`location-row-${index}`);
+            const inputs = row.querySelectorAll('input[readonly]');
+            
+            inputs.forEach(input => {
+                if (!input.id.includes('start')) {
+                    input.removeAttribute('readonly');
+                    input.classList.add('bg-light');
+                }
+            });
+            
+            const editBtn = row.querySelector('button');
+            editBtn.innerHTML = '<i class="bi bi-check"></i>';
+            editBtn.classList.remove('btn-primary');
+            editBtn.classList.add('btn-success');
+            editBtn.setAttribute('onclick', `saveLocation(${index}, ${locationId})`);
+        }
+        
+        function editLocationMobile(index, locationId) {
+            const card = document.getElementById(`mobile-location-card-${index}`);
+            const inputs = card.querySelectorAll('input[readonly], textarea[readonly]');
+            
+            inputs.forEach(input => {
+                input.removeAttribute('readonly');
+                input.classList.add('editable');
+            });
+            
+            const editBtn = card.querySelector('button.btn-primary');
+            editBtn.innerHTML = '<i class="bi bi-check"></i>';
+            editBtn.classList.remove('btn-primary');
+            editBtn.classList.add('btn-success');
+            editBtn.setAttribute('onclick', `saveLocationMobile(${index}, ${locationId})`);
+        }
+        
+        function saveLocation(index, locationId) {
+            const updateData = {
+                location_name: document.getElementById(`location-name-${index}`).value,
+                company_name: document.getElementById(`location-company-${index}`).value,
+                phone: document.getElementById(`location-phone-${index}`).value,
+                gst_number: document.getElementById(`location-gst-${index}`).value,
+                start_date: document.getElementById(`location-start-${index}`).value
+            };
+            
+            // Validate phone
+            if (!/^[0-9]{10}$/.test(updateData.phone)) {
+                showMessage('Phone must be exactly 10 digits', 'danger');
+                return;
+            }
+            
+            fetch(`/location-master/${locationId}?_method=PUT`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Location updated successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showMessage('Error: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => showMessage('Error: ' + error.message, 'danger'));
+        }
+        
+        function saveLocationMobile(index, locationId) {
+            const updateData = {
+                location_name: document.getElementById(`mobile-location-card-${index}`).querySelector('.location-info strong').textContent,
+                company_name: document.getElementById(`mobile-company-${index}`).value,
+                phone: document.getElementById(`mobile-phone-${index}`).value,
+                gst_number: document.getElementById(`mobile-gst-${index}`).value,
+                address: document.getElementById(`mobile-address-${index}`).value,
+                start_date: new Date().toISOString().split('T')[0]
+            };
+            
+            // Validate phone
+            if (!/^[0-9]{10}$/.test(updateData.phone)) {
+                showMessage('Phone must be exactly 10 digits', 'danger');
+                return;
+            }
+            
+            fetch(`/location-master/${locationId}?_method=PUT`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Location updated successfully', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showMessage('Error: ' + data.error, 'danger');
+                }
+            })
+            .catch(error => showMessage('Error: ' + error.message, 'danger'));
+        }
+        
+        function deactivateLocation(locationId, locationName) {
+            if (confirm(`Deactivate location "${locationName}"?`)) {
+                fetch(`/location-master/${locationId}/deactivate?_method=PUT`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Location deactivated', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showMessage('Error: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => showMessage('Error: ' + error.message, 'danger'));
+            }
+        }
+        
+        function reactivateLocation(locationId, locationName) {
+            if (confirm(`Reactivate location "${locationName}"?`)) {
+                fetch(`/location-master/${locationId}/reactivate?_method=PUT`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Location reactivated', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showMessage('Error: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => showMessage('Error: ' + error.message, 'danger'));
+            }
+        }
+        
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            messageText.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.style.display = 'none', 150);
+            }, 3000);
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('refreshDataBtn').addEventListener('click', () => location.reload());
+            
+            document.getElementById('add_location_code').addEventListener('input', function() {
+                this.value = this.value.toUpperCase();
+            });
+            
+            // Search functionality
+            const searchInput = document.getElementById('searchInput');
+            const clearSearchBtn = document.getElementById('clearSearch');
+            const desktopRows = document.querySelectorAll('#location-master-table tbody tr');
+            const mobileCards = document.querySelectorAll('.mobile-cards-view .card');
+            
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase().trim();
+                
+                // Show/hide clear button
+                clearSearchBtn.style.display = searchTerm ? 'block' : 'none';
+                
+                // Search in desktop table
+                desktopRows.forEach(row => {
+                    // Get all text content AND input values
+                    const textContent = row.textContent.toLowerCase();
+                    const inputValues = Array.from(row.querySelectorAll('input'))
+                        .map(input => (input.value || '').toLowerCase())
+                        .join(' ');
+                    const allText = textContent + ' ' + inputValues;
+                    
+                    row.style.display = allText.includes(searchTerm) ? '' : 'none';
+                });
+                
+                // Search in mobile cards
+                mobileCards.forEach(card => {
+                    // Get all text content AND input/textarea values
+                    const textContent = card.textContent.toLowerCase();
+                    const inputValues = Array.from(card.querySelectorAll('input, textarea'))
+                        .map(input => (input.value || '').toLowerCase())
+                        .join(' ');
+                    const allText = textContent + ' ' + inputValues;
+                    
+                    card.closest('.col-12').style.display = allText.includes(searchTerm) ? '' : 'none';
+                });
+                
+                // Show "no results" message if needed
+                updateNoResultsMessage(searchTerm);
+            });
+            
+            clearSearchBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                searchInput.focus();
+            });
+            
+            function updateNoResultsMessage(searchTerm) {
+                // Remove existing message
+                const existingMsg = document.getElementById('noResultsMessage');
+                if (existingMsg) existingMsg.remove();
+                
+                if (!searchTerm) return;
+                
+                // Check if any results visible
+                const visibleDesktop = Array.from(desktopRows).some(row => row.style.display !== 'none');
+                const visibleMobile = Array.from(mobileCards).some(card => card.closest('.col-12').style.display !== 'none');
+                
+                if (!visibleDesktop && !visibleMobile) {
+                    const noResultsHtml = `
+                        <div id="noResultsMessage" class="col-12 text-center py-5">
+                            <i class="bi bi-search" style="font-size: 3rem; color: #ccc;"></i>
+                            <h5 class="text-muted mt-3">No locations found</h5>
+                            <p class="text-muted">Try adjusting your search terms</p>
+                        </div>
+                    `;
+                    
+                    // Add to desktop view
+                    const desktopContainer = document.querySelector('.desktop-table-view');
+                    if (desktopContainer) {
+                        desktopContainer.insertAdjacentHTML('beforeend', noResultsHtml);
+                    }
+                    
+                    // Add to mobile view
+                    const mobileContainer = document.querySelector('.mobile-cards-view .row');
+                    if (mobileContainer) {
+                        mobileContainer.insertAdjacentHTML('beforeend', noResultsHtml);
+                    }
+                }
+            }
+        });
