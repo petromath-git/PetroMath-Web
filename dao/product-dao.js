@@ -76,6 +76,70 @@ module.exports = {
             }
         });
     },
+    findAll: (locationCode) => {
+    const baseQuery = {
+        attributes: [
+            'product_id', 
+            'product_name', 
+            'qty', 
+            'unit', 
+            'price'
+        ],
+        order: [['product_name', 'ASC']]
+    };
+
+    if (locationCode) {
+        baseQuery.where = { location_code: locationCode };
+    }
+
+    return Product.findAll(baseQuery);
+},
+
+// Add this new method to your existing product-dao.js (keep existing findAll)
+
+findPumpProducts: async (locationCode) => {
+    // Get pump products for the location
+    const pumpProductsQuery = `
+        SELECT DISTINCT mp.product_code 
+        FROM m_pump mp
+        WHERE mp.product_code IS NOT NULL 
+        ${locationCode ? `AND mp.location_code = :locationCode` : ''}
+    `;
+    
+    const pumpProducts = await db.sequelize.query(pumpProductsQuery, {
+        replacements: { locationCode },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    const pumpProductCodes = pumpProducts.map(p => p.product_code);
+    
+    if (pumpProductCodes.length === 0) {
+        // No pump products found, return empty array
+        return [];
+    }
+    
+    // Get product details for pump products only
+    const baseQuery = {
+        attributes: [
+            'product_id', 
+            'product_name', 
+            'unit', 
+            'price'
+        ],
+        where: {
+            product_name: {
+                [Op.in]: pumpProductCodes
+            }
+        },
+        order: [['product_name', 'ASC']]
+    };
+
+    if (locationCode) {
+        baseQuery.where.location_code = locationCode;
+    }
+
+    return Product.findAll(baseQuery);
+},
 
     create: (product) => {
         if (!product.sku_name) {

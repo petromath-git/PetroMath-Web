@@ -9,20 +9,41 @@ const CreditDao = require('../dao/credits-dao');
 const PersonDao = require('../dao/person-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const lookupDao = require('../dao/lookup-dao');
+const rolePermissionsDao = require('../dao/role-permissions-dao');
 
 // ===== CREDIT CUSTOMER ROUTES =====
 
 // Display credit customers page (excludes digital)
-router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function (req, res) {
     try {
         const credits = await creditController.findCreditCustomersOnly(req.user.location_code);
         const customerTypes = await lookupDao.getCustomerTypes(req.user.location_code);
+        
+        // Check individual permissions for UI
+        const canEdit = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'EDIT_CUSTOMER_MASTER'
+        );
+        const canAdd = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'ADD_CUSTOMER_MASTER'
+        );
+        const canDisable = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'DISABLE_CUSTOMER_MASTER'
+        );
         
         res.render('credits', { 
             title: 'Customer Master', 
             user: req.user, 
             credits: credits,
-            customerTypes: customerTypes
+            customerTypes: customerTypes,
+            canEdit: canEdit,
+            canAdd: canAdd,
+            canDisable: canDisable
         });
     } catch (error) {
         console.error('Error loading customer master:', error);
@@ -30,10 +51,14 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res) 
     }
 });
 
+
 // Create new credit customer
-router.post('/', [isLoginEnsured, security.isAdmin()], async function (req, res, next) {
+router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function (req, res, next) {
     try {
 
+        // Extract data from request - ADD THESE LINES
+        const companyName = req.body.m_credit_name_0;
+        const locationCode = req.user.location_code;
         // Check if customer already exists
         const existingCustomer = await CreditDao.findByNameAndLocation(companyName, locationCode);
         
@@ -63,7 +88,7 @@ router.post('/', [isLoginEnsured, security.isAdmin()], async function (req, res,
 
 
 // API endpoint for updating customer
-router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
     try {
         const creditlistId = req.params.id;
         const newCompanyName = req.body.Company_Name;
@@ -123,7 +148,7 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
 });
 
 // Display disabled credit customers
-router.get('/enable', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+router.get('/enable', [isLoginEnsured, security.hasPermission('DISABLE_CUSTOMER_MASTER')], function (req, res, next) {
     creditController.findDisableCreditCustomersOnly(req.user.location_code)
         .then(data => {
             res.render('enable_credit', {
@@ -139,7 +164,7 @@ router.get('/enable', [isLoginEnsured, security.isAdmin()], function (req, res, 
 });
 
 // Enable specific credit customer
-router.put('/enable/:id', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+router.put('/enable/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], function (req, res, next) {
     const creditID = req.params.id;
     
     CreditDao.enableCredit(creditID)

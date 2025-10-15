@@ -12,24 +12,28 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.INTEGER,
             allowNull: false
         },
+        vehicle_number: {
+            type: DataTypes.STRING,
+            allowNull: false
+        },
         vehicle_type: {
             type: DataTypes.STRING,
             allowNull: true
         },
-        vehicle_number: {
-            type: DataTypes.STRING,
-            allowNull: false
+        product_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         },
         notes: {
             type: DataTypes.TEXT,
             allowNull: true
         },
         created_by: {
-            type: DataTypes.INTEGER,  // Changed from STRING to INTEGER to match your pattern
+            type: DataTypes.INTEGER,
             allowNull: false
         },
         updated_by: {
-            type: DataTypes.INTEGER,  // Changed from STRING to INTEGER
+            type: DataTypes.INTEGER,
             allowNull: true
         },
         creation_date: {
