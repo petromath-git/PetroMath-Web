@@ -55,9 +55,9 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
 // Create new credit customer
 router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function (req, res, next) {
     try {
-        
+
         // Extract data from request - ADD THESE LINES
-        const companyName = req.body.Company_Name;
+        const companyName = req.body.m_credit_name_0;
         const locationCode = req.user.location_code;
         // Check if customer already exists
         const existingCustomer = await CreditDao.findByNameAndLocation(companyName, locationCode);
