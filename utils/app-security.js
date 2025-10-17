@@ -52,17 +52,23 @@ module.exports = {
         };
     },
 
-    // 🔹 Global app hardening middleware
+    
+   // 🔹 Global app hardening middleware
     secureApp: (app) => {
         // Hide Express fingerprint
         app.disable('x-powered-by');
 
-        // Block directory browsing
+        // Block directory browsing — but allow root "/"
         app.use((req, res, next) => {
             const requestedPath = path.join(publicDir, req.path);
             try {
-                if (fs.existsSync(requestedPath) && fs.lstatSync(requestedPath).isDirectory()) {
-                    return res.status(403).render('403', { message: 'Directory access is not allowed.' });
+                // Allow "/" and routes that aren't static directories
+                if (
+                    req.path !== "/" &&                // ✅ allow homepage
+                    fs.existsSync(requestedPath) &&
+                    fs.lstatSync(requestedPath).isDirectory()
+                ) {
+                    return res.status(403).render("403", { message: "Directory access is not allowed." });
                 }
             } catch (_) {}
             next();
@@ -74,7 +80,7 @@ module.exports = {
                 /\.env$/, /\.git/, /\.sql$/, /\.bak$/, /\.zip$/, /\.json$/, /\.md$/, /\.yml$/, /\.yaml$/
             ];
             if (forbiddenPatterns.some((p) => p.test(req.path.toLowerCase()))) {
-                return res.status(403).send('Forbidden file access');
+                return res.status(403).send("Forbidden file access");
             }
             next();
         });
@@ -87,4 +93,5 @@ module.exports = {
             next();
         });
     }
+
 };
