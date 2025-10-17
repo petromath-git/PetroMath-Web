@@ -176,6 +176,7 @@ const tallyDaybookRoutes = require('./routes/tally-daybook-routes');
 const customerDashboardRoutes = require('./routes/customer-dashboard-routes');
 const adjustmentRoutes = require('./routes/adjustment-routes');
 const productsRoutes = require('./routes/products-routes');
+const pumpTankRoutes = require('./routes/pump-tank-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
@@ -334,6 +335,7 @@ app.use('/menu-management', menuManagementRoutes);
 app.use('/reports/stock', stockReportsRoutes);
 app.use('/credit-master', creditMasterRoutes);
 app.use('/location-master', locationMasterRoutes);
+app.use('/masters/pump-tank',pumpTankRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 

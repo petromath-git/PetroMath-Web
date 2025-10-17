@@ -1,0 +1,224 @@
+extends layout
+
+block content
+    style.
+        /* Sticky header styling */
+        .pump-tank-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-left: 0;
+            margin-right: 0;
+        }
+        
+        .pump-tank-container {
+            padding-top: 15px;
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+        
+        /* Desktop: Account for sidebar */
+        @media (min-width: 992px) {
+            .pump-tank-header-sticky {
+                margin-left: 0;
+            }
+        }
+        
+        /* Mobile adjustments */
+        @media (max-width: 991.98px) {
+            .pump-tank-header-sticky h4 {
+                font-size: 18px;
+            }
+            
+            .pump-tank-header-sticky .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+        }
+        
+        /* Tab content styling */
+        .tab-content {
+            padding-top: 20px;
+        }
+        
+        /* Card styling for mobile */
+        .master-card {
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-bottom: 15px;
+        }
+        
+        .master-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        
+        .master-card .card-header {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 12px 16px;
+        }
+        
+        /* Desktop table view */
+        @media (min-width: 992px) {
+            .desktop-table-view {
+                display: block !important;
+            }
+            
+            .mobile-cards-view {
+                display: none !important;
+            }
+        }
+        
+        /* Mobile card view */
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            
+            .mobile-cards-view {
+                display: block !important;
+            }
+        }
+
+    // Alert for messages
+    #messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header
+    .pump-tank-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-center.justify-content-md-between
+                .col-auto.order-2.order-md-1
+                    h4.mb-0.text-primary.text-center.text-md-left Pump & Tank Master
+                .col-auto.order-1.order-md-2.ml-auto
+                    // Location selector
+                    select#locationSelector.form-control.form-control-sm(style="min-width: 200px;")
+                        each location in locations
+                            option(value=location.location_code, selected=location.location_code === selectedLocation)= location.location_name
+
+    // Main content container
+    .pump-tank-container
+        // Tab navigation
+        ul.nav.nav-tabs#pumpTankTabs(role="tablist")
+            li.nav-item
+                a.nav-link.active#tanks-tab(data-toggle="tab" href="#tanks" role="tab") 
+                    i.bi.bi-archive.me-1
+                    | Tanks
+            li.nav-item
+                a.nav-link#pumps-tab(data-toggle="tab" href="#pumps" role="tab") 
+                    i.bi.bi-funnel.me-1
+                    | Pumps
+            li.nav-item
+                a.nav-link#relations-tab(data-toggle="tab" href="#relations" role="tab") 
+                    i.bi.bi-diagram-3.me-1
+                    | Pump-Tank Relations
+
+        // Tab content
+        .tab-content#pumpTankTabContent
+            
+            // ==================== TANKS TAB ====================
+            #tanks.tab-pane.fade.show.active(role="tabpanel")
+                .row.mb-3
+                    .col-12.text-right
+                        button.btn.btn-primary.btn-sm#addTankBtn
+                            i.bi.bi-plus-circle.me-1
+                            | Add Tank
+                
+                // Desktop table view
+                .desktop-table-view
+                    .table-responsive
+                        table.table.table-hover.table-striped#tanksTable
+                            thead.thead-dark
+                                tr
+                                    th Tank Code
+                                    th Product
+                                    th Capacity (L)
+                                    th Opening Stock (L)
+                                    th Dead Stock (L)
+                                    th Status
+                                    th Actions
+                            tbody
+                                tr
+                                    td.text-center(colspan="7") Loading tanks...
+                
+                // Mobile card view
+                .mobile-cards-view(style="display: none;")
+                    #tanksCardContainer.row
+                        .col-12.text-center.py-4
+                            | Loading tanks...
+
+            // ==================== PUMPS TAB ====================
+            #pumps.tab-pane.fade(role="tabpanel")
+                .row.mb-3
+                    .col-12.text-right
+                        button.btn.btn-primary.btn-sm#addPumpBtn
+                            i.bi.bi-plus-circle.me-1
+                            | Add Pump
+                
+                // Desktop table view
+                .desktop-table-view
+                    .table-responsive
+                        table.table.table-hover.table-striped#pumpsTable
+                            thead.thead-dark
+                                tr
+                                    th Pump Code
+                                    th Make
+                                    th Product
+                                    th Opening Reading
+                                    th Display Order
+                                    th Status
+                                    th Actions
+                            tbody
+                                tr
+                                    td.text-center(colspan="7") Loading pumps...
+                
+                // Mobile card view
+                .mobile-cards-view(style="display: none;")
+                    #pumpsCardContainer.row
+                        .col-12.text-center.py-4
+                            | Loading pumps...
+
+            // ==================== RELATIONS TAB ====================
+            #relations.tab-pane.fade(role="tabpanel")
+                .row.mb-3
+                    .col-12.text-right
+                        button.btn.btn-primary.btn-sm#addRelationBtn
+                            i.bi.bi-plus-circle.me-1
+                            | Link Pump to Tank
+                
+                // Desktop table view
+                .desktop-table-view
+                    .table-responsive
+                        table.table.table-hover.table-striped#relationsTable
+                            thead.thead-dark
+                                tr
+                                    th Pump Code
+                                    th Pump Product
+                                    th Tank Code
+                                    th Tank Product
+                                    th Effective From
+                                    th Status
+                                    th Actions
+                            tbody
+                                tr
+                                    td.text-center(colspan="7") Loading relations...
+                
+                // Mobile card view
+                .mobile-cards-view(style="display: none;")
+                    #relationsCardContainer.row
+                        .col-12.text-center.py-4
+                            | Loading relations...
+
+    // Embed data for JavaScript
+    script.
+        const selectedLocation = '#{selectedLocation}';
+        const userRole = '#{user.Role}';
+
+    script(src="/javascripts/pump-tank-master.js")
