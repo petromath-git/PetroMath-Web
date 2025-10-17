@@ -88,8 +88,40 @@ hasMultipleLocationAccess: async (personId) => {
 },
 
 // Get user's accessible locations with location names
+// Get user's accessible locations with location names
 getUserAccessibleLocationsWithNames: async (personId) => {
     try {
+        // First check if user is SuperUser
+        const userCheck = await db.sequelize.query(`
+            SELECT Role FROM m_persons WHERE Person_id = :personId
+        `, {
+            replacements: { personId: personId },
+            type: db.sequelize.QueryTypes.SELECT
+        });
+        
+        // If SuperUser, return all locations
+        if (userCheck.length > 0 && userCheck[0].Role === 'SuperUser') {
+            const allLocations = await db.sequelize.query(`
+                SELECT 
+                    'SUPERUSER' as source,
+                    location_code,
+                    'SuperUser' as role,
+                    'Full Access' as access_type,
+                    location_name,
+                    (SELECT Person_Name FROM m_persons WHERE Person_id = :personId) as person_name,
+                    :personId as person_id
+                FROM m_location
+                WHERE start_date <= CURDATE()
+                ORDER BY location_name
+            `, {
+                replacements: { personId: personId },
+                type: db.sequelize.QueryTypes.SELECT
+            });
+            
+            return allLocations;
+        }
+        
+        // For non-SuperUser, return accessible locations only
         const result = await db.sequelize.query(`
             SELECT DISTINCT
                 loc_access.source,
@@ -113,7 +145,7 @@ getUserAccessibleLocationsWithNames: async (personId) => {
                 SELECT 
                     'ADDITIONAL' as source, 
                     pl.location_code, 
-                    pl.role, 
+                    p.role, 
                     'Additional Access' as access_type,
                     p.Person_Name as person_name,
                     p.Person_id as person_id
@@ -135,6 +167,8 @@ getUserAccessibleLocationsWithNames: async (personId) => {
         throw error;
     }
 },
+
+
     create: (user) => {
         return new Promise((resolve, reject) => {
             // Hash the user's password before saving
