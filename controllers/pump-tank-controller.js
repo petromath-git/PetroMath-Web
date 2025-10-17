@@ -91,8 +91,8 @@ function validatePumpNumbers(openingReading, displayOrder) {
     
     // Validate opening reading (decimal with 3 places)
     const openingReadingNum = Number(openingReading);
-    if (openingReadingNum > 999999.999) {
-        return { valid: false, error: 'Opening reading cannot exceed 999999.999' };
+    if (openingReadingNum > 999999999.999) {
+        return { valid: false, error: 'Opening reading cannot exceed 999999999.999' };
     }
     
     // Check decimal places (max 3)
