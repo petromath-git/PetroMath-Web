@@ -38,4 +38,89 @@ router.get('/api/products',
     pumpTankController.getProducts
 );
 
+
+// Tank CRUD operations
+router.post('/api/tanks', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.createTank
+);
+
+router.get('/api/tanks/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.getTankById
+);
+
+router.put('/api/tanks/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.updateTank
+);
+
+router.put('/api/tanks/:id/deactivate', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.deactivateTank
+);
+
+
+// Pump CRUD operations
+router.post('/api/pumps', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.createPump
+);
+
+router.get('/api/pumps/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.getPumpById
+);
+
+router.put('/api/pumps/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.updatePump
+);
+
+
+// Pump-Tank Relationship CRUD operations
+router.post('/api/relations', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.createRelation
+);
+
+router.get('/api/relations/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.getRelationById
+);
+
+router.put('/api/relations/:id', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.updateRelation
+);
+
+router.put('/api/relations/:id/deactivate', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.deactivateRelation
+);
+
+// Helper endpoints for relationship creation
+router.get('/api/available-pumps', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.getAvailablePumps
+);
+
+router.get('/api/available-tanks', 
+    isLoginEnsured,
+    appSecurity.hasPermission('MANAGE_PUMP_TANK_MASTER'),
+    pumpTankController.getAvailableTanks
+);
+
 module.exports = router;

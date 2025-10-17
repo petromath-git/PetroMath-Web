@@ -63,6 +63,38 @@ block content
             padding: 12px 16px;
         }
         
+
+       /* Helper text - force subtle gray color */
+        small.form-text.text-muted,
+        .form-text.text-muted,
+        .form-group small.text-muted {
+            color: #6c757d !important;
+            font-size: 0.80rem !important;
+            font-style: italic;
+            margin-top: 0.25rem;
+            display: block;
+        }
+        
+        /* Placeholder text - make it subtle gray instead of red */
+        .form-control::placeholder {
+            color: #999 !important;
+            font-style: italic;
+            opacity: 0.7;
+        }
+        
+        .form-control::-webkit-input-placeholder {
+            color: #999 !important;
+            font-style: italic;
+            opacity: 0.7;
+        }
+        
+        .form-control::-moz-placeholder {
+            color: #999 !important;
+            font-style: italic;
+            opacity: 0.7;
+        }
+
+
         /* Desktop table view */
         @media (min-width: 992px) {
             .desktop-table-view {
@@ -187,13 +219,17 @@ block content
 
             // ==================== RELATIONS TAB ====================
             #relations.tab-pane.fade(role="tabpanel")
-                .row.mb-3
-                    .col-12.text-right
+                .row.mb-3.align-items-center
+                    .col-md-6
+                        .custom-control.custom-switch
+                            input#showHistoricalToggle.custom-control-input(type='checkbox')
+                            label.custom-control-label(for='showHistoricalToggle') Show Historical Relations
+                    .col-md-6.text-right
                         button.btn.btn-primary.btn-sm#addRelationBtn
                             i.bi.bi-plus-circle.me-1
                             | Link Pump to Tank
                 
-                // Desktop table view
+                // Desktop table view   
                 .desktop-table-view
                     .table-responsive
                         table.table.table-hover.table-striped#relationsTable
@@ -215,7 +251,469 @@ block content
                     #relationsCardContainer.row
                         .col-12.text-center.py-4
                             | Loading relations...
+    // ==================== TANK MODALS ====================
+    
+    // Add Tank Modal
+    #addTankModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Tank
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    #addTankError.alert.alert-danger(style='display: none;', role='alert')
+                       span#addTankErrorText
+                    form#addTankForm
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='addTankCode') Tank Code
+                                        span.text-danger *
+                                    input#addTankCode.form-control(
+                                        type='text',
+                                        maxlength='10',
+                                        placeholder='e.g., T01, TANK-1',
+                                        required,
+                                        style='text-transform: uppercase;'
+                                    )
+                                    small.form-text.text-muted Max 10 characters. Letters, numbers, and hyphens only.
+                            .col-md-6
+                                .form-group
+                                    label(for='addTankProduct') Product
+                                        span.text-danger *
+                                    select#addTankProduct.form-control(required)
+                                        option(value='') -- Select Product --
+                        .row
+                            .col-md-4
+                                .form-group
+                                    label(for='addTankCapacity') Tank Capacity (Liters)
+                                        span.text-danger *
+                                    input#addTankCapacity.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='1',
+                                        max='99999',
+                                        placeholder='e.g., 10000',
+                                        required
+                                    )
+                            .col-md-4
+                                .form-group
+                                    label(for='addTankOpeningStock') Opening Stock (Liters)
+                                    input#addTankOpeningStock.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='0',
+                                        max='99999',
+                                        placeholder='0',
+                                        value='0'
+                                        required
+                                    )
+                            .col-md-4
+                                .form-group
+                                    label(for='addTankDeadStock') Dead Stock (Liters)
+                                    input#addTankDeadStock.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='0',
+                                        max='99999',
+                                        placeholder='0',
+                                        value='0'
+                                        required
+                                    )
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#saveTankBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Save Tank
 
+    // Edit Tank Modal
+    #editTankModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Tank
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    #editTankError.alert.alert-danger(style='display: none;', role='alert')
+                        span#editTankErrorText
+                    form#editTankForm
+                        input#editTankId(type='hidden')
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='editTankCode') Tank Code
+                                        span.text-danger *
+                                    input#editTankCode.form-control(
+                                        type='text',
+                                        maxlength='10',
+                                        required,
+                                        style='text-transform: uppercase;'
+                                    )
+                                    small.form-text.text-muted Max 10 characters. Letters, numbers, and hyphens only.
+                            .col-md-6
+                                .form-group
+                                    label(for='editTankProduct') Product
+                                        span.text-danger *
+                                    select#editTankProduct.form-control(required)
+                                        option(value='') -- Select Product --
+                        .row
+                            .col-md-4
+                                .form-group
+                                    label(for='editTankCapacity') Tank Capacity (Liters)
+                                        span.text-danger *
+                                    input#editTankCapacity.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='1',
+                                        max='99999',
+                                        required
+                                    )
+                            .col-md-4
+                                .form-group
+                                    label(for='editTankOpeningStock') Opening Stock (Liters)
+                                    input#editTankOpeningStock.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='0',
+                                        max='99999'
+                                        required
+                                    )
+                            .col-md-4
+                                .form-group
+                                    label(for='editTankDeadStock') Dead Stock (Liters)
+                                    input#editTankDeadStock.form-control(
+                                       type='number',
+                                        step='1',
+                                        min='0',
+                                        max='99999'
+                                        required
+                                    )
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#updateTankBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Update Tank
+    // ==================== PUMP MODALS ====================
+    
+    // Add Pump Modal
+    #addPumpModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Pump
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    // Error alert
+                    #addPumpError.alert.alert-danger(style='display: none;', role='alert')
+                        span#addPumpErrorText
+                    
+                    form#addPumpForm
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='addPumpCode') Pump Code
+                                        span.text-danger *
+                                    input#addPumpCode.form-control(
+                                        type='text',
+                                        maxlength='10',
+                                        placeholder='e.g., P01, PUMP-1',
+                                        required,
+                                        style='text-transform: uppercase;'
+                                    )
+                                    small.form-text.text-muted Max 10 characters. Letters, numbers, and hyphens only.
+                            .col-md-6
+                                .form-group
+                                    label(for='addPumpMake') Pump Make
+                                    input#addPumpMake.form-control(
+                                        type='text',
+                                        maxlength='50',
+                                        placeholder='e.g., Wayne, Gilbarco'
+                                    )
+                                    small.form-text.text-muted Optional. Max 50 characters.
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='addPumpProduct') Product
+                                        span.text-danger *
+                                    select#addPumpProduct.form-control(required)
+                                        option(value='') -- Select Product --
+                            .col-md-6
+                                .form-group
+                                    label(for='addPumpDisplayOrder') Display Order
+                                        span.text-danger *
+                                    input#addPumpDisplayOrder.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='1',
+                                        max='999',
+                                        placeholder='e.g., 1, 2, 3',
+                                        required
+                                    )
+                                    small.form-text.text-muted Whole number, 1-999. Must be unique.
+                        .row
+                            .col-md-4
+                                .form-group
+                                    label(for='addPumpOpeningReading') Opening Reading
+                                        span.text-danger *
+                                    input#addPumpOpeningReading.form-control(
+                                        type='number',
+                                        step='0.001',
+                                        min='0',
+                                        max='999999.999',
+                                        placeholder='e.g., 12345.678',
+                                        required
+                                    )
+                                    small.form-text.text-muted Max 3 decimal places.
+                            .col-md-4
+                                .form-group
+                                    label(for='addPumpStampingDate') Stamping Date
+                                        span.text-danger *
+                                    input#addPumpStampingDate.form-control(
+                                        type='date',
+                                        required
+                                    )
+                                    small.form-text.text-muted Cannot be future date.
+                            .col-md-4
+                                .form-group
+                                    label(for='addPumpStampingDue') Stamping Due
+                                    input#addPumpStampingDue.form-control(
+                                        type='date',
+                                        readonly,
+                                        style='background-color: #e9ecef;'
+                                    )
+                                    small.form-text.text-muted Auto-calculated (+1 year).
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#savePumpBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Save Pump
+
+    // Edit Pump Modal
+    #editPumpModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Pump
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    // Error alert
+                    #editPumpError.alert.alert-danger(style='display: none;', role='alert')
+                        span#editPumpErrorText
+                    
+                    form#editPumpForm
+                        input#editPumpId(type='hidden')
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpCode') Pump Code
+                                        span.text-danger *
+                                    input#editPumpCode.form-control(
+                                        type='text',
+                                        maxlength='10',
+                                        required,
+                                        style='text-transform: uppercase;'
+                                    )
+                                    small.form-text.text-muted Max 10 characters. Letters, numbers, and hyphens only.
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpMake') Pump Make
+                                    input#editPumpMake.form-control(
+                                        type='text',
+                                        maxlength='50'
+                                    )
+                                    small.form-text.text-muted Optional. Max 50 characters.
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpProduct') Product
+                                        span.text-danger *
+                                    select#editPumpProduct.form-control(required)
+                                        option(value='') -- Select Product --
+                            .col-md-6
+                                .form-group
+                                    label(for='editPumpDisplayOrder') Display Order
+                                        span.text-danger *
+                                    input#editPumpDisplayOrder.form-control(
+                                        type='number',
+                                        step='1',
+                                        min='1',
+                                        max='999',
+                                        required
+                                    )
+                                    small.form-text.text-muted Whole number, 1-999. Must be unique.
+                        .row
+                            .col-md-4
+                                .form-group
+                                    label(for='editPumpOpeningReading') Opening Reading
+                                        span.text-danger *
+                                    input#editPumpOpeningReading.form-control(
+                                        type='number',
+                                        step='0.001',
+                                        min='0',
+                                        max='999999.999',
+                                        required
+                                    )
+                                    small.form-text.text-muted Max 3 decimal places.
+                            .col-md-4
+                                .form-group
+                                    label(for='editPumpStampingDate') Stamping Date
+                                        span.text-danger *
+                                    input#editPumpStampingDate.form-control(
+                                        type='date',
+                                        required
+                                    )
+                                    small.form-text.text-muted Cannot be future date.
+                            .col-md-4
+                                .form-group
+                                    label(for='editPumpStampingDue') Stamping Due
+                                    input#editPumpStampingDue.form-control(
+                                        type='date',
+                                        readonly,
+                                        style='background-color: #e9ecef;'
+                                    )
+                                    small.form-text.text-muted Auto-calculated (+1 year).
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#updatePumpBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Update Pump                    
+    
+    // ==================== RELATIONSHIP MODALS ====================
+    
+    // Add Relationship Modal
+    #addRelationModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Link Pump to Tank
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    // Error alert
+                    #addRelationError.alert.alert-danger(style='display: none;', role='alert')
+                        span#addRelationErrorText
+                    
+                    form#addRelationForm
+                        .row
+                            .col-md-4
+                                .form-group
+                                    label(for='addRelationDate') Effective From
+                                        span.text-danger *
+                                    input#addRelationDate.form-control(
+                                        type='date',
+                                        required
+                                    )
+                                    small.form-text.text-muted Today or past date only.
+                            .col-md-4
+                                .form-group
+                                    label(for='addRelationPump') Pump
+                                        span.text-danger *
+                                    select#addRelationPump.form-control(required)
+                                        option(value='') -- Select Pump --
+                                    small.form-text.text-muted Only unlinked pumps shown.
+                            .col-md-4
+                                .form-group
+                                    label(for='addRelationTank') Tank
+                                        span.text-danger *
+                                    select#addRelationTank.form-control(required, disabled)
+                                        option(value='') -- Select Pump First --
+                                    small.form-text.text-muted Same product only.
+                        .row
+                            .col-12
+                                #relationProductInfo.alert.alert-info(style='display: none;')
+                                    strong Selected Mapping: 
+                                    span#relationProductText
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#saveRelationBtn.btn.btn-primary(type='button')
+                        i.bi.bi-link.me-1
+                        | Create Link
+
+    // Edit Relationship Modal
+    #editRelationModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-md(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Relationship Dates
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    // Error alert
+                    #editRelationError.alert.alert-danger(style='display: none;', role='alert')
+                        span#editRelationErrorText
+                    
+                    // Show pump-tank info (read-only)
+                    #editRelationInfo.alert.alert-info
+                        strong Relationship: 
+                        span#editRelationInfoText
+                    
+                    form#editRelationForm
+                        input#editRelationId(type='hidden')
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label(for='editRelationStartDate') Effective From
+                                        span.text-danger *
+                                    input#editRelationStartDate.form-control(
+                                        type='date',
+                                        required
+                                    )
+                                    small.form-text.text-muted Today or past date only.
+                            .col-md-6
+                                .form-group
+                                    label(for='editRelationEndDate') Effective To
+                                    input#editRelationEndDate.form-control(
+                                        type='date'
+                                    )
+                                    small.form-text.text-muted Leave empty for active.
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#updateRelationBtn.btn.btn-primary(type='button')
+                        i.bi.bi-save.me-1
+                        | Update Dates
+
+    // Deactivate Relationship Modal
+    #deactivateRelationModal.modal.fade(tabindex='-1', role='dialog')
+        .modal-dialog.modal-sm(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title Deactivate Relationship
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    // Error alert
+                    #deactivateRelationError.alert.alert-danger(style='display: none;', role='alert')
+                        span#deactivateRelationErrorText
+                    
+                    p Are you sure you want to deactivate this pump-tank relationship?
+                    
+                    // Show pump-tank info
+                    #deactivateRelationInfo.alert.alert-warning
+                        strong Relationship: 
+                        span#deactivateRelationInfoText
+                    
+                    form#deactivateRelationForm
+                        input#deactivateRelationId(type='hidden')
+                        .form-group
+                            label(for='deactivateRelationEndDate') Effective End Date
+                                span.text-danger *
+                            input#deactivateRelationEndDate.form-control(
+                                type='date',
+                                required
+                            )
+                            small.form-text.text-muted Today or past date only.
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#confirmDeactivateRelationBtn.btn.btn-danger(type='button')
+                        i.bi.bi-trash.me-1
+                        | Deactivate
+    
+    
+    
     // Embed data for JavaScript
     script.
         const selectedLocation = '#{selectedLocation}';
