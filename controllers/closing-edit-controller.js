@@ -18,11 +18,17 @@ module.exports = {
         const locationCode = req.user.location_code;
 
 
-        const maxBackDateDays = await locationConfig.getLocationConfigValue(
+        const maxBackDateDays =  Number(await locationConfig.getLocationConfigValue(
             locationCode, 
             'MAX_DAYS_ALLOWED_BACK_DATE_CLOSING', 
             config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing
-        );
+        ));
+
+        const openingReadonlyConfig = await locationConfig.getLocationConfigValue(
+        locationCode,
+        'PUMP_OPENING_READING_READONLY',
+        'N' // default value if not configured
+         );
 
 
         if(closingId) {
@@ -51,6 +57,7 @@ module.exports = {
                         config: config.APP_CONFIGS,
                         currentDate: utils.currentDate(),
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
+                        isOpeningReadonly: openingReadonlyConfig === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
