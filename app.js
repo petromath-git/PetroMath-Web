@@ -170,6 +170,10 @@ const { log } = require('console');
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
+security.secureApp(app);
+app.use(express.static(path.join(__dirname, 'public')));
+
+
 const vehicleRoutes = require('./routes/vehicle-routes'); 
 const passwordRoutes = require('./routes/password-reset-routes'); 
 const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
@@ -203,7 +207,6 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 
 app.use(flash());
-app.use(express.static('public'));
 app.use(require('cookie-parser')('keyboard cat'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -354,7 +357,7 @@ app.use((req, res, next) => {
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(express.static(path.join(__dirname, 'public')));
+
 
 
 
