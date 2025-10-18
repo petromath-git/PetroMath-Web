@@ -27,12 +27,19 @@ module.exports = {
         const locationCode = req.user.location_code;
 
 
-        const maxBackDateDays = await locationConfig.getLocationConfigValue(
+        const maxBackDateDays = Number( await locationConfig.getLocationConfigValue(
             locationCode, 
             'MAX_DAYS_ALLOWED_BACK_DATE_CLOSING', 
             config.APP_CONFIGS.maxDaysAllowedToGoBackForNewClosing
-        );
+        ));
 
+        const openingReadonlyConfig = await locationConfig.getLocationConfigValue(
+        locationCode,
+        'PUMP_OPENING_READING_READONLY',
+        'N' // default value if not configured
+     );
+
+      
 
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
@@ -65,6 +72,7 @@ module.exports = {
                             expenseValues: values[6].value.expenses,
                             usersList: values[7].value.allUsers,
                             vehicleData: values[8].value,
+                            isOpeningReadonly: openingReadonlyConfig === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {

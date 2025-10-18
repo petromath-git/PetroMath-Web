@@ -17,7 +17,12 @@ async function getLocationConfigValue(locationCode, settingName, defaultValue = 
             type: db.Sequelize.QueryTypes.SELECT
         });
         
-        return result.length > 0 ? parseInt(result[0].setting_value) : defaultValue;
+        if (result.length > 0 && result[0].setting_value != null) {
+            return result[0].setting_value.trim();
+        }
+
+        return defaultValue;
+        
     } catch (error) {
         console.error('Error fetching location config:', error);
         return defaultValue;

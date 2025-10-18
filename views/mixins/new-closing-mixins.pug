@@ -125,7 +125,7 @@ mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
                         td
                             label(for=pumpUniqueName + `pump_opening`) Opening
                         td
-                            input.form-control(type='number', name=pumpUniqueName + `pump_opening`, id=pumpUniqueName + `pump_opening`, value= pumpOpening, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")')
+                            input.form-control(type='number', name=pumpUniqueName + `pump_opening`, id=pumpUniqueName + `pump_opening`, value= pumpOpening, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")' readonly= isOpeningReadonly ? true : false)
                     tr
                         td
                             label(for=pumpUniqueName + `pump_testing`) Testing

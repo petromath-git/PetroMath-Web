@@ -51,39 +51,37 @@ block content
             updateSummary();
         });
 
-    form(method='POST' action='/reports-tally-daybook' id='reportForm')
-        .card.shadow.mb-4
-            .card-header.py-3
-                h6.m-0.font-weight-bold.text-primary Tally Daybook Report Filters
-            .card-body
-                .row
-                    .col-md-2
-                        label(for='dateRange') Date Range:
-                        select#dateRange.form-control(onchange="updateDateRange()")
-                            option(value='this_month') This Month
-                            option(value='last_month') Last Month
-                            option(value='this_financial_year') This Financial Year
-                            option(value='last_financial_year') Last Financial Year
-                            option(value='custom', selected=true) Custom Date
-                    .col-md-2
-                        label(for='fromclosingDate') From Date:
-                        input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
-                    .col-md-2
-                        label(for='toclosingDate') To Date:
-                        input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
-                    .col-md-2
-                        label(for='searchInput') Search:
-                        input#searchInput.form-control(type='text', placeholder='Search transactions...', onkeyup='searchTable()')   
-                    .col-md-4.d-flex.align-items-end
-                        include report-print-download.pug
-
-    // Summary Section - Only Total Transactions
-    .row.mb-4
-        .col-md-12
-            .card.border-left-info
-                .card-body
-                    .text-xs.font-weight-bold.text-info.text-uppercase.mb-1 Total Transactions
-                    .h5.mb-0.font-weight-bold.text-gray-800#totalTransactions 0
+    // Sticky Header Container
+    .sticky-header-container
+        .container-fluid            
+            // Filter Section - Always Expanded
+            .filter-section-expanded
+                .filter-header
+                    h6.mb-0.text-primary
+                        i.fas.fa-filter.mr-2
+                        | Tally Daybook Report Filters
+                .filter-content-expanded
+                    form(method='POST' action='/reports-tally-daybook' id='reportForm')
+                        .form-row
+                            .col-md-2
+                                label(for='dateRange') Date Range:
+                                select#dateRange.form-control(onchange="updateDateRange()")
+                                    option(value='this_month') This Month
+                                    option(value='last_month') Last Month
+                                    option(value='this_financial_year') This Financial Year
+                                    option(value='last_financial_year') Last Financial Year
+                                    option(value='custom', selected=true) Custom Date
+                            .col-md-2
+                                label(for='fromclosingDate') From Date:
+                                input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                            .col-md-2
+                                label(for='toclosingDate') To Date:
+                                input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                            .col-md-2
+                                label(for='searchInput') Search:
+                                input#searchInput.form-control(type='text', placeholder='Search transactions...', onkeyup='searchTable()')   
+                            .col-md-4.d-flex.align-items-end
+                                include report-print-download.pug       
 
     // Voucher Type Breakdown - Removed for now
     // .row.mb-4#voucherTypeBreakdown
@@ -92,14 +90,19 @@ block content
     // Main Report Table
     if tallyDaybookData && tallyDaybookData.length > 0
         .card.shadow.mb-4
-            .card-header.py-3.d-flex.flex-row.align-items-center.justify-content-between
+            .card-header.py-3.d-flex.flex-row.align-items-center.justify-content-between(style="position: sticky; top: 0; z-index: 15; background-color: #fff; border-bottom: 2px solid #dee2e6;")
                 h6.m-0.font-weight-bold.text-primary= "Tally Daybook Report"
-                small.text-muted= `${formattedFromDate} to ${formattedToDate}`
+                .d-flex.align-items-center
+                    small.text-muted.mr-3
+                        | Total Transactions: 
+                        span#totalTransactions.font-weight-bold 0
+                    small.text-muted= `${formattedFromDate} to ${formattedToDate}`
+                    
             .card-body
-                .table-responsive
+                .table-responsive(style="max-height: 60vh; overflow-y: auto;")
                     table.table.table-bordered.table-hover.table-sm#tallyDaybookTable
-                        thead(class="thead-dark")
-                            tr
+                        thead.thead-dark
+                            tr(style="position: sticky; top: 0; z-index: 10; background-color: #343a40;")
                                 th.text-center Date
                                 th.text-center Voucher Type
                                 th.text-center Ledger From
@@ -167,3 +170,30 @@ block content
         .border-left-info {
             border-left: 0.25rem solid #36b9cc !important;
         }
+        /* Override filter header styling for Tally Daybook */
+        .filter-header {
+            background: #f8f9fa !important;  /* Light gray background */
+            border-bottom: 1px solid #dee2e6 !important;
+            padding: 12px 20px !important;
+        }
+
+        .filter-header h6 {
+            color: #007bff !important;  /* Bootstrap primary blue */
+            font-weight: 600 !important;
+        }
+
+        /* Button styling to match the design */
+        .filter-content-expanded .btn-primary {
+            background-color: #007bff !important;             
+        }
+
+        .filter-content-expanded .btn-success {
+            background-color: #28a745 !important; 
+            border-color: #34c38f !important;
+        }
+
+        .filter-content-expanded .btn-info {
+            background-color: #17a2b8 !important; 
+            border-color: #50a5f1 !important;
+        }
+
