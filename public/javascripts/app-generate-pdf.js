@@ -14,6 +14,10 @@ function generatePDF(currentPage,isPrint = 'N') {
     if (currentPage.includes('creditsummary')) {
         requestBody.reportType = 'CreditSummary';
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;
+    }else if (currentPage.includes('reports-cashflow-detailed')) {
+    requestBody.reportType = 'CashflowDetailed';
+    requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
+    requestBody.toClosingDate = document.getElementById('toclosingDate').value;
     } else if (currentPage.includes('reports-cashflow')){
         requestBody.reportType = 'CashFlow';
         requestBody.cfclosingDate = document.getElementById('cfclosingDate').value;       
@@ -57,8 +61,7 @@ function generatePDF(currentPage,isPrint = 'N') {
     requestBody.reportType = 'TallyDaybook';
     requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
     requestBody.toClosingDate = document.getElementById('toclosingDate').value;
-    }
-    else if (currentPage.includes('reports')) {
+    }else if (currentPage.includes('reports')) {
         requestBody.reportType = 'CreditDetails';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
         requestBody.toClosingDate = document.getElementById('toclosingDate').value;

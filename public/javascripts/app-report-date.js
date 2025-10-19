@@ -23,11 +23,13 @@ function updateDateRange() {
         if (currentMonth < 3) {
             // Jan, Feb, or Mar => Financial year started last year
             fromDate = new Date(currentYear - 1, 3, 1); // 1st April of last year
-            toDate = new Date(currentYear, 2, 31); // 31st March of this year
+            toDate = currentDate; // Today instead of March 31
+            //toDate = new Date(currentYear, 2, 31); // 31st March of this year
         } else {
             // Apr to Dec => Financial year started this year
             fromDate = new Date(currentYear, 3, 1); // 1st April of this year
-            toDate = new Date(currentYear + 1, 2, 31); // 31st March of next year
+            toDate = currentDate; // Today instead of March 31
+            //toDate = new Date(currentYear + 1, 2, 31); // 31st March of next year
         }
     } else if (dateRange === 'last_financial_year') {
         // "Last Financial Year": From 1st April of last year to 31st March of the current year
