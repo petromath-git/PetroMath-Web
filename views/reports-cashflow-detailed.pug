@@ -1,0 +1,190 @@
+extends layout
+
+block content
+    // Only include JavaScript for non-PDF renders
+    if caller !== 'pdf'
+        script.       
+
+            // Live search functionality
+
+            var searchTimeout;
+
+            function searchTable() {
+                const input = document.getElementById('searchInput');
+                const table = document.getElementById('cashflowDetailedTable');
+                
+                if (!input || !table) return; // Safety check
+                
+                 // Clear existing timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Set new timeout - wait 300ms after user stops typing
+                searchTimeout = setTimeout(() => {
+                    const filter = input.value.toUpperCase();
+                    const tr = table.getElementsByTagName('tr');
+
+                    for (let i = 1; i < tr.length; i++) { // Start from 1 to skip header
+                        const row = tr[i];
+                        let shouldShow = false;
+                        const td = row.getElementsByTagName('td');
+                        
+                        for (let j = 0; j < td.length; j++) {
+                            if (td[j]) {
+                                const txtValue = td[j].textContent || td[j].innerText;
+                                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                                    shouldShow = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        row.style.display = shouldShow ? '' : 'none';
+                    }
+                    updateSummary();
+                }, 300); // 300ms delay
+            }
+
+            // Summary calculations
+            function updateSummary() {
+                const table = document.getElementById('cashflowDetailedTable');
+                
+                // Check if table exists
+                if (!table) {
+                    console.log('Table not found - no data to summarize');
+                    return;
+                }
+                
+                const rows = table.getElementsByTagName('tr');
+                let visibleRows = 0;
+                let totalInflow = 0;
+                let totalOutflow = 0;
+
+                for (let i = 1; i < rows.length; i++) { // Skip header
+                    const row = rows[i];
+                    if (row.style.display !== 'none') {
+                        visibleRows++;
+                        const amountCell = row.cells[4]; // Amount column
+                        const typeCell = row.cells[2]; // Type column
+                        if (amountCell && typeCell) {
+                            const amount = parseFloat(amountCell.textContent.replace(/[₹,]/g, '')) || 0;
+                            const type = typeCell.textContent.trim();
+                            if (type === 'Inflow' || type === 'Credit') {
+                                totalInflow += amount;
+                            } else {
+                                totalOutflow += amount;
+                            }
+                        }
+                    }
+                }
+
+                // Update summary elements if they exist
+                const totalTransElement = document.getElementById('totalTransactions');
+                const totalInflowElement = document.getElementById('totalInflow');
+                const totalOutflowElement = document.getElementById('totalOutflow');
+                const netCashflowElement = document.getElementById('netCashflow');
+                
+                if (totalTransElement) totalTransElement.textContent = visibleRows;
+                if (totalInflowElement) totalInflowElement.textContent = '₹' + totalInflow.toLocaleString('en-IN', {minimumFractionDigits: 2});
+                if (totalOutflowElement) totalOutflowElement.textContent = '₹' + totalOutflow.toLocaleString('en-IN', {minimumFractionDigits: 2});
+                if (netCashflowElement) netCashflowElement.textContent = '₹' + (totalInflow - totalOutflow).toLocaleString('en-IN', {minimumFractionDigits: 2});
+            }
+
+            // Initialize on page load
+            document.addEventListener('DOMContentLoaded', function() {
+                // Only call updateSummary if the table exists
+                if (document.getElementById('cashflowDetailedTable')) {
+                    updateSummary();
+                }
+            });
+
+    // Only show sticky header and filters for non-PDF renders
+    if caller !== 'pdf'
+        // Sticky Header Container
+        .sticky-header-container
+            .container-fluid
+                // Filter Section - Always Expanded
+                .filter-section-expanded.cashflow-detailed-filters
+                    .filter-header
+                        h6.mb-0.text-white
+                            | Cashflow Detailed Report Filters
+                    .filter-content-expanded
+                        form(method='POST' action='/reports-cashflow-detailed' id='reportForm')
+                            .form-row
+                                .col-md-2
+                                    label(for='dateRange') Date Range:
+                                    select#dateRange.form-control(onchange="updateDateRange()")
+                                        option(value='this_month') This Month
+                                        option(value='last_month') Last Month
+                                        option(value='this_financial_year') This Financial Year
+                                        option(value='last_financial_year') Last Financial Year
+                                        option(value='custom', selected=true) Custom Date
+                                .col-md-2
+                                    label(for='fromclosingDate') From Date:
+                                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                                .col-md-2
+                                    label(for='toclosingDate') To Date:
+                                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                                .col-md-2
+                                    label(for='searchInput') Search:
+                                    input#searchInput.form-control(type='text', placeholder='Search transactions...', oninput='searchTable()')   
+                                .col-md-4.d-flex.align-items-end
+                                    button.btn.btn-primary.mr-2(type='submit' form='reportForm')
+                                        | Go
+                                    button.btn.btn-success.mr-2(type='button' onClick='generatePDF(window.location.href,"N")')
+                                        i.bi.bi-cloud-download.mr-1
+                                        | Download
+                                    button.btn.btn-info(type='button' onClick='generatePDF(window.location.href,"Y")')
+                                        i.bi.bi-printer.mr-1
+                                        | Print
+
+    // Main Report Table - shown for both PDF and screen
+    if cashflowDetailedData && cashflowDetailedData.length > 0
+        .card.shadow.mb-4
+            .card-header.bg-dark.text-white.py-3.d-flex.flex-row.align-items-center.justify-content-between(style=caller !== 'pdf' ? "position: sticky; top: 0; z-index: 15; border-bottom: 2px solid #dee2e6;" : "")
+                h6.m-0.text-white= "Cashflow Detailed Report"
+                .d-flex.align-items-center
+                    small.text-light.mr-3
+                        | Total: 
+                        span#totalTransactions.font-weight-bold= cashflowDetailedData.length
+                        |  | In: 
+                        span#totalInflow.font-weight-bold.text-success ₹0
+                        |  | Out: 
+                        span#totalOutflow.font-weight-bold.text-danger ₹0
+                        |  | Net: 
+                        span#netCashflow.font-weight-bold ₹0
+                    small.text-light= `${formattedFromDate} to ${formattedToDate}`
+                
+            .card-body(style="padding-top: 0;")
+                .table-responsive(style=caller !== 'pdf' ? "max-height: calc(100vh - 300px); overflow-y: auto;" : "")
+                    table.table.table-bordered.table-hover.table-sm#cashflowDetailedTable(style="margin-top: 0;")
+                        thead.thead-dark
+                            tr(style=caller !== 'pdf' ? "position: sticky; top: 0; z-index: 10; background-color: #343a40;" : "background-color: #343a40;")
+                                th.text-center Date
+                                th.text-center Description
+                                th.text-center Type
+                                th.text-center Category
+                                th.text-center.text-right Amount (₹)                                
+                        tbody
+                            each transaction in cashflowDetailedData
+                                tr
+                                    td.text-center= transaction.transaction_date
+                                    td= transaction.description
+                                    td.text-center
+                                        if transaction.type === 'Inflow' || transaction.type === 'Credit'
+                                            span.badge.badge-success= transaction.type
+                                        else
+                                            span.badge.badge-danger= transaction.type
+                                    td= transaction.category
+                                    td.text-right.font-weight-bold(class=transaction.type === 'Inflow' || transaction.type === 'Credit' ? 'text-success' : 'text-danger')
+                                        | ₹#{transaction.amount.toLocaleString('en-IN')}                                    
+    else
+        .card.shadow.mb-4
+            .card-body.text-center
+                h5 No cashflow data found
+                p.text-muted Select date range and click 'Go' to generate report
+
+    // Only include date script for non-PDF
+    if caller !== 'pdf'
+        script(src='/javascripts/app-report-date.js')
