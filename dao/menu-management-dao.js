@@ -141,6 +141,18 @@ const menuManagementDao = {
             updated_by: createdBy
         });
     },
+    createDefaultPermission: async (role, menuCode, createdBy) => {
+    return await db.menu_access_global.create({
+        role,
+        menu_code: menuCode,
+        allowed: 1,
+        effective_start_date: new Date(),
+        created_by: createdBy,
+        updated_by: createdBy,
+        creation_date: new Date(),
+        updation_date: new Date()
+    });
+    },
 
     // CACHE MANAGEMENT
     refreshMenuCache: async () => {

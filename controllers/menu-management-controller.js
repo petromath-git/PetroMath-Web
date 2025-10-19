@@ -48,9 +48,16 @@ const menuManagementController = {
             
             await menuManagementDao.createMenuItem(menuData);
 
+            // Automatically create SuperUser permission for the new menu item
+            await menuManagementDao.createDefaultPermission(
+                'SuperUser',
+                req.body.menu_code,
+                req.user.User_Name
+            );
+
             res.json({
                 success: true,
-                message: 'Menu item created successfully'
+                message: 'Menu item created successfully with SuperUser access'
             });
 
         } catch (error) {
