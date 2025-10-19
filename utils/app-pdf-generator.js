@@ -8,6 +8,7 @@ const gstReportsController = require("../controllers/reports-gst-summary-control
 const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
 const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
 const stockReportsController = require("../controllers/stock-reports-controller");
+const cashflowDetailedController = require("../controllers/reports-cashflow-detailed-controller");
 var locationdao = require("../dao/report-dao");
 require('dotenv').config();
 const { getBrowser } = require('./browserHelper');
@@ -66,6 +67,9 @@ module.exports = {
         }
         else if (req.body.reportType == 'StockLedger') {
             htmlContent = await stockReportsController.getStockLedgerReport(req, res, next);
+        }
+        else if (req.body.reportType == 'CashflowDetailed') {
+             htmlContent = await cashflowDetailedController.getCashflowDetailedReport(req, res, next);
         }
 
         const contentEnd = performance.now();

@@ -193,6 +193,7 @@ const stockReportsRoutes = require('./routes/stock-reports-routes');
 const creditMasterRoutes = require('./routes/credit-master-routes');
 const locationMasterRoutes = require('./routes/location-master-routes');
 const apiRoutes = require('./api/apiRoutes');
+const cashflowDetailedRoutes = require('./routes/cashflow-detailed-routes');
 
 
 
@@ -341,6 +342,7 @@ app.use('/location-master', locationMasterRoutes);
 app.use('/masters/pump-tank',pumpTankRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
+app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
