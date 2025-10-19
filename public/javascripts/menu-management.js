@@ -56,8 +56,8 @@ $(document).ready(function() {
 
     function setupTabEvents() {
         // Load data when tabs are activated - Fixed target IDs
-        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
-            const target = $(e.target).attr('data-bs-target');
+        $('a[data-toggle="tab"], button[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            const target = $(e.target).attr('data-bs-target') || $(e.target).attr('href');
             
             switch(target) {
                 case '#menu-items-pane':
@@ -187,6 +187,14 @@ $(document).ready(function() {
     }
 
     function saveMenuItem() {
+
+         // Check if form is valid
+        const form = document.getElementById('menu-item-form');
+        if (!form.checkValidity()) {
+            form.reportValidity(); // This will show browser validation messages
+            return;
+        }
+
         // Fixed IDs to match template
         const formData = {
             menu_code: $('#menu-code').val(),

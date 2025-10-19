@@ -20,19 +20,19 @@ block content
             // Tab Navigation
             ul.nav.nav-tabs.mb-3#menu-tabs(role="tablist")
               li.nav-item(role="presentation")
-                button.nav-link.active#menu-items-tab(data-bs-toggle="tab" data-bs-target="#menu-items-pane" type="button" role="tab") 
+                a.nav-link.active#menu-items-tab(data-toggle="tab" href="#menu-items-pane" role="tab") 
                   i.bi.bi-list-ul.me-1
                   | Menu Items
               li.nav-item(role="presentation")
-                button.nav-link#menu-groups-tab(data-bs-toggle="tab" data-bs-target="#menu-groups-pane" type="button" role="tab")
+                a.nav-link#menu-groups-tab(data-toggle="tab" href="#menu-groups-pane" role="tab")
                   i.bi.bi-collection.me-1
                   | Menu Groups
               li.nav-item(role="presentation")
-                button.nav-link#menu-access-tab(data-bs-toggle="tab" data-bs-target="#menu-access-pane" type="button" role="tab")
+                a.nav-link#menu-access-tab(data-toggle="tab" href="#menu-access-pane" role="tab")
                   i.bi.bi-shield-lock.me-1
                   | Access Control
               li.nav-item(role="presentation")
-                button.nav-link#cache-tab(data-bs-toggle="tab" data-bs-target="#cache-pane" type="button" role="tab")
+                a.nav-link#cache-tab(data-toggle="tab" href="#cache-pane" role="tab")
                   i.bi.bi-hdd-stack.me-1
                   | Cache Status
 
@@ -144,7 +144,8 @@ block content
       .modal-content
         .modal-header
           h5.modal-title#menu-item-modal-title Add Menu Item
-          button.button(type="button" class="btn-close" data-bs-dismiss="modal")
+          button.btn.btn-close(type="button" data-dismiss="modal" aria-label="Close")
+            span(aria-hidden="true") ×
         .modal-body
           form#menu-item-form
             .row
@@ -162,7 +163,7 @@ block content
               .col-md-6
                 .mb-3
                   label.form-label URL Path
-                  input.form-control#url-path(type="text" maxlength="255")
+                  input.form-control#url-path(type="text" required maxlength="255")
                   .form-text e.g., /dashboard or /reports/sales
               .col-md-6
                 .mb-3
@@ -190,7 +191,7 @@ block content
                     option(value="inactive") Inactive
 
         .modal-footer
-          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
           button.btn.btn-primary#save-menu-item-btn Save Menu Item
 
   // ===============================
@@ -201,7 +202,8 @@ block content
       .modal-content
         .modal-header
           h5.modal-title#menu-group-modal-title Add Menu Group
-          button.button(type="button" class="btn-close" data-bs-dismiss="modal")
+          button.close(type="button" data-dismiss="modal" aria-label="Close")
+            span(aria-hidden="true") &times;
         .modal-body
           form#menu-group-form
             .mb-3
@@ -225,7 +227,7 @@ block content
                   .form-text Bootstrap icon class (e.g., bi-clock)
 
         .modal-footer
-          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
           button.btn.btn-primary#save-menu-group-btn Save Menu Group
           
   script.
