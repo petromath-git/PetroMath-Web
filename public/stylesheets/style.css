@@ -2766,3 +2766,27 @@ body {
     color: #ffffff !important;  /* White text */
     font-weight: 600 !important;
 }
+
+/* Menu Access Report Styles */
+#access-report-table .sticky-col {
+    position: sticky;
+    left: 0;
+    background-color: #f8f9fa;
+    z-index: 10;
+    min-width: 200px;
+}
+
+#access-report-table thead .sticky-col {
+    background-color: #343a40;
+    color: white;
+}
+
+#access-report-table .table-secondary .sticky-col {
+    background-color: #e2e3e5;
+}
+
+@media print {
+    .btn-group {
+        display: none !important;
+    }
+}

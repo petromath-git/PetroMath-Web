@@ -1,0 +1,29 @@
+extends layout
+
+block content
+  .container-fluid.mt-3
+    .row
+      .col-12
+        .card
+          .card-header.d-flex.justify-content-between.align-items-center
+            h4.mb-0
+              i.bi.bi-file-earmark-text.me-2
+              | Menu Access Report - #{location}
+            .btn-group
+              button.btn.btn-success.btn-sm#export-excel-btn
+                i.bi.bi-file-excel.me-1
+                | Export Excel
+              button.btn.btn-danger.btn-sm#export-pdf-btn
+                i.bi.bi-file-pdf.me-1
+                | Export PDF
+
+          .card-body
+            #report-container
+              .text-center.p-4
+                .spinner-border.me-2(role="status")
+                | Loading report...
+
+  script.
+    const userLocation = '#{location}';
+    
+  script(src="/javascripts/menu-access-report.js")

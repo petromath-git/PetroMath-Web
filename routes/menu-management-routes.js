@@ -66,4 +66,15 @@ router.post('/api/refresh-cache', [isLoginEnsured, security.hasPermission('MANAG
     menuManagementController.refreshCache
 );
 
+
+// Menu Access Report page
+router.get('/access-report', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')], 
+    menuManagementController.renderAccessReport
+);
+
+// API: Get access report data
+router.get('/api/access-report', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')], 
+    menuManagementController.getAccessReportData
+);
+
 module.exports = router;
