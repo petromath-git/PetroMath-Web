@@ -39,6 +39,20 @@ const menuManagementController = {
     // CREATE: New menu item
     createMenuItem: async (req, res, next) => {
         try {
+
+             // Check for duplicate sequence in the same group
+            const existingItem = await menuManagementDao.checkSequenceInGroup(
+                req.body.group_code,
+                req.body.sequence
+            );
+            
+            if (existingItem) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Sequence ${req.body.sequence} is already used by "${existingItem.menu_name}" in this group. Please use a different sequence number.`
+                });
+            }
+
             const menuData = {
                 ...req.body,
                 effective_start_date: new Date(),
@@ -48,9 +62,16 @@ const menuManagementController = {
             
             await menuManagementDao.createMenuItem(menuData);
 
+            // Automatically create SuperUser permission for the new menu item
+            await menuManagementDao.createDefaultPermission(
+                'SuperUser',
+                req.body.menu_code,
+                req.user.User_Name
+            );
+
             res.json({
                 success: true,
-                message: 'Menu item created successfully'
+                message: 'Menu item created successfully with SuperUser access'
             });
 
         } catch (error) {
@@ -271,7 +292,46 @@ const menuManagementController = {
                 error: 'Failed to refresh menu cache: ' + error.message
             });
         }
+    },
+
+    // Render access report page
+renderAccessReport: async (req, res, next) => {
+    try {
+        res.render('menu-access-report', {
+            title: 'Menu Access Report',
+            user: req.user,
+            location: req.user.location_code
+        });
+    } catch (error) {
+        console.error('Error rendering menu access report:', error);
+        res.status(500).send('Error loading menu access report');
     }
+},
+
+// GET: Access report data for current location
+getAccessReportData: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const roles = await menuManagementDao.getAllRoles();
+        const reportData = await menuManagementDao.getAccessReportMatrix(locationCode);
+
+        res.json({
+            success: true,
+            location: locationCode,
+            roles: roles,
+            data: reportData
+        });
+
+    } catch (error) {
+        console.error('Error fetching access report:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch access report: ' + error.message
+        });
+    }
+},
+
+    
 };
 
 module.exports = menuManagementController;
