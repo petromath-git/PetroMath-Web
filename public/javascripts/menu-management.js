@@ -195,6 +195,24 @@ $(document).ready(function() {
             return;
         }
 
+         // Get form values
+        const groupCode = $('#group-code').val();
+        const sequence = parseInt($('#sequence').val());
+        const menuCode = $('#menu-code').val();
+        
+        // Check for duplicate sequence within the same group
+        const duplicateSequence = menuItems.find(item => 
+            item.group_code === groupCode && 
+            parseInt(item.sequence) === sequence &&
+            item.menu_code !== menuCode // Exclude current item when editing
+        );
+        
+        if (duplicateSequence) {
+            showError(`Sequence ${sequence} is already used by "${duplicateSequence.menu_name}" in this group. Please use a different sequence number.`);
+            $('#sequence').focus();
+            return;
+        }
+
         // Fixed IDs to match template
         const formData = {
             menu_code: $('#menu-code').val(),

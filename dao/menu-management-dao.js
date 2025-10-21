@@ -177,7 +177,64 @@ const menuManagementDao = {
         return await db.sequelize.query(query, {
             type: QueryTypes.SELECT
         });
+    },
+
+    getAccessReportMatrix: async (locationCode) => {
+    const query = `
+        SELECT 
+            mi.menu_code,
+            mi.menu_name,
+            mi.sequence,
+            mg.group_code,
+            mg.group_name,
+            mg.group_sequence,
+            GROUP_CONCAT(
+                CONCAT(m.role, ':', m.allowed) 
+                ORDER BY r.role_level DESC
+                SEPARATOR '|'
+            ) as role_permissions
+        FROM m_menu_items mi
+        LEFT JOIN m_menu_groups mg ON mi.group_code = mg.group_code
+        LEFT JOIN m_menu_access_v m ON mi.menu_code = m.menu_code 
+            AND m.location_code = ?
+        LEFT JOIN m_roles r ON m.role = r.role_name
+        WHERE mi.effective_start_date <= CURDATE()
+        AND (mi.effective_end_date IS NULL OR mi.effective_end_date >= CURDATE())
+        GROUP BY mi.menu_code, mi.menu_name, mi.sequence, 
+                 mg.group_code, mg.group_name, mg.group_sequence
+        ORDER BY mg.group_sequence, mi.sequence, mi.menu_name
+    `;
+    
+    return await db.sequelize.query(query, {
+        replacements: [locationCode],
+        type: QueryTypes.SELECT
+    });
+},
+
+
+checkSequenceInGroup: async (groupCode, sequence, excludeMenuId = null) => {
+    const whereClause = {
+        group_code: groupCode,
+        sequence: sequence,
+        effective_start_date: { [Op.lte]: new Date() },
+        [Op.or]: [
+            { effective_end_date: null },
+            { effective_end_date: { [Op.gte]: new Date() } }
+        ]
+    };
+    
+    // Exclude current menu when editing
+    if (excludeMenuId) {
+        whereClause.menu_id = { [Op.ne]: excludeMenuId };
     }
+    
+    return await db.menu_items.findOne({
+        where: whereClause,
+        attributes: ['menu_id', 'menu_code', 'menu_name', 'sequence']
+    });
+},
+
+
 };
 
 module.exports = menuManagementDao;
