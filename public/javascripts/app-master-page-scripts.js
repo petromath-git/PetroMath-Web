@@ -1,33 +1,7 @@
 
 // Receipts - scripts - start
 
-function saveReceipt(id, receiptId) {
-    const receiptNoObj = document.getElementById("creditreceiptno_" + id);
-    const receiptTypeObj = document.getElementById("cr_receiptType_" + id);
-    const creditTypeObj = document.getElementById("cr_type-" + id);
-    const CompanyIdObj = document.getElementById("cr_crcompanyname_" + id);
-    const amountObj = document.getElementById("cramount_" + id);
-    const notesObj = document.getElementById("crnotes_" + id);
-    if (amountObj.value && parseInt(amountObj.value) > 0) {
-        if (putAjax('receipt/' + receiptId, {
-            receipt_no: receiptNoObj.value,
-            receipt_type: receiptTypeObj.value,
-            credit_type: creditTypeObj.value,
-            company_id: CompanyIdObj.value,
-            amount: amountObj.value,
-            notes: notesObj.value
-        })) {
-            postReceiptEdit(id);
-        }
-    }
-}
 
-function deleteReceipt(rowId, receiptId) {
-    deleteAjax('delete-receipt', receiptId, rowId, 'd-md-none').then(() => {
-        window.location.reload();
-    });
-
-}
 
 // master table receipt row edit
 function editReceipt(id) {

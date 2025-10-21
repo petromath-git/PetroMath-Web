@@ -162,6 +162,7 @@ const passwordResetController = require('./controllers/password-reset-controller
 const txnController = require("./controllers/txn-common-controller");
 
 
+
 const flash = require('express-flash');
 const bodyParser = require('body-parser');
 const { log } = require('console');
@@ -194,6 +195,7 @@ const creditMasterRoutes = require('./routes/credit-master-routes');
 const locationMasterRoutes = require('./routes/location-master-routes');
 const apiRoutes = require('./api/apiRoutes');
 const cashflowDetailedRoutes = require('./routes/cashflow-detailed-routes');
+const creditReceiptsRoutes = require('./routes/credit-receipts-routes');
 
 
 
@@ -343,6 +345,7 @@ app.use('/masters/pump-tank',pumpTankRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
+app.use('/creditreceipts', creditReceiptsRoutes);
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
@@ -471,21 +474,7 @@ app.post('/reports-customer', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditReport(req, res, next);
 });
 
-app.post('/creditreceipts', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    receiptController.saveReceipts(req, res);   // response returned inside controller
-});
 
-app.get('/creditreceipts', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    receiptController.getReceipts(req, res);    // response returned inside controller
-});
-
-app.put('/receipt/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    receiptController.updateReceipts(req, res);
-});
-
-app.delete('/delete-receipt', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    receiptController.deleteReceipts(req, res, next);
-});
 
 // app.get('/products', [isLoginEnsured, security.isAdmin()], function (req, res) {
 //     let locationCode = req.user.location_code;

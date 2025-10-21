@@ -6,6 +6,7 @@ const config = require("../config/app-config");
 const txnController = require("../controllers/txn-common-controller");
 const cashFlowController = require("../controllers/cash-flow-controller");
 const CreditsDao = require("../dao/credits-dao");
+const lookupDao = require('../dao/lookup-dao');
 
 module.exports = {
 
@@ -65,10 +66,12 @@ module.exports = {
         }
     
         try {
-            const [receiptResult, activeCreditResult, suspenseResult] = await Promise.all([
+            const [receiptResult, activeCreditResult, suspenseResult,receiptTypes, creditTypes] = await Promise.all([
                 CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
                 txnController.creditCompanyDataPromise(locationCode),  // active credit companies
-                txnController.suspenseDataPromise(locationCode)
+                txnController.suspenseDataPromise(locationCode),
+                lookupDao.getLookupByType('CREDIT_RECEIPT_TYPE', locationCode),
+                lookupDao.getCustomerTypes(locationCode)
             ]);
 
             
@@ -123,22 +126,21 @@ module.exports = {
        
              
 
-            // Final datasets for view rendering
-            
+            // For adding new receipts - exclude digital customers
             const activeCreditCompanyValues = activeCreditResult.filter(
                 (c) => !c.card_flag || c.card_flag !== 'Y'
             );
 
-            
+            // For displaying existing receipts - include ALL customers (including digital)
+            const allActiveCreditCompanyValues = activeCreditResult;  // Don't filter out digital
 
-            const activeSuspenseValues = suspenseResult;           // Already plain
             const creditCompanyValues = [
-                ...activeCreditCompanyValues.map(c => ({
-                    creditlist_id: c.creditorId,         // normalize to standard field
+                ...allActiveCreditCompanyValues.map(c => ({
+                    creditlist_id: c.creditorId,
                     Company_Name: c.creditorName,
                     type: c.type
                 })),
-                ...activeSuspenseValues.map(c => ({
+                ...suspenseResult.map(c => ({
                     creditlist_id: c.creditorId,
                     Company_Name: c.creditorName,
                     type: c.type
@@ -174,21 +176,28 @@ module.exports = {
           
     
             res.render('credit-receipts', {
-                title: 'Credit Receipts',
-                user: req.user,
-                config: config.APP_CONFIGS,
-                cashReceipts: receipts,
-                creditCompanyValues: creditCompanyValues,              // main table: show active + inactive
-                digitalCompanyValues: digitalCompanyValues,  // main table: show Digital active + inactive
-                activeCreditCompanyValues: activeCreditCompanyValues,  // mixin (add new): only active
-                digActiveCreditCompanyValues: digitalCreditCompanyValues,  // mixin (add new): only active digital
-                suspenseValues: suspenseResult,
-                currentDate: utils.currentDate(),
-                minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
-                fromDate: fromDate,
-                toDate: toDate
-            });
-    
+                        title: 'Credit Receipts',
+                        user: req.user,
+                        config: config.APP_CONFIGS,
+                        receiptTypes: receiptTypes.map(rt => ({ 
+                            label: rt.description, 
+                            allow_manual_entry: rt.attribute1 === 'Y'
+                        })),
+                        creditTypes: creditTypes.map(ct => ct.description),
+                        hasMultipleCreditTypes: creditTypes.length > 1,
+                        defaultCreditType: creditTypes.length > 0 ? creditTypes[0].description : null, 
+                        cashReceipts: receipts,
+                        creditCompanyValues: creditCompanyValues,
+                        digitalCompanyValues: digitalCompanyValues,
+                        activeCreditCompanyValues: activeCreditCompanyValues,
+                        digActiveCreditCompanyValues: digitalCreditCompanyValues,
+                        suspenseValues: suspenseResult,
+                        currentDate: utils.currentDate(),
+                        minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
+                        fromDate: fromDate,
+                        toDate: toDate
+                    });
+                        
         } catch (err) {
             console.error("Error fetching credit receipts:", err);
             res.status(500).send("Internal Server Error");
