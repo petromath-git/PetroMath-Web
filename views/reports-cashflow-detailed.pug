@@ -148,12 +148,6 @@ block content
                     small.text-light.mr-3
                         | Total: 
                         span#totalTransactions.font-weight-bold= cashflowDetailedData.length
-                        |  | In: 
-                        span#totalInflow.font-weight-bold.text-success ₹0
-                        |  | Out: 
-                        span#totalOutflow.font-weight-bold.text-danger ₹0
-                        |  | Net: 
-                        span#netCashflow.font-weight-bold ₹0
                     small.text-light= `${formattedFromDate} to ${formattedToDate}`
                 
             .card-body(style="padding-top: 0;")
