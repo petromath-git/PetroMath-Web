@@ -102,24 +102,58 @@ module.exports = {
 
     /**
      * Get lookup values by type (generic method)
+     * @param {string} lookupType - The lookup type to fetch
+     * @param {string} locationCode - Optional location code for location-specific lookups
      */
-    getLookupByType: async (lookupType) => {
+    getLookupByType: async (lookupType, locationCode = null) => {
         try {
             const currentDate = new Date();
             
-            const values = await Lookup.findAll({
-                attributes: ['lookup_id', 'description', 'tag', 'attribute1', 'attribute2', 'attribute3'],
-                where: {
-                    lookup_type: lookupType,
-                    start_date_active: {
-                        [Op.lte]: currentDate
-                    },
-                    end_date_active: {
-                        [Op.gte]: currentDate
-                    }
+            const whereClause = {
+                lookup_type: lookupType,
+                start_date_active: {
+                    [Op.lte]: currentDate
                 },
+                end_date_active: {
+                    [Op.gte]: currentDate
+                }
+            };
+
+            // Add location filter if locationCode is provided
+            if (locationCode) {
+                whereClause[Op.or] = [
+                    { location_code: null },           // Global lookups
+                    { location_code: locationCode }    // Location-specific lookups
+                ];
+            }
+            
+            const values = await Lookup.findAll({
+                attributes: ['lookup_id', 'description', 'tag', 'attribute1', 'attribute2', 'attribute3', 'location_code'],
+                where: whereClause,
                 order: [['description', 'ASC']]
             });
+
+            // If locationCode provided, remove duplicates (prefer location-specific over global)
+            if (locationCode) {
+                const uniqueValues = [];
+                const seenDescriptions = new Set();
+                
+                // Sort to prioritize location-specific entries (location_code !== null comes first)
+                values.sort((a, b) => {
+                    if (a.location_code && !b.location_code) return -1;
+                    if (!a.location_code && b.location_code) return 1;
+                    return 0;
+                });
+                
+                values.forEach(val => {
+                    if (!seenDescriptions.has(val.description)) {
+                        uniqueValues.push(val);
+                        seenDescriptions.add(val.description);
+                    }
+                });
+                
+                return uniqueValues;
+            }
             
             return values;
         } catch (error) {
