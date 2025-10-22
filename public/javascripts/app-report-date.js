@@ -8,7 +8,22 @@ function updateDateRange() {
     const currentDate = new Date();
     let fromDate, toDate;
 
-    if (dateRange === 'this_month') {
+    if (dateRange === 'today') {
+        // "Today": Current date only
+        fromDate = new Date();
+        toDate = new Date();
+    } else if (dateRange === 'yesterday') {
+        // "Yesterday": Previous day
+        fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - 1);
+        toDate = new Date();
+        toDate.setDate(toDate.getDate() - 1);
+    } else if (dateRange === 'this_week') {
+        // "This Week": From Sunday (start of week) to today
+        fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - fromDate.getDay()); // Go back to Sunday
+        toDate = new Date(); // Today
+    } else if (dateRange === 'this_month') {
         // "This Month": From 1st day of current month to today
         fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1); // 1st day of the current month
         toDate = new Date(); // Current date

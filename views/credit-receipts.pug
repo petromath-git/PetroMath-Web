@@ -1,113 +1,692 @@
 extends layout
-include mixins/mixins
+
 
 block content
-    form(method='GET' action='/creditreceipts')
-        table.center
-            tr
-                td From Date:
-                td
-                    input#receipts_fromDate.form-control(type='date', name='receipts_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
-                td &nbsp;
-                td To Date:
-                td
-                    input#receipts_toDate.form-control(type='date', name='receipts_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
-                td &nbsp;
-                td
-                    button.btn.btn-primary(type='submit') Go
-    br
-    form(method='POST' action='/creditreceipts')
-        input(type='hidden' id='receipts_fromDate_hiddenValue' name='receipts_fromDate_hiddenValue' value=fromDate)
-        input(type='hidden' id='receipts_toDate_hiddenValue' name='receipts_toDate_hiddenValue' value=toDate)
-        table(class="table" id="creditReceipts-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Receipt Date
-                    th(scope="col") ReceiptNo
-                    th(scope="col") Receipt Type
-                    th(scope="col") Credit Type                    
-                    th(scope="col") Credit Party
-                    th(scope="col") Digital Vendor
-                    th(scope="col") Amount
-                    th(scope="col") Notes
-                    th(scope="col") Delete
-                tbody
-                    - var prefix = 'cr_';
-                    each val, index in cashReceipts
-                        tr(id="creditReceipts_row_"+index)
-                            td(scope="row")= index + 1
-                            td(scope="row" class="row flex-nowrap")= val.receipt_date
-                            td(scope="row")
-                                input.form-control(type="text" id="creditreceiptno_"+index value=val.receipt_no readonly)
-                            td(scope="row")
-                                select.form-control(name=prefix + 'receiptType_' + index, id=prefix + 'receiptType_' + index disabled)
-                                    if config.receiptTypes
-                                        each type in config.receiptTypes
-                                            option(value=`${type.label}` selected= val.receipt_type === type.label)= type.label
-                            td(scope="row")
-                                select.form-control(name=prefix+'type-' + index, id=prefix+'type-' + index, disabled)
-                                    if config.creditTypes
-                                        each type in config.creditTypes
-                                            option(value=`${type}` selected= val.creditType === type)= type
-                                creditType
-                            td(scope="row")
-                                select.form-control(
-                                    name=`${prefix}crcompanyname_${index}`, 
-                                    id=`${prefix}crcompanyname_${index}`, 
-                                    disabled
-                                    aria-label=`Credit company ${index + 1}`
-                                )
-                                    if creditCompanyValues
-                                        each company in creditCompanyValues
-                                            option(
-                                                value=company.creditlist_id
-                                                selected=(val.company_id == company.creditlist_id)
-                                            )= company.Company_Name
+    style.
+        /* Sticky header styling */
+        .receipts-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-left: 0;
+            margin-right: 0;
+            padding: 15px 0;
+        }
+        
+        .receipts-container {
+            padding-top: 15px;
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+        
+        /* Mobile card styling */
+        .receipt-card {
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-bottom: 15px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .receipt-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        
+        .receipt-card .card-header {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .receipt-detail {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .receipt-detail:last-child {
+            border-bottom: none;
+        }
+        
+        .receipt-detail small {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            color: #6c757d;
+            font-weight: 600;
+        }
+        
+        .receipt-detail strong {
+            font-size: 14px;
+            color: #212529;
+        }
+        
+        .badge-receipt-type {
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        
+        /* Date filter styling */
+        .date-filter-mobile {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        
+        .date-filter-mobile .form-group {
+            margin-bottom: 10px;
+        }
+        
+        .date-filter-mobile label {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+        
+        /* Sticky filter section for desktop */
+        .sticky-header-container {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .filter-section-expanded {
+            background: #343a40;
+            padding: 15px;
+        }
+        
+        .filter-header h6 {
+            color: #ffffff;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .filter-content-expanded {
+            background: white;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-top: none;
+        }
+        
+        /* Responsive breakpoints */
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            
+            .mobile-cards-view {
+                display: block !important;
+            }
+            
+            .date-filter-mobile {
+                display: block !important;
+            }
+            
+            .filter-section-expanded {
+                display: none !important;
+            }
+        }
+        
+        @media (min-width: 992px) {
+            .desktop-table-view {
+                display: block !important;
+            }
+            
+            .mobile-cards-view {
+                display: none !important;
+            }
+            
+            .date-filter-mobile {
+                display: none !important;
+            }
+            
+            .filter-section-expanded {
+                display: block !important;
+            }
+        }
+        
+        .table-responsive {
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Amount column styling */
+        .table td.text-right {
+            text-align: right !important;
+            padding-right: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: nowrap;
+        }
+        
+        .table th:nth-last-child(3) {
+            text-align: right !important;
+            padding-right: 20px;
+        }
+        
+        /* Fix red placeholder text for required empty fields */
+        input:invalid,
+        select:invalid {
+            box-shadow: none;
+        }
+        
+        input::placeholder,
+        textarea::placeholder {
+            color: #6c757d !important;
+            opacity: 0.6;
+        }
+        
+        /* Remove red outline from invalid but untouched fields */
+        input:invalid:not(:focus),
+        select:invalid:not(:focus) {
+            border-color: #ced4da;
+        }
+        
+        /* Show red only on focus or after interaction */
+        input:invalid:focus,
+        select:invalid:focus {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
+    // Desktop: Sticky Header Container with Filters
+    .sticky-header-container.d-none.d-lg-block
+        .container-fluid
+            // Header with title and Add button
+            .receipts-header-sticky
+                .row.align-items-center
+                    .col-auto
+                        h4.mb-0.text-primary Credit Receipts
+                    .col.text-right
+                        button.btn.btn-success.btn-sm(data-toggle="modal" data-target="#addReceiptModal")
+                            i.oi.oi-plus
+                            span.ml-2 Add New Receipt
+            
+            // Desktop Filter Section
+            .filter-section-expanded
+                .filter-header
+                    h6.mb-0 Credit Receipts Filters
+                .filter-content-expanded
+                    form(method='GET' action='/creditreceipts' id='receiptFilterForm')
+                        .form-row
+                            .col-md-2
+                                label(for='dateRange') Date Range:
+                                select#dateRange.form-control(onchange="updateDateRange()")
+                                    option(value='today') Today
+                                    option(value='yesterday') Yesterday
+                                    option(value='this_week') This Week
+                                    option(value='this_month') This Month
+                                    option(value='last_month') Last Month
+                                    option(value='this_financial_year') This Financial Year
+                                    option(value='last_financial_year') Last Financial Year
+                                    option(value='custom', selected=true) Custom Date
                             
-                            // Digital Vendor column
-                            td(scope="row")
-                                if val.receipt_type === 'Digital'
-                                    select.form-control(
-                                        name=`${prefix}digitalcompanyname_${index}`, 
-                                        id=`${prefix}digitalcompanyname_${index}`, 
-                                        disabled
-                                        aria-label=`Digital vendor ${index + 1}`
-                                    )
-                                        if digitalCompanyValues
-                                            each company in digitalCompanyValues
-                                                option(
-                                                    value=company.creditlist_id
-                                                    selected=(val.digital_company_id == company.creditlist_id)
-                                                )= company.Company_Name
-                                else
-                                    // Empty field for non-digital receipts
+                            .col-md-2
+                                label(for='fromclosingDate') From Date:
+                                input#fromclosingDate.form-control(type='date' name='receipts_fromDate' value=fromDate max=currentDate required)
+
+                            .col-md-2
+                                label(for='toclosingDate') To Date:
+                                input#toclosingDate.form-control(type='date' name='receipts_toDate' value=toDate max=currentDate required)
+                            
+                            .col-md-3
+                                label(for='searchInput') Search:
+                                input#searchInput.form-control(type='text' placeholder='Search receipts...' oninput='searchReceiptsTable()')
+                            
+                            .col-md-3.d-flex.align-items-end
+                                button.btn.btn-primary.mr-2(type='submit') Go
+    // Mobile: Simple Header
+    .d-lg-none
+        .receipts-header-sticky
+            .container-fluid
+                .row.align-items-center
+                    .col
+                        h4.mb-0.text-primary Credit Receipts
+
+    // Mobile: Date Filter
+    .date-filter-mobile
+        form(method='GET' action='/creditreceipts')
+            .form-group
+                label From Date:
+                input.form-control(type='date' name='receipts_fromDate' value=fromDate max=currentDate required)
+            .form-group
+                label To Date:
+                input.form-control(type='date' name='receipts_toDate' value=toDate max=currentDate required)
+            button.btn.btn-primary.btn-block(type='submit') Apply Filter
+
+    .receipts-container
+        // Desktop Table View
+        .desktop-table-view
+            .table-responsive
+                table.table.table-hover.table-striped#creditReceipts-table
+                    thead.thead-light(style="position: sticky; top: 0; z-index: 10; background-color: #f8f9fa;")
+                        tr
+                            th(scope="col") #
+                            th(scope="col") Date
+                            th(scope="col") Receipt No
+                            th(scope="col") Type
+                            if hasMultipleCreditTypes
+                                th(scope="col") Credit Type
+                            th(scope="col") Credit Party
+                            th(scope="col") Digital Vendor
+                            th(scope="col") Amount
+                            th(scope="col") Notes
+                            th(scope="col") Actions
+                    tbody
+                        - var prefix = 'cr_';
+                        if cashReceipts && cashReceipts.length > 0
+                            each val, index in cashReceipts
+                                tr(id="creditReceipts_row_"+index)
+                                    td= index + 1
+                                    td= val.receipt_date
+                                    td= val.receipt_no
+                                    td
+                                        span.badge(class=val.receipt_type === 'Digital' ? 'badge-info' : val.receipt_type === 'Cash' ? 'badge-success' : 'badge-secondary')= val.receipt_type
+                                    if hasMultipleCreditTypes
+                                        td= val.creditType
+                                    td
+                                        if creditCompanyValues
+                                            - var company = creditCompanyValues.find(c => c.creditlist_id == val.company_id)
+                                            = company ? company.Company_Name : '-'
+                                    td
+                                        if val.receipt_type === 'Digital' && digitalCompanyValues
+                                            - var digitalCompany = digitalCompanyValues.find(c => c.creditlist_id == val.digital_company_id)
+                                            = digitalCompany ? digitalCompany.Company_Name : '-'
+                                        else
+                                            span.text-muted N/A
+                                    td.text-right.font-weight-bold= new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(val.amount || 0))
+                                    td= val.notes || '-'
+                                    td
+                                        if val.showEditOrDelete
+                                            button.btn.btn-danger.btn-sm(onclick=`deleteReceipt('creditReceipts_row_${index}','${val.id}')` title="Delete Receipt")
+                                                i.oi.oi-trash
+                        else
+                            tr
+                                td.text-center(colspan=hasMultipleCreditTypes ? "10" : "9")
+                                    .py-4
+                                        i.oi.oi-inbox(style="font-size: 48px; color: #ccc;")
+                                        p.text-muted.mt-2 No receipts found for the selected date range
+
+        // Mobile Cards View
+        .mobile-cards-view
+            if cashReceipts && cashReceipts.length > 0
+                .row
+                    each val, index in cashReceipts
+                        .col-12
+                            .card.receipt-card
+                                .card-header
+                                    div
+                                        strong Receipt ##{val.receipt_no}
+                                        br
+                                        small #{val.receipt_date}
+                                    span.badge.badge-light= val.receipt_type
+                                .card-body
+                                    .receipt-detail
+                                        small Receipt Type
+                                        strong
+                                            span.badge(class=val.receipt_type === 'Digital' ? 'badge-info' : val.receipt_type === 'Cash' ? 'badge-success' : 'badge-secondary')= val.receipt_type
+                                    
+                                    if hasMultipleCreditTypes
+                                        .receipt-detail
+                                            small Credit Type
+                                            strong= val.creditType
+                                    
+                                    .receipt-detail
+                                        small Credit Party
+                                        strong
+                                            if creditCompanyValues
+                                                - var company = creditCompanyValues.find(c => c.creditlist_id == val.company_id)
+                                                = company ? company.Company_Name : '-'
+                                    
+                                    if val.receipt_type === 'Digital'
+                                        .receipt-detail
+                                            small Digital Vendor
+                                            strong
+                                                if digitalCompanyValues
+                                                    - var digitalCompany = digitalCompanyValues.find(c => c.creditlist_id == val.digital_company_id)
+                                                    = digitalCompany ? digitalCompany.Company_Name : '-'
+                                    
+                                    .receipt-detail
+                                        small Amount
+                                        strong.text-success ₹#{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(val.amount || 0))}
+                                    
+                                    .receipt-detail
+                                        small Notes
+                                        strong= val.notes || '-'
+                                    
+                                    if val.showEditOrDelete
+                                        .mt-3
+                                            button.btn.btn-danger.btn-block(onclick=`deleteReceipt('creditReceipts_row_${index}','${val.id}')`)
+                                                i.oi.oi-trash.mr-2
+                                                | Delete Receipt
+            else
+                .text-center.py-5
+                    i.oi.oi-inbox(style="font-size: 64px; color: #ccc;")
+                    h5.text-muted.mt-3 No Receipts Found
+                    p.text-muted No receipts available for the selected date range
+                    button.btn.btn-primary.mt-3(data-toggle="modal" data-target="#addReceiptModal")
+                        i.oi.oi-plus.mr-2
+                        | Add Your First Receipt
+
+    // Floating Add Button (Mobile Only)
+    .d-lg-none
+        button.btn.btn-success.btn-lg(
+            style="position: fixed; bottom: 20px; right: 20px; border-radius: 50%; width: 60px; height: 60px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;"
+            data-toggle="modal"
+            data-target="#addReceiptModal"
+            title="Add New Receipt"
+        )
+            i.oi.oi-plus(style="font-size: 24px;")
+
+    // Add Receipt Modal
+    #addReceiptModal.modal.fade(tabindex="-1" role="dialog" aria-labelledby="addReceiptModalLabel" aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                form(method='POST' action='/creditreceipts')
+                    input(type='hidden' name='receipts_fromDate_hiddenValue' value=fromDate)
+                    input(type='hidden' name='receipts_toDate_hiddenValue' value=toDate)
+                    
+                    .modal-header
+                        h5#addReceiptModalLabel.modal-title Add New Receipt
+                        button.close(type="button" data-dismiss="modal" aria-label="Close")
+                            span(aria-hidden="true") &times;
+                    
+                    .modal-body
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label Receipt Date
                                     input.form-control(
-                                        type="text" 
-                                        disabled 
-                                        readonly
-                                        placeholder="N/A"
-                                        aria-label=`Digital vendor ${index + 1} (not applicable)`
+                                        type='date'
+                                        name='txn_receipt_date_0'
+                                        value=currentDate
+                                        max=currentDate
+                                        min=minDateForNewReceipts
+                                        required
                                     )
-                                //- input.form-control(type="text" id="crcompanyname_"+index value=val.company_name readonly)
-                            td(scope="row")
-                                input.form-control(type="number" id="cramount_"+index value=val.amount readonly)
-                            td(scope="row")
-                                input.form-control(type="text" id="crnotes_"+index value=val.notes readonly)
-                            if(val.showEditOrDelete)
-                                td(scope="row")
-                                    div(class="row flex-nowrap")
-                                        //-a.btn.btn-info(id="receipt-edit-"+index onclick="editReceipt('"+index+"','"+ val.id +"')")
-                                        //-   span.oi.oi-pencil(style="color: white;")
-                                        div &nbsp;&nbsp;
-                                        a.btn.btn-danger(id="receipt-delete-" + index onclick="deleteReceipt('creditReceipts_row_"+ index+"','" + val.id + "')")
-                                            span.oi.oi-trash(style="color: white;")
-                                        //-   div &nbsp;&nbsp;
-                                        //-   a.btn-info.d-md-none(id="receipt-save-"+index onClick="saveReceipt('"+ index+"','"+ val.id +"')" style="color: white;") Save
-                    - var rowCnt = 0
-                    while rowCnt < 1
-                        +addTxnReceipt(rowCnt++)
-        div(align="center")
-            button.btn.btn-info(type="button", id="creditReceipts-add-new" onClick="showMasterEntryRow(this, 'creditReceipts')" title="Only one can be added at a time.", disabled=false) Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", id="creditReceipts-save" disabled=true, title="Enabled on 'Add New'") Save
+                            
+                            .col-md-6
+                                .form-group
+                                    label Receipt Number
+                                    input.form-control(
+                                        type='number'
+                                        name='creditreceiptno_0'
+                                        placeholder="Enter receipt number"
+                                        required
+                                    )
+                        
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label Receipt Type
+                                    select.form-control(
+                                        name='cr_receiptType_0'
+                                        id='cr_receiptType_0'
+                                        required
+                                        onchange="toggleReceiptRelatedDropdowns(this, 0, 'cr_')"
+                                    )
+                                        option(value="" disabled selected) Select Receipt Type
+                                        if receiptTypes
+                                            each val in receiptTypes
+                                                if val.allow_manual_entry
+                                                    option(value=val.label)= val.label
+                            
+                            .col-md-6
+                                .form-group
+                                    if hasMultipleCreditTypes
+                                        label Credit Type
+                                        select.form-control(
+                                            name='cr_type-0'
+                                            id='cr_type-0'
+                                            required
+                                            onchange="toggleReceiptRelatedDropdowns(this, 0, 'cr_')"
+                                        )
+                                            option(value="" disabled selected) Select Credit Type
+                                            if creditTypes
+                                                each val in creditTypes
+                                                    option(value=val)= val
+                                    else
+                                        label Credit Type
+                                        input.form-control(
+                                            type='text'
+                                            value=defaultCreditType
+                                            readonly
+                                            disabled
+                                        )
+                                        input(type='hidden' name='cr_type-0' id='cr_type-0' value=defaultCreditType)
+                        
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label Credit Party
+                                    input(type='hidden' id='cr_companyId_0' name='cr_companyId_0')
+                                    
+                                    if creditTypes
+                                        each creditType in creditTypes
+                                            select.form-control(
+                                                name=`cr_${creditType}-0`
+                                                id=`cr_${creditType}-0`
+                                                style="display: none;"
+                                                onchange="updateHiddenCreditId(this, 'cr_', 0)"
+                                            )
+                                                option(value="" disabled selected) Select #{creditType}
+                                                if creditType === 'Credit' && activeCreditCompanyValues
+                                                    each val in activeCreditCompanyValues
+                                                        option(value=val.creditorId)= val.creditorName
+                                                else if creditType === 'Suspense' && suspenseValues
+                                                    each val in suspenseValues
+                                                        option(value=val.creditorId)= val.creditorName
+                            
+                            .col-md-6
+                                .form-group
+                                    label Digital Vendor
+                                    select.form-control(
+                                        name='cr_digitalcreditparty_0'
+                                        id='cr_digitalcreditparty_0'
+                                        disabled
+                                    )
+                                        option(value="" selected) Select Digital Vendor
+                                        if digActiveCreditCompanyValues
+                                            each val in digActiveCreditCompanyValues
+                                                option(value=val.creditorId)= val.creditorName
+                        
+                        .row
+                            .col-md-6
+                                .form-group
+                                    label Amount
+                                    input.form-control(
+                                        type='number'
+                                        name='cramount_0'
+                                        id='cramount_0'
+                                        step='0.01'
+                                        min='0.01'
+                                        placeholder="Enter amount"
+                                        required
+                                        oninput="if(this.value < 0) this.value = 0;"
+                                    )
+                            
+                            .col-md-6
+                                .form-group
+                                    label Notes
+                                    input.form-control(
+                                        type='text'
+                                        name='crnotes_0'
+                                        id='crnotes_0'
+                                        placeholder="Optional notes"
+                                    )
+                    
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-primary(type="submit") Save Receipt
+
+    // JavaScript
+    script.
+        // Make credit types available globally
+        window.creditTypesData = !{JSON.stringify(creditTypes)};
+        window.hasMultipleCreditTypes = !{hasMultipleCreditTypes};
+        window.defaultCreditType = !{JSON.stringify(defaultCreditType)};
+        
+        // Live search functionality
+        function searchReceiptsTable() {
+            const searchInput = document.getElementById('searchInput');
+            if (!searchInput) return;
+            
+            const searchValue = searchInput.value.toLowerCase();
+            const table = document.getElementById('creditReceipts-table');
+            if (!table) return;
+            
+            const tbody = table.getElementsByTagName('tbody')[0];
+            if (!tbody) return;
+            
+            const rows = tbody.getElementsByTagName('tr');
+            
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                
+                // Skip if this is the "no records" row
+                if (cells.length === 1 && cells[0].colSpan > 1) {
+                    continue;
+                }
+                
+                let found = false;
+                
+                // Search through all cells
+                for (let j = 0; j < cells.length; j++) {
+                    const cellText = cells[j].textContent || cells[j].innerText;
+                    if (cellText.toLowerCase().indexOf(searchValue) > -1) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                row.style.display = found ? '' : 'none';
+            }
+        }
+        
+        function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix) {
+            const receiptTypeEl = document.getElementById(`${creditRowPrefix}receiptType_${rowNo}`);
+            const creditTypeEl = document.getElementById(`${creditRowPrefix}type-${rowNo}`);
+            const digitalDropdown = document.getElementById(`${creditRowPrefix}digitalcreditparty_${rowNo}`);
+            
+            if (!receiptTypeEl || !creditTypeEl) return;
+
+            let receiptType = receiptTypeEl.value;
+            let creditType = creditTypeEl.value;
+
+            // Handle digital vendor dropdown
+            if (digitalDropdown && changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
+                if (receiptType && receiptType.toLowerCase() === 'digital') {
+                    digitalDropdown.disabled = false;
+                    digitalDropdown.required = true;
+                } else {
+                    digitalDropdown.disabled = true;
+                    digitalDropdown.required = false;
+                    digitalDropdown.value = '';
+                }
+            }
+
+            // Handle credit party dropdowns
+            if (creditType && changedElement.id === `${creditRowPrefix}type-${rowNo}`) {
+                const selectedDropdown = document.getElementById(`${creditRowPrefix}${creditType}-${rowNo}`);
+                
+                if (selectedDropdown) {
+                    selectedDropdown.style.display = 'block';
+                    selectedDropdown.required = true;
+                    
+                    // Hide all other credit type dropdowns
+                    window.creditTypesData.forEach(type => {
+                        if (type !== creditType) {
+                            const otherDropdown = document.getElementById(`${creditRowPrefix}${type}-${rowNo}`);
+                            if (otherDropdown) {
+                                otherDropdown.style.display = 'none';
+                                otherDropdown.required = false;
+                                otherDropdown.value = '';
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        function updateHiddenCreditId(selectElement, prefix, rowNo) {
+            const hiddenInput = document.getElementById(`${prefix}companyId_${rowNo}`);
+            if (hiddenInput) {
+                hiddenInput.value = selectElement.value;
+            }
+        }
+
+        function deleteReceipt(rowId, receiptId) {
+            if (confirm('Are you sure you want to delete this receipt?')) {
+                deleteAjax('/creditreceipts/delete-receipt', receiptId, rowId, 'd-md-none').then(() => {
+                    window.location.reload();
+                }).catch(error => {
+                    console.error('Error deleting receipt:', error);
+                    alert('Failed to delete receipt. Please try again.');
+                });
+            }
+        }
+
+        $(document).ready(function() {
+            // When modal opens, auto-show credit party if only one type
+            $('#addReceiptModal').on('show.bs.modal', function () {
+                $('#cr_digitalcreditparty_0').prop('disabled', true).prop('required', false);
+                
+                // Hide all credit party dropdowns initially
+                window.creditTypesData.forEach(type => {
+                    const dropdown = document.getElementById(`cr_${type}-0`);
+                    if (dropdown) {
+                        dropdown.style.display = 'none';
+                        dropdown.required = false;
+                    }
+                });
+                
+                // If only one credit type, auto-show its dropdown
+                if (!window.hasMultipleCreditTypes && window.defaultCreditType) {
+                    setTimeout(() => {
+                        const defaultDropdown = document.getElementById(`cr_${window.defaultCreditType}-0`);
+                        if (defaultDropdown) {
+                            defaultDropdown.style.display = 'block';
+                            defaultDropdown.required = true;
+                        }
+                    }, 100);
+                }
+            });
+            
+            $('#addReceiptModal').on('hidden.bs.modal', function () {
+                $(this).find('form')[0].reset();
+                $('#cr_companyId_0').val('');
+                
+                window.creditTypesData.forEach(type => {
+                    const dropdown = document.getElementById(`cr_${type}-0`);
+                    if (dropdown) {
+                        dropdown.style.display = 'none';
+                        dropdown.required = false;
+                    }
+                });
+                
+                $('#cr_digitalcreditparty_0').prop('disabled', true).prop('required', false).val('');
+            });
+        });
+    
+    // Include the shared date range script
+    script(src='/javascripts/app-report-date.js')
