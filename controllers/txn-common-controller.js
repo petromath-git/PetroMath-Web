@@ -334,7 +334,7 @@ const shiftProductsPromise = async (closingId) => {
             type: Sequelize.QueryTypes.SELECT
         });
         
-        console.log('Database results:', result);
+        
         console.log('Results length:', result ? result.length : 0);
         return result;
         
