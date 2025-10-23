@@ -15,6 +15,7 @@ const deleteController = require("./closing-delete-controller");
 const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const db = require("../db/db-connection");
+const rolePermissionsDao = require("../dao/role-permissions-dao");
 
 module.exports = {
 
@@ -364,7 +365,8 @@ const getHomeData = (req, res, next) => {
             getDraftsCount(locationCode),
             getDraftsCountBeforeDays(locationCode, config.APP_CONFIGS.maxAllowedDraftsDays),
             getDeadlineWarningMessage(locationCode),
-            getLocationProductColumns(locationCode)
+            getLocationProductColumns(locationCode),
+            rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
         ]).then(values => {
             res.render('home', {
                 title: 'Shift Closing',
@@ -377,7 +379,8 @@ const getHomeData = (req, res, next) => {
                 draftsCnt: values[1].value,
                 draftDaysCnt: values[2].value,
                 deadlineMessage: values[3].value,
-                productColumns: values[4].value
+                productColumns: values[4].value,
+                canSearchClosings: values[5].value
             });
         }).catch(error => {
             console.error('Error in getHomeData:', error);
@@ -385,7 +388,7 @@ const getHomeData = (req, res, next) => {
         });
     } else {
         Promise.allSettled([
-            getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate),
+            getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate,rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')),
             getLocationProductColumns(locationCode)
         ]).then(values => {
             res.render('home', {
@@ -396,7 +399,8 @@ const getHomeData = (req, res, next) => {
                 currentDate: utils.currentDate(),
                 fromClosingDate: closingQueryFromDate,
                 toClosingDate: closingQueryToDate,
-                productColumns: values[1].value
+                productColumns: values[1].value,
+                canSearchClosings: values[2].value
             });
         }).catch(error => {
             console.error('Error in getHomeData for non-admin:', error);
