@@ -1,156 +1,208 @@
 extends layout
 
 block content
-    // Desktop Date Filter
-    form(method='GET' action='/home' id='closing-by-date')
-        table.center
-            tr
-                td From Date:
-                td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;
-                td To Date:
-                td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;
-                td
-                    button.btn.btn-primary(type='submit') Go
-    // Mobile Date Filter (only visible on mobile)
-    .date-filter-mobile
-        form(method='GET' action='/home')
-            table.center
-                tr
-                    td From Date:
-                    td
-                        input.form-control(
-                            type='date', 
-                            name='fromClosingDate', 
-                            value=fromClosingDate 
-                            max=currentDate 
-                            required
-                        )
-                tr
-                    td To Date:
-                    td
-                        input.form-control(
-                            type='date', 
-                            name='toClosingDate', 
-                            value=toClosingDate 
-                            max=currentDate 
-                            required
-                        )
-                tr
-                    td(colspan="2")
-                        button.btn.btn-primary(type='submit') Go                
-    div &nbsp;
+
+    style.
+        /* Sticky header styling for home page */
+        .table-responsive {
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+        
+        /* Ensure table header stays on top when scrolling */
+        .table-desktop thead.thead-light {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+    // Collapsible Filter Section - Desktop & Mobile
+    .card.mb-3
+        .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0 
+                    i.bi.bi-funnel.me-2
+                    | Shift Closing Filters
+                i#filter-toggle-icon.bi.bi-chevron-down
+        .filter-content.collapse.show#filterContent
+            .card-body
+                form#closingFilterForm(method='GET' action='/home')
+                    .row.g-3
+                        // Period Dropdown
+                        .col-md-2.col-12
+                            label.form-label(for='dateRange') Date Range:
+                            select#dateRange.form-control(onchange='updateDateRange()')
+                                option(value='today') Today
+                                option(value='yesterday') Yesterday
+                                option(value='this_week') This Week
+                                option(value='this_month') This Month
+                                option(value='last_month') Last Month
+                                option(value='this_financial_year') This Financial Year
+                                option(value='last_financial_year') Last Financial Year
+                                option(value='custom' selected) Custom Date
+                        
+                        // From Date
+                        .col-md-2.col-6
+                            label.form-label(for='fromclosingDate') From Date:
+                            input#fromclosingDate.form-control(
+                                type='date' 
+                                name='fromClosingDate' 
+                                value=fromClosingDate 
+                                max=currentDate
+                                required
+                            )
+                        
+                        // To Date
+                        .col-md-2.col-6
+                            label.form-label(for='toclosingDate') To Date:
+                            input#toclosingDate.form-control(
+                                type='date' 
+                                name='toClosingDate' 
+                                value=toClosingDate 
+                                max=currentDate
+                                required
+                            )
+                        
+                        // Live Search
+                        if canSearchClosings
+                            .col-md-4.col-12
+                                label.form-label(for='searchInput') Search:
+                                input#searchInput.form-control(
+                                    type='text' 
+                                    placeholder='Search closings...' 
+                                    oninput='searchClosingsTable()'
+                                )
+                            
+                            // Go Button
+                            .col-md-2.col-12.d-flex.align-items-end
+                                button.btn.btn-primary.w-100(type='submit')
+                                    i.bi.bi-search.me-2
+                                    | Go
+                        else
+                            // For users without search permission
+                            .col-md-2.col-12.d-flex.align-items-end
+                                button.btn.btn-primary.w-100(type='submit')
+                                    i.bi.bi-search.me-2
+                                    | Go
+
+    div &nbsp;             
+    
     div.container-fluid
         if closingValues && closingValues.length > 0
             // Reverted back to simple table.table (like original)
-            table.table.table-desktop(style="width:100% !important;")
-                thead.thead-light
-                    tr
-                        th Date
-                        th Closing ID
-                        th Cashier
-                        if productColumns && productColumns.length > 0
-                            each column in productColumns
-                                th= column.label
-                        else
-                            th MS
-                            th HSD
-                            th XMS
-                            th 2T Loose
-                        th Shortage/Excess
-                        th Status
-                        th Edit/View
-                        th Delete
-                tbody
-                    each val in closingValues
-                        tr(id=`closing-record-${val.closingId}`)
-                            td
-                                span= val.closingDate
-                            td
-                                span= val.closingId
-                            td
-                                span= val.cashierName
+            .table-responsive
+                table.table.table-desktop(style="width:100% !important;")
+                    thead.thead-light.sticky-top
+                        tr
+                            th Date
+                            th Closing ID
+                            th Cashier
                             if productColumns && productColumns.length > 0
                                 each column in productColumns
-                                    td
-                                        span= parseFloat(val[column.key] || 0).toFixed(2)
+                                    th= column.label
                             else
+                                th MS
+                                th HSD
+                                th XMS
+                                th 2T Loose
+                            th Shortage/Excess
+                            th Status
+                            th Edit/View
+                            th Delete
+                    tbody
+                        each val in closingValues
+                            tr(id=`closing-record-${val.closingId}`)
                                 td
-                                    span= val.msData || '0.00'
+                                    span= val.closingDate
                                 td
-                                    span= val.hsdData || '0.00'
+                                    span= val.closingId
                                 td
-                                    span= val.xmsData || '0.00'
+                                    span= val.cashierName
+                                if productColumns && productColumns.length > 0
+                                    each column in productColumns
+                                        td
+                                            span= parseFloat(val[column.key] || 0).toFixed(2)
+                                else
+                                    td
+                                        span= val.msData || '0.00'
+                                    td
+                                        span= val.hsdData || '0.00'
+                                    td
+                                        span= val.xmsData || '0.00'
+                                    td
+                                        span= val.l2tData || '0.00'
                                 td
-                                    span= val.l2tData || '0.00'
-                            td
-                                if val.expenseData && val.expenseData != 0
-                                    if val.expenseData > 0
-                                        strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                    if val.expenseData && val.expenseData != 0
+                                        if val.expenseData > 0
+                                            strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                        else
+                                            strong.text-danger= parseFloat(val.expenseData).toFixed(2)
                                     else
-                                        strong.text-danger= parseFloat(val.expenseData).toFixed(2)
-                                else
-                                    strong.text-muted 0.00
-                            td
-                                if val.closingStatus === 'CLOSED'
-                                    span.badge.badge-success Closed
-                                else if val.closingStatus === 'DRAFT'
-                                    span.badge.badge-warning Draft
-                                else
-                                    span.badge.badge-info= val.closingStatus
-                            if (val.closingStatus === 'DRAFT')
+                                        strong.text-muted 0.00
                                 td
-                                    a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
-                                        span.oi.oi-pencil
-                                if user.isAdmin
+                                    if val.closingStatus === 'CLOSED'
+                                        span.badge.badge-success Closed
+                                    else if val.closingStatus === 'DRAFT'
+                                        span.badge.badge-warning Draft
+                                    else
+                                        span.badge.badge-info= val.closingStatus
+                                if (val.closingStatus === 'DRAFT')
                                     td
-                                        a.btn.btn-danger(onClick=`deleteClosing(${val.closingId})`)
-                                            span.oi.oi-trash
-                            if (val.closingStatus === 'CLOSED')
-                                td
-                                    a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
-                                        span.oi.oi-book
-                                td &nbsp;
-                    if closingValues.length > 1
-                        tr.table-info
-                            td.strong Total
-                            td -
-                            td -
-                            if productColumns && productColumns.length > 0
-                                each column in productColumns
+                                        a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
+                                            span.oi.oi-pencil
+                                    if user.isAdmin
+                                        td
+                                            a.btn.btn-danger(onClick=`deleteClosing(${val.closingId})`)
+                                                span.oi.oi-trash
+                                if (val.closingStatus === 'CLOSED')
                                     td
-                                        - var total = 0
+                                        a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
+                                            span.oi.oi-book
+                                    td &nbsp;
+                        if closingValues.length > 1
+                            tr.table-info
+                                td.strong Total
+                                td -
+                                td -
+                                if productColumns && productColumns.length > 0
+                                    each column in productColumns
+                                        td
+                                            - var total = 0
+                                            each val in closingValues
+                                                - total += parseFloat(val[column.key] || 0)
+                                            strong= total.toFixed(2)
+                                else
+                                    td
+                                        - var msTotal = 0
                                         each val in closingValues
-                                            - total += parseFloat(val[column.key] || 0)
-                                        strong= total.toFixed(2)
-                            else
-                                td
-                                    - var msTotal = 0
-                                    each val in closingValues
-                                        - msTotal += parseFloat(val.msData || 0)
-                                    strong= msTotal.toFixed(2)
-                                td
-                                    - var hsdTotal = 0
-                                    each val in closingValues
-                                        - hsdTotal += parseFloat(val.hsdData || 0)
-                                    strong= hsdTotal.toFixed(2)
-                                td
-                                    - var xmsTotal = 0
-                                    each val in closingValues
-                                        - xmsTotal += parseFloat(val.xmsData || 0)
-                                    strong= xmsTotal.toFixed(2)
-                                td
-                                    - var l2tTotal = 0
-                                    each val in closingValues
-                                        - l2tTotal += parseFloat(val.l2tData || 0)
-                                    strong= l2tTotal.toFixed(2)
-                            td -
-                            td -
-                            td -
-                            td -
+                                            - msTotal += parseFloat(val.msData || 0)
+                                        strong= msTotal.toFixed(2)
+                                    td
+                                        - var hsdTotal = 0
+                                        each val in closingValues
+                                            - hsdTotal += parseFloat(val.hsdData || 0)
+                                        strong= hsdTotal.toFixed(2)
+                                    td
+                                        - var xmsTotal = 0
+                                        each val in closingValues
+                                            - xmsTotal += parseFloat(val.xmsData || 0)
+                                        strong= xmsTotal.toFixed(2)
+                                    td
+                                        - var l2tTotal = 0
+                                        each val in closingValues
+                                            - l2tTotal += parseFloat(val.l2tData || 0)
+                                        strong= l2tTotal.toFixed(2)
+                                td -
+                                td -
+                                td -
+                                td -
 
             // Mobile cards layout - ONLY visible on mobile
             .mobile-cards-container(style="display: none;")
@@ -246,3 +298,120 @@ block content
                             tr(id="deadlineWarning_row_"+index)
                                 td(scope="row")= val.deadlineDate
                                 td(scope="row")= val.message
+    script(src='/javascripts/app-report-date.js')
+    script.
+        // Toggle filter collapse
+        function toggleFilters() {
+            const filterContent = document.getElementById('filterContent');
+            const icon = document.getElementById('filter-toggle-icon');
+            
+            if (filterContent.classList.contains('show')) {
+                filterContent.classList.remove('show');
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            } else {
+                filterContent.classList.add('show');
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        }
+
+        // Live search function for closings table with dynamic totals recalculation
+        function searchClosingsTable() {
+            const searchInput = document.getElementById('searchInput');
+            if (!searchInput) return;
+            
+            const searchValue = searchInput.value.toLowerCase();
+            
+            // Search in desktop table
+            const desktopTable = document.querySelector('.table-desktop');
+            if (desktopTable) {
+                const thead = desktopTable.querySelector('thead');
+                const tbody = desktopTable.querySelector('tbody');
+                const rows = tbody.getElementsByTagName('tr');
+                const totalRow = tbody.querySelector('tr.table-info');
+                
+                // Count total columns and identify product columns dynamically
+                const headerCells = thead.querySelectorAll('th');
+                const totalColumns = headerCells.length;
+                
+                // Product columns are after: Date(0), Closing ID(1), Cashier(2)
+                // and before: Shortage/Excess(-4), Status(-3), Edit/View(-2), Delete(-1)
+                const productStartIndex = 3;
+                const productEndIndex = totalColumns - 4;
+                const productColumnCount = productEndIndex - productStartIndex;
+                
+                // Initialize totals array for product columns
+                const totals = new Array(productColumnCount).fill(0);
+                let visibleCount = 0;
+                
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    
+                    // Skip total row
+                    if (row.classList.contains('table-info')) {
+                        continue;
+                    }
+                    
+                    const cells = row.getElementsByTagName('td');
+                    let found = false;
+                    
+                    // Search through all cells
+                    for (let j = 0; j < cells.length; j++) {
+                        const cellText = cells[j].textContent || cells[j].innerText;
+                        if (cellText.toLowerCase().indexOf(searchValue) > -1) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (found) {
+                        row.style.display = '';
+                        visibleCount++;
+                        
+                        // Add product values to totals
+                        for (let j = productStartIndex; j < productEndIndex; j++) {
+                            const cellValue = parseFloat(cells[j].textContent) || 0;
+                            const totalIndex = j - productStartIndex;
+                            totals[totalIndex] += cellValue;
+                        }
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+                
+                // Update total row if it exists
+                if (totalRow) {
+                    if (visibleCount > 0) {
+                        const totalCells = totalRow.getElementsByTagName('td');
+                        
+                        // Update each product total
+                        // Total row structure: Total(0), -(1), -(2), product1(3), product2(4), ..., -(last 4 columns)
+                        for (let i = 0; i < productColumnCount; i++) {
+                            const totalCellIndex = productStartIndex + i;
+                            
+                            if (totalCells[totalCellIndex]) {
+                                const strongTag = totalCells[totalCellIndex].querySelector('strong');
+                                if (strongTag) {
+                                    strongTag.textContent = totals[i].toFixed(2);
+                                }
+                            }
+                        }
+                        totalRow.style.display = '';
+                    } else {
+                        totalRow.style.display = 'none';
+                    }
+                }
+            }
+            
+            // Search in mobile cards
+            const mobileCards = document.querySelectorAll('.mobile-cards-container .closing-card');
+            mobileCards.forEach(card => {
+                const cardText = card.textContent || card.innerText;
+                if (cardText.toLowerCase().indexOf(searchValue) > -1) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }    

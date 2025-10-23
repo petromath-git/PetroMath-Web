@@ -866,8 +866,7 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
 
 
 app.get('/api/shift-products/:closingId', (req, res) => {
-    console.log('=== API ROUTE CALLED ===');
-    console.log('Received closingId:', req.params.closingId);
+    
     
     const closingId = req.params.closingId;
     txnController.shiftProductsPromise(closingId)

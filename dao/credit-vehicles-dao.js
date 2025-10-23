@@ -145,4 +145,14 @@ module.exports = {
         }
     );
 },
+
+findByVehicleIds: (vehicleIds) => {
+        return CreditListVehicle.findAll({
+            where: { 
+                vehicle_id: vehicleIds
+            },
+            attributes: ['vehicle_id', 'vehicle_number', 'vehicle_type', 'creditlist_id']
+        });
+    },
+
 };
