@@ -71,19 +71,26 @@ block content
                             )
                         
                         // Live Search
-                        .col-md-4.col-12
-                            label.form-label(for='searchInput') Search:
-                            input#searchInput.form-control(
-                                type='text' 
-                                placeholder='Search closings...' 
-                                oninput='searchClosingsTable()'
-                            )
-                        
-                        // Go Button (now on same line)
-                        .col-md-2.col-12.d-flex.align-items-end
-                            button.btn.btn-primary.w-100(type='submit')
-                                i.bi.bi-search.me-2
-                                | Go
+                        if canSearchClosings
+                            .col-md-4.col-12
+                                label.form-label(for='searchInput') Search:
+                                input#searchInput.form-control(
+                                    type='text' 
+                                    placeholder='Search closings...' 
+                                    oninput='searchClosingsTable()'
+                                )
+                            
+                            // Go Button
+                            .col-md-2.col-12.d-flex.align-items-end
+                                button.btn.btn-primary.w-100(type='submit')
+                                    i.bi.bi-search.me-2
+                                    | Go
+                        else
+                            // For users without search permission
+                            .col-md-6.col-12.d-flex.align-items-end
+                                button.btn.btn-primary.w-100(type='submit')
+                                    i.bi.bi-search.me-2
+                                    | Go
 
     div &nbsp;             
     
