@@ -8,13 +8,11 @@ const moment = require('moment');
 
 module.exports = {
   getDigitalReconReport: async (req, res) => {
-    //console.log(req);
     let locationCode = req.user.location_code;
     let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
     let cid = req.body.company_id;
     let caller = req.body.caller;
-
 
     if (req.body.fromClosingDate) {
       fromDate = req.body.fromClosingDate;
@@ -44,7 +42,6 @@ module.exports = {
     OpeningBal = data[0].OpeningData;
     closingBal = data[0].ClosingData;
 
-
     // Create extended dates for query
     const queryFromDate = new Date(fromDate);
     queryFromDate.setDate(queryFromDate.getDate() - 3);
@@ -60,33 +57,37 @@ module.exports = {
       cid
     );
 
-    // Create full dataset for reconciliation
-    const fullDataset = data1.map((creditstmtData) => ({
+    // Create full dataset for reconciliation - WITH UNIQUE ID
+    const fullDataset = data1.map((creditstmtData, index) => ({
+      unique_id: `${index}`,
       Date: creditstmtData.tran_date,
+      bill_no: creditstmtData.bill_no,
       Narration: [creditstmtData.bill_no, creditstmtData.notes]
-    .filter(Boolean) // Remove null/undefined values
-    .join(" - "), // Concatenate bill_no and notes with a separator
+        .filter(Boolean)
+        .join(" - "),
       companyName: creditstmtData.company_name,
-      Debit: creditstmtData.product_name !== null ? creditstmtData.amount : null,
-      Credit: creditstmtData.product_name === null ? creditstmtData.amount : null     
+      entry_type: creditstmtData.entry_type,
+      Debit: creditstmtData.entry_type === 'DEBIT' ? creditstmtData.amount : null,
+      Credit: creditstmtData.entry_type === 'CREDIT' ? creditstmtData.amount : null
     }));
 
     function findMatchingTransactions(transactions) {
-      const TOLERANCE = 100; // 100 rupees tolerance
+      const TOLERANCE = 100;
 
       const processedData = transactions.map(tx => ({
         ...tx,
-        Date: new Date(tx.Date.split('-').reverse().join('-')),
-        Debit: tx.Debit ? parseFloat(tx.Debit.replace(/,/g, '')) : null,
-        Credit: tx.Credit ? parseFloat(tx.Credit.replace(/,/g, '')) : null,
-        reconciled: false // Add reconciled flag
+        DateObj: new Date(tx.Date.split('-').reverse().join('-')),
+        DebitAmount: tx.Debit ? parseFloat(tx.Debit) : null,
+        CreditAmount: tx.Credit ? parseFloat(tx.Credit) : null,
+        reconciled: false,
+        match_id: null
       }));
 
-      const creditTransactions = processedData.filter(tx => tx.Credit !== null);
+      const creditTransactions = processedData.filter(tx => tx.CreditAmount !== null);
       const matches = [];
       const matchedDebitIds = new Set();
+      let matchCounter = 1;
 
-      // Function to get all combinations of debits (2 to N debits)
       function getCombinations(arr, size) {
         const combinations = [];
         const helper = (start, currentCombo) => {
@@ -105,76 +106,104 @@ module.exports = {
       }
 
       creditTransactions.forEach(creditTx => {
-        const creditDate = creditTx.Date;
-        const creditAmount = creditTx.Credit;
+        const creditDate = creditTx.DateObj;
+        const creditAmount = creditTx.CreditAmount;
         const currentDateStr = creditDate.toISOString().split('T')[0];
 
         const prevDate = new Date(creditDate);
         prevDate.setDate(prevDate.getDate() - 1);
         const prevDateStr = prevDate.toISOString().split('T')[0];
 
+        const nextDate = new Date(creditDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+
         const relevantDebits = processedData.filter(tx =>
-          tx.Debit !== null &&
-          !matchedDebitIds.has(tx['Bill No/Receipt No.']) &&
-          [currentDateStr, prevDateStr].includes(tx.Date.toISOString().split('T')[0])
+          tx.DebitAmount !== null &&
+          !matchedDebitIds.has(tx.unique_id) &&
+          [prevDateStr, currentDateStr, nextDateStr].includes(tx.DateObj.toISOString().split('T')[0])
         );
 
-        // Check combinations of 2 to N debits
-        for (let i = 2; i <= relevantDebits.length; i++) {
+        // Try single debit match first
+        for (const debit of relevantDebits) {
+          if (Math.abs(debit.DebitAmount - creditAmount) <= TOLERANCE) {
+            const currentMatchId = matchCounter++;
+            
+            matches.push({
+              match_id: currentMatchId,
+              creditDate: creditTx.Date,
+              creditAmount: creditAmount,
+              creditBillNo: creditTx.bill_no,
+              matchingDebits: [debit],
+              totalDebits: debit.DebitAmount
+            });
+            
+            debit.reconciled = true;
+            debit.match_id = currentMatchId;
+            creditTx.reconciled = true;
+            creditTx.match_id = currentMatchId;
+            matchedDebitIds.add(debit.unique_id);
+            return;
+          }
+        }
+
+        // Try combinations of 2 to N debits
+        for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
           const combinations = getCombinations(relevantDebits, i);
           for (const combo of combinations) {
-            const sum = combo.reduce((acc, debit) => acc + debit.Debit, 0);
-            if (Math.abs(sum - creditAmount) <= TOLERANCE) {  // Using tolerance
+            const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
+            if (Math.abs(sum - creditAmount) <= TOLERANCE) {
+              const currentMatchId = matchCounter++;
+              
               matches.push({
-                creditDate: dateFormat(creditDate, "dd-mm-yyyy"),
+                match_id: currentMatchId,
+                creditDate: creditTx.Date,
                 creditAmount: creditAmount,
+                creditBillNo: creditTx.bill_no,
                 matchingDebits: combo,
                 totalDebits: sum
               });
 
-              // Mark the debits as reconciled
               combo.forEach(debit => {
                 debit.reconciled = true;
-                matchedDebitIds.add(debit['Bill No/Receipt No.']);
+                debit.match_id = currentMatchId;
+                matchedDebitIds.add(debit.unique_id);
               });
               creditTx.reconciled = true;
+              creditTx.match_id = currentMatchId;
 
-              return;  // Stop after finding the first match within tolerance
+              return;
             }
           }
         }
       });
 
-      return { matches, matchedDebitIds };
+      return { matches, matchedDebitIds, processedData };
     }
 
-
     // Get matches
-    const { matches: reconciliationMatches, matchedDebitIds } = findMatchingTransactions(fullDataset);
+    const { matches: reconciliationMatches, matchedDebitIds, processedData } = findMatchingTransactions(fullDataset);
 
-    Creditstmtlist = fullDataset
+    // Filter to date range and map reconciliation status
+    Creditstmtlist = processedData
       .filter(record => {
-        const recordDate = new Date(record.Date.split('-').reverse().join('-'));
+        const recordDate = record.DateObj;
         const startDate = new Date(fromDate);
         const endDate = new Date(toDate);
         return recordDate >= startDate && recordDate <= endDate;
       })
       .map(transaction => ({
-        ...transaction,
-        reconciled: transaction.Credit !== null ?
-          reconciliationMatches.some(m =>
-            m.creditDate === transaction.Date &&
-            Math.abs(parseFloat(transaction.Credit.replace(/,/g, '')) - m.totalDebits) <= 100  // Same tolerance
-          ) :
-          matchedDebitIds.has(transaction['Bill No/Receipt No.'])
+        Date: transaction.Date,
+        Narration: transaction.Narration,
+        companyName: transaction.companyName,
+        Debit: transaction.Debit,
+        Credit: transaction.Credit,
+        reconciled: transaction.reconciled,
+        match_id: transaction.match_id
       }));
-
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
     const formattedToDate = moment(toDate).format('DD/MM/YYYY');
-
-     
-    
 
     // Prepare the render data
     renderData = {
@@ -195,25 +224,18 @@ module.exports = {
     if (caller == 'notpdf') {
       res.render('reports-digital-recon', renderData);
     } else {
-
       return new Promise((resolve, reject) => {
         res.render('reports-digital-recon', renderData,
           (err, html) => {
             if (err) {
-              console.error('getCreditSummaryReport: Error in res.render:', err);
-              reject(err); // Reject the promise if there's an error
+              console.error('getDigitalReconReport: Error in res.render:', err);
+              reject(err);
             } else {
-              console.log('getCreditSummaryReport: Successfully rendered HTML');
-              resolve(html); // Resolve the promise with the HTML content
+              console.log('getDigitalReconReport: Successfully rendered HTML');
+              resolve(html);
             }
           });
       });
-
-
     }
-
-
-
   }
-
 }

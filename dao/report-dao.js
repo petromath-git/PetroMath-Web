@@ -183,78 +183,103 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
 },
 
 
-    getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
+getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     const result = await db.sequelize.query(
-        `SELECT 
-                  DATE_FORMAT(tds.transaction_date, '%d-%m-%Y') as tran_date,
-                  CONCAT('DS-', tds.digital_sales_id) as bill_no,
-                  tds.notes,
-                  mcl.company_name,
-                  'Digital Sale' as product_name,
-                  tds.amount,
-                  tds.transaction_date as sort_date
-              FROM t_digital_sales tds
-              INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
-              INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
-              WHERE tc.location_code = :locationCode
-                AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
-                AND tds.vendor_id = :vendorId
+        `-- DEBIT: Digital Sales
+        SELECT 
+            DATE_FORMAT(tds.transaction_date, '%d-%m-%Y') as tran_date,
+            CONCAT('DS-', tds.digital_sales_id) as bill_no,
+            tds.notes,
+            mcl.company_name,
+            'Digital Sale' as product_name,
+            tds.amount,
+            tds.transaction_date as sort_date,
+            'DEBIT' as entry_type
+        FROM t_digital_sales tds
+        INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
+        INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
+        WHERE tc.location_code = :locationCode
+          AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
+          AND tds.vendor_id = :vendorId
 
-              UNION ALL
+        UNION ALL
 
-              SELECT 
-                  DATE_FORMAT(tr.receipt_date, '%d-%m-%Y') as tran_date,
-                  tr.receipt_no as bill_no,
-                  CONCAT(
-                      tr.notes, 
-                      ' (Digital Payment by ', 
-                      COALESCE(mcl_payer.short_name, mcl_payer.company_name), 
-                      ')'
-                  ) as notes,
-                  mcl.company_name,
-                  'Digital Receipt' as product_name,
-                  tr.amount,
-                  tr.receipt_date as sort_date
-              FROM t_receipts tr
-              INNER JOIN m_credit_list mcl ON tr.digital_creditlist_id = mcl.creditlist_id
-              INNER JOIN m_credit_list mcl_payer ON tr.creditlist_id = mcl_payer.creditlist_id
-              WHERE tr.location_code = :locationCode
-                AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
-                AND tr.digital_creditlist_id = :vendorId
-                AND tr.receipt_type = 'Digital'
+        -- DEBIT: Customer payments via digital vendor
+        SELECT 
+            DATE_FORMAT(tr.receipt_date, '%d-%m-%Y') as tran_date,
+            tr.receipt_no as bill_no,
+            CONCAT(
+                tr.notes, 
+                ' (Digital Payment by ', 
+                COALESCE(mcl_payer.short_name, mcl_payer.company_name), 
+                ')'
+            ) as notes,
+            mcl.company_name,
+            NULL as product_name,
+            tr.amount,
+            tr.receipt_date as sort_date,
+            'DEBIT' as entry_type
+        FROM t_receipts tr
+        INNER JOIN m_credit_list mcl ON tr.digital_creditlist_id = mcl.creditlist_id
+        LEFT JOIN m_credit_list mcl_payer ON tr.creditlist_id = mcl_payer.creditlist_id
+        WHERE tr.location_code = :locationCode
+          AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
+          AND tr.digital_creditlist_id = :vendorId
 
-              UNION ALL
+        UNION ALL
 
-              SELECT 
-                  DATE_FORMAT(tr.receipt_date, '%d-%m-%Y') as tran_date,
-                  tr.receipt_no as bill_no,
-                  tr.notes,
-                  mcl.company_name,
-                  NULL as product_name,
-                  tr.amount,
-                  tr.receipt_date as sort_date
-              FROM t_receipts tr
-              INNER JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
-              WHERE tr.location_code = :locationCode
-                AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
-                AND tr.creditlist_id = :vendorId
-                AND mcl.card_flag = 'Y'
+        -- CREDIT: Payments from digital vendor to us
+        SELECT 
+            DATE_FORMAT(tr.receipt_date, '%d-%m-%Y') as tran_date,
+            tr.receipt_no as bill_no,
+            tr.notes,
+            mcl.company_name,
+            NULL as product_name,
+            tr.amount,
+            tr.receipt_date as sort_date,
+            'CREDIT' as entry_type
+        FROM t_receipts tr
+        INNER JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
+        WHERE tr.location_code = :locationCode
+          AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
+          AND tr.creditlist_id = :vendorId
 
-              ORDER BY sort_date, bill_no`,
+        UNION ALL
+
+        -- Adjustments (both debit and credit)
+        SELECT 
+            DATE_FORMAT(ta.adjustment_date, '%d-%m-%Y') as tran_date,
+            CONCAT('ADJ-', ta.adjustment_id) as bill_no,
+            ta.description as notes,
+            mcl.company_name,
+            NULL as product_name,
+            COALESCE(ta.debit_amount, ta.credit_amount) as amount,
+            ta.adjustment_date as sort_date,
+            CASE 
+                WHEN ta.debit_amount > 0 THEN 'DEBIT'
+                ELSE 'CREDIT'
+            END as entry_type
+        FROM t_adjustments ta
+        INNER JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
+        WHERE ta.external_source = 'DIGITAL_VENDOR'
+          AND ta.external_id = :vendorId
+          AND ta.status = 'ACTIVE'
+          AND ta.location_code = :locationCode
+          AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
+
+        ORDER BY sort_date, bill_no`,
         {
             replacements: { 
-                locationCode: locationCode, 
-                fromDate: fromDate, 
-                toDate: toDate, 
-                vendorId: vendorId 
-            },
-            type: db.sequelize.QueryTypes.SELECT
+                locationCode: locationCode,
+                vendorId: vendorId,
+                fromDate: fromDate,
+                toDate: toDate
+            }, 
+            type: db.Sequelize.QueryTypes.SELECT
         }
     );
     return result;
 },
-
-
 
     getLocationDetails: (location_code) => {
         return db.sequelize.query(
