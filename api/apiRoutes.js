@@ -78,7 +78,8 @@ router.post("/login", apiLoginLimiter, async (req, res, next) => {
             userName:user.User_Name,
             personName:user.Person_Name,
             location_code:user.location_code,
-            userRole:user.Role
+            userRole:user.Role,
+            creditId:user.creditlist_id ?? '',
         });
     })(req, res, next);
 });
@@ -123,6 +124,7 @@ router.post('/bills/create', verifyToken, (req, res, next) => {
 
 ///Customer related api
 const customerController = require('../controllers/customer-dashboard-controller');
+const reportController = require('../controllers/reports-controller');
 
 router.get('/customer/d_getCreditList', verifyToken,isCustomerOnly, (req, res, next) => {
     customerController.getCreditStatementDashboardApi(req, res, next);
@@ -130,6 +132,10 @@ router.get('/customer/d_getCreditList', verifyToken,isCustomerOnly, (req, res, n
 
 router.get('/customer/getCreditList', verifyToken,isCustomerOnly, (req, res, next) => {
     customerController.getCreditStatementDataAPI(req, res, next);
+});
+
+router.post('/customer/creditReport', verifyToken,isCustomerOnly, (req, res, next) => {
+    reportController.getApiCreditReport1(req, res, next);
 });
 
 
@@ -147,6 +153,14 @@ router.get('/customer/mileage', verifyToken, (req, res, next) => {
 router.get('/customer/mileage/:vehicleId', verifyToken, (req, res, next) => {
     vehicleController.getVehicleMileageDetails(req, res, next);
 });
+
+///Transaction correction api
+
+const transactionCorrectionsController = require('../controllers/transaction-corrections-controller');
+
+router.get('/transactions/search',verifyToken, transactionCorrectionsController.searchTransactions);
+
+router.get('/transactions/customers',verifyToken, transactionCorrectionsController.getCustomers);
 
 
 module.exports = router;
