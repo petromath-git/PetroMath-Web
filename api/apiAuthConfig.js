@@ -52,7 +52,7 @@ module.exports.generateToken = (user) => {
             creditlist_id: user.creditlist_id
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1d" }
+        // { expiresIn: "1d" }
     );
 };
 

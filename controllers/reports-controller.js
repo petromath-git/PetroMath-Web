@@ -590,7 +590,100 @@ module.exports = {
  
  
  
-           }
+           },
+
+           getApiCreditReport1: async (req, res) => {
+  try {
+    // Extract data directly from verified JWT
+    const locationCode = req.user.location_code;
+    const role = req.user.role;
+    const cid = req.user.creditlist_id; // For Customer
+    const username = req.user.username;
+
+    // Default filters
+    const fromDate = req.body.fromClosingDate || dateFormat(new Date(), "yyyy-mm-dd");
+    const toDate = req.body.toClosingDate || dateFormat(new Date(), "yyyy-mm-dd");
+
+    let totalDebits = 0;
+    let totalCredits = 0;
+    let Creditstmtlist = [];
+    let OpeningBal = 0;
+    let closingBal = 0;
+
+    // Fetch credit list
+    const creditData = await CreditDao.findAll(locationCode);
+    const credits = creditData
+      .filter((c) => !(c.card_flag === "Y"))
+      .map((c) => ({ id: c.creditlist_id, name: c.Company_Name }));
+
+    // Determine company ID
+    const companyId = role === "Customer" ? cid : req.body.company_id;
+
+    // Fetch balances
+    const balanceData = await ReportDao.getBalance(companyId, fromDate, toDate);
+    OpeningBal = balanceData?.[0]?.OpeningData || 0;
+    closingBal = balanceData?.[0]?.ClosingData || 0;
+
+    // Fetch statement data
+    const transactions = await ReportDao.getCreditStmt(locationCode, fromDate, toDate, companyId);
+    let runningBalance = Number(OpeningBal);
+
+    transactions.forEach((t) => {
+      const amount = Number(t.amount || 0);
+
+      switch (t.transaction_type) {
+        case "SALE":
+        case "ADJUSTMENT_DEBIT":
+          runningBalance += amount;
+          totalDebits += amount;
+          break;
+        case "RECEIPT":
+        case "ADJUSTMENT_CREDIT":
+          runningBalance -= amount;
+          totalCredits += amount;
+          break;
+      }
+
+      Creditstmtlist.push({
+        Date: dateFormat(t.tran_date, "dd-mm-yyyy"),
+        Particulars: t.bill_no,
+        companyName: t.company_name,
+        Product: t.product_name,
+        Price: t.price,
+        "Price Discount": t.price_discount,
+        Qty: t.qty,
+        Debit: ["SALE", "ADJUSTMENT_DEBIT"].includes(t.transaction_type) ? amount : null,
+        Credit: ["RECEIPT", "ADJUSTMENT_CREDIT"].includes(t.transaction_type) ? amount : null,
+        Narration: t.notes,
+        Balance: runningBalance,
+      });
+    });
+
+    const formattedFromDate = moment(fromDate).format("DD/MM/YYYY");
+    const formattedToDate = moment(toDate).format("DD/MM/YYYY");
+
+    // Final JSON payload
+    const result = {
+      username,
+      role,
+      locationCode,
+      company_id: companyId,
+      fromDate: formattedFromDate,
+      toDate: formattedToDate,
+      openingBalance: OpeningBal,
+      closingBalance: closingBal,
+      totalDebits,
+      totalCredits,
+      transactions: Creditstmtlist,
+      credits,
+    };
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("getApiCreditReport error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
 
 }
         
