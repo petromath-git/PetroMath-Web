@@ -1,141 +1,353 @@
 extends layout
 
 block content
-    form(method='POST' action='/reports-digital-recon')
-        script.
+    style.
+        /* Sticky header styling */
+        .table-responsive {
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+        
+        .table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+        
+        /* Red highlight for unreconciled amounts */
+        .unreconciled-amount {
+            color: #dc3545 !important;
+            font-weight: 600;
+        }
+
+    script.
+        // Javascript that gets table data
+        var creditstmtFromServer = !{JSON.stringify(creditstmt)} 
+        var currentData = creditstmtFromServer;
+
+        function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
+            // Start directly with the table
+            var result = "<div class='table-responsive'>";
+            result += "<table class='table table-bordered table-sm table-hover' style='width: 100%; border: 1px solid #dee2e6; margin-top: 10px;'>";
             
-            // Javascript that gets table data
-            var creditstmtFromServer = !{JSON.stringify(creditstmt)} 
-            
-
-            function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
-                // Start directly with the table
-                var result = "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000; margin-top: 10px;'>";
-                                // Headers
-                    if (array.length > 0 && typeof array[0] === 'object') {
-                        result += "<thead class='thead-light'><tr>";
-                        Object.keys(array[0]).forEach(key => {
-                            if (key !== 'companyName' && key !== 'reconciled') {
-                                result += "<th style='border: 1px solid #000;' class='text-center'>" + key + "</th>";
-                            }
-                        });
-                        result += "<th style='border: 1px solid #000;' class='text-center'>Status</th>";
-                        result += "</tr></thead>";
+            // Headers
+            if (array.length > 0 && typeof array[0] === 'object') {
+                result += "<thead class='thead-light' style='background-color: #f8f9fa;'><tr>";
+                
+                // Add Match ID header first
+                result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Match ID</th>";
+                
+                Object.keys(array[0]).forEach(key => {
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
+                        result += "<th style='border: 1px solid #dee2e6;' class='text-center'>" + key + "</th>";
                     }
+                });
+                result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Status</th>";
+                result += "</tr></thead>";
+            }
 
-                    result += "<tbody>";
+            result += "<tbody>";
 
-                for (var i = 0; i < array.length; i++) {
-                    let rowClass = '';
+            for (var i = 0; i < array.length; i++) {
+                let rowClass = '';
 
-                    // Check if it's the last row and contains "Total"
-                    if (i === array.length - 1) {
-                        let isTotalRow = Object.values(array[i]).some(value => value && 
-                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
-                        );
+                // Check if it's the last row and contains "Total"
+                if (i === array.length - 1) {
+                    let isTotalRow = Object.values(array[i]).some(value => value && 
+                        (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                    );
 
-                        if (isTotalRow) {
-                            rowClass = 'font-weight-bold text-danger';
-                        }
+                    if (isTotalRow) {
+                        rowClass = 'font-weight-bold text-dark bg-light';
                     }
-
-                    result += `<tr class='${rowClass}'>`;
-
-                    Object.keys(array[i]).forEach(key => {
-                        // Skip 'companyName', and 'reconciled' columns
-                        if (key !== 'companyName' && key !== 'reconciled') {
-                            let dataValue = array[i][key];
-
-                            if (numberColumns.includes(key) && dataValue !== "" && !isNaN(dataValue)) {
-                                printedValue = new Intl.NumberFormat('en-IN', {
-                                    style: 'decimal',
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                }).format(dataValue);
-
-                                result += "<td class='text-right' style='border: 1px solid #000;'>" + printedValue + "</td>";
-                            } else {
-                                result += "<td class='text-left' style='border: 1px solid #000;'>" + dataValue + "</td>";
-                            }
-                        }
-                    });
-
-                    // Add Status column with tick
-                    result += "<td class='text-center' style='border: 1px solid #000;'>" + 
-                            (array[i].reconciled ? "✓" : "") + "</td>";
-                    result += "</tr>";
                 }
 
-                result += "</tbody>";
-                result += "</table>";
-                return result;
-            }
+                result += `<tr class='${rowClass}'>`;
 
+                // Add Match ID column first
+                const matchId = array[i].match_id;
+                const displayMatchId = matchId !== null && matchId !== undefined ? matchId : '';
+                const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
+                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6;'>${displayMatchId || '-'}</td>`;
 
-            // Function to filter data based on reconciliation status (unreconciled only)
-            function filterUnreconciledTransactions() {
-                const showUnreconciled = document.getElementById('showUnreconciled').checked;
-                const filteredData = showUnreconciled ? creditstmtFromServer.filter(tx => !tx.reconciled) : creditstmtFromServer;
-                document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit'],"col-sm-8 mx-auto");
-            }
+                Object.keys(array[i]).forEach(key => {
+                    // Skip 'companyName', 'reconciled', 'match_id', 'possibleMatch', and 'reconciliation_pass' columns
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
+                        let dataValue = array[i][key];
+                        
+                        // Check if this is an amount column and if the row is unreconciled
+                        const isAmountColumn = numberColumns.includes(key);
+                        const isUnreconciled = !array[i].reconciled;
+                        const amountClass = isAmountColumn && isUnreconciled ? 'unreconciled-amount' : '';
 
-            document.addEventListener('DOMContentLoaded', function() {
-                // Initial table rendering
-                filterUnreconciledTransactions(); // Default to showing all transactions (can change based on checkbox)
+                        if (isAmountColumn && dataValue !== "" && dataValue !== null && !isNaN(dataValue)) {
+                            printedValue = new Intl.NumberFormat('en-IN', {
+                                style: 'decimal',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            }).format(dataValue);
 
-                // Listen for changes to the checkbox
-                document.getElementById('showUnreconciled').addEventListener('change', filterUnreconciledTransactions);
-            });
-        
-        table.center
-            tr
-                td Date Range:
-                td
-                    select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='this_month') This Month
-                        option(value='last_month') Last Month
-                        option(value='this_financial_year') This Financial Year
-                        option(value='last_financial_year') Last Financial Year
-                        option(value='custom', selected=true) Custom Date
-                td &nbsp;                   
-                td#fromDateLabel From Date:
-                td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;                   
-                td#toDateLabel To Date:
-                td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;
-                td Company Name:
-                td
-                    select#company_id.form-control(name='company_id')
-                        if credits                           
-                            each val in credits
-                                option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
-            tr
-                td(colspan="2")
-                    div.form-check.mt-2
-                        input#showUnreconciled.form-check-input(
-                            type='checkbox', 
-                            onchange='filterUnreconciledTransactions()', 
-                            style='margin-right: 8px;'
-                        )
-                        label.form-check-label(for='showUnreconciled') Show Only Unreconciled
-                td(colspan="10")
+                            result += `<td class='text-right ${amountClass}' style='border: 1px solid #dee2e6;'>${printedValue}</td>`;
+                        } else {
+                            result += `<td class='text-left' style='border: 1px solid #dee2e6;'>${dataValue || ''}</td>`;
+                        }
+                    }
+                });
+
+                // Add Status column with colored tick based on reconciliation pass
+                let statusIcon;
+                if (array[i].reconciled) {
+                    if (array[i].reconciliation_pass === 2) {
+                        // Yellow/orange tick for Pass 2 (extended reconciliation)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #ffa500;' title='Matched in extended pass (±5 days)'></i>";
+                    } else {
+                        // Green tick for Pass 1 (standard reconciliation)
+                        statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched in standard pass (±1 day)'></i>";
+                    }
+                } else {
+                    // Gray X for unmatched
+                    statusIcon = "<i class='bi bi-x-circle text-muted'></i>";
+                }
                 
-                include report-print-download.pug
+                let statusCell = statusIcon;
+                
+                // Add possible match hint if exists
+                if (array[i].possibleMatch && !array[i].reconciled) {
+                    const pm = array[i].possibleMatch;
+                    statusCell += `<br><small class='text-warning' style='cursor: help;' title='Possible entry error'>
+                        <i class='bi bi-exclamation-triangle-fill'></i> 
+                        Found in ${pm.vendor}
+                    </small>`;
+                }
+                
+                result += `<td class='text-center' style='border: 1px solid #dee2e6;'>${statusCell}</td>`;
+                result += "</tr>";
+            }
+
+            result += "</tbody>";
+            result += "</table>";
+            result += "</div>";
+            return result;
+        }
+
+        // Live search function
+        function liveSearch() {
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const showUnreconciled = document.getElementById('showUnreconciled').checked;
+            
+            let filteredData = creditstmtFromServer;
+            
+            // Filter by reconciliation status
+            if (showUnreconciled) {
+                filteredData = filteredData.filter(tx => !tx.reconciled);
+            }
+            
+            // Filter by search term
+            if (searchValue) {
+                filteredData = filteredData.filter(tx => {
+                    return Object.values(tx).some(value => {
+                        if (value !== null && value !== undefined) {
+                            return value.toString().toLowerCase().includes(searchValue);
+                        }
+                        return false;
+                    });
+                });
+            }
+            
+            currentData = filteredData;
+            document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
+        }
+
+        // Function to filter data based on reconciliation status
+        function filterUnreconciledTransactions() {
+            liveSearch();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initial table rendering
+            liveSearch();
+        });
+
+        // Get current date in YYYY-MM-DD format for max date validation
+        var today = new Date();
+        var dd = String(today.getDate()).padStart(2, '0');
+        var mm = String(today.getMonth() + 1).padStart(2, '0');
+        var yyyy = today.getFullYear();
+        var currentDate = yyyy + '-' + mm + '-' + dd;
+
+        function updateDateRange() {
+            var dateRange = document.getElementById('dateRange').value;
+            var fromDate = new Date();
+            var toDate = new Date();
+
+            if (dateRange === 'this_month') {
+                fromDate.setDate(1);
+                toDate = new Date();
+            } else if (dateRange === 'last_month') {
+                fromDate.setMonth(fromDate.getMonth() - 1);
+                fromDate.setDate(1);
+                toDate.setDate(0);
+            } else if (dateRange === 'this_financial_year') {
+                var currentMonth = today.getMonth();
+                if (currentMonth >= 3) {
+                    fromDate.setMonth(3);
+                    fromDate.setDate(1);
+                } else {
+                    fromDate.setFullYear(fromDate.getFullYear() - 1);
+                    fromDate.setMonth(3);
+                    fromDate.setDate(1);
+                }
+                toDate = new Date();
+            } else if (dateRange === 'last_financial_year') {
+                var currentMonth = today.getMonth();
+                if (currentMonth >= 3) {
+                    fromDate.setFullYear(fromDate.getFullYear() - 1);
+                    fromDate.setMonth(3);
+                    fromDate.setDate(1);
+                    toDate.setFullYear(toDate.getFullYear());
+                    toDate.setMonth(2);
+                    toDate.setDate(31);
+                } else {
+                    fromDate.setFullYear(fromDate.getFullYear() - 2);
+                    fromDate.setMonth(3);
+                    fromDate.setDate(1);
+                    toDate.setFullYear(toDate.getFullYear() - 1);
+                    toDate.setMonth(2);
+                    toDate.setDate(31);
+                }
+            } else if (dateRange === 'custom') {
+                return;
+            }
+
+            document.getElementById('fromclosingDate').value = fromDate.toISOString().split('T')[0];
+            document.getElementById('toclosingDate').value = toDate.toISOString().split('T')[0];
+        }
+
+        // Toggle filter collapse
+        function toggleFilters() {
+            const filterContent = document.getElementById('filterContent');
+            const icon = document.getElementById('filter-toggle-icon');
+            
+            if (filterContent.classList.contains('show')) {
+                filterContent.classList.remove('show');
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            } else {
+                filterContent.classList.add('show');
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            }
+        }
+
+    // Collapsible Filter Section - Modern Style
+    .card.mb-3
+        .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0 
+                    i.bi.bi-funnel.me-2
+                    | Digital Reconciliation Filters
+                i#filter-toggle-icon.bi.bi-chevron-down
+        .filter-content.collapse.show#filterContent
+            .card-body
+                form(method='POST' action='/reports-digital-recon')
+                    .row.g-3.align-items-end
+                        // Period Dropdown
+                        .col-lg-2.col-md-3.col-6
+                            label.form-label(for='dateRange') Date Range:
+                            select#dateRange.form-control(onchange='updateDateRange()')
+                                option(value='this_month') This Month
+                                option(value='last_month') Last Month
+                                option(value='this_financial_year') This Financial Year
+                                option(value='last_financial_year') Last Financial Year
+                                option(value='custom' selected) Custom Date
+                        
+                        // From Date
+                        .col-lg-2.col-md-3.col-6
+                            label.form-label(for='fromclosingDate') From Date:
+                            input#fromclosingDate.form-control(
+                                type='date' 
+                                name='fromClosingDate' 
+                                value=fromClosingDate 
+                                max=currentDate
+                                required
+                            )
+                        
+                        // To Date
+                        .col-lg-2.col-md-3.col-6
+                            label.form-label(for='toclosingDate') To Date:
+                            input#toclosingDate.form-control(
+                                type='date' 
+                                name='toClosingDate' 
+                                value=toClosingDate 
+                                max=currentDate
+                                required
+                            )
+                        
+                        // Digital Vendor - Reduced width
+                        .col-lg-2.col-md-3.col-6
+                            label.form-label(for='company_id') Digital Vendor:
+                            select#company_id.form-control(name='company_id' required)
+                                if credits                           
+                                    each val in credits
+                                        option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+                        
+                        // Live Search - Reduced width
+                        .col-lg-2.col-md-6.col-12
+                            label.form-label(for='searchInput') Search:
+                            input#searchInput.form-control(
+                                type='text' 
+                                placeholder='Search transactions...' 
+                                oninput='liveSearch()'
+                            )
+                        
+                        // Action Buttons (Go, Download, Print) on same line
+                        .col-lg-2.col-md-6.col-12
+                            label.form-label &nbsp;
+                            .d-flex.gap-2
+                                include report-print-download.pug
+                    
+                    // Show Unreconciled Checkbox Row
+                    .row.mt-3
+                        .col-12
+                            .form-check
+                                input#showUnreconciled.form-check-input(
+                                    type='checkbox' 
+                                    onchange='filterUnreconciledTransactions()'
+                                )
+                                label.form-check-label(for='showUnreconciled') 
+                                    i.bi.bi-filter-circle.me-1
+                                    | Show Only Unreconciled Transactions
+
     div &nbsp;
-    div
+    
+    .container-fluid
         if creditstmt && creditstmt.length > 0
             - var companyName = creditstmt[0].companyName            
             div
-                h6.font-weight-bold.text-center Digital Reconciliation Report
-                h6.font-weight-bold.text-center.text-uppercase= companyName                 
-                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`                 
+                h5.font-weight-bold.text-center.mb-1 Digital Reconciliation Report
+                h6.font-weight-bold.text-center.text-uppercase.text-primary= companyName                 
+                p.text-center.text-muted.mb-2
+                    i.bi.bi-calendar-range.me-2
+                    = `${formattedFromDate} to ${formattedToDate}`
+                
+                // Legend for status indicators
+                .d-flex.justify-content-center.gap-4.mb-3.small
+                    div
+                        i.bi.bi-check-circle-fill.text-success.me-1
+                        span Standard Match (±1 day)
+                    div
+                        i.bi.bi-check-circle-fill.me-1(style='color: #ffa500;')
+                        span Extended Match (±5 days)
+                    div
+                        i.bi.bi-x-circle.text-muted.me-1
+                        span Unmatched
+                
                 div#creditstmt-table-container               
         else
-            div.row &nbsp;
-            div.row.bg-light No Transactions.  
+            .alert.alert-info.text-center.mt-4(role='alert')
+                i.bi.bi-info-circle.me-2
+                | No transactions found for the selected period.
 
-        // Include the overlay
-        include overlay.pug
+    // Include the overlay
+    include overlay.pug
