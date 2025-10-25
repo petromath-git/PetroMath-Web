@@ -187,19 +187,19 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     const result = await db.sequelize.query(
         `-- DEBIT: Digital Sales
         SELECT 
-            DATE_FORMAT(tds.transaction_date, '%d-%m-%Y') as tran_date,
+            DATE_FORMAT(COALESCE(tds.transaction_date, tc.closing_date), '%d-%m-%Y') as tran_date,
             CONCAT('DS-', tds.digital_sales_id) as bill_no,
             tds.notes,
             mcl.company_name,
             'Digital Sale' as product_name,
             tds.amount,
-            tds.transaction_date as sort_date,
+            COALESCE(tds.transaction_date, tc.closing_date) as sort_date,
             'DEBIT' as entry_type
         FROM t_digital_sales tds
         INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
         WHERE tc.location_code = :locationCode
-          AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
+          AND DATE(COALESCE(tds.transaction_date, tc.closing_date)) BETWEEN :fromDate AND :toDate
           AND tds.vendor_id = :vendorId
 
         UNION ALL
@@ -267,7 +267,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
           AND ta.location_code = :locationCode
           AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
 
-        ORDER BY sort_date, bill_no`,
+        ORDER BY sort_date, entry_type DESC, bill_no`,
         {
             replacements: { 
                 locationCode: locationCode,
@@ -280,6 +280,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     );
     return result;
 },
+
 
     getLocationDetails: (location_code) => {
         return db.sequelize.query(

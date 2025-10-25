@@ -39,7 +39,7 @@ block content
                 result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Match ID</th>";
                 
                 Object.keys(array[0]).forEach(key => {
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id') {
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch') {
                         result += "<th style='border: 1px solid #dee2e6;' class='text-center'>" + key + "</th>";
                     }
                 });
@@ -72,8 +72,8 @@ block content
                 result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6;'>${displayMatchId || '-'}</td>`;
 
                 Object.keys(array[i]).forEach(key => {
-                    // Skip 'companyName', 'reconciled', and 'match_id' columns
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id') {
+                    // Skip 'companyName', 'reconciled', 'match_id', and 'possibleMatch' columns
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch') {
                         let dataValue = array[i][key];
                         
                         // Check if this is an amount column and if the row is unreconciled
@@ -95,9 +95,23 @@ block content
                     }
                 });
 
-                // Add Status column with tick
-                const statusIcon = array[i].reconciled ? "<i class='bi bi-check-circle-fill text-success'></i>" : "<i class='bi bi-x-circle text-muted'></i>";
-                result += `<td class='text-center' style='border: 1px solid #dee2e6;'>${statusIcon}</td>`;
+                // Add Status column with tick and possible match hint
+                const statusIcon = array[i].reconciled ? 
+                    "<i class='bi bi-check-circle-fill text-success'></i>" : 
+                    "<i class='bi bi-x-circle text-muted'></i>";
+                
+                let statusCell = statusIcon;
+                
+                // Add possible match hint if exists
+                if (array[i].possibleMatch && !array[i].reconciled) {
+                    const pm = array[i].possibleMatch;
+                    statusCell += `<br><small class='text-warning' style='cursor: help;' title='Possible entry error'>
+                        <i class='bi bi-exclamation-triangle-fill'></i> 
+                        Found in ${pm.vendor}
+                    </small>`;
+                }
+                
+                result += `<td class='text-center' style='border: 1px solid #dee2e6;'>${statusCell}</td>`;
                 result += "</tr>";
             }
 

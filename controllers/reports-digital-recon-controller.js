@@ -72,7 +72,7 @@ module.exports = {
     }));
 
     function findMatchingTransactions(transactions) {
-      const TOLERANCE = 100;
+      const TOLERANCE = 1; // Reduced to Rs 1
 
       const processedData = transactions.map(tx => ({
         ...tx,
@@ -124,7 +124,30 @@ module.exports = {
           [prevDateStr, currentDateStr, nextDateStr].includes(tx.DateObj.toISOString().split('T')[0])
         );
 
-        // Try single debit match first
+        // PRIORITY 1: Try EXACT single debit match first (difference = 0)
+        for (const debit of relevantDebits) {
+          if (Math.abs(debit.DebitAmount - creditAmount) === 0) {
+            const currentMatchId = matchCounter++;
+            
+            matches.push({
+              match_id: currentMatchId,
+              creditDate: creditTx.Date,
+              creditAmount: creditAmount,
+              creditBillNo: creditTx.bill_no,
+              matchingDebits: [debit],
+              totalDebits: debit.DebitAmount
+            });
+            
+            debit.reconciled = true;
+            debit.match_id = currentMatchId;
+            creditTx.reconciled = true;
+            creditTx.match_id = currentMatchId;
+            matchedDebitIds.add(debit.unique_id);
+            return;
+          }
+        }
+
+        // PRIORITY 2: Try single debit match within tolerance
         for (const debit of relevantDebits) {
           if (Math.abs(debit.DebitAmount - creditAmount) <= TOLERANCE) {
             const currentMatchId = matchCounter++;
@@ -147,7 +170,37 @@ module.exports = {
           }
         }
 
-        // Try combinations of 2 to N debits
+        // PRIORITY 3: Try EXACT combinations of 2 to N debits
+        for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
+          const combinations = getCombinations(relevantDebits, i);
+          for (const combo of combinations) {
+            const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
+            if (Math.abs(sum - creditAmount) === 0) {
+              const currentMatchId = matchCounter++;
+              
+              matches.push({
+                match_id: currentMatchId,
+                creditDate: creditTx.Date,
+                creditAmount: creditAmount,
+                creditBillNo: creditTx.bill_no,
+                matchingDebits: combo,
+                totalDebits: sum
+              });
+
+              combo.forEach(debit => {
+                debit.reconciled = true;
+                debit.match_id = currentMatchId;
+                matchedDebitIds.add(debit.unique_id);
+              });
+              creditTx.reconciled = true;
+              creditTx.match_id = currentMatchId;
+
+              return;
+            }
+          }
+        }
+
+        // PRIORITY 4: Try combinations within tolerance
         for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
           const combinations = getCombinations(relevantDebits, i);
           for (const combo of combinations) {
@@ -184,6 +237,81 @@ module.exports = {
     // Get matches
     const { matches: reconciliationMatches, matchedDebitIds, processedData } = findMatchingTransactions(fullDataset);
 
+    // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors
+    const unReconciledTransactions = processedData.filter(tx => !tx.reconciled);
+    
+    if (unReconciledTransactions.length > 0) {
+      // Get all digital vendors EXCEPT the current one (performance optimization)
+      const allVendors = await CreditDao.findAll(locationCode);
+      const digitalVendors = allVendors.filter(v => 
+        v.card_flag === 'Y' && 
+        v.creditlist_id !== parseInt(cid) // Exclude current vendor
+      );
+      
+      // Early exit if no other vendors to check
+      if (digitalVendors.length === 0) {
+        console.log('No other digital vendors to check for cross-vendor matches');
+      } else {
+        console.log(`Checking ${digitalVendors.length} other vendor(s) for possible matches`);
+        
+        // Query each other vendor for possible matches
+        for (const vendor of digitalVendors) {
+          const vendorData = await ReportDao.getDigitalStmt(
+            locationCode,
+            dateFormat(queryFromDate, "yyyy-mm-dd"),
+            dateFormat(queryToDate, "yyyy-mm-dd"),
+            vendor.creditlist_id
+          );
+
+          // Process vendor data
+          const vendorProcessed = vendorData.map(tx => ({
+            Date: tx.tran_date,
+            DateObj: new Date(tx.tran_date.split('-').reverse().join('-')),
+            amount: parseFloat(tx.amount),
+            vendorName: vendor.Company_Name,
+            billNo: tx.bill_no,
+            entryType: tx.entry_type
+          }));
+
+          // Check each unreconciled transaction against this vendor
+          unReconciledTransactions.forEach(unreconciledTx => {
+            // Skip if already found a possible match
+            if (unreconciledTx.possibleMatch) return;
+            
+            const txDate = unreconciledTx.DateObj;
+            const txAmount = unreconciledTx.DebitAmount || unreconciledTx.CreditAmount;
+            const txType = unreconciledTx.DebitAmount ? 'DEBIT' : 'CREDIT';
+            
+            // Look for exact match (±1 day)
+            const prevDate = new Date(txDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const nextDate = new Date(txDate);
+            nextDate.setDate(nextDate.getDate() + 1);
+
+            const possibleMatch = vendorProcessed.find(otherTx => {
+              // Check if date is within range
+              const dateMatch = otherTx.DateObj >= prevDate && otherTx.DateObj <= nextDate;
+              // Check if amount is exact match
+              const amountMatch = Math.abs(otherTx.amount - txAmount) === 0;
+              // Check if entry type matches
+              const typeMatch = otherTx.entryType === txType;
+              
+              return dateMatch && amountMatch && typeMatch;
+            });
+
+            if (possibleMatch) {
+              unreconciledTx.possibleMatch = {
+                vendor: possibleMatch.vendorName,
+                date: possibleMatch.Date,
+                billNo: possibleMatch.billNo,
+                amount: possibleMatch.amount
+              };
+            }
+          });
+        }
+      }
+    }
+
     // Filter to date range and map reconciliation status
     Creditstmtlist = processedData
       .filter(record => {
@@ -199,7 +327,8 @@ module.exports = {
         Debit: transaction.Debit,
         Credit: transaction.Credit,
         reconciled: transaction.reconciled,
-        match_id: transaction.match_id
+        match_id: transaction.match_id,
+        possibleMatch: transaction.possibleMatch || null // Add possible match hint
       }));
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
