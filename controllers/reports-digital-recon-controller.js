@@ -80,12 +80,10 @@ module.exports = {
         DebitAmount: tx.Debit ? parseFloat(tx.Debit) : null,
         CreditAmount: tx.Credit ? parseFloat(tx.Credit) : null,
         reconciled: false,
-        match_id: null
+        match_id: null,
+        reconciliation_pass: null // Track which pass matched: 1 or 2
       }));
 
-      const creditTransactions = processedData.filter(tx => tx.CreditAmount !== null);
-      const matches = [];
-      const matchedDebitIds = new Set();
       let matchCounter = 1;
 
       function getCombinations(arr, size) {
@@ -105,137 +103,195 @@ module.exports = {
         return combinations;
       }
 
-      creditTransactions.forEach(creditTx => {
-        const creditDate = creditTx.DateObj;
-        const creditAmount = creditTx.CreditAmount;
-        const currentDateStr = creditDate.toISOString().split('T')[0];
+      // PASS 1: Standard reconciliation (±1 day)
+      function firstPassReconciliation(creditTransactions, processedData, matchedDebitIds) {
+        creditTransactions.forEach(creditTx => {
+          if (creditTx.reconciled) return; // Skip if already matched
 
-        const prevDate = new Date(creditDate);
-        prevDate.setDate(prevDate.getDate() - 1);
-        const prevDateStr = prevDate.toISOString().split('T')[0];
+          const creditDate = creditTx.DateObj;
+          const creditAmount = creditTx.CreditAmount;
+          const currentDateStr = creditDate.toISOString().split('T')[0];
 
-        const nextDate = new Date(creditDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
+          const prevDate = new Date(creditDate);
+          prevDate.setDate(prevDate.getDate() - 1);
+          const prevDateStr = prevDate.toISOString().split('T')[0];
 
-        const relevantDebits = processedData.filter(tx =>
-          tx.DebitAmount !== null &&
-          !matchedDebitIds.has(tx.unique_id) &&
-          [prevDateStr, currentDateStr, nextDateStr].includes(tx.DateObj.toISOString().split('T')[0])
-        );
+          const nextDate = new Date(creditDate);
+          nextDate.setDate(nextDate.getDate() + 1);
+          const nextDateStr = nextDate.toISOString().split('T')[0];
 
-        // PRIORITY 1: Try EXACT single debit match first (difference = 0)
-        for (const debit of relevantDebits) {
-          if (Math.abs(debit.DebitAmount - creditAmount) === 0) {
-            const currentMatchId = matchCounter++;
-            
-            matches.push({
-              match_id: currentMatchId,
-              creditDate: creditTx.Date,
-              creditAmount: creditAmount,
-              creditBillNo: creditTx.bill_no,
-              matchingDebits: [debit],
-              totalDebits: debit.DebitAmount
-            });
-            
-            debit.reconciled = true;
-            debit.match_id = currentMatchId;
-            creditTx.reconciled = true;
-            creditTx.match_id = currentMatchId;
-            matchedDebitIds.add(debit.unique_id);
-            return;
-          }
-        }
+          const relevantDebits = processedData.filter(tx =>
+            tx.DebitAmount !== null &&
+            !matchedDebitIds.has(tx.unique_id) &&
+            [prevDateStr, currentDateStr, nextDateStr].includes(tx.DateObj.toISOString().split('T')[0])
+          );
 
-        // PRIORITY 2: Try single debit match within tolerance
-        for (const debit of relevantDebits) {
-          if (Math.abs(debit.DebitAmount - creditAmount) <= TOLERANCE) {
-            const currentMatchId = matchCounter++;
-            
-            matches.push({
-              match_id: currentMatchId,
-              creditDate: creditTx.Date,
-              creditAmount: creditAmount,
-              creditBillNo: creditTx.bill_no,
-              matchingDebits: [debit],
-              totalDebits: debit.DebitAmount
-            });
-            
-            debit.reconciled = true;
-            debit.match_id = currentMatchId;
-            creditTx.reconciled = true;
-            creditTx.match_id = currentMatchId;
-            matchedDebitIds.add(debit.unique_id);
-            return;
-          }
-        }
-
-        // PRIORITY 3: Try EXACT combinations of 2 to N debits
-        for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
-          const combinations = getCombinations(relevantDebits, i);
-          for (const combo of combinations) {
-            const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
-            if (Math.abs(sum - creditAmount) === 0) {
+          // PRIORITY 1: Try EXACT single debit match first (difference = 0)
+          for (const debit of relevantDebits) {
+            if (Math.abs(debit.DebitAmount - creditAmount) === 0) {
               const currentMatchId = matchCounter++;
               
-              matches.push({
-                match_id: currentMatchId,
-                creditDate: creditTx.Date,
-                creditAmount: creditAmount,
-                creditBillNo: creditTx.bill_no,
-                matchingDebits: combo,
-                totalDebits: sum
-              });
-
-              combo.forEach(debit => {
-                debit.reconciled = true;
-                debit.match_id = currentMatchId;
-                matchedDebitIds.add(debit.unique_id);
-              });
+              debit.reconciled = true;
+              debit.match_id = currentMatchId;
+              debit.reconciliation_pass = 1;
               creditTx.reconciled = true;
               creditTx.match_id = currentMatchId;
-
+              creditTx.reconciliation_pass = 1;
+              matchedDebitIds.add(debit.unique_id);
               return;
             }
           }
-        }
 
-        // PRIORITY 4: Try combinations within tolerance
-        for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
-          const combinations = getCombinations(relevantDebits, i);
-          for (const combo of combinations) {
-            const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
-            if (Math.abs(sum - creditAmount) <= TOLERANCE) {
+          // PRIORITY 2: Try single debit match within tolerance
+          for (const debit of relevantDebits) {
+            if (Math.abs(debit.DebitAmount - creditAmount) <= TOLERANCE) {
               const currentMatchId = matchCounter++;
               
-              matches.push({
-                match_id: currentMatchId,
-                creditDate: creditTx.Date,
-                creditAmount: creditAmount,
-                creditBillNo: creditTx.bill_no,
-                matchingDebits: combo,
-                totalDebits: sum
-              });
-
-              combo.forEach(debit => {
-                debit.reconciled = true;
-                debit.match_id = currentMatchId;
-                matchedDebitIds.add(debit.unique_id);
-              });
+              debit.reconciled = true;
+              debit.match_id = currentMatchId;
+              debit.reconciliation_pass = 1;
               creditTx.reconciled = true;
               creditTx.match_id = currentMatchId;
-
+              creditTx.reconciliation_pass = 1;
+              matchedDebitIds.add(debit.unique_id);
               return;
             }
           }
-        }
-      });
 
-      return { matches, matchedDebitIds, processedData };
+          // PRIORITY 3: Try EXACT combinations of 2 to N debits
+          for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
+            const combinations = getCombinations(relevantDebits, i);
+            for (const combo of combinations) {
+              const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
+              if (Math.abs(sum - creditAmount) === 0) {
+                const currentMatchId = matchCounter++;
+                
+                combo.forEach(debit => {
+                  debit.reconciled = true;
+                  debit.match_id = currentMatchId;
+                  debit.reconciliation_pass = 1;
+                  matchedDebitIds.add(debit.unique_id);
+                });
+                creditTx.reconciled = true;
+                creditTx.match_id = currentMatchId;
+                creditTx.reconciliation_pass = 1;
+
+                return;
+              }
+            }
+          }
+
+          // PRIORITY 4: Try combinations within tolerance
+          for (let i = 2; i <= Math.min(relevantDebits.length, 5); i++) {
+            const combinations = getCombinations(relevantDebits, i);
+            for (const combo of combinations) {
+              const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
+              if (Math.abs(sum - creditAmount) <= TOLERANCE) {
+                const currentMatchId = matchCounter++;
+                
+                combo.forEach(debit => {
+                  debit.reconciled = true;
+                  debit.match_id = currentMatchId;
+                  debit.reconciliation_pass = 1;
+                  matchedDebitIds.add(debit.unique_id);
+                });
+                creditTx.reconciled = true;
+                creditTx.match_id = currentMatchId;
+                creditTx.reconciliation_pass = 1;
+
+                return;
+              }
+            }
+          }
+        });
+      }
+
+      // PASS 2: Extended reconciliation (±5 days) for unmatched transactions
+      function secondPassReconciliation(creditTransactions, processedData, matchedDebitIds) {
+        const unmatchedCredits = creditTransactions.filter(tx => !tx.reconciled);
+        
+        console.log(`Second pass: Attempting to match ${unmatchedCredits.length} unmatched credits with ±5 day range`);
+
+        unmatchedCredits.forEach(creditTx => {
+          const creditDate = creditTx.DateObj;
+          const creditAmount = creditTx.CreditAmount;
+
+          // Extended date range: ±5 days
+          const fromDate = new Date(creditDate);
+          fromDate.setDate(fromDate.getDate() - 5);
+          
+          const toDate = new Date(creditDate);
+          toDate.setDate(toDate.getDate() + 5);
+
+          const relevantDebits = processedData.filter(tx =>
+            tx.DebitAmount !== null &&
+            !matchedDebitIds.has(tx.unique_id) &&
+            tx.DateObj >= fromDate &&
+            tx.DateObj <= toDate
+          );
+
+          // Only try EXACT matches in second pass (no tolerance)
+          // Try combinations of 2 to N debits
+          for (let i = 1; i <= Math.min(relevantDebits.length, 10); i++) {
+            if (i === 1) {
+              // Single debit exact match
+              for (const debit of relevantDebits) {
+                if (Math.abs(debit.DebitAmount - creditAmount) === 0) {
+                  const currentMatchId = matchCounter++;
+                  
+                  debit.reconciled = true;
+                  debit.match_id = currentMatchId;
+                  debit.reconciliation_pass = 2;
+                  creditTx.reconciled = true;
+                  creditTx.match_id = currentMatchId;
+                  creditTx.reconciliation_pass = 2;
+                  matchedDebitIds.add(debit.unique_id);
+                  
+                  console.log(`Second pass matched: Credit ${creditAmount} with single debit`);
+                  return;
+                }
+              }
+            } else {
+              // Multiple debit exact match
+              const combinations = getCombinations(relevantDebits, i);
+              for (const combo of combinations) {
+                const sum = combo.reduce((acc, debit) => acc + debit.DebitAmount, 0);
+                if (Math.abs(sum - creditAmount) === 0) {
+                  const currentMatchId = matchCounter++;
+                  
+                  combo.forEach(debit => {
+                    debit.reconciled = true;
+                    debit.match_id = currentMatchId;
+                    debit.reconciliation_pass = 2;
+                    matchedDebitIds.add(debit.unique_id);
+                  });
+                  creditTx.reconciled = true;
+                  creditTx.match_id = currentMatchId;
+                  creditTx.reconciliation_pass = 2;
+
+                  console.log(`Second pass matched: Credit ${creditAmount} with ${combo.length} debits spanning multiple days`);
+                  return;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      const creditTransactions = processedData.filter(tx => tx.CreditAmount !== null);
+      const matchedDebitIds = new Set();
+
+      // Execute Pass 1: Standard ±1 day reconciliation
+      firstPassReconciliation(creditTransactions, processedData, matchedDebitIds);
+
+      // Execute Pass 2: Extended ±5 day reconciliation for unmatched
+      secondPassReconciliation(creditTransactions, processedData, matchedDebitIds);
+
+      return { matchedDebitIds, processedData };
     }
 
-    // Get matches
-    const { matches: reconciliationMatches, matchedDebitIds, processedData } = findMatchingTransactions(fullDataset);
+    // Get matches using two-pass reconciliation
+    const { matchedDebitIds, processedData } = findMatchingTransactions(fullDataset);
 
     // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors
     const unReconciledTransactions = processedData.filter(tx => !tx.reconciled);
@@ -328,6 +384,7 @@ module.exports = {
         Credit: transaction.Credit,
         reconciled: transaction.reconciled,
         match_id: transaction.match_id,
+        reconciliation_pass: transaction.reconciliation_pass, // 1 = standard, 2 = extended
         possibleMatch: transaction.possibleMatch || null // Add possible match hint
       }));
 

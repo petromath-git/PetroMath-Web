@@ -39,7 +39,7 @@ block content
                 result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Match ID</th>";
                 
                 Object.keys(array[0]).forEach(key => {
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch') {
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
                         result += "<th style='border: 1px solid #dee2e6;' class='text-center'>" + key + "</th>";
                     }
                 });
@@ -72,8 +72,8 @@ block content
                 result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6;'>${displayMatchId || '-'}</td>`;
 
                 Object.keys(array[i]).forEach(key => {
-                    // Skip 'companyName', 'reconciled', 'match_id', and 'possibleMatch' columns
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch') {
+                    // Skip 'companyName', 'reconciled', 'match_id', 'possibleMatch', and 'reconciliation_pass' columns
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
                         let dataValue = array[i][key];
                         
                         // Check if this is an amount column and if the row is unreconciled
@@ -95,10 +95,20 @@ block content
                     }
                 });
 
-                // Add Status column with tick and possible match hint
-                const statusIcon = array[i].reconciled ? 
-                    "<i class='bi bi-check-circle-fill text-success'></i>" : 
-                    "<i class='bi bi-x-circle text-muted'></i>";
+                // Add Status column with colored tick based on reconciliation pass
+                let statusIcon;
+                if (array[i].reconciled) {
+                    if (array[i].reconciliation_pass === 2) {
+                        // Yellow/orange tick for Pass 2 (extended reconciliation)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #ffa500;' title='Matched in extended pass (±5 days)'></i>";
+                    } else {
+                        // Green tick for Pass 1 (standard reconciliation)
+                        statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched in standard pass (±1 day)'></i>";
+                    }
+                } else {
+                    // Gray X for unmatched
+                    statusIcon = "<i class='bi bi-x-circle text-muted'></i>";
+                }
                 
                 let statusCell = statusIcon;
                 
@@ -317,9 +327,22 @@ block content
             div
                 h5.font-weight-bold.text-center.mb-1 Digital Reconciliation Report
                 h6.font-weight-bold.text-center.text-uppercase.text-primary= companyName                 
-                p.text-center.text-muted.mb-3
+                p.text-center.text-muted.mb-2
                     i.bi.bi-calendar-range.me-2
                     = `${formattedFromDate} to ${formattedToDate}`
+                
+                // Legend for status indicators
+                .d-flex.justify-content-center.gap-4.mb-3.small
+                    div
+                        i.bi.bi-check-circle-fill.text-success.me-1
+                        span Standard Match (±1 day)
+                    div
+                        i.bi.bi-check-circle-fill.me-1(style='color: #ffa500;')
+                        span Extended Match (±5 days)
+                    div
+                        i.bi.bi-x-circle.text-muted.me-1
+                        span Unmatched
+                
                 div#creditstmt-table-container               
         else
             .alert.alert-info.text-center.mt-4(role='alert')
