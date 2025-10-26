@@ -278,14 +278,92 @@ module.exports = {
         });
       }
 
+      // PASS 3: Reverse matching - Single debit → Multiple credits (±5 days)
+      function thirdPassReconciliation(creditTransactions, processedData, matchedDebitIds, matchedCreditIds) {
+        const unmatchedDebits = processedData.filter(tx => 
+          tx.DebitAmount !== null && !matchedDebitIds.has(tx.unique_id)
+        );
+        
+        console.log(`Third pass (Reverse): Attempting to match ${unmatchedDebits.length} unmatched debits with multiple credits`);
+
+        unmatchedDebits.forEach(debitTx => {
+          if (debitTx.reconciled) return; // Skip if already matched
+
+          const debitDate = debitTx.DateObj;
+          const debitAmount = debitTx.DebitAmount;
+
+          // Extended date range: ±5 days
+          const fromDate = new Date(debitDate);
+          fromDate.setDate(fromDate.getDate() - 5);
+          
+          const toDate = new Date(debitDate);
+          toDate.setDate(toDate.getDate() + 5);
+
+          // Find unmatched credits within the date range
+          const relevantCredits = creditTransactions.filter(tx =>
+            !matchedCreditIds.has(tx.unique_id) &&
+            tx.DateObj >= fromDate &&
+            tx.DateObj <= toDate
+          );
+
+          // Only try EXACT matches (no tolerance) for combinations of 2 to N credits
+          for (let i = 2; i <= Math.min(relevantCredits.length, 5); i++) {
+            const combinations = getCombinations(relevantCredits, i);
+            for (const combo of combinations) {
+              const sum = combo.reduce((acc, credit) => acc + credit.CreditAmount, 0);
+              
+              // Check for exact match
+              if (Math.abs(sum - debitAmount) === 0) {
+                const currentMatchId = matchCounter++;
+                
+                // Mark the single debit
+                debitTx.reconciled = true;
+                debitTx.match_id = currentMatchId;
+                debitTx.reconciliation_pass = 3;
+                matchedDebitIds.add(debitTx.unique_id);
+                
+                // Mark multiple credits
+                combo.forEach(credit => {
+                  credit.reconciled = true;
+                  credit.match_id = currentMatchId;
+                  credit.reconciliation_pass = 3;
+                  matchedCreditIds.add(credit.unique_id);
+                });
+
+                console.log(`Third pass (Reverse) matched: Debit ${debitAmount} with ${combo.length} credits (${combo.map(c => c.CreditAmount).join(' + ')} = ${sum})`);
+                return;
+              }
+            }
+          }
+        });
+      }
+
       const creditTransactions = processedData.filter(tx => tx.CreditAmount !== null);
       const matchedDebitIds = new Set();
+      const matchedCreditIds = new Set();
 
       // Execute Pass 1: Standard ±1 day reconciliation
       firstPassReconciliation(creditTransactions, processedData, matchedDebitIds);
+      
+      // Track matched credits from Pass 1
+      creditTransactions.forEach(tx => {
+        if (tx.reconciled && tx.reconciliation_pass === 1) {
+          matchedCreditIds.add(tx.unique_id);
+        }
+      });
 
       // Execute Pass 2: Extended ±5 day reconciliation for unmatched
       secondPassReconciliation(creditTransactions, processedData, matchedDebitIds);
+      
+      // Track matched credits from Pass 2
+      creditTransactions.forEach(tx => {
+        if (tx.reconciled && tx.reconciliation_pass === 2 && !matchedCreditIds.has(tx.unique_id)) {
+          matchedCreditIds.add(tx.unique_id);
+        }
+      });
+
+      // Execute Pass 3: Reverse matching (1 debit → multiple credits)
+      thirdPassReconciliation(creditTransactions, processedData, matchedDebitIds, matchedCreditIds);
 
       return { matchedDebitIds, processedData };
     }
