@@ -4,7 +4,7 @@ block content
     style.
         /* Sticky header styling */
         .table-responsive {
-            max-height: calc(100vh - 350px);
+            max-height: calc(100vh - 250px);
             overflow-y: auto;
         }
         
@@ -101,6 +101,9 @@ block content
                     if (array[i].reconciliation_pass === 2) {
                         // Yellow/orange tick for Pass 2 (extended reconciliation)
                         statusIcon = "<i class='bi bi-check-circle-fill' style='color: #ffa500;' title='Matched in extended pass (±5 days)'></i>";
+                    } else if (array[i].reconciliation_pass === 3) {
+                        // Purple/violet tick for Pass 3 (reverse matching: 1 debit → multiple credits)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #9333ea;' title='Reverse match: 1 debit → multiple credits (±5 days)'></i>";
                     } else {
                         // Green tick for Pass 1 (standard reconciliation)
                         statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched in standard pass (±1 day)'></i>";
@@ -156,7 +159,93 @@ block content
             }
             
             currentData = filteredData;
+            
+            // Calculate totals
+            updateTotals(filteredData);
+            
             document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
+        }
+
+        // Function to calculate and display totals
+        function updateTotals(data) {
+            let totalDebit = 0;
+            let totalCredit = 0;
+            let reconciledCount = 0;
+            let unreconciledCount = 0;
+            
+            data.forEach(tx => {
+                if (tx.Debit) {
+                    totalDebit += parseFloat(tx.Debit);
+                }
+                if (tx.Credit) {
+                    totalCredit += parseFloat(tx.Credit);
+                }
+                
+                if (tx.reconciled) {
+                    reconciledCount++;
+                } else {
+                    unreconciledCount++;
+                }
+            });
+            
+            const difference = totalDebit - totalCredit;
+            
+            // Format numbers
+            const formatCurrency = (num) => {
+                return new Intl.NumberFormat('en-IN', {
+                    style: 'decimal',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).format(num);
+            };
+            
+            // Build totals HTML
+            let totalsHTML = `
+                <div class="card mt-3 mb-3" style="border: 2px solid #dee2e6;">
+                    <div class="card-body py-2">
+                        <div class="row text-center">
+                            <div class="col-md-3 col-6">
+                                <small class="text-muted d-block">Total Debit</small>
+                                <strong class="text-danger fs-5">₹${formatCurrency(totalDebit)}</strong>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <small class="text-muted d-block">Total Credit</small>
+                                <strong class="text-success fs-5">₹${formatCurrency(totalCredit)}</strong>
+                            </div>
+                            <div class="col-md-3 col-6 mt-2 mt-md-0">
+                                <small class="text-muted d-block">Difference</small>
+                                <strong class="${difference === 0 ? 'text-success' : 'text-warning'} fs-5">₹${formatCurrency(Math.abs(difference))}</strong>
+                                ${difference !== 0 ? `<small class="d-block text-muted">(${difference > 0 ? 'Debit excess' : 'Credit excess'})</small>` : ''}
+                            </div>
+                            <div class="col-md-3 col-6 mt-2 mt-md-0">
+                                <small class="text-muted d-block">Transactions</small>
+                                <strong class="text-primary fs-5">${data.length}</strong>
+                                <small class="d-block text-muted">${reconciledCount} matched, ${unreconciledCount} unmatched</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Update or create totals div
+            let totalsDiv = document.getElementById('totals-summary');
+            if (!totalsDiv) {
+                totalsDiv = document.createElement('div');
+                totalsDiv.id = 'totals-summary';
+                const container = document.getElementById('creditstmt-table-container');
+                container.parentNode.insertBefore(totalsDiv, container);
+            }
+            totalsDiv.innerHTML = totalsHTML;
+        }
+
+        // Function to get all data for PDF/print export (ignores filters)
+        function getAllDataForExport() {
+            return creditstmtFromServer;
+        }
+
+        // Function to get current filtered data for PDF/print export
+        function getCurrentDataForExport() {
+            return currentData;
         }
 
         // Function to filter data based on reconciliation status
@@ -339,6 +428,9 @@ block content
                     div
                         i.bi.bi-check-circle-fill.me-1(style='color: #ffa500;')
                         span Extended Match (±5 days)
+                    div
+                        i.bi.bi-check-circle-fill.me-1(style='color: #9333ea;')
+                        span Reverse Match (1→N)
                     div
                         i.bi.bi-x-circle.text-muted.me-1
                         span Unmatched
