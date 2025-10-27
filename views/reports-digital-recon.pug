@@ -277,34 +277,6 @@ block content
                 fromDate.setMonth(fromDate.getMonth() - 1);
                 fromDate.setDate(1);
                 toDate.setDate(0);
-            } else if (dateRange === 'this_financial_year') {
-                var currentMonth = today.getMonth();
-                if (currentMonth >= 3) {
-                    fromDate.setMonth(3);
-                    fromDate.setDate(1);
-                } else {
-                    fromDate.setFullYear(fromDate.getFullYear() - 1);
-                    fromDate.setMonth(3);
-                    fromDate.setDate(1);
-                }
-                toDate = new Date();
-            } else if (dateRange === 'last_financial_year') {
-                var currentMonth = today.getMonth();
-                if (currentMonth >= 3) {
-                    fromDate.setFullYear(fromDate.getFullYear() - 1);
-                    fromDate.setMonth(3);
-                    fromDate.setDate(1);
-                    toDate.setFullYear(toDate.getFullYear());
-                    toDate.setMonth(2);
-                    toDate.setDate(31);
-                } else {
-                    fromDate.setFullYear(fromDate.getFullYear() - 2);
-                    fromDate.setMonth(3);
-                    fromDate.setDate(1);
-                    toDate.setFullYear(toDate.getFullYear() - 1);
-                    toDate.setMonth(2);
-                    toDate.setDate(31);
-                }
             } else if (dateRange === 'custom') {
                 return;
             }
@@ -347,8 +319,6 @@ block content
                             select#dateRange.form-control(onchange='updateDateRange()')
                                 option(value='this_month') This Month
                                 option(value='last_month') Last Month
-                                option(value='this_financial_year') This Financial Year
-                                option(value='last_financial_year') Last Financial Year
                                 option(value='custom' selected) Custom Date
                         
                         // From Date
@@ -409,6 +379,14 @@ block content
                                     | Show Only Unreconciled Transactions
 
     div &nbsp;
+    
+    // Error message display
+    if error_message
+        .alert.alert-danger.alert-dismissible.fade.show.mx-3(role='alert')
+            i.bi.bi-exclamation-triangle-fill.me-2
+            strong Error: 
+            = error_message
+            button.btn-close(type='button' data-bs-dismiss='alert' aria-label='Close')
     
     .container-fluid
         if creditstmt && creditstmt.length > 0

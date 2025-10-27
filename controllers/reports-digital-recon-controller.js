@@ -13,6 +13,7 @@ module.exports = {
     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
     let cid = req.body.company_id;
     let caller = req.body.caller;
+    let credits = [];
 
     if (req.body.fromClosingDate) {
       fromDate = req.body.fromClosingDate;
@@ -20,8 +21,42 @@ module.exports = {
     if (req.body.toClosingDate) {
       toDate = req.body.toClosingDate;
     }
-    let Creditstmtlist = [];
-    let credits = [];
+
+    // Validate date range: Maximum 65 days
+    const fromDateObj = new Date(fromDate);
+    const toDateObj = new Date(toDate);
+    const daysDifference = Math.ceil((toDateObj - fromDateObj) / (1000 * 60 * 60 * 24));
+    
+    if (daysDifference > 65) {
+      // Get credits list for dropdown even on error
+      const allCredits = await CreditDao.findAll(locationCode);
+      allCredits.forEach((credit) => {
+        if (credit.card_flag === 'Y') {
+          credits.push({
+            id: credit.creditlist_id,
+            name: credit.Company_Name
+          });
+        }
+      });
+      
+      return res.render("reports-digital-recon", {
+        title: 'Digital Reconciliation',
+        user: req.user,
+        credits: credits,
+        creditstmt: [],
+        fromClosingDate: fromDate,
+        toClosingDate: toDate,
+        formattedFromDate: dateFormat(fromDateObj, "dd-mm-yyyy"),
+        formattedToDate: dateFormat(toDateObj, "dd-mm-yyyy"),
+        company_id: cid,
+        OpeningBal: 0,
+        closingBal: 0,
+        currentDate: dateFormat(new Date(), "yyyy-mm-dd"),
+        error_message: `Date range cannot exceed 65 days. Current range: ${daysDifference} days. Please select a shorter period.`
+      });
+    }
+
+    let Creditstmtlist = [];    
     let OpeningBal;
     let closingBal;
     let renderData = {};
