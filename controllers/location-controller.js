@@ -22,7 +22,7 @@ module.exports = {
                 return {
                     ...locationData,
                     is_active: new Date(locationData.start_date) <= currentDate && 
-                              new Date(locationData.effective_end_date) > currentDate
+                            new Date(locationData.effective_end_date) > currentDate
                 };
             });
 
@@ -70,12 +70,12 @@ module.exports = {
 
             // Create location
             await locationDao.create({
-                location_code: location_code.toUpperCase(),
-                location_name,
-                address,
-                company_name,
-                gst_number,
-                phone,
+                location_code: location_code.toUpperCase().trim(),
+                location_name: location_name.toUpperCase().trim(),
+                address: address.toUpperCase().trim(),
+                company_name: company_name.toUpperCase().trim(),
+                gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
+                phone: phone.trim(),
                 start_date: start_date || new Date(),
                 created_by: req.user.Person_id.toString()
             });
@@ -105,14 +105,14 @@ module.exports = {
 
         // Update location
         await locationDao.update(locationId, {
-            location_name,
-            company_name,
-            gst_number,
-            phone,
-            start_date,
-            effective_end_date: '9999-12-31', // Keep active
-            updated_by: req.user.Person_id.toString()
-        });
+        location_name: location_name.toUpperCase().trim(),
+        company_name: company_name.toUpperCase().trim(),
+        gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
+        phone: phone.trim(),
+        start_date,
+        effective_end_date: '9999-12-31',
+        updated_by: req.user.Person_id.toString()
+    });
 
         res.json({ success: true, message: 'Location updated successfully' });
     } catch (error) {

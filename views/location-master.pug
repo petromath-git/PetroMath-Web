@@ -238,10 +238,10 @@ block content
                                     name="location_code", 
                                     required,
                                     maxlength="5",
-                                    pattern="[A-Z0-9]{4,5}",
+                                    pattern="[A-Z0-9]{3,5}"
                                     style="text-transform: uppercase;"
                                 )
-                                small.form-text.text-muted 4-5 chars, uppercase, no spaces
+                                small.form-text.text-muted 3-5 chars, uppercase alphanumeric, no spaces
                             .col-md-6.mb-3
                                 label.form-label Location Name *
                                 input.form-control(type="text", name="location_name", required, maxlength="300")
@@ -576,6 +576,19 @@ block content
             
             document.getElementById('add_location_code').addEventListener('input', function() {
                 this.value = this.value.toUpperCase();
+            });
+
+            // Convert all text fields to uppercase on input
+            const uppercaseFields = ['location_name', 'company_name', 'gst_number', 'address'];
+            uppercaseFields.forEach(fieldName => {
+                const field = document.querySelector(`[name="${fieldName}"]`);
+                if (field) {
+                    field.addEventListener('input', function() {
+                        const cursorPos = this.selectionStart;
+                        this.value = this.value.toUpperCase();
+                        this.setSelectionRange(cursorPos, cursorPos);
+                    });
+                }
             });
             
             // Search functionality

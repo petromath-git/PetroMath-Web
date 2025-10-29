@@ -6,16 +6,21 @@ const dateFormat = require("dateformat");
 
 module.exports = {
     // Method to fetch all locations from the database
-    findAllLocations: async function () {
-        try {
-            // Query the location table to get all locations
+   findAllLocations: async function () {
+    try {
+        // Query the location table to get all locations
+        // Sort by: active first (effective_end_date DESC to put 9999-12-31 first), 
+        // then by start_date ASC
             const locations = await Location.findAll({
-                attributes: ['location_id', 'location_code', 'location_name', 'address', 
-                           'company_name', 'gst_number', 'phone', 'start_date', 
-                           'effective_end_date', 'created_by', 'updated_by', 
-                           'creation_date', 'updation_date'],
-                order: [['location_name', 'ASC']]
-            });
+            attributes: ['location_id', 'location_code', 'location_name', 'address', 
+                       'company_name', 'gst_number', 'phone', 'start_date', 
+                       'effective_end_date', 'created_by', 'updated_by', 
+                       'creation_date', 'updation_date'],
+            order: [
+                ['effective_end_date', 'DESC'],  // Active locations (9999-12-31) first
+                ['start_date', 'ASC']             // Then by start date ascending
+            ]
+          });
 
             return locations; // Return the fetched locations
         } catch (error) {
@@ -167,16 +172,34 @@ module.exports = {
         }
     },
 
-    // Validate location code format (4-5 chars, alphanumeric uppercase, no spaces)
-    validateLocationCode: function (locationCode) {
-        const regex = /^[A-Z0-9]{4,5}$/;
-        return regex.test(locationCode);
-    },
+    // Validate location code format (3-5 chars, alphanumeric uppercase, no spaces)
+        validateLocationCode: function (locationCode) {
+            const regex = /^[A-Z0-9]{3,5}$/;
+            return regex.test(locationCode);
+        },
 
     // Get oil companies from lookup table
     getOilCompanies: async function () {        
         return await lookupDao.getOilCompanies();
+    },
+
+    // Check if a location is active
+isLocationActive: async function (locationCode) {
+    try {
+        const currentDate = new Date();
+        const location = await Location.findOne({
+            where: {
+                location_code: locationCode,
+                start_date: { [Op.lte]: currentDate },
+                effective_end_date: { [Op.gt]: currentDate }
+            }
+        });
+        return !!location; // Returns true if location is active, false otherwise
+    } catch (error) {
+        console.error("Error checking if location is active:", error);
+        throw error;
     }
+},
 
 
 };
