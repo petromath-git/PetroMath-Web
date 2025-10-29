@@ -196,6 +196,8 @@ const locationMasterRoutes = require('./routes/location-master-routes');
 const apiRoutes = require('./api/apiRoutes');
 const cashflowDetailedRoutes = require('./routes/cashflow-detailed-routes');
 const creditReceiptsRoutes = require('./routes/credit-receipts-routes');
+const personLocationRoutes = require('./routes/person-location-routes');
+const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes');
 
 
 
@@ -346,7 +348,8 @@ app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
 app.use('/creditreceipts', creditReceiptsRoutes);
-
+app.use('/assign-person-locations', personLocationRoutes);
+app.use('/oil-company-statement', oilCompanyStatementRoutes);  
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
