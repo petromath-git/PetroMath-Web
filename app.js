@@ -50,6 +50,14 @@ passport.use(new LocalStrategy(
                             const today_date = dateFormat(now, "yyyy-mm-dd");
                             
                             if (data.effective_end_date > today_date) {
+
+                                 // Check if user's location is active
+                                    const isLocationActive = await LocationDao.isLocationActive(data.location_code);
+                                    if (!isLocationActive) {
+                                        done(null, false, { message: 'This location is currently inactive. Please contact your administrator.' });
+                                        return;
+                                    }
+
                                 // Fetch menu access from DAO
                                 const role = data.Role;
                                 const location = data.location_code;
@@ -1361,7 +1369,7 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         
         // SuperUsers always get access to all locations (backward compatibility)
         if (req.user.Role === 'SuperUser') {
-            const availableLocations = await LocationDao.findAllLocations();
+            const availableLocations = await LocationDao.findActiveLocations();
             return res.render('select-location', {
                 title: 'Select Location',
                 locations: availableLocations,
