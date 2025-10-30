@@ -181,4 +181,4 @@ block content
 
     // Only include date script for non-PDF
     if caller !== 'pdf'
-        script(src='/javascripts/app-report-date.js')
+        script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`)
