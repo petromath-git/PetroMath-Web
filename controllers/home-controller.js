@@ -40,6 +40,12 @@ module.exports = {
         'N' // default value if not configured
      );
 
+       const allowSecondaryPump = await locationConfig.getLocationConfigValue(
+        locationCode,
+        'ALLOW_SECONDARY_PUMP',
+        'true' // default value
+    );
+
       
 
         getDraftsCount(locationCode).then(data => {
@@ -73,7 +79,8 @@ module.exports = {
                             expenseValues: values[6].value.expenses,
                             usersList: values[7].value.allUsers,
                             vehicleData: values[8].value,
-                            isOpeningReadonly: openingReadonlyConfig === 'Y'
+                            isOpeningReadonly: openingReadonlyConfig === 'Y',
+                            allowSecondaryPump: allowSecondaryPump === 'true',
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
