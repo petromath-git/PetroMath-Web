@@ -478,7 +478,7 @@ module.exports = {
               Creditsummarylist.push({
                   'Credit Customer': creditSummaryData.company_name,
                   'Balance': creditSummaryData.ClosingData,
-                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
+                  'Notional Interest @ 12% (Today)': interestIncurred.toFixed(2)
               });
           } 
           // On other days, limit to 3 entries only
@@ -486,7 +486,7 @@ module.exports = {
               Creditsummarylist.push({
                   'Credit Customer': creditSummaryData.company_name,
                   'Balance': creditSummaryData.ClosingData,
-                  'Interest Incurred (Today)': interestIncurred.toFixed(2)
+                  'Notional Interest @ 12% (Today)': interestIncurred.toFixed(2)
               });
               count++;
           }
@@ -496,7 +496,7 @@ module.exports = {
         Creditsummarylist.push({
           'Credit Customer': 'Total(All Customer Balances)',
           'Balance': totalBalance,
-          'Interest Incurred (Today)': (totalBalance * 0.12 / 365).toFixed(2)
+          'Notional Interest @ 12% (Today)': (totalBalance * 0.12 / 365).toFixed(2)
         });
               
 
@@ -514,8 +514,8 @@ module.exports = {
         Cashflowstmtlist.push({
           Transaction: cashflowData.type,
           Description: cashflowData.description,
-          Credit: cashflowData.credit,
-          Debit: cashflowData.debit,
+          InFlow: cashflowData.credit,
+          OutFlow: cashflowData.debit,
         });
   
        // Sum the credits and debits
@@ -531,8 +531,8 @@ module.exports = {
         Cashflowstmtlist.push({
           Transaction: "Total",
           Description: "-",
-          Credit: totalCredits,
-          Debit: totalDebits
+          InFlow: totalCredits,
+          OutFlow: totalDebits
         });
 
       // Calculate the result of credits - debits
