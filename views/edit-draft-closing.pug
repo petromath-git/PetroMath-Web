@@ -234,7 +234,7 @@ block content
                                     tr
                                         td
                                             select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
-                                                each val in pumps
+                                                each val in pumpInstances
                                                     option= val.pumpCode
                                         td
                                             input#reading-price.form-control(type="number" min="0" step=0.01)
