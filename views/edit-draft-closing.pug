@@ -108,7 +108,7 @@ block content
                             input#cashierDate.form-control(type='date', name='closing__cashierDate', value= closingData.closingDate required max=currentDate min=minDateForNewClosing)
                             div.invalid-feedback Closing date is required.
                         div.col
-                            label(for='cashGiven') Cash Given:
+                            label(for='cashGiven') Opening Cash Given:
                             input#cashGiven.form-control(type='number', name='closing__cashGiven' required value= closingData.cash min=0 oninput='validity.valid||(value="")' step=0.01)
                             div.invalid-feedback Cash given is required.
                         div.col
@@ -475,7 +475,7 @@ block content
                                                 span Date:&nbsp;
                                                 span(id='valDate-cashierDate')
                                             div.col-3
-                                                span Cash Given:&nbsp;
+                                                span Opening Cash Given:&nbsp;
                                                 span(id='val-cashGiven')
                                             div.col-3
                                                 span Excess/Shortage:&nbsp;
