@@ -298,7 +298,7 @@ block content
                             tr(id="deadlineWarning_row_"+index)
                                 td(scope="row")= val.deadlineDate
                                 td(scope="row")= val.message
-    script(src='/javascripts/app-report-date.js')
+    script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`)
     script.
         // Toggle filter collapse
         function toggleFilters() {

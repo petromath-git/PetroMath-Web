@@ -627,5 +627,5 @@ block content
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
         window.allowSecondaryPump = !{allowSecondaryPump};
-    script(src='/javascripts/shift-products.js')    
+    script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
 

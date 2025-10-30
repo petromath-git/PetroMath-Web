@@ -5,12 +5,12 @@ html
     - var mobileReadyPages = ['Shift Closing', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
     if mobileReadyPages.includes(title)
       meta(name="viewport" content="width=device-width, initial-scale=1.0")   
-    link(rel='stylesheet', href='/stylesheets/style.css')        
+    link(rel='stylesheet', href=`/stylesheets/style.css?v=${CACHE_BUST}`)        
     link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
     link(rel="stylesheet",href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
     link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
     link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
-    link(id="favicon" rel="shortcut icon" type="image/png" href="/images/mc_logo.jpg" src="/images/mc_logo.jpg")
+    link(id="favicon" rel="shortcut icon" type="image/png" href=`/images/mc_logo.jpg?v=${CACHE_BUST}` src=`/images/mc_logo.jpg?v=${CACHE_BUST}`)
     link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
     script(src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js')
     script(src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment.min.js')
@@ -19,13 +19,13 @@ html
     script(src='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js')
     script(src='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/js/bootstrap-datetimepicker.min.js')
     script(src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js')
-    script(src='/javascripts/app-validator.js')
-    script(src='/javascripts/app-scripts.js')
-    script(src='/javascripts/app-master-page-scripts.js')
-    script(src='/javascripts/draft-edit-scripts.js')        
-    script(src='/javascripts/app-generate-pdf.js', defer)
-    script(src='/javascripts/app-report-date.js', defer)
-    script(src='/javascripts/app-report-table-generator.js')
+    script(src=`/javascripts/app-validator.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/app-scripts.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/app-master-page-scripts.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/draft-edit-scripts.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/app-generate-pdf.js?v=${CACHE_BUST}`, defer)
+    script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`, defer)
+    script(src=`/javascripts/app-report-table-generator.js?v=${CACHE_BUST}`)
     
     style.
       @media print {
@@ -47,7 +47,7 @@ html
     
     if user
       div#ajax-loading.d-sm-none
-        img#loading-image(src="/images/ajax-loader.gif", alt="Loading...", width="300px", height="300px")
+        img#loading-image(src=`/images/ajax-loader.gif?v=${CACHE_BUST}`, alt="Loading...", width="300px", height="300px")
 
       // Vertical Sidebar
       nav.sidebar#sidebar

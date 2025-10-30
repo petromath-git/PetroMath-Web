@@ -363,6 +363,7 @@ app.use('/oil-company-statement', oilCompanyStatementRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
     res.locals.SERVER_PORT = process.env.SERVER_PORT;
+    res.locals.CACHE_BUST = Date.now(); // Cache busting version
     next();
 });
 
