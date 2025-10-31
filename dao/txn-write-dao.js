@@ -19,14 +19,55 @@ module.exports = {
         });
         return closingTxn;
     },
-    saveReadings: (data) => {
-        const readingTxn = TxnReading.bulkCreate(data, {
-            returning: true,
-            updateOnDuplicate: ["opening_reading", "closing_reading",
-            "pump_id", "price", "testing", "updated_by", "updation_date"]
-        });
-        return readingTxn;
-    },
+   
+saveReadings: (data) => {
+    // Validate all readings before saving to database
+    const validationErrors = [];
+    
+    data.forEach((reading, index) => {
+        const closing = parseFloat(reading.closing_reading) || 0;
+        const opening = parseFloat(reading.opening_reading) || 0;
+        const testing = parseFloat(reading.testing) || 0;
+        const pumpId = reading.pump_id;
+        
+      
+               
+        // Validation 1: Closing must be >= Opening
+        if (closing < opening) {
+            validationErrors.push({
+                pumpId: pumpId,
+                field: 'closing_reading',
+                error: `Pump ${pumpId}: Closing reading (${closing}) cannot be less than opening reading (${opening})`
+            });
+        }
+        
+        // Validation 2: Net sales (closing - opening - testing) must be >= 0
+        const netSales = closing - opening - testing;
+        if (netSales < 0) {
+            const grossSales = closing - opening;
+            validationErrors.push({
+                pumpId: pumpId,
+                field: 'testing',
+                error: `Pump ${pumpId}: Testing value (${testing}) is too high. Gross sales is only ${grossSales}. Net sales cannot be negative.`
+            });
+        }
+    });
+    
+    // If validation errors exist, reject the promise with detailed error
+    if (validationErrors.length > 0) {
+        const errorMessage = validationErrors.map(e => e.error).join('; ');
+        return Promise.reject(new Error(`Reading validation failed: ${errorMessage}`));
+    }
+    
+    // If validation passes, proceed with database save
+    const readingTxn = TxnReading.bulkCreate(data, {
+        returning: true,
+        updateOnDuplicate: ["opening_reading", "closing_reading",
+        "pump_id", "price", "testing", "updated_by", "updation_date"]
+    });
+    return readingTxn;
+},
+
     deleteReadingById: (readingId) => {
         const readingTxn = TxnReading.destroy({ where: { reading_id: readingId } });
         return readingTxn;

@@ -431,8 +431,8 @@ module.exports = {
         const keyValue = {};
       
         // Handle known columns directly
-        keyValue['Date'] = shiftsummary.closing_date_formatted;
-        keyValue['Name'] = shiftsummary.person_name;        
+        keyValue['Closing Date'] = shiftsummary.closing_date_formatted;
+        keyValue['Cashier Name'] = shiftsummary.person_name;        
       
         // Handle unknown columns dynamically (for product sales data)
         Object.keys(shiftsummary).forEach((key) => {

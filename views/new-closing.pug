@@ -179,19 +179,23 @@ block content
                             table.table
                                 tbody
                                     thead.thead-light
-                                        th PumpName
-                                        th Price
+                                        th Nozzle
+                                        if allowSecondaryPump
+                                            th Price
                                         th Action
                                     tr
                                         td
                                             select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
                                                 each val in pumps
                                                     option= val.pumpCode
+                                        if allowSecondaryPump
+                                            td
+                                                input#reading-price.form-control(type="number" min="0" step=0.01)
+                                        else
+                                            input#reading-price(type="hidden")
                                         td
-                                            input#reading-price.form-control(type="number" min="0" step=0.01)
-                                        td
-                                            a.btn.btn-info.btn-sm(onclick="showReadingPump()" style="margin-right: 5px;") Add New
-                                            a.btn.btn-success.btn-sm(onclick="addAllPumps()") Add All Pumps
+                                            a.btn.btn-info.btn-sm(onclick="showReadingPump()" style="margin-right: 5px;") Add Nozzle
+                                            a.btn.btn-success.btn-sm(onclick="addAllPumps()") Add All Nozzles
                     else
                         div.row.bg-warning
                             pre.text-danger= `Note: Pumps data is empty at backend.`
