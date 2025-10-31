@@ -1,6 +1,44 @@
 extends layout
 
 block content
-    h1= message
-    h2= error.status
-    pre #{error.stack}
+    .container.mt-5
+        .row.justify-content-center
+            .col-md-8.col-lg-6
+                .card.border-danger
+                    .card-header.bg-danger.text-white
+                        h4.mb-0
+                            i.bi.bi-exclamation-triangle-fill.me-2
+                            | #{error.status || 500} - Access Error
+                    .card-body.text-center.py-4
+                        if error.status === 403
+                            i.bi.bi-shield-lock.display-1.text-danger.mb-3
+                        else if error.status === 404
+                            i.bi.bi-search.display-1.text-warning.mb-3
+                        else
+                            i.bi.bi-exclamation-circle.display-1.text-danger.mb-3
+                        
+                        h5.card-title.mb-3= message
+                        
+                        if error.status === 403
+                            p.text-muted You don't have permission to access this resource.
+                        else if error.status === 404
+                            p.text-muted The resource you're looking for doesn't exist.
+                        else
+                            p.text-muted Something went wrong. Please try again.
+                        
+                        .mt-4
+                            a.btn.btn-primary.me-2(href='/')
+                                i.bi.bi-house-door.me-1
+                                | Go to Home
+                            button.btn.btn-outline-secondary(onclick='window.history.back()')
+                                i.bi.bi-arrow-left.me-1
+                                | Go Back
+                    
+                    if user && user.isAdmin && error.stack
+                        .card-footer.bg-light
+                            details
+                                summary.text-danger.cursor-pointer
+                                    small
+                                        i.bi.bi-bug.me-1
+                                        | Debug Information (Admin Only)
+                                pre.mt-2.mb-0.small.text-start #{error.stack}
