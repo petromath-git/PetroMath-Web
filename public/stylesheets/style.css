@@ -1307,9 +1307,13 @@ body {
 
 .sidebar-header {
   padding: 20px;
-  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%) !important;
+  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
+}
+
+.sidebar-header.canary-instance {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
 }
 
 .sidebar-logo {
@@ -2795,4 +2799,29 @@ body {
     .btn-group {
         display: none !important;
     }
+}
+
+/* Reading validation warnings */
+.reading-validation-warning {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+}
+
+.reading-validation-warning .close {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    float: right;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #000;
+    opacity: 0.5;
+    cursor: pointer;
+}
+
+.reading-validation-warning .close:hover {
+    opacity: 0.75;
 }
