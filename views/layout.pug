@@ -51,7 +51,7 @@ html
 
       // Vertical Sidebar
       nav.sidebar#sidebar
-        .sidebar-header
+        .sidebar-header(class=(APP_VERSION === 'canary' ? 'canary-instance' : ''))
           a.sidebar-logo(href="/") PetroMath
           .sidebar-user
             | Logged in as #{user.Person_Name}
