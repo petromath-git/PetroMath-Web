@@ -124,10 +124,23 @@ function trackMenu(obj) {
         const callSaveFunctionForMenu = getSaveFunction(obj.id);        
         if (previousSaveFun === callSaveFunctionForMenu) {
             setSaveFunction(obj.id);
+
+            // Initialize reading tab price when navigating to it via Next button
+            if (obj.id === 'reading_tab') {
+                setTimeout(() => updatePriceOnReadingTab(false), 100);
+            }
+            
+
             return;
         }
         if (previousSaveFun === 'NoSaveClick') {
             document.getElementById('currentTabForSave').value = callSaveFunctionForMenu;
+
+             // Initialize reading tab price when navigating to it via Next button
+            if (obj.id === 'reading_tab') {
+                setTimeout(() => updatePriceOnReadingTab(false), 100);
+            }
+
         } else {            
             ajaxLoading('d-md-block');
             window[previousSaveFun]().then((data) => {
@@ -135,6 +148,12 @@ function trackMenu(obj) {
                     setSaveFunction(obj.id);
                     activateTabDirectly(obj);
                     //obj.click();
+                    // Initialize reading tab price when navigating to it via Next button
+                    if (obj.id === 'reading_tab') {
+                        setTimeout(() => updatePriceOnReadingTab(false), 100);
+                    }
+
+
                 }
                 ajaxLoading('d-md-none');
             });

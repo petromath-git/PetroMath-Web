@@ -1307,9 +1307,13 @@ body {
 
 .sidebar-header {
   padding: 20px;
-  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%) !important;
+  background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
+}
+
+.sidebar-header.canary-instance {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
 }
 
 .sidebar-logo {

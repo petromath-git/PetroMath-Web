@@ -22,17 +22,17 @@ async function handleVersionRouting(user, req, res) {
             if (version === 'canary') {
                 // User should be on canary, redirect from stable to canary
                 if (currentHost.includes('dev.')) {
-                    redirectUrl = 'http://beta.dev.petromath.co.in/login';
+                    redirectUrl = 'http://beta.dev.petromath.co.in/home';
                 } else {
-                    redirectUrl = 'http://beta.petromath.co.in/login';
+                    redirectUrl = 'http://beta.petromath.co.in/home';
                 }
                 console.log(`Redirecting ${user.location_code} to canary: ${redirectUrl}`);
             } else {
                 // User should be on stable, redirect from canary to stable
                 if (currentHost.includes('beta.dev.')) {
-                    redirectUrl = 'http://dev.petromath.co.in/login';
+                    redirectUrl = 'http://dev.petromath.co.in/home';
                 } else if (currentHost.includes('beta.')) {
-                    redirectUrl = 'http://petromath.co.in/login';
+                    redirectUrl = 'http://petromath.co.in/home';
                 } else {
                     // Already on correct stable app, shouldn't happen
                     return false;
