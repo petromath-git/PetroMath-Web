@@ -8,43 +8,91 @@ const tankreceiptController = require("./tank-receipt-controller");
 const TankDao = require("../dao/tank-dao");
 const TxnStkRcptDtlDao = require("../dao/txn-stkrcpt-dtl-dao");
 const TruckDao = require("../dao/truck-dao");
+const db = require('../db/db-connection');
 
 module.exports = {
-    getDataToEdit: (req, res, next) => {
-        const ttank_id = req.query.closingId;
-        const locationCode = req.user.location_code;
-        if(ttank_id){
-            Promise.allSettled([personDataPromise(locationCode),
-                txntankReceiptPromise(ttank_id),
-                getDriverHelper(locationCode),
-                tankCodePromise(locationCode),
-                txnDecantLinesPromise(ttank_id),
-                truckDataPromise(locationCode),
-                ])
-                .then((values) => {
-                    res.render('edit-draft-tankrcpt',{
-                        user: req.user,
-                        config: config.APP_CONFIGS,
-                        inchargers: values[0].value.inchargers,
-                        currentDate: utils.currentDate(),
-                        receiptsData: values[1].value,
-                        drivers: values[2].value.drivers,
-                        tanks: values[3].value.tanks,
-                        decantLines: values[4].value.decantLines,
-                        trucks: values[5].value.trucks,
-                        
-                    });
-                    
-                }).catch((err) => {
-                    console.warn("Error while getting data using promises " + err.toString());
-                    Promise.reject(err);
+    getDataToEdit: async (req, res, next) => {
+    const ttank_id = req.query.closingId;
+    const locationCode = req.user.location_code;
+    
+    if(ttank_id){
+        // SECURITY: Validate that tank receipt belongs to user's location
+        try {
+            
+            const locationCheck = await db.sequelize.query(`
+                SELECT location_code 
+                FROM t_tankrcpt 
+                WHERE ttank_id = :ttank_id
+            `, {
+                replacements: { ttank_id },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+
+            if (locationCheck.length === 0) {
+                const error = {
+                    status: 404,
+                    stack: 'Tank receipt not found'
+                };
+                return res.status(404).render('error', {
+                    user: req.user,
+                    message: 'Tank receipt not found',
+                    error: error
                 });
-               
-        }else {
-            res.render('home', {user: req.user});
+            }
+
+            if (locationCheck[0].location_code !== locationCode) {
+                const error = {
+                    status: 403,
+                    stack: 'Unauthorized access attempt to tank receipt from different location'
+                };
+                return res.status(403).render('error', {
+                    user: req.user,
+                    message: 'Unauthorized: You cannot access tank receipts from other locations',
+                    error: error
+                });
+            }
+        } catch (error) {
+            console.error('Error checking tank receipt location:', error);
+            const err = {
+                status: 500,
+                stack: error.stack
+            };
+            return res.status(500).render('error', {
+                user: req.user,
+                message: 'Internal server error',
+                error: err
+            });
         }
-     
+
+        // Proceed with normal logic if validation passes
+        Promise.allSettled([personDataPromise(locationCode),
+            txntankReceiptPromise(ttank_id),
+            getDriverHelper(locationCode),
+            tankCodePromise(locationCode),
+            txnDecantLinesPromise(ttank_id),
+            truckDataPromise(locationCode),
+            ])
+            .then((values) => {
+                res.render('edit-draft-tankrcpt',{
+                    user: req.user,
+                    config: config.APP_CONFIGS,
+                    inchargers: values[0].value.inchargers,
+                    currentDate: utils.currentDate(),
+                    receiptsData: values[1].value,
+                    drivers: values[2].value.drivers,
+                    tanks: values[3].value.tanks,
+                    decantLines: values[4].value.decantLines,
+                    trucks: values[5].value.trucks,
+                });
+            }).catch((err) => {
+                console.warn("Error while getting data using promises " + err.toString());
+                Promise.reject(err);
+            });
+           
+    }else {
+        res.render('home', {user: req.user});
     }
+}
 }
 const txntankReceiptPromise = (ttank_id) => {
     return new Promise((resolve, reject) => {

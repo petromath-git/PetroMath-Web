@@ -46,6 +46,18 @@ module.exports = {
         'true' // default value
     );
 
+    const digitalSalesBackdateDays = Number(await locationConfig.getLocationConfigValue(
+    locationCode, 
+    'DIGITAL_SALES_BACKDATE_DAYS', 
+    2  // default 2 days
+    ));     
+
+    const digitalSalesFutureDays = Number(await locationConfig.getLocationConfigValue(
+    locationCode, 
+    'DIGITAL_SALES_FUTURE_DAYS', 
+    0  // default 0 days
+    ));
+
       
 
         getDraftsCount(locationCode).then(data => {
@@ -81,6 +93,8 @@ module.exports = {
                             vehicleData: values[8].value,
                             isOpeningReadonly: openingReadonlyConfig === 'Y',
                             allowSecondaryPump: allowSecondaryPump === 'true',
+                            digitalSalesBackdateDays: digitalSalesBackdateDays,
+                            digitalSalesFutureDays: digitalSalesFutureDays
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {

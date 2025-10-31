@@ -11,22 +11,36 @@ module.exports = {
             res, next, {});
     },
     getCashFlowEntry: (req, res, next) => {
-        cashflowDao.findCashflow(req.user.location_code, req.query.id).then(data => {
-            if (data) {
-                if (data.status === 'CLOSED') {
+    cashflowDao.findCashflow(req.user.location_code, req.query.id).then(data => {
+        if (data) {
+            if (data.status === 'CLOSED') {
+                getCashFlowDetailsPromise(data, req, res, next)
+            } else {
+                cashflowDao.triggerGenerateCashflow(req.query.id).then(() => {
                     getCashFlowDetailsPromise(data, req, res, next)
-                } else {
-                    cashflowDao.triggerGenerateCashflow(req.query.id).then(() => {
-                        getCashFlowDetailsPromise(data, req, res, next)
-                    }).catch((err) => {
-                        gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
-                            req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-                            { error: "Error while triggering procedure." });
-                    });
-                }
+                }).catch((err) => {
+                    gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
+                        req.body.cashflow_toDate_hiddenValue, req.user, res, next,
+                        { error: "Error while triggering procedure." });
+                });
             }
-        });
-    },
+        } else {
+            // Handle unauthorized access or not found
+            const error = {
+                status: 403,
+                stack: 'Unauthorized access attempt to cashflow from different location'
+            };
+            return res.status(403).render('error', {
+                user: req.user,
+                message: 'Unauthorized: You cannot access cashflow records from other locations',
+                error: error
+            });
+        }
+    });
+},
+
+
+
     triggerCashSalesByDate: (req, res, next) => {
         let locationCode = req.user.location_code;
         const generateDate = new Date(req.body.generateDate);
@@ -134,25 +148,61 @@ module.exports = {
             res.status(500).send({error: 'Cash flow deletion failed or not available to delete.'});
         }
     },
-    deleteCashFlowClosing: (req, res, next) => {
-        if(req.query.id) {
-            cashflowDao.deleteCashFlow(req.query.id).then(() => {
-                res.status(200).send({message: 'The cash-flow record is deleted successfully.'});
-            }).error((err) => {
-                res.status(500).send({error: 'Error while deleting the cash-flow record.'});
+
+
+
+   deleteCashFlowClosing: async (req, res, next) => {
+    const cashflowId = req.query.id;
+    const userLocation = req.user.location_code;
+
+    try {
+        // SECURITY: Validate that cashflow belongs to user's location
+        const cashflow = await cashflowDao.findCashflow(userLocation, cashflowId);
+        
+        if (!cashflow) {
+            return res.status(403).json({ 
+                error: 'Unauthorized: You cannot delete cashflow records from other locations' 
             });
         }
+
+        // Proceed with deletion if validation passes
+        await cashflowDao.deleteCashFlow(cashflowId);
+        res.status(200).send({message: 'The cashflow closing is deleted successfully.'});
+    } catch (error) {
+        console.error('Error deleting cashflow:', error);
+        res.status(500).send({error: 'Error while deleting the record.'});
+    }
+},
+    closeData: async (req, res, next) => {
+    const cashflowId = req.query.id;
+    const userLocation = req.user.location_code;
+
+    try {
+        // SECURITY: Validate that cashflow belongs to user's location
+        const cashflow = await cashflowDao.findCashflow(userLocation, cashflowId);
+        
+        if (!cashflow) {
+            return res.status(403).json({ 
+                    error: 'Unauthorized: You cannot close cashflow records from other locations' 
+                });
+            }
+
+            // Proceed with closing if validation passes
+            const result = await cashflowDao.finishClosing(cashflowId);
+            
+            if(result == 1) {
+                res.status(200).send({message: 'The closing record is made final.'});
+            } else {
+                res.status(500).send({error: 'Error while closing the record.'});
+            }
+        } catch (error) {
+            console.error('Error closing cashflow:', error);
+            res.status(500).send({error: 'Error while closing the record.'});
+        }
     },
-    closeData: (req, res, next) => {
-        cashflowDao.finishClosing(req.query.id).then(
-            (data) => {
-                if(data == 1) {
-                    res.status(200).send({message: 'The closing record is made final.'});
-                } else {
-                    res.status(500).send({error: 'Error while closing the record.'});
-                }
-            });
-    },
+
+
+
 };
 
 function getManagerNames(closingValues, cashflowDate, personData) {

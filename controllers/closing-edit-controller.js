@@ -10,12 +10,60 @@ const config = require("../config/app-config");
 const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const locationConfig = require('../utils/location-config');
+const db = require('../db/db-connection');
 // Edit flow: This controller takes care of all joins to get data for editing.
 
 module.exports = {
     getDataToEdit: async  (req, res, next) => {
         const closingId = req.query.closingId;
         const locationCode = req.user.location_code;
+
+        // NEW: Validate that the closing belongs to the user's location
+    if (closingId) {
+        try {
+            
+            const locationCheck = await db.sequelize.query(`
+                SELECT location_code 
+                FROM t_closing 
+                WHERE closing_id = :closingId
+            `, {
+                replacements: { closingId },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+
+            
+            if (locationCheck[0].location_code !== locationCode) {
+                const error = {
+                    status: 403,
+                    stack: 'Unauthorized access attempt to closing from different location'
+                };
+                return res.status(403).render('error', {
+                    user: req.user,
+                    message: 'Unauthorized: You cannot access closing records from other locations',
+                    error: error
+                });
+            }
+
+            // Also update the "not found" case
+            if (locationCheck.length === 0) {
+                const error = {
+                    status: 404,
+                    stack: 'Closing record not found in database'
+                };
+                return res.status(404).render('error', {
+                    user: req.user,
+                    message: 'Closing record not found',
+                    error: error
+                });
+            }
+        } catch (error) {
+            console.error('Error checking closing location:', error);
+            return res.status(500).send('Internal server error');
+        }
+    }
+
+
+
 
 
         const maxBackDateDays =  Number(await locationConfig.getLocationConfigValue(
@@ -36,6 +84,17 @@ module.exports = {
             'true' // default value
         );
 
+         const digitalSalesBackdateDays = Number(await locationConfig.getLocationConfigValue(
+            locationCode, 
+            'DIGITAL_SALES_BACKDATE_DAYS', 
+            2  // default 2 days
+            ));     
+        
+            const digitalSalesFutureDays = Number(await locationConfig.getLocationConfigValue(
+            locationCode, 
+            'DIGITAL_SALES_FUTURE_DAYS', 
+            0  // default 0 days
+            ));    
 
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
@@ -65,6 +124,8 @@ module.exports = {
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                         isOpeningReadonly: openingReadonlyConfig === 'Y',
                         allowSecondaryPump: allowSecondaryPump === 'true',
+                        digitalSalesBackdateDays: digitalSalesBackdateDays,
+                        digitalSalesFutureDays: digitalSalesFutureDays,
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
