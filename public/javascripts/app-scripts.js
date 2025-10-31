@@ -169,25 +169,130 @@ function updatePriceOnReadingTabv1(isOnLoad) {
     }
 }
 
-// Add new flow: Re-add pump reading to UI
+
+
+// Modified: Add new flow - Re-add pump reading to UI (respects secondary pump config)
 function showReadingPump() {
     const pumpName = document.getElementById("reading-pump-name").value;
     const currency = document.getElementById('currency_hiddenValue').value;
-    if (!document.getElementById("reading-price").value || document.getElementById("reading-price").value<=0)
-    {
-     alert(`Product Price cannot be less than 0 for ${pumpName}`);   
+    
+    if (!document.getElementById("reading-price").value || document.getElementById("reading-price").value <= 0) {
+        alert(`Product Price cannot be less than 0 for ${pumpName}`);
+        return;
     }
-    else if (document.getElementById("f_" + pumpName + "_sub_header").className == 'col-3 d-md-none') {
-        document.getElementById("f_" + pumpName + "_sub_header").className = 'col-3 d-md-block';
+    
+    // Check if pump already added
+    const fPumpHeader = document.getElementById("f_" + pumpName + "_sub_header");
+    const sPumpHeader = document.getElementById("s_" + pumpName + "_sub_header");
+    
+    // Check both slots more carefully
+    const fPumpIsVisible = fPumpHeader && (fPumpHeader.className.includes('d-md-block') || !fPumpHeader.className.includes('d-md-none'));
+    const sPumpIsVisible = sPumpHeader && (sPumpHeader.className.includes('d-md-block') || !sPumpHeader.className.includes('d-md-none'));
+    
+    // If already added in first slot
+    if (fPumpIsVisible) {
+        // If secondary pumps are NOT allowed, show error
+        if (!window.allowSecondaryPump) {
+            alert(`${pumpName} is already added`);
+            return;
+        }
+        // If secondary pumps ARE allowed, check second slot
+        if (sPumpIsVisible) {
+            alert(`${pumpName} is already added twice (maximum allowed)`);
+            return;
+        }
+    }
+    
+    // Check if already added in second slot only
+    if (sPumpIsVisible && !fPumpIsVisible) {
+        alert(`${pumpName} is already added`);
+        return;
+    }
+    
+    // Add to first available slot
+    if (fPumpHeader && fPumpHeader.className.includes('d-md-none')) {
+        fPumpHeader.className = 'col-3 d-md-block';
         document.getElementById("f_" + pumpName + "_sub_header_price").innerHTML = currency + document.getElementById("reading-price").value;
         document.getElementById("f_" + pumpName + "_price").value = document.getElementById("reading-price").value;
-    } else if (document.getElementById("s_" + pumpName + "_sub_header").className == 'col-3 d-md-none') {
-        document.getElementById("s_" + pumpName + "_sub_header").className = 'col-3 d-md-block';
+    } else if (sPumpHeader && sPumpHeader.className.includes('d-md-none') && window.allowSecondaryPump) {
+        sPumpHeader.className = 'col-3 d-md-block';
         document.getElementById("s_" + pumpName + "_sub_header_price").innerHTML = currency + document.getElementById("reading-price").value;
         document.getElementById("s_" + pumpName + "_price").value = document.getElementById("reading-price").value;
-    } else {
-        alert("Same pump cannot be added more than 2 times");
     }
+}
+
+
+// Add all pumps with their respective product prices
+function addAllPumps() {
+    const currency = document.getElementById('currency_hiddenValue').value;
+    let addedCount = 0;
+    let skippedPumps = [];
+    
+    // Get all pumps from the dropdown
+    const pumpSelect = document.getElementById("reading-pump-name");
+    const allPumps = Array.from(pumpSelect.options).map(option => option.value);
+    
+    // Iterate through each pump
+    allPumps.forEach(pumpCode => {
+        // Find the pump data
+        const pump = window.pumpsData.find(p => p.pumpCode === pumpCode);
+        
+        if (!pump || !pump.productCode) {
+            skippedPumps.push(pumpCode + " (no product code)");
+            return;
+        }
+        
+        // Find the product for this pump
+        const product = window.productValuesData.find(p => p.productName === pump.productCode);
+        
+        if (!product) {
+            skippedPumps.push(pumpCode + " (product not found)");
+            return;
+        }
+        
+        // Get the rate field ID
+        const rateFieldId = 'rate_' + product.textName;
+        const rateElement = document.getElementById(rateFieldId);
+        
+        if (!rateElement || !rateElement.value || parseFloat(rateElement.value) <= 0) {
+            skippedPumps.push(pumpCode + " (no valid rate)");
+            return;
+        }
+        
+        const price = rateElement.value;
+        
+        // Check if pump already added
+        const fPumpHeader = document.getElementById("f_" + pumpCode + "_sub_header");
+        const sPumpHeader = document.getElementById("s_" + pumpCode + "_sub_header");
+        
+        // Skip if already added
+        if (fPumpHeader && fPumpHeader.className.includes('d-md-block')) {
+            return;
+        }
+        if (sPumpHeader && sPumpHeader.className.includes('d-md-block')) {
+            return;
+        }
+        
+        // Add to first available slot       
+        if (fPumpHeader && fPumpHeader.className.includes('d-md-none')) {
+            fPumpHeader.className = 'col-3 d-md-block';
+            document.getElementById("f_" + pumpCode + "_sub_header_price").innerHTML = currency + price;
+            document.getElementById("f_" + pumpCode + "_price").value = price;
+            addedCount++;
+        } else if (sPumpHeader && sPumpHeader.className.includes('d-md-none') && window.allowSecondaryPump) {
+            sPumpHeader.className = 'col-3 d-md-block';
+            document.getElementById("s_" + pumpCode + "_sub_header_price").innerHTML = currency + price;
+            document.getElementById("s_" + pumpCode + "_price").value = price;
+            addedCount++;
+        }
+    });
+    
+    // Show result message
+    let message = `Added ${addedCount} pump(s) successfully.`;
+    if (skippedPumps.length > 0) {
+        message += `\n\nSkipped pumps:\n${skippedPumps.join('\n')}`;
+    }
+    alert(message);
 }
 
 

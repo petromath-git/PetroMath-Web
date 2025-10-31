@@ -108,7 +108,7 @@ block content
                             input#cashierDate.form-control(type='date', name='closing__cashierDate', value= closingData.closingDate required max=currentDate min=minDateForNewClosing)
                             div.invalid-feedback Closing date is required.
                         div.col
-                            label(for='cashGiven') Cash Given:
+                            label(for='cashGiven') Opening Cash Given:
                             input#cashGiven.form-control(type='number', name='closing__cashGiven' required value= closingData.cash min=0 oninput='validity.valid||(value="")' step=0.01)
                             div.invalid-feedback Cash given is required.
                         div.col
@@ -234,12 +234,13 @@ block content
                                     tr
                                         td
                                             select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
-                                                each val in pumps
+                                                each val in pumpInstances
                                                     option= val.pumpCode
                                         td
                                             input#reading-price.form-control(type="number" min="0" step=0.01)
                                         td
-                                            a.btn.btn-info(onclick="showReadingPump()") Add New
+                                            a.btn.btn-info.btn-sm(onclick="showReadingPump()" style="margin-right: 5px;") Add New
+                                            a.btn.btn-success.btn-sm(onclick="addAllPumps()") Add All Pumps
                     else
                         div.row.bg-warning
                             pre.text-danger= `Note: Pumps data is empty at backend.`
@@ -474,7 +475,7 @@ block content
                                                 span Date:&nbsp;
                                                 span(id='valDate-cashierDate')
                                             div.col-3
-                                                span Cash Given:&nbsp;
+                                                span Opening Cash Given:&nbsp;
                                                 span(id='val-cashGiven')
                                             div.col-3
                                                 span Excess/Shortage:&nbsp;
@@ -625,5 +626,6 @@ block content
         var vehicleData = !{JSON.stringify(vehicleData || {})};        
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
-    script(src='/javascripts/shift-products.js')    
+        window.allowSecondaryPump = !{allowSecondaryPump};
+    script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
 

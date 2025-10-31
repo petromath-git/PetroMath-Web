@@ -222,5 +222,5 @@ block content
         const pumpTankMappings = !{JSON.stringify(pumpTankMappings)};
         const userLocationCode = '#{user.location_code}';
 
-    script(src="/javascripts/pump-master.js")
+    script(src=`/javascripts/pump-master.js?v=${CACHE_BUST}`)
     

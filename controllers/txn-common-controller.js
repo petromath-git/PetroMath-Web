@@ -61,7 +61,7 @@ const getNamesPromise = (closerId, cashierId) => {
 const pumpDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         let pumps = [];
-        PumpDao.findPumps(locationCode)
+        PumpDao.findActivePumps(locationCode)
             .then(data => {
                 data.forEach((pump) => {
                     pumps.push({

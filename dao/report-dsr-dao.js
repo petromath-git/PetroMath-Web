@@ -389,6 +389,12 @@ const result = await db.sequelize.query(
                                               where 1=1
                                               and   tc.product_id = mp.product_id
                                               and   tc.closing_id in (:closing_id)
+                                              AND mp.product_name NOT IN (
+                                                    SELECT DISTINCT mp2.product_code
+                                                    FROM t_reading tr
+                                                    JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
+                                                    WHERE tr.closing_id = tc.closing_id
+                                                )
                                               group by mp.product_name,tc.price,discount
                                               union all
                                               SELECT mp.product_name product_name,

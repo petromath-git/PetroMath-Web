@@ -30,6 +30,12 @@ module.exports = {
         'N' // default value if not configured
          );
 
+         const allowSecondaryPump = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'ALLOW_SECONDARY_PUMP',
+            'true' // default value
+        );
+
 
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
@@ -58,6 +64,7 @@ module.exports = {
                         currentDate: utils.currentDate(),
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                         isOpeningReadonly: openingReadonlyConfig === 'Y',
+                        allowSecondaryPump: allowSecondaryPump === 'true',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,

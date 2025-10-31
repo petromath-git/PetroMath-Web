@@ -25,7 +25,7 @@ module.exports = {
 
             res.render('oil-company-statement', {
                 user: req.user,
-                title: 'Oil Company Statement',
+                title: 'SAP Statement',
                 config: config.APP_CONFIGS,
                 fromDate: fromDate,
                 toDate: toDate,

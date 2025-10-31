@@ -285,4 +285,4 @@ block content
         const billData = !{JSON.stringify(bill)};
         billsVehicleData = !{JSON.stringify(vehicleData)};
 
-    script(src="/javascripts/bills.js")
+    script(src=`/javascripts/bills.js?v=${CACHE_BUST}`)

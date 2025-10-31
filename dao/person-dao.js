@@ -101,19 +101,20 @@ getUserAccessibleLocationsWithNames: async (personId) => {
         
         // If SuperUser, return all locations
         if (userCheck.length > 0 && userCheck[0].Role === 'SuperUser') {
-            const allLocations = await db.sequelize.query(`
-                SELECT 
-                    'SUPERUSER' as source,
-                    location_code,
-                    'SuperUser' as role,
-                    'Full Access' as access_type,
-                    location_name,
-                    (SELECT Person_Name FROM m_persons WHERE Person_id = :personId) as person_name,
-                    :personId as person_id
-                FROM m_location
-                WHERE start_date <= CURDATE()
-                ORDER BY location_name
-            `, {
+        const allLocations = await db.sequelize.query(`
+            SELECT 
+                'SUPERUSER' as source,
+                location_code,
+                'SuperUser' as role,
+                'Full Access' as access_type,
+                location_name,
+                (SELECT Person_Name FROM m_persons WHERE Person_id = :personId) as person_name,
+                :personId as person_id
+            FROM m_location
+            WHERE start_date <= CURDATE()
+            AND effective_end_date > CURDATE()
+            ORDER BY location_name
+        `, {
                 replacements: { personId: personId },
                 type: db.sequelize.QueryTypes.SELECT
             });

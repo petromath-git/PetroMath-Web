@@ -20,6 +20,36 @@ module.exports = {
             return Pump.findAll();
         }
     },
+    findActivePumps: (locationCode) => {
+            if (locationCode) {
+                return Pump.findAll({
+                    where: { 
+                        [Op.and]: [
+                            { 'location_code': locationCode }, 
+                            { 'effective_start_date': { [Op.lte]: Sequelize.fn('CURDATE') } },
+                            { 'effective_end_date': { [Op.gte]: Sequelize.fn('CURDATE') } }
+                        ] 
+                    },
+                    order: [
+                        ['display_order', 'ASC'],
+                        ['pump_code', 'ASC']
+                    ]
+                });
+            } else {
+                return Pump.findAll({
+                    where: { 
+                        [Op.and]: [
+                            { 'effective_start_date': { [Op.lte]: Sequelize.fn('CURDATE') } },
+                            { 'effective_end_date': { [Op.gte]: Sequelize.fn('CURDATE') } }
+                        ] 
+                    },
+                    order: [
+                        ['display_order', 'ASC'],
+                        ['pump_code', 'ASC']
+                    ]
+                });
+            }
+        },
 
     findPumpCodes: (pumpIds) => {
         return Pump.findAll({
