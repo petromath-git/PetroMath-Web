@@ -2,10 +2,11 @@ mixin listProductNames(pumpProductValues, prefix)
     each val in pumpProductValues
         div.col(style=`background-color: rgb(${val.rgbColor}); margin: 0 10px;`)
             label= `${val.productAlias} Rate`
-            input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" step=0.01)
+            input.form-control(type='number', id=prefix + `${val.textName}`, name=prefix + `${val.textName}`, value= val.productPrice, min="0" max="999" step=0.01 required)
+            div.invalid-feedback Price is required.
             div &nbsp;
         
-        input.form-control(type='hidden', id=prefix+`${val.productId}`, name=prefix+`${val.productId}`, value= val.productPrice)
+        input.form-control(type='hidden', id=prefix+`${val.productId}`, name=prefix+`${val.productId}`, value= val.productPrice )
 
 
 //- Add new page: Dom elements to enter prices for products
@@ -111,7 +112,7 @@ mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
             else
                 span(id=pumpUniqueName + `_sub_header_price`) [price]
             span(align="right")
-                button.close(type="button" aria-label="Close" onclick='hideAndDeleteReadingPump(\'' + pumpUniqueName + `_sub_header` + '\')')
+                button.close(type="button" aria-label="Close" onclick='hideAndDeleteReadingPump(\'' + pumpUniqueName + `_sub_header` + '\')' tabindex="-1")
                     span(aria-hidden="true") &times;
         div.table-responsive(id=pumpUniqueName+`_readings`)
             table.table.table-sm(style=`background-color: rgb(${rgbColor})`)
@@ -125,7 +126,7 @@ mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
                         td
                             label(for=pumpUniqueName + `pump_opening`) Opening
                         td
-                            input.form-control(type='number', name=pumpUniqueName + `pump_opening`, id=pumpUniqueName + `pump_opening`, value= pumpOpening, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")' readonly= isOpeningReadonly ? true : false)
+                            input.form-control(type='number', name=pumpUniqueName + `pump_opening`, id=pumpUniqueName + `pump_opening`, value= pumpOpening, min="0" step=0.001 onChange=`calculatePumpSale(\`${pumpUniqueName}\`)` oninput='validity.valid||(value="0")' readonly= isOpeningReadonly ? 'readonly' : undefined tabindex= isOpeningReadonly ? '-1' : undefined)
                     tr
                         td
                             label(for=pumpUniqueName + `pump_testing`) Testing
@@ -135,12 +136,12 @@ mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
                         td
                             label(for=pumpUniqueName+`pump_sale`) Sale
                         td
-                            input.form-control(type='text' name=pumpUniqueName+`pump_sale` id=pumpUniqueName+`pump_sale` readonly value=0)
+                            input.form-control(type='text' name=pumpUniqueName+`pump_sale` id=pumpUniqueName+`pump_sale` readonly value=0 tabindex="-1")
                     tr
                         td
                             span Amount
                         td
-                            input.form-control(type='text' name=pumpUniqueName+`pump_amount` id=pumpUniqueName+`pump_amount` readonly value=0)
+                            input.form-control(type='text' name=pumpUniqueName+`pump_amount` id=pumpUniqueName+`pump_amount` readonly value=0 tabindex="-1")
                             
 //- Add new page: Dom elements to enter prices for 2T products
 mixin list2TProductNames(val)

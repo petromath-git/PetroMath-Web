@@ -76,8 +76,44 @@ function calculateDigitalSalesAndTrackMenu(obj) {
     }, 100);
 }
 
+// Validate closing tab prices before moving to next tab
+function validateClosingTabPrices() {
+    const priceInputs = document.querySelectorAll('#gasoline-prices input[type="number"]:not([type="hidden"])');
+    let isValid = true;
+    let emptyFields = [];
+    
+    priceInputs.forEach(input => {
+        const value = parseFloat(input.value);
+        if (!input.value || isNaN(value) || value <= 0) {
+            isValid = false;
+            input.classList.add('is-invalid');
+            // Get the product name from the label
+            const label = input.closest('.col').querySelector('label');
+            if (label) {
+                emptyFields.push(label.textContent.replace(' Rate', ''));
+            }
+        } else {
+            input.classList.remove('is-invalid');
+        }
+    });
+    
+    if (!isValid) {
+        showSnackbar(`Please enter valid prices for: ${emptyFields.join(', ')}`, 'warning', 4000);
+    }
+    
+    return isValid;
+}
+
 
 function trackMenuWithName(tabName) {
+    // If moving away from closing tab, validate prices first
+    const activeTab = document.querySelector('.nav-link.active');
+    if (activeTab && activeTab.id === 'closing_tab') {
+        if (!validateClosingTabPrices()) {
+            return; // Don't allow navigation if validation fails
+        }
+    }
+    
     trackMenu(document.getElementById(tabName));
 }
 

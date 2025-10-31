@@ -63,26 +63,65 @@ function populateDefaultExpenseAmt(obj) {
     calculateExpenseTotal();
 }
 
-// Add new flow: Calculate sale to each pump instance reading.
 function calculatePumpSale(uniquePumpId) {
     const pumpClosing = document.getElementById(uniquePumpId + 'pump_closing');
     const pumpOpening = document.getElementById(uniquePumpId + 'pump_opening');
     const pumpTesting = document.getElementById(uniquePumpId + 'pump_testing');
-    if (parseFloat(pumpClosing.value) > parseFloat(pumpOpening.value)) {
-        const pricePerLitre = parseFloat(document.getElementById(uniquePumpId + '_price').value);
-        const sale = pumpClosing.value - pumpOpening.value - pumpTesting.value;
-        if (sale >= 0) {
-            document.getElementById(uniquePumpId + 'pump_sale').value = formatCurrencies(sale, toFixedValue);
-            document.getElementById(uniquePumpId + 'pump_amount').value = formatCurrencies(sale * pricePerLitre, toFixedValue);
-        } else {
-            document.getElementById(uniquePumpId + 'pump_sale').value = 0;
-            document.getElementById(uniquePumpId + 'pump_amount').value = 0;
-        }
+    
+    if (!pumpClosing || !pumpOpening || !pumpTesting) {
+        return;
+    }
+    
+    const closing = parseFloat(pumpClosing.value) || 0;
+    const opening = parseFloat(pumpOpening.value) || 0;
+    const testing = parseFloat(pumpTesting.value) || 0;
+    const pricePerLitre = parseFloat(document.getElementById(uniquePumpId + '_price').value) || 0;
+    
+    // Remove any existing warnings
+    removeReadingValidationWarning(uniquePumpId);
+    
+    // Calculate sales
+    const grossSales = closing - opening;
+    const netSales = grossSales - testing;
+    
+    // Validation 1: Check if closing < opening (INVALID)
+    if (closing > 0 && closing < opening) {
+        document.getElementById(uniquePumpId + 'pump_sale').value = 0;
+        document.getElementById(uniquePumpId + 'pump_amount').value = 0;
+        
+        showReadingValidationWarning(
+            uniquePumpId,
+            `Closing reading (${closing.toFixed(3)}) cannot be less than opening reading (${opening.toFixed(3)}). Please correct the readings.`,
+            'danger'
+        );
+        return;
+    }
+    
+    // Validation 2: Check if net sales is negative (INVALID - testing too high)
+    if (closing >= opening && netSales < 0) {
+        document.getElementById(uniquePumpId + 'pump_sale').value = 0;
+        document.getElementById(uniquePumpId + 'pump_amount').value = 0;
+        
+        showReadingValidationWarning(
+            uniquePumpId,
+            `Testing value (${testing.toFixed(3)}) is too high. Gross sales is only ${grossSales.toFixed(3)}. Net sales cannot be negative.`,
+            'danger'
+        );
+        return;
+    }
+    
+    // Valid scenarios: closing >= opening AND netSales >= 0
+    // This includes: closing = opening (pump not operated, sales = 0)
+    if (closing >= opening && netSales >= 0) {
+        document.getElementById(uniquePumpId + 'pump_sale').value = formatCurrencies(netSales, toFixedValue);
+        document.getElementById(uniquePumpId + 'pump_amount').value = formatCurrencies(netSales * pricePerLitre, toFixedValue);
     } else {
+        // Fallback for any edge cases
         document.getElementById(uniquePumpId + 'pump_sale').value = 0;
         document.getElementById(uniquePumpId + 'pump_amount').value = 0;
     }
 }
+
 
 // Add new flow: Hide pump reading and delete from backend
 function hideAndDeleteReadingPump(elementId) {
@@ -176,8 +215,8 @@ function showReadingPump() {
     const pumpName = document.getElementById("reading-pump-name").value;
     const currency = document.getElementById('currency_hiddenValue').value;
     
-    if (!document.getElementById("reading-price").value || document.getElementById("reading-price").value <= 0) {
-        alert(`Product Price cannot be less than 0 for ${pumpName}`);
+    if (!document.getElementById("reading-price").value || document.getElementById("reading-price").value <= 0) {        
+        showSnackbar(`Product Price cannot be less than 0 for ${pumpName}`, 'warning', 3000);
         return;
     }
     
@@ -193,19 +232,19 @@ function showReadingPump() {
     if (fPumpIsVisible) {
         // If secondary pumps are NOT allowed, show error
         if (!window.allowSecondaryPump) {
-            alert(`${pumpName} is already added`);
+            showSnackbar(`${pumpName} is already added`, 'warning', 3000);
             return;
         }
         // If secondary pumps ARE allowed, check second slot
         if (sPumpIsVisible) {
-            alert(`${pumpName} is already added twice (maximum allowed)`);
+            showSnackbar(`${pumpName} is already added twice (maximum allowed)`, 'warning', 3000);
             return;
         }
     }
     
     // Check if already added in second slot only
     if (sPumpIsVisible && !fPumpIsVisible) {
-        alert(`${pumpName} is already added`);
+        showSnackbar(`${pumpName} is already added`, 'warning', 3000);
         return;
     }
     
@@ -287,12 +326,17 @@ function addAllPumps() {
         }
     });
     
-    // Show result message
-    let message = `Added ${addedCount} pump(s) successfully.`;
-    if (skippedPumps.length > 0) {
-        message += `\n\nSkipped pumps:\n${skippedPumps.join('\n')}`;
-    }
-    alert(message);
+   // Show result message using snackbar
+        if (addedCount > 0) {
+            showSnackbar(`Added ${addedCount} pump(s) successfully`, 'success', 3000);
+        }
+
+        // If there are skipped pumps, show warning
+        if (skippedPumps.length > 0) {
+            setTimeout(() => {
+                showSnackbar(`Skipped ${skippedPumps.length} pump(s): ${skippedPumps.join(', ')}`, 'warning', 5000);
+            }, 3500); // Show after success message
+        }
 }
 
 
@@ -989,6 +1033,26 @@ function saveReadings() {
         const user = JSON.parse(document.getElementById("user").value);
         const closeReadingTime = document.getElementById('closeReadingTime').value;
         
+        // STEP 1: Validate all pump readings before proceeding
+        const validationResult = validateAllPumpReadings();
+        
+        if (!validationResult.allValid) {
+            // Show all validation warnings
+            validationResult.invalidPumps.forEach(pump => {
+                showReadingValidationWarning(pump.pumpId, pump.message, 'danger');
+            });
+            
+            // Create summary message
+            let errorSummary = 'Cannot save readings. Please fix the following errors:\n\n';
+            validationResult.invalidPumps.forEach(pump => {
+                errorSummary += `• ${pump.pumpCode}: ${pump.message}\n`;
+            });
+            
+            alert(errorSummary);
+            resolve(false);
+            return;
+        }
+        
         // Check if any readings have actually been modified
         let hasActualReadings = false;
         pumps.forEach((pump) => {
@@ -1020,8 +1084,7 @@ function saveReadings() {
             return;
         }
         
-      
-        
+        // If all validations pass, proceed with save
         postAjaxNew('new-readings', newReadings, updateReadings, tabToActivate, currentDiv, newHiddenFieldsArr, 'reading_id')
             .then((data) => {
                 if (data && closeReadingTime) {
@@ -1042,7 +1105,6 @@ function saveReadings() {
         }
     });
 }
-
 
 function updateClosingWithReadingTime(closeReadingTime, user) {
     return new Promise((resolve, reject) => {
@@ -2529,3 +2591,157 @@ function loadVehiclesDynamically(creditListId, vehicleSelectId) {
         }
     });
 }
+
+
+// ========== READING VALIDATION FUNCTIONS ==========
+
+/**
+ * Shows inline validation warning for a specific pump
+ */
+function showReadingValidationWarning(pumpId, message, type = 'danger') {
+    removeReadingValidationWarning(pumpId);
+    
+    const warningDiv = document.createElement('div');
+    warningDiv.id = pumpId + '_validation_warning';
+    warningDiv.className = `alert alert-${type} alert-dismissible fade show mt-2 mb-2`;
+    warningDiv.style.fontSize = '0.85rem';
+    warningDiv.style.padding = '0.5rem';
+    warningDiv.innerHTML = `
+        <i class="bi bi-exclamation-triangle-fill"></i> ${message}
+        <button type="button" class="close" onclick="removeReadingValidationWarning('${pumpId}')">
+            <span>&times;</span>
+        </button>
+    `;
+    
+    const readingsDiv = document.getElementById(pumpId + '_readings');
+    if (readingsDiv) {
+        readingsDiv.parentNode.insertBefore(warningDiv, readingsDiv.nextSibling);
+    }
+}
+
+/**
+ * Removes validation warning for a specific pump
+ */
+function removeReadingValidationWarning(pumpId) {
+    const existingWarning = document.getElementById(pumpId + '_validation_warning');
+    if (existingWarning) {
+        existingWarning.remove();
+    }
+}
+
+/**
+ * Validates a single pump's readings
+ * Returns: {isValid: boolean, message: string, type: string}
+ */
+function validatePumpReading(pumpId) {
+    const closingElement = document.getElementById(pumpId + 'pump_closing');
+    const openingElement = document.getElementById(pumpId + 'pump_opening');
+    const testingElement = document.getElementById(pumpId + 'pump_testing');
+    
+    if (!closingElement || !openingElement || !testingElement) {
+        return { isValid: true, message: '' };
+    }
+    
+    const closing = parseFloat(closingElement.value) || 0;
+    const opening = parseFloat(openingElement.value) || 0;
+    const testing = parseFloat(testingElement.value) || 0;
+    
+    // Skip validation if closing is 0 (pump not added to shift)
+    if (closing === 0) {
+        return { isValid: true, message: '' };
+    }
+    
+    // Validation 1: Closing must be >= Opening (closing can equal opening for non-operated pumps)
+    if (closing < opening) {
+        return {
+            isValid: false,
+            message: `Closing reading (${closing.toFixed(3)}) cannot be less than opening reading (${opening.toFixed(3)}). Please correct.`,
+            type: 'danger'
+        };
+    }
+    
+    // Validation 2: (Closing - Opening - Testing) must be >= 0
+    const netSales = closing - opening - testing;
+    if (netSales < 0) {
+        const grossSales = closing - opening;
+        return {
+            isValid: false,
+            message: `Testing value (${testing.toFixed(3)}) is too high. Gross sales is only ${grossSales.toFixed(3)}. Net sales cannot be negative.`,
+            type: 'danger'
+        };
+    }
+    
+    return { isValid: true, message: '' };
+}
+
+/**
+ * Validates all pump readings on the page
+ * Returns: {allValid: boolean, invalidPumps: Array}
+ */
+function validateAllPumpReadings() {
+    const readingTag = '_readings';
+    const currentDiv = 'new_readings';
+    const pumps = document.getElementById(currentDiv).querySelectorAll('[id$=' + readingTag + ']:not([type="hidden"])');
+    
+    let allValid = true;
+    const invalidPumps = [];
+    
+    pumps.forEach((pump) => {
+        const pumpId = pump.id.replace(readingTag, '');
+        const headerObj = document.getElementById(pumpId + '_sub_header');
+        
+        // Only validate visible pumps
+        if (headerObj && headerObj.className.includes('d-md-block')) {
+            const validation = validatePumpReading(pumpId);
+            
+            if (!validation.isValid) {
+                allValid = false;
+                const pumpCodeElement = document.getElementById(pumpId + '_sub_header').querySelector('span');
+                invalidPumps.push({
+                    pumpId: pumpId,
+                    pumpCode: pumpCodeElement ? pumpCodeElement.textContent : 'Unknown',
+                    message: validation.message
+                });
+            }
+        }
+    });
+    
+    return { allValid, invalidPumps };
+}
+
+
+// ========== SNACKBAR UTILITY FUNCTIONS ==========
+
+/**
+ * Shows a snackbar notification
+ * @param {string} message - Message to display
+ * @param {string} type - Type: 'success', 'danger', 'warning', 'info'
+ * @param {number} duration - Duration in milliseconds (default 3000)
+ */
+function showSnackbar(message, type = 'success', duration = 3000) {
+    const snackbar = document.getElementById('snackbar');
+    
+    // Set message and styling
+    snackbar.textContent = message;
+    snackbar.className = 'show';
+    
+    // Add color styling based on type
+    if (type === 'success') {
+        snackbar.style.backgroundColor = '#28a745';
+    } else if (type === 'danger' || type === 'error') {
+        snackbar.style.backgroundColor = '#dc3545';
+    } else if (type === 'warning') {
+        snackbar.style.backgroundColor = '#ffc107';
+        snackbar.style.color = '#000';
+    } else if (type === 'info') {
+        snackbar.style.backgroundColor = '#17a2b8';
+    }
+    
+    // Auto-hide after duration
+    setTimeout(() => {
+        snackbar.className = snackbar.className.replace('show', '');
+        snackbar.style.color = '#fff'; // Reset color
+    }, duration);
+}
+
+

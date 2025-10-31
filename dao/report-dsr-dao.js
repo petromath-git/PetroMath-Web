@@ -481,7 +481,7 @@ return result;
                                           ttank_id = tts.ttank_id) invoice_amount,
                                   DATE_FORMAT(tts.decant_date, '%d-%m-%Y') decant_date,
                                   tts.decant_time,
-                                  tts.truck_number,
+                                  coalesce(tts.truck_number,'-') truck_number,
                                   tts.location_code,
                                   tts.odometer_reading,
                                   (SELECT 

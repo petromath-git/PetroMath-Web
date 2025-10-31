@@ -122,17 +122,56 @@ module.exports = {
 
 
     saveReadingData: (req, res, next) => {
-        const readingData = req.body;
-        if (readingData && readingData[0] && readingData[0].closing_id) {
-            saveController.txnWriteReadingPromise(readingData).then((result) => {
-                if (!result.error) {
-                    res.status(200).send({message: 'Saved reading data successfully.', rowsData: result});
-                } else {
-                    res.status(500).send({error: result.error});
-                }
+    const readingData = req.body;
+    
+    if (readingData && readingData[0] && readingData[0].closing_id) {
+        // Validate all readings before saving
+        const validationErrors = [];
+        
+        readingData.forEach((reading, index) => {
+            const closing = parseFloat(reading.closing_reading) || 0;
+            const opening = parseFloat(reading.opening_reading) || 0;
+            const testing = parseFloat(reading.testing) || 0;
+            const pumpId = reading.pump_id;
+            
+            // Validation 2: Closing must be >= Opening
+            if (closing < opening) {
+                validationErrors.push({
+                    pumpId: pumpId,
+                    error: `Pump ${pumpId}: Closing reading (${closing}) cannot be less than opening reading (${opening})`
+                });
+            }
+            
+            // Validation 3: Net sales (closing - opening - testing) must be >= 0
+            const netSales = closing - opening - testing;
+            if (netSales < 0) {
+                const grossSales = closing - opening;
+                validationErrors.push({
+                    pumpId: pumpId,
+                    error: `Pump ${pumpId}: Testing value (${testing}) is too high. Gross sales is only ${grossSales}. Net sales cannot be negative.`
+                });
+            }
+        });
+        
+        // If validation errors exist, return 400 Bad Request
+        if (validationErrors.length > 0) {
+            return res.status(400).send({
+                error: 'Reading validation failed',
+                validationErrors: validationErrors,
+                message: validationErrors.map(e => e.error).join('\n')
             });
         }
-    },
+        
+        // If validation passes, proceed with save
+        saveController.txnWriteReadingPromise(readingData).then((result) => {
+            if (!result.error) {
+                res.status(200).send({message: 'Saved reading data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    }
+},
 
     save2TSalesData: (req, res, next) => {
         const saleData = req.body;
