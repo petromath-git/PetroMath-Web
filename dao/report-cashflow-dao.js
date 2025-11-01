@@ -79,25 +79,23 @@ module.exports = {
    },
    getBankTransaction: async (locationCode, cashflowDate) => {
     const result = await db.sequelize.query(`SELECT 
-                                            COALESCE(mb.account_nickname,account_number) bank_account,
-                                            DATE_FORMAT(tbt.trans_date, '%d-%b-%Y') AS "Transaction Date",
-                                            mlk.Description,
-                                            COALESCE(tbt.credit_amount, 0) AS "Credit",
-                                            COALESCE(tbt.debit_amount, 0) AS "Debit",
-                                            tbt.remarks                                            
-                                            FROM 
-                                            m_bank mb,
-                                            t_bank_transaction tbt,
-                                            m_location ml,
-                                            m_lookup mlk
-                                            WHERE
-                                            tbt.bank_id = mb.bank_id
-                                            AND ml.location_id = mb.location_id
-                                            AND ml.location_code = :locationCode
-                                            AND DATE(tbt.closed_date) = :cashflowDate                                           
-                                            AND mlk.lookup_type = 'Bank_Transaction_Type'
-                                            AND mlk.lookup_id = tbt.transaction_type                                            
-                                            ORDER BY  tbt.t_bank_id,trans_date`,
+                                              COALESCE(mb.account_nickname, mb.account_number) AS bank_account,
+                                              DATE_FORMAT(tbt.trans_date, '%d-%b-%Y') AS "Transaction Date",
+                                              tbt.ledger_name AS "Ledger Name",
+                                              COALESCE(tbt.credit_amount, 0) AS "Credit",
+                                              COALESCE(tbt.debit_amount, 0) AS "Debit",
+                                              tbt.remarks
+                                          FROM 
+                                              m_bank mb,
+                                              t_bank_transaction tbt,
+                                              m_location ml
+                                          WHERE
+                                              tbt.bank_id = mb.bank_id
+                                              AND ml.location_id = mb.location_id
+                                              AND ml.location_code = :locationCode
+                                              AND DATE(tbt.closed_date) = :cashflowDate
+                                          ORDER BY 
+                                              tbt.t_bank_id, tbt.trans_date;`,
         {
           replacements: { locationCode: locationCode, cashflowDate: cashflowDate },
           type: Sequelize.QueryTypes.SELECT

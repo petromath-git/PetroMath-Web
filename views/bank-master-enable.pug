@@ -1,0 +1,182 @@
+extends layout
+
+block content
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button", data-dismiss="alert", aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header
+    .enable-banks-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col
+                    h4.mb-0.text-warning Disabled Banks
+                .col-auto
+                    button.btn.btn-primary.btn-sm(type="button", onclick="window.location.href='/bank-master'")
+                        i.bi.bi-arrow-left
+                        span.ms-1 Back to Active Banks
+
+    // Disabled banks content
+    .enable-banks-container
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            if banks && banks.length > 0
+                .table-responsive
+                    table.table.table-hover.table-striped
+                        thead.thead-dark
+                            tr
+                                th #
+                                th Bank Name
+                                th Branch
+                                th Account Number
+                                th IFSC Code
+                                th Account Nickname
+                                th Type
+                                th Actions
+                        tbody
+                            each bank, index in banks
+                                tr
+                                    td= index + 1
+                                    td= bank.bank_name
+                                    td= bank.bank_branch
+                                    td= bank.account_number
+                                    td= bank.ifsc_code
+                                    td= bank.account_nickname || '-'
+                                    td= bank.type || '-'
+                                    td
+                                        button.btn.btn-success.btn-sm(type="button", onclick=`enableBank(${bank.bank_id})`)
+                                            i.bi.bi-check-circle
+                                            span.ms-1 Enable
+            else
+                .alert.alert-info.text-center
+                    i.bi.bi-info-circle
+                    |  All banks are currently active.
+        
+        // Mobile cards view
+        .mobile-cards-view.d-block.d-lg-none
+            if banks && banks.length > 0
+                each bank in banks
+                    .card.disabled-bank-card.mb-3
+                        .card-header
+                            .d-flex.justify-content-between.align-items-center
+                                strong= bank.bank_name
+                                button.btn.btn-success.btn-sm(type="button", onclick=`enableBank(${bank.bank_id})`)
+                                    i.bi.bi-check-circle
+                                    span.ms-1 Enable
+                        .card-body.p-3
+                            .row.g-2
+                                .col-6
+                                    .bank-detail
+                                        small.text-muted Branch
+                                        div.fw-bold= bank.bank_branch
+                                .col-6
+                                    .bank-detail
+                                        small.text-muted Account Number
+                                        div.fw-bold= bank.account_number
+                                .col-12
+                                    .bank-detail
+                                        small.text-muted IFSC Code
+                                        div.fw-bold= bank.ifsc_code
+                                if bank.account_nickname
+                                    .col-12
+                                        .bank-detail
+                                            small.text-muted Nickname
+                                            div= bank.account_nickname
+                                if bank.type
+                                    .col-12
+                                        .bank-detail
+                                            small.text-muted Type
+                                            div= bank.type
+            else
+                .alert.alert-info.text-center
+                    i.bi.bi-info-circle
+                    br
+                    |  All banks are currently active.
+
+    // CSS Styles
+    style.
+        .enable-banks-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .enable-banks-container {
+            padding-top: 15px;
+        }
+        
+        @media (min-width: 992px) {
+            .enable-banks-header-sticky {
+                margin-left: 260px;
+            }
+        }
+        
+        .disabled-bank-card {
+            border-radius: 12px;
+            border: 2px solid #ffc107;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .disabled-bank-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .disabled-bank-card .card-header {
+            border-radius: 12px 12px 0 0;
+            background: linear-gradient(45deg, #ffc107, #ff9800);
+            color: white;
+        }
+        
+        .bank-detail {
+            margin-bottom: 8px;
+        }
+        
+        .bank-detail small {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+    // JavaScript
+    script.
+        function enableBank(bankId) {
+            if (confirm('Are you sure you want to enable this bank?')) {
+                fetch(`/bank-master/enable/${bankId}`, {
+                    method: 'PUT'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Bank enabled successfully', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showMessage(data.error || 'Error enabling bank', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage('Error enabling bank', 'danger');
+                });
+            }
+        }
+        
+        function showMessage(message, type) {
+            const alert = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            messageText.textContent = message;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
