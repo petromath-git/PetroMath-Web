@@ -156,7 +156,6 @@ const gstsummaryreportsController = require("./controllers/reports-gst-summary-c
 const digitalReconreportsController = require("./controllers/reports-digital-recon-controller");
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
-const bankAccountController = require("./controllers/bankaccount-mgmt-controller");
 const dashBoardController = require("./controllers/dashboard-controller");
 const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
@@ -206,6 +205,7 @@ const cashflowDetailedRoutes = require('./routes/cashflow-detailed-routes');
 const creditReceiptsRoutes = require('./routes/credit-receipts-routes');
 const personLocationRoutes = require('./routes/person-location-routes');
 const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes');
+const bankStatementRoutes = require('./routes/bank-statement-routes');
 
 
 
@@ -357,7 +357,8 @@ app.use('/api', apiRoutes);
 app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
 app.use('/creditreceipts', creditReceiptsRoutes);
 app.use('/assign-person-locations', personLocationRoutes);
-app.use('/oil-company-statement', oilCompanyStatementRoutes);  
+app.use('/oil-company-statement', oilCompanyStatementRoutes); 
+app.use('/bank-statement', bankStatementRoutes); 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
@@ -1126,21 +1127,7 @@ app.post('/tally/export-range', isLoginEnsured, function (req, res) {
     utilitiesController.getTallyExportRange(req, res);
 });
 
-app.get('/bank-transaction', isLoginEnsured, function (req, res) {
-    bankAccountController.getAccountData(req, res);   // response returned inside controller
-});
 
-app.post('/bank-transaction', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    bankAccountController.saveTransactionData(req, res, next);  // response returned inside controller
-});
-
-app.delete('/delete-banktransaction', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    bankAccountController.deleteTransaction(req, res, next);
-});
-
-app.get('/account-type', isLoginEnsured, function (req, res) {
-    bankAccountController.getAccountingType(req, res);    // response returned inside controller
-});
 
 app.get('/charts', isLoginEnsured, function (req, res) {
     res.render('charts', { user: req.user, location: req.user.location_code });    // response returned inside controller

@@ -9,7 +9,12 @@ const { Sequelize, Op } = require("sequelize");
 
 module.exports = {
     findCashflow: (locationCode, cashflowId) => {
-        return CashFlowClosing.findByPk(cashflowId);
+        return CashFlowClosing.findOne({
+            where: { 
+                cashflow_id: cashflowId,
+                location_code: locationCode 
+            }
+        });
     },
     findCashflowClosings: (locationCode, fromDate, toDate) => {
         return CashFlowClosing.findAll({
