@@ -10,13 +10,13 @@ html(lang='en')
                 size: A6;
                 margin: 3mm;
             }
-            
+
             * {
                 margin: 0;
                 padding: 0;
                 box-sizing: border-box;
             }
-            
+
             body {
                 font-family: 'Courier New', monospace;
                 font-size: 9px;
@@ -25,9 +25,9 @@ html(lang='en')
                 margin: 0 auto;
                 background: white;
                 color: black;
-                font-weight: bold; /* Make all text bold */
+                font-weight: bold;
             }
-            
+
             /* Container for each copy */
             .copy-container {
                 width: 100%;
@@ -36,11 +36,11 @@ html(lang='en')
                 border-bottom: 1px dashed #000;
                 page-break-inside: avoid;
             }
-            
+
             .copy-container:last-child {
                 border-bottom: none;
             }
-            
+
             /* Header Section */
             .header {
                 text-align: center;
@@ -48,45 +48,52 @@ html(lang='en')
                 padding-bottom: 1.5mm;
                 margin-bottom: 1.5mm;
             }
-            
+
             .company-name {
                 font-size: 13px;
                 font-weight: bold;
                 margin-bottom: 1mm;
             }
-            
+
             .company-address {
                 font-size: 7px;
                 margin-bottom: 0.5mm;
                 font-weight: bold;
             }
-            
+
             .company-contact {
                 font-size: 7px;
                 font-weight: bold;
             }
-            
-            /* Bill Info Section - 3 columns */
-            .bill-info {
-                display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 2mm;
-                margin-bottom: 1.5mm;
+
+            /* Compact Bill Info Row */
+            .bill-info-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
                 font-size: 8px;
                 font-weight: bold;
+                margin-bottom: 1.5mm;
+                white-space: nowrap; /* Prevent wrapping */
+                gap: 2mm;
             }
-            
-            .bill-info-col {
-                display: flex;
-                flex-direction: column;
+
+            .bill-info-row span {
+                flex-shrink: 0; /* prevent text compression */
             }
-            
+
             .bill-number {
                 font-size: 9px;
                 font-weight: bold;
+                white-space: nowrap;
             }
-            
-            /* Customer Section - Combined with Cashier */
+
+            .bill-type,
+            .bill-date {
+                white-space: nowrap;
+            }
+
+            /* Customer Section */
             .customer-section {
                 margin-bottom: 1.5mm;
                 font-size: 8px;
@@ -97,8 +104,8 @@ html(lang='en')
                 display: flex;
                 justify-content: space-between;
             }
-            
-            /* Items Table - Optimized for A6 */
+
+            /* Items Table */
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -106,7 +113,7 @@ html(lang='en')
                 font-size: 8px;
                 font-weight: bold;
             }
-            
+
             .items-table th {
                 background: #f0f0f0;
                 padding: 1mm;
@@ -115,7 +122,7 @@ html(lang='en')
                 text-align: center;
                 font-size: 8px;
             }
-            
+
             .items-table td {
                 padding: 1mm;
                 border: 0.2px solid #ccc;
@@ -123,10 +130,10 @@ html(lang='en')
                 font-size: 8px;
                 font-weight: bold;
             }
-            
+
             .text-right { text-align: right; }
             .text-center { text-align: center; }
-            
+
             /* Totals Section */
             .totals-section {
                 border-top: 1px solid #000;
@@ -135,13 +142,13 @@ html(lang='en')
                 font-size: 9px;
                 font-weight: bold;
             }
-            
+
             .total-row {
                 display: flex;
                 justify-content: space-between;
                 margin-bottom: 0.5mm;
             }
-            
+
             .grand-total {
                 font-size: 11px;
                 font-weight: bold;
@@ -151,26 +158,26 @@ html(lang='en')
                 display: flex;
                 justify-content: space-between;
             }
-            
-            /* Footer - Signature lines */
+
+            /* Footer */
             .footer {
                 border-top: 1px solid #000;
                 padding-top: 1mm;
                 margin-top: 1mm;
                 font-weight: bold;
             }
-            
+
             .signature-section {
                 display: flex;
                 justify-content: space-between;
                 margin-top: 2mm;
                 font-size: 7px;
             }
-            
+
             .signature-line {
                 width: 45%;
             }
-            
+
             /* Copy labels */
             .copy-label {
                 text-align: center;
@@ -179,8 +186,8 @@ html(lang='en')
                 margin-bottom: 1mm;
                 color: #666;
             }
-            
-            /* Print-specific settings */
+
+            /* Print settings */
             @media print {
                 body {
                     -webkit-print-color-adjust: exact;
@@ -188,11 +195,10 @@ html(lang='en')
                 }
             }
     body
-        //- FIRST COPY (TOP HALF)
+        //- CUSTOMER COPY
         .copy-container
             .copy-label CUSTOMER COPY
-            
-            //- Header Section
+
             .header
                 .company-name #{bill.location_name || 'Petrol Pump'}
                 .company-address #{bill.location_address || 'Address not available'}
@@ -202,23 +208,20 @@ html(lang='en')
                         span  | 
                     if bill.location_phone
                         span Phone: #{bill.location_phone}
-            
-            //- Bill Information (3 columns)
-            .bill-info
-                .bill-info-col
-                    .bill-number Bill: #{bill.bill_no}
-                .bill-info-col
-                    div Type: #{bill.bill_type}
-                .bill-info-col
-                    div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
-            
-            //- Customer and Cashier Section (same line)
+
+            //- Compact Bill Info Row
+            .bill-info-row
+                span.bill-number Bill: #{bill.bill_no}
+                span.bill-type Type: #{bill.bill_type}
+                span.bill-date Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
+
+            //- Customer Section
             .customer-section
                 if bill.customer_name
                     span Customer: #{bill.customer_name}
                 if bill.vehicle_info
                     span Vehicle: #{bill.vehicle_info}
-            
+
             //- Items Table
             if items && items.length > 0
                 table.items-table
@@ -235,7 +238,7 @@ html(lang='en')
                                 td.text-right= parseFloat(item.qty).toFixed(2)
                                 td.text-right ₹#{parseFloat(item.price).toFixed(2)}
                                 td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
-            
+
             //- Totals Section
             .totals-section
                 if totals
@@ -255,19 +258,17 @@ html(lang='en')
                     .grand-total
                         span GRAND TOTAL:
                         span ₹#{parseFloat(bill.total_amount || 0).toFixed(2)}
-            
-            //- Footer
+
             .footer
                 div Thank you for your business!
                 .signature-section
                     .signature-line Received by: __________
                     .signature-line Cashier: #{bill.cashier_name || '__________'}
 
-        //- SECOND COPY (BOTTOM HALF) - IDENTICAL TO CUSTOMER COPY
+        //- OFFICE COPY
         .copy-container
             .copy-label OFFICE COPY
-            
-            //- Header Section
+
             .header
                 .company-name #{bill.location_name || 'Petrol Pump'}
                 .company-address #{bill.location_address || 'Address not available'}
@@ -277,24 +278,19 @@ html(lang='en')
                         span  | 
                     if bill.location_phone
                         span Phone: #{bill.location_phone}
-            
-            //- Bill Information (3 columns)
-            .bill-info
-                .bill-info-col
-                    .bill-number Bill: #{bill.bill_no}
-                .bill-info-col
-                    div Type: #{bill.bill_type}
-                .bill-info-col
-                    div Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
-            
-            //- Customer and Cashier Section (same line)
+
+            //- Compact Bill Info Row
+            .bill-info-row
+                span.bill-number Bill: #{bill.bill_no}
+                span.bill-type Type: #{bill.bill_type}
+                span.bill-date Date: #{new Date(bill.creation_date).toLocaleDateString('en-IN')}
+
             .customer-section
                 if bill.customer_name
                     span Customer: #{bill.customer_name}
                 if bill.vehicle_info
                     span Vehicle: #{bill.vehicle_info}
-            
-            //- Items Table
+
             if items && items.length > 0
                 table.items-table
                     thead
@@ -310,8 +306,7 @@ html(lang='en')
                                 td.text-right= parseFloat(item.qty).toFixed(2)
                                 td.text-right ₹#{parseFloat(item.price).toFixed(2)}
                                 td.text-right ₹#{parseFloat(item.amount).toFixed(2)}
-            
-            //- Totals Section
+
             .totals-section
                 if totals
                     .total-row
@@ -330,8 +325,7 @@ html(lang='en')
                     .grand-total
                         span GRAND TOTAL:
                         span ₹#{parseFloat(bill.total_amount || 0).toFixed(2)}
-            
-            //- Footer
+
             .footer
                 div Thank you for your business!
                 .signature-section
@@ -345,7 +339,6 @@ html(lang='en')
                     window.print();
                 }, 500);
             };
-            
             window.onafterprint = function() {
                 window.close();
             };
