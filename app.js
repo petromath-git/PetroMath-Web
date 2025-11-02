@@ -206,6 +206,7 @@ const creditReceiptsRoutes = require('./routes/credit-receipts-routes');
 const personLocationRoutes = require('./routes/person-location-routes');
 const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes');
 const bankStatementRoutes = require('./routes/bank-statement-routes');
+const bankMasterRoutes = require('./routes/bank-master-routes');
 
 
 
@@ -359,6 +360,7 @@ app.use('/creditreceipts', creditReceiptsRoutes);
 app.use('/assign-person-locations', personLocationRoutes);
 app.use('/oil-company-statement', oilCompanyStatementRoutes); 
 app.use('/bank-statement', bankStatementRoutes); 
+app.use('/bank-master', bankMasterRoutes);
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
