@@ -42,6 +42,26 @@ module.exports = {
         });
     },
 
+    getLedgerDetails: async (bankId, ledgerName, locationCode) => {
+    const query = `
+        SELECT 
+            external_id,
+            source_type
+        FROM m_bank_allowed_ledgers_v
+        WHERE bank_id = :bankId
+          AND ledger_name = :ledgerName
+          AND (location_code = :locationCode OR location_code IS NULL)
+        LIMIT 1
+    `;
+    
+    const result = await db.sequelize.query(query, {
+        replacements: { bankId, ledgerName, locationCode },
+        type: QueryTypes.SELECT
+    });
+    
+    return result[0] || null;
+},
+
     // Get bank transactions by date range and bank
     getTransactionsByDate: async (locationCode, fromDate, toDate, bankId) => {
         let query = `
@@ -98,25 +118,28 @@ module.exports = {
         return result[0];
     },
 
-    // Save transaction
+ 
+
     saveTransaction: async (transactionData) => {
-        const query = `
-            INSERT INTO t_bank_transaction (
-                trans_date, bank_id, ledger_name,
-                credit_amount, debit_amount, remarks, 
-                transaction_type, accounting_type, created_by
-            ) VALUES (
-                :trans_date, :bank_id, :ledger_name,
-                :credit_amount, :debit_amount, :remarks,
-                :transaction_type, :accounting_type, :created_by
-            )
-        `;
-        
-        return await db.sequelize.query(query, {
-            replacements: transactionData,
-            type: QueryTypes.INSERT
-        });
-    },
+    const query = `
+        INSERT INTO t_bank_transaction (
+            trans_date, bank_id, ledger_name,
+            credit_amount, debit_amount, remarks, 
+            transaction_type, accounting_type, 
+            external_id, external_source, created_by
+        ) VALUES (
+            :trans_date, :bank_id, :ledger_name,
+            :credit_amount, :debit_amount, :remarks,
+            :transaction_type, :accounting_type,
+            :external_id, :external_source, :created_by
+        )
+    `;
+    
+    return await db.sequelize.query(query, {
+        replacements: transactionData,
+        type: QueryTypes.INSERT
+    });
+},
 
     // Get transaction by ID to check if it's closed
     getTransactionById: async (tBankId) => {
