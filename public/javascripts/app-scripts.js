@@ -382,19 +382,7 @@ function creditOrSaleUpdateProductTypePrices(obj, rowNo, cashOrCreditRowPrefix) 
     showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName);
 }
 
-function toggleCreditTypes(obj, rowNo, creditRowPrefix, creditTypes) {
-    creditTypes.forEach((type) => {
-        let creditTypeSelect = document.getElementById(creditRowPrefix + type + '-' + rowNo);
-        if (creditTypeSelect) {
-            if (type === obj.value) {
-                creditTypeSelect.className = "form-control " + showClassName;
-                updateHiddenCreditId(creditTypeSelect, creditRowPrefix, rowNo);
-            } else {
-                creditTypeSelect.className = hideClassName;
-            }
-        }
-    });
-}
+
 
 
 function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, creditTypes) {
@@ -475,16 +463,15 @@ function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, c
 }
 // Note: This function uses the existing updateHiddenCreditId function
 // which updates both companyName_ and companyId_ hidden fields
-// Note: This function uses the existing updateHiddenCreditId function
-// which updates both companyName_ and companyId_ hidden fields
 function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
     let hiddenObj = document.getElementById(creditRowPrefix + 'companyName_' + rowNo);
-    if (hiddenObj) {
+    // Add safety checks: obj exists, has options, selectedIndex is valid, and option exists
+    if (hiddenObj && obj && obj.options && obj.selectedIndex >= 0 && obj.options[obj.selectedIndex]) {
         hiddenObj.value = obj.options[obj.selectedIndex].text;
     }
     hiddenObj = document.getElementById(creditRowPrefix + 'companyId_' + rowNo);
-    if (hiddenObj) {
-        hiddenObj.value = obj.value;
+    if (hiddenObj && obj) {
+        hiddenObj.value = obj.value || '';
     }
 }
 
@@ -1414,9 +1401,10 @@ function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) 
 }
 
 
+
 function getCreditType(creditSaleTag, creditObjRowNum) {
-    const creditTypeObj = document.getElementById(creditSaleTag + 'type-' + creditObjRowNum);
-    return document.getElementById(creditSaleTag + creditTypeObj.value + '-' + creditObjRowNum).value;
+    // Simplified: directly read from the single credit party dropdown
+    return document.getElementById(creditSaleTag + 'creditparty-' + creditObjRowNum).value;
 }
 
 function saveExpensesAndDenoms() {
@@ -2413,35 +2401,40 @@ $(document).ready(function() {
     initializeVehicleSelect2();
 });
 
-// Initialize Select2 for vehicle dropdowns
+
 function initializeVehicleSelect2() {
     $('.select2-vehicle').select2({
         placeholder: 'Search vehicle number...',
         allowClear: true,
         width: '100%',
         minimumInputLength: 0,
-        theme: 'default' // or 'bootstrap4' if you're using Bootstrap 4 theme
+        theme: 'default'
     });
     
-    // Add change event handler for vehicle selection
-    $('.select2-vehicle').on('change', function() {
-        onVehicleSelect(this);
-    });
+    // REMOVED: Vehicle-first auto-population event handler
+    // Users must select credit party first, then vehicles will be available
 }
 
-// Updated function to handle credit selection and load vehicles
-function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
 
+function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
     console.log('updateCreditAndLoadVehicles called with:', {
         creditListId: obj.value,
         creditRowPrefix: creditRowPrefix,
         rowNo: rowNo
     });
 
-    // First update the hidden credit ID
-    updateHiddenCreditId(obj, creditRowPrefix, rowNo);
+    // Update the hidden fields with selected credit party info
+    const hiddenNameObj = document.getElementById(creditRowPrefix + 'companyName_' + rowNo);
+    const hiddenIdObj = document.getElementById(creditRowPrefix + 'companyId_' + rowNo);
     
-    // Then load vehicles for the selected credit party
+    if (hiddenNameObj && obj && obj.options && obj.selectedIndex >= 0 && obj.options[obj.selectedIndex]) {
+        hiddenNameObj.value = obj.options[obj.selectedIndex].text;
+    }
+    if (hiddenIdObj && obj) {
+        hiddenIdObj.value = obj.value || '';
+    }
+    
+    // Load vehicles for the selected credit party
     const creditListId = obj.value;
     const vehicleSelect = document.getElementById(creditRowPrefix + 'vehicle-' + rowNo);
 
@@ -2466,37 +2459,8 @@ function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
     $(vehicleSelect).trigger('change');
 }
 
-// Function to handle vehicle selection and auto-populate credit party
-function onVehicleSelect(vehicleSelect) {
-    const rowNo = $(vehicleSelect).data('row');
-    const selectedVehicleId = vehicleSelect.value;
-    const prefix = 'credit-';
-    
-    if (!selectedVehicleId) return;
-    
-    // Find which credit party this vehicle belongs to
-    let creditListId = null;
-    for (const [creditId, vehicles] of Object.entries(vehicleDataByCredit)) {
-        if (vehicles.some(v => v.vehicleId == selectedVehicleId)) {
-            creditListId = creditId;
-            break;
-        }
-    }
-    
-    if (creditListId) {
-        // Get the current credit type
-        const creditTypeSelect = document.getElementById(prefix + 'type-' + rowNo);
-        const creditType = creditTypeSelect.value;
-        
-        // Set the credit party dropdown
-        const creditPartySelect = document.getElementById(prefix + creditType + '-' + rowNo);
-        if (creditPartySelect) {
-            creditPartySelect.value = creditListId;
-            // Update hidden credit ID
-            updateHiddenCreditId(creditPartySelect, prefix, rowNo);
-        }
-    }
-}
+
+
 
 function showAddedDigitalSalesRow(prefix) {
     showAddedRow(prefix, calculateDigitalSalesTotal);
@@ -2516,13 +2480,11 @@ function initializeNewVehicleSelects() {
     const prefix = 'credit-';
     const userRowsCnt = document.getElementById(prefix + 'table').rows.length;
     
-    // Check each row to find newly visible ones that need Select2 initialization
     for (let i = 0; i < userRowsCnt; i++) {
         const vehicleSelectId = prefix + 'vehicle-' + i;
         const vehicleSelect = document.getElementById(vehicleSelectId);
         
         if (vehicleSelect && !$(vehicleSelect).hasClass('select2-hidden-accessible')) {
-            // This select hasn't been initialized with Select2 yet
             $(vehicleSelect).select2({
                 placeholder: 'Search vehicle number...',
                 allowClear: true,
@@ -2531,10 +2493,7 @@ function initializeNewVehicleSelects() {
                 theme: 'default'
             });
             
-            // Add change event handler
-            $(vehicleSelect).on('change', function() {
-                onVehicleSelect(this);
-            });
+            // REMOVED: Vehicle-first auto-population event handler
         }
     }
 }

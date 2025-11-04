@@ -2,7 +2,7 @@ extends layout
 include mixins/new-closing-mixins
 include mixins/summary-mixins
 
-block content
+block content    
     - var maxCreditsRowCnt = config.maxCreditsRowCnt;
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
@@ -276,6 +276,19 @@ block content
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('cash_sales_tab')") Next &raquo;
                 // ----------------------- New cash sales details ----------------------------
                 div#new_cash_sales(class = cashSalesTabActiveStatus + divDisableClass)
+                    style.
+                            /* Header styling */
+                            #cash-sale-table thead th {
+                                text-align: center;
+                                font-weight: 500;
+                                color: #333;
+                                font-size: 0.95rem;
+                                vertical-align: middle;
+                                padding-top: 8px;
+                                padding-bottom: 8px;
+                                letter-spacing: 0.2px;
+                                white-space: nowrap; /* keeps headers on one line */
+                            }
                     div
                         div.col-16
                             div.table-responsive
@@ -317,6 +330,31 @@ block content
 
                 // ----------------------- New credit sales details ----------------------------
                 div.tab-pane.fade#new_credit_sales(class= divDisableClass)
+                    style.
+                        /* Header styling */
+                        #credit-table thead th {
+                            text-align: center;
+                            font-weight: 500;
+                            color: #333;
+                            font-size: 0.95rem;
+                            vertical-align: middle;
+                            padding-top: 8px;
+                            padding-bottom: 8px;
+                            letter-spacing: 0.2px;
+                            white-space: nowrap; /* keeps headers on one line */
+                        }
+
+                        /* Column width tuning */
+                        #credit-table .col-product   { width: 12%; }
+                        #credit-table .col-bill      { width: 7%; }
+                        #credit-table .col-company   { width: 14%; }
+                        #credit-table .col-vehicle   { width: 10%; }
+                        #credit-table .col-odo       { width: 8%; }
+                        #credit-table .col-price     { width: 7%; }
+                        #credit-table .col-discount  { width: 6%; }  /* small field */
+                        #credit-table .col-qty       { width: 6%; }
+                        #credit-table .col-sale      { width: 10%; } /* extra space for sale */
+                        #credit-table .col-notes     { width: 10%; }
                     div
                         div.col-16
                             div.table-responsive
@@ -325,11 +363,10 @@ block content
                                         thead(class="thead-light")
                                             tr
                                                 th(scope="col") Product
-                                                th(scope="col") Bill #
-                                                th(scope="col") Type
+                                                th(scope="col") Bill #                                                
                                                 th(scope="col") Company
                                                 th(scope="col") Vehicle Number
-                                                th(scope="col") Odometer Reading
+                                                th(scope="col") Odometer
                                                 th(scope="col") Price
                                                 th(scope="col") Price Discount
                                                 th(scope="col") Quantity
@@ -529,8 +566,7 @@ block content
                                                     thead.thead-light
                                                         tr
                                                             th(scope="col") Product
-                                                            th(scope="col") Bill #
-                                                            th(scope="col") Type
+                                                            th(scope="col") Bill #                                                            
                                                             th(scope="col") Company
                                                             th(scope="col") Price
                                                             th(scope="col") Price Discount
