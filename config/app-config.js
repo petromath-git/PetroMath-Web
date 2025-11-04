@@ -165,6 +165,7 @@ module.exports = {
   LUBES_INVOICE_HDR_TABLE: "t_lubes_inv_hdr",
   LUBES_INVOICE_LINES_TABLE: "t_lubes_inv_lines",
   TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
+  PERSON_LOCATION_TABLE: "m_person_location",
 
   // config related to sales
   APP_CONFIGS: {
