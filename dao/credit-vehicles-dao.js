@@ -155,4 +155,34 @@ findByVehicleIds: (vehicleIds) => {
         });
     },
 
+// Find disabled vehicles for a credit party
+findDisabled: (creditlistId) => {
+    const now = new Date();
+    return db.sequelize.query(`
+        SELECT 
+            v.vehicle_id,
+            v.creditlist_id,
+            v.vehicle_number,
+            v.vehicle_type,
+            v.product_id,
+            p.product_name,
+            v.notes,
+            v.created_by,
+            v.updated_by,
+            v.creation_date,
+            v.updation_date,
+            v.effective_start_date,
+            v.effective_end_date
+        FROM m_creditlist_vehicles v
+        LEFT JOIN m_product p ON v.product_id = p.product_id
+        WHERE v.creditlist_id = :creditlistId
+          AND v.effective_end_date IS NOT NULL 
+          AND v.effective_end_date < :now
+        ORDER BY v.vehicle_number
+    `, {
+        replacements: { creditlistId, now },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+},    
+
 };

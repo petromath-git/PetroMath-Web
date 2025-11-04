@@ -285,27 +285,21 @@ mixin addCredits(creditRowNo, rowData)
             input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo type='number' min=1 oninput='validity.valid||(value="1")')
         td
             input(type='hidden' id=prefix +'companyName_'+ creditRowNo, value = rowData.companyName)
-            select.form-control(name=prefix + 'type-' + creditRowNo, id=prefix + 'type-' + creditRowNo, onChange='toggleCreditTypes(this, ' + creditRowNo + ', \'' + prefix + '\', ' + JSON.stringify(config.creditTypes) + ')')
-                if config.creditTypes
-                    each val in config.creditTypes
-                        option(value=`${val}` selected= rowData.creditType === val)= val
-        td
-            - var displayType1Class = 'd-md-none'
-            if rowData.creditType === config.creditTypes[0]
-                - displayType1Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[0] + '-' + creditRowNo id=prefix + config.creditTypes[0] + '-' + creditRowNo, class = displayType1Class, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
-                if creditCompanyValues
-                    each val in creditCompanyValues
-                        if val.card_flag !== 'Y'
-                            option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
-            - var displayType2Class = 'd-md-none'
-            if rowData.creditType === config.creditTypes[1]
-                - displayType2Class = 'd-md-block'
-            select.form-control(name=prefix + config.creditTypes[1] + '-' + creditRowNo id=prefix + config.creditTypes[1] + '-' + creditRowNo, class = displayType2Class, onChange='updateHiddenCreditId(this, \'' + prefix + '\', ' + creditRowNo + ')')
-                if suspenseValues
-                    each val in suspenseValues
-                        if val.card_flag !== 'Y'
-                            option(value=`${val.creditorId}` selected= rowData.creditListId === val.creditorId)= val.creditorName
+            input(type='hidden' id=prefix +'companyId_'+ creditRowNo, value = rowData.creditListId)
+            - var allCreditParties = [];
+            if creditCompanyValues
+                each val in creditCompanyValues
+                    if val.card_flag !== 'Y'
+                        - allCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
+            if suspenseValues
+                each val in suspenseValues
+                    if val.card_flag !== 'Y'
+                        - allCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
+            - allCreditParties.sort((a, b) => a.creditorName.localeCompare(b.creditorName));
+            select.form-control(name=prefix + 'creditparty-' + creditRowNo id=prefix + 'creditparty-' + creditRowNo, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
+                option(value='') Select Credit Party
+                each party in allCreditParties
+                    option(value=`${party.creditorId}` selected= rowData.creditListId === party.creditorId)= party.creditorName
         td
             select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
                 option(value='') Select Vehicle
