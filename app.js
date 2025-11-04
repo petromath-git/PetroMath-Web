@@ -179,7 +179,14 @@ const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
 security.secureApp(app);
-app.use(express.static(path.join(__dirname, 'public')));
+
+
+const compression = require('compression');
+app.use(compression());
+
+
+
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 
 const vehicleRoutes = require('./routes/vehicle-routes'); 
@@ -207,6 +214,7 @@ const personLocationRoutes = require('./routes/person-location-routes');
 const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes');
 const bankStatementRoutes = require('./routes/bank-statement-routes');
 const bankMasterRoutes = require('./routes/bank-master-routes');
+const locationConfigRoutes = require('./routes/location-config-routes');
 
 
 
@@ -357,10 +365,11 @@ app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
 app.use('/creditreceipts', creditReceiptsRoutes);
-app.use('/assign-person-locations', personLocationRoutes);
+app.use('/person-locations', personLocationRoutes);
 app.use('/oil-company-statement', oilCompanyStatementRoutes); 
 app.use('/bank-statement', bankStatementRoutes); 
 app.use('/bank-master', bankMasterRoutes);
+app.use('/location-config', locationConfigRoutes);
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
@@ -767,10 +776,10 @@ app.post('/reports-dsr', isLoginEnsured, function (req, res, next) {
 
 
 
-
-app.get('/new-closing', isLoginEnsured, function (req, res, next) {
-    HomeController.getNewData(req, res, next);  // response returned inside controller
+app.get('/new-closing', [isLoginEnsured, security.hasPermission('CREATE_SHIFT_CLOSING')], function (req, res, next) {
+    HomeController.getNewData(req, res, next);
 });
+
 
 app.post('/new-closing', isLoginEnsured, function (req, res, next) {
     HomeController.saveClosingData(req, res, next);  // response returned inside controller

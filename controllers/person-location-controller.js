@@ -102,7 +102,7 @@ module.exports = {
     assignLocations: async (req, res, next) => {
         try {
             const { person_id, locations } = req.body;
-            const username = req.user.username;
+            const createdBy = req.user.Person_id;
             
             if (!person_id || !locations || locations.length === 0) {
                 return res.status(400).json({
@@ -141,8 +141,8 @@ module.exports = {
                         role: loc.role,
                         effective_start_date: loc.effective_start_date,
                         effective_end_date: loc.effective_end_date,
-                        created_by: username,
-                        updated_by: username
+                        created_by: createdBy,
+                        updated_by: createdBy
                     });
 
                     results.assigned.push(loc.location_code);
@@ -169,24 +169,27 @@ module.exports = {
         }
     },
 
+    
     // DELETE: Remove a location assignment
-    removeAssignment: async (req, res, next) => {
-        try {
-            const personlocId = req.params.personlocId;
-            const username = req.user.username;
+removeAssignment: async (req, res, next) => {
+    try {
+        const personlocId = req.params.personlocId;
+        const updatedBy = req.user.Person_id;
 
-            await personLocationDao.removeAssignment(personlocId, username);
+        await personLocationDao.removeAssignment(personlocId, updatedBy);
 
-            res.json({
-                success: true,
-                message: 'Location assignment removed successfully'
-            });
-        } catch (error) {
-            console.error('Error removing assignment:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to remove assignment: ' + error.message
-            });
-        }
+        res.json({
+            success: true,
+            message: 'Location assignment removed successfully'
+        });
+    } catch (error) {
+        console.error('Error removing assignment:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to remove assignment: ' + error.message
+        });
     }
+}
+
+
 };
