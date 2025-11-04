@@ -179,7 +179,14 @@ const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
 security.secureApp(app);
-app.use(express.static(path.join(__dirname, 'public')));
+
+
+const compression = require('compression');
+app.use(compression());
+
+
+
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 
 const vehicleRoutes = require('./routes/vehicle-routes'); 
