@@ -1,0 +1,641 @@
+extends layout
+
+block content
+    style.
+        /* Location Config Styling */
+        .config-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .config-container {
+            padding: 15px;
+        }
+        
+        /* Desktop vs Mobile views */
+        @media (min-width: 992px) {
+            .desktop-table-view {
+                display: block !important;
+            }
+            .mobile-cards-view {
+                display: none !important;
+            }
+            .config-header-sticky h4 {
+                font-size: 24px;
+            }
+        }
+        
+        @media (max-width: 991.98px) {
+            .desktop-table-view {
+                display: none !important;
+            }
+            .mobile-cards-view {
+                display: block !important;
+            }
+            .config-header-sticky h4 {
+                font-size: 18px;
+            }
+            .config-header-sticky .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+        }
+        
+        /* Config card styling */
+        .config-card {
+            border-radius: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-bottom: 15px;
+        }
+        
+        .config-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        }
+        
+        .config-card.global {
+            border-left: 4px solid #28a745;
+        }
+        
+        .config-card.location-specific {
+            border-left: 4px solid #007bff;
+        }
+        
+        .config-card .card-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            padding: 12px 16px;
+        }
+        
+        .config-detail {
+            margin-bottom: 8px;
+        }
+        
+        .config-detail small {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            color: #6c757d;
+        }
+        
+        /* Table styling */
+        .table-responsive {
+            max-height: calc(100vh - 250px);
+            overflow-y: auto;
+        }
+        
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #343a40;
+        }
+        
+        /* Badge styling */
+        .badge-global {
+            background: #28a745;
+        }
+        
+        .badge-location {
+            background: #007bff;
+        }
+        
+        /* History section */
+        .history-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+        }
+        
+        .history-section .card {
+            opacity: 0.85;
+        }
+        
+        /* Search box styling */
+        #searchInput {
+            border-radius: 0;
+        }
+        
+        #searchInput:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+            border-color: #80bdff;
+        }
+        
+        .input-group-text {
+            background-color: #f8f9fa;
+            border-right: 0;
+        }
+
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header
+    .config-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-center.justify-content-md-between
+                .col-auto.order-2.order-md-1
+                    h4.mb-0.text-primary.text-center.text-md-left Location Configuration
+                .col-auto.order-1.order-md-2.ml-auto
+                    .btn-group
+                        button.btn.btn-success.btn-sm#addConfigBtn(type="button", data-toggle="modal", data-target="#addConfigModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Config
+                            span.d-inline.d-sm-none Add
+                        button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                            i.bi.bi-arrow-clockwise.me-1
+                            span.d-none.d-sm-inline Refresh
+                            span.d-inline.d-sm-none Refresh
+
+    // Main content
+    .config-container
+        // Filters row
+        .row.mb-3
+            .col-12.col-md-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(
+                        type="text",
+                        placeholder="Search by setting name, value, location...",
+                        autocomplete="off"
+                    )
+            if isSuperUser
+                .col-12.col-md-4.mt-2.mt-md-0
+                    select.form-control#locationFilter
+                        option(value="ALL") All Locations
+                        option(value="*") Global Only
+                        each location in locations
+                            option(value=location.location_code, selected=location.location_code === currentFilter)= location.location_name
+
+        // Active Configs Section
+        h5.mb-3
+            i.bi.bi-gear-fill.me-2
+            | Active Configurations
+        
+        // Desktop table view
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive
+                table.table.table-hover.table-striped#config-table
+                    thead.thead-dark.sticky-top
+                        tr
+                            th(scope="col") Location
+                            th(scope="col") Setting Name
+                            th(scope="col") Setting Value
+                            th(scope="col") Effective From
+                            th(scope="col") Effective Until
+                            th(scope="col") Created By
+                            th(scope="col") Actions
+                    tbody
+                        if activeConfigs && activeConfigs.length > 0
+                            each config in activeConfigs
+                                tr
+                                    td
+                                        if config.is_global
+                                            span.badge.badge-global GLOBAL
+                                        else
+                                            span.badge.badge-location= config.location_code
+                                    td
+                                        strong= config.setting_name
+                                    td= config.setting_value
+                                    td= config.effective_start_date_formatted
+                                    td= config.effective_end_date_formatted
+                                    td= config.created_by || 'N/A'
+                                    td
+                                        button.btn.btn-sm.btn-primary.edit-config-btn(
+                                            type="button",
+                                            data-config-id=config.config_id,
+                                            data-toggle="modal",
+                                            data-target="#editConfigModal"
+                                        )
+                                            i.bi.bi-pencil
+                        else
+                            tr
+                                td(colspan="7").text-center.text-muted No active configurations found
+        
+        // Mobile cards view
+        .mobile-cards-view.d-lg-none
+            if activeConfigs && activeConfigs.length > 0
+                each config, index in activeConfigs
+                    .col-12
+                        .card.config-card(class=config.is_global ? 'global' : 'location-specific')
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                .config-info
+                                    strong= config.setting_name
+                                    if config.is_global
+                                        .badge.badge-global.mt-1 GLOBAL
+                                    else
+                                        .badge.badge-location.mt-1= config.location_code
+                                .config-actions
+                                    button.btn.btn-primary.btn-sm.edit-config-btn(
+                                        type="button",
+                                        data-config-id=config.config_id,
+                                        data-toggle="modal",
+                                        data-target="#editConfigModal"
+                                    )
+                                        i.bi.bi-pencil
+                            .card-body.p-3
+                                .row.g-2
+                                    .col-12
+                                        .config-detail
+                                            small Setting Value
+                                            .fw-bold= config.setting_value
+                                    .col-6
+                                        .config-detail
+                                            small Effective From
+                                            div= config.effective_start_date_formatted
+                                    .col-6
+                                        .config-detail
+                                            small Effective Until
+                                            div= config.effective_end_date_formatted
+                                    .col-12
+                                        .config-detail
+                                            small Created By
+                                            div= config.created_by || 'N/A'
+            else
+                .alert.alert-info.text-center No active configurations found
+
+        // History Section
+        .history-section
+            h5.mb-3
+                i.bi.bi-clock-history.me-2
+                | Configuration History
+            
+            // Desktop table view
+            .desktop-table-view.d-none.d-lg-block
+                .table-responsive
+                    table.table.table-hover.table-sm#history-table
+                        thead.thead-light.sticky-top
+                            tr
+                                th(scope="col") Location
+                                th(scope="col") Setting Name
+                                th(scope="col") Setting Value
+                                th(scope="col") Effective From
+                                th(scope="col") Effective Until
+                                th(scope="col") Created By
+                        tbody
+                            if historyConfigs && historyConfigs.length > 0
+                                each config in historyConfigs
+                                    tr
+                                        td
+                                            if config.is_global
+                                                span.badge.badge-secondary GLOBAL
+                                            else
+                                                span.badge.badge-secondary= config.location_code
+                                        td= config.setting_name
+                                        td= config.setting_value
+                                        td= config.effective_start_date_formatted
+                                        td= config.effective_end_date_formatted
+                                        td= config.created_by || 'N/A'
+                            else
+                                tr
+                                    td(colspan="6").text-center.text-muted No history found
+            
+            // Mobile cards view
+            .mobile-cards-view.d-lg-none
+                if historyConfigs && historyConfigs.length > 0
+                    each config in historyConfigs
+                        .col-12
+                            .card.config-card.border-secondary
+                                .card-header.bg-secondary.text-white
+                                    .config-info
+                                        strong= config.setting_name
+                                        if config.is_global
+                                            .badge.badge-light.text-dark.mt-1 GLOBAL
+                                        else
+                                            .badge.badge-light.text-dark.mt-1= config.location_code
+                                .card-body.p-3
+                                    .row.g-2
+                                        .col-12
+                                            .config-detail
+                                                small Setting Value
+                                                div= config.setting_value
+                                        .col-6
+                                            .config-detail
+                                                small Effective From
+                                                div= config.effective_start_date_formatted
+                                        .col-6
+                                            .config-detail
+                                                small Ended On
+                                                div= config.effective_end_date_formatted
+                                        .col-12
+                                            .config-detail
+                                                small Created By
+                                                div= config.created_by || 'N/A'
+                else
+                    .alert.alert-secondary.text-center No history found
+
+    // Add Config Modal
+    #addConfigModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-dialog-centered
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        i.bi.bi-plus-circle.me-2
+                        | Add Configuration
+                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                .modal-body
+                    form#addConfigForm
+                        .row.g-3
+                            .col-12
+                                label.form-label(for='addLocationCode') Location
+                                    span.text-danger  *
+                                select.form-control#addLocationCode(required)
+                                    option(value='*') Global (All Locations)
+                                    if isSuperUser
+                                        each location in locations
+                                            option(value=location.location_code)= location.location_name
+                                    else
+                                        option(value=user.location_code, selected)= user.location_code
+                            
+                            .col-12
+                                label.form-label(for='addSettingName') Setting Name
+                                    span.text-danger  *
+                                input.form-control#addSettingName(
+                                    type='text',
+                                    required,
+                                    placeholder='e.g., MAX_CREDIT_DAYS',
+                                    list='settingNamesList'
+                                )
+                                datalist#settingNamesList
+                                    each name in settingNames
+                                        option(value=name)
+                                .form-text Uppercase recommended. Existing names shown as suggestions.
+                            
+                            .col-12
+                                label.form-label(for='addSettingValue') Setting Value
+                                    span.text-danger  *
+                                input.form-control#addSettingValue(
+                                    type='text',
+                                    required,
+                                    placeholder='Enter value'
+                                )
+                            
+                            .col-12
+                                label.form-label(for='addEffectiveDate') Effective Start Date
+                                input.form-control#addEffectiveDate(
+                                    type='date',
+                                    value=currentDate
+                                )
+                                .form-text Default: Today
+                .modal-footer
+                    .row.g-2.w-100
+                        .col-6
+                            button.btn.btn-outline-secondary.w-100(type='button' data-dismiss='modal') Cancel
+                        .col-6
+                            button#saveConfigBtn.btn.btn-success.w-100(type='button')
+                                span.spinner-border.spinner-border-sm.me-2(style='display:none')
+                                | Save Config
+
+    // Edit Config Modal
+    #editConfigModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-dialog-centered
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        i.bi.bi-pencil.me-2
+                        | Edit Configuration
+                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                .modal-body
+                    // Config info card
+                    .card.mb-3.bg-light
+                        .card-body.py-2
+                            .row.g-2
+                                .col-6
+                                    small.text-muted Location:
+                                    .fw-semibold#editLocationDisplay -
+                                .col-6
+                                    small.text-muted Setting:
+                                    .fw-semibold#editSettingDisplay -
+                    
+                    form#editConfigForm
+                        input#editConfigId(type='hidden')
+                        .row.g-3
+                            .col-12
+                                label.form-label(for='editSettingValue') New Setting Value
+                                    span.text-danger  *
+                                input.form-control#editSettingValue(
+                                    type='text',
+                                    required,
+                                    placeholder='Enter new value'
+                                )
+                                .form-text This will end-date the current config and create a new one
+                            
+                            .col-12
+                                .alert.alert-warning.py-2
+                                    .d-flex.align-items-start
+                                        i.bi.bi-exclamation-triangle.me-2.mt-1
+                                        div
+                                            small.fw-semibold Note
+                                            .small The current config will be end-dated yesterday, and a new config will be effective from today.
+                .modal-footer
+                    .row.g-2.w-100
+                        .col-6
+                            button.btn.btn-outline-secondary.w-100(type='button' data-dismiss='modal') Cancel
+                        .col-6
+                            button#updateConfigBtn.btn.btn-primary.w-100(type='button')
+                                span.spinner-border.spinner-border-sm.me-2(style='display:none')
+                                | Update Config
+
+    // JavaScript
+    script.
+        // Data from server
+        const activeConfigsData = !{activeConfigsData};
+        const historyConfigsData = !{historyConfigsData};
+        const locationsData = !{locationsData};
+        const isSuperUser = !{isSuperUser};
+
+        // Page initialization
+        $(document).ready(function() {
+            initializeEventListeners();
+            initializeSearch();
+        });
+
+        function initializeEventListeners() {
+            // Add config button
+            $('#saveConfigBtn').on('click', handleSaveConfig);
+            
+            // Update config button
+            $('#updateConfigBtn').on('click', handleUpdateConfig);
+            
+            // Edit config button
+            $('.edit-config-btn').on('click', handleEditClick);
+            
+            // Refresh button
+            $('#refreshDataBtn').on('click', function() {
+                window.location.reload();
+            });
+            
+            // Location filter (SuperUser only)
+            $('#locationFilter').on('change', function() {
+                const selectedLocation = $(this).val();
+                window.location.href = `/location-config?location=${selectedLocation}`;
+            });
+            
+            // Setting name input - auto uppercase
+            $('#addSettingName').on('input', function() {
+                this.value = this.value.toUpperCase();
+            });
+        }
+
+        function initializeSearch() {
+            const searchInput = $('#searchInput');
+            
+            searchInput.on('keyup', function() {
+                const searchTerm = $(this).val().toLowerCase();
+                
+                // Search in desktop table
+                $('#config-table tbody tr').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).toggle(text.indexOf(searchTerm) > -1);
+                });
+                
+                // Search in mobile cards
+                $('.mobile-cards-view .config-card').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).parent().toggle(text.indexOf(searchTerm) > -1);
+                });
+            });
+        }
+
+        async function handleSaveConfig() {
+            const locationCode = $('#addLocationCode').val();
+            const settingName = $('#addSettingName').val().trim().toUpperCase();
+            const settingValue = $('#addSettingValue').val().trim();
+            const effectiveDate = $('#addEffectiveDate').val();
+
+            // Validation
+            if (!locationCode || !settingName || !settingValue) {
+                showAlert('Please fill all required fields', 'danger');
+                return;
+            }
+
+            // Show loading
+            const btn = $('#saveConfigBtn');
+            const spinner = btn.find('.spinner-border');
+            btn.prop('disabled', true);
+            spinner.show();
+
+            try {
+                const response = await fetch('/location-config/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        location_code: locationCode,
+                        setting_name: settingName,
+                        setting_value: settingValue,
+                        effective_start_date: effectiveDate
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    $('#addConfigModal').modal('hide');
+                    $('#addConfigForm')[0].reset();
+                    
+                    // Reload after short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showAlert(result.error, 'danger');
+                }
+            } catch (error) {
+                console.error('Error creating config:', error);
+                showAlert('Failed to create configuration', 'danger');
+            } finally {
+                btn.prop('disabled', false);
+                spinner.hide();
+            }
+        }
+
+        function handleEditClick(e) {
+            const configId = $(this).data('config-id');
+            
+            // Find config in data
+            const config = activeConfigsData.find(c => c.config_id == configId);
+            
+            if (config) {
+                $('#editConfigId').val(config.config_id);
+                $('#editLocationDisplay').text(config.is_global ? 'GLOBAL' : config.location_code);
+                $('#editSettingDisplay').text(config.setting_name);
+                $('#editSettingValue').val(config.setting_value);
+            }
+        }
+
+        async function handleUpdateConfig() {
+            const configId = $('#editConfigId').val();
+            const settingValue = $('#editSettingValue').val().trim();
+
+            if (!settingValue) {
+                showAlert('Please enter a value', 'danger');
+                return;
+            }
+
+            // Show loading
+            const btn = $('#updateConfigBtn');
+            const spinner = btn.find('.spinner-border');
+            btn.prop('disabled', true);
+            spinner.show();
+
+            try {
+                const response = await fetch(`/location-config/update/${configId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        setting_value: settingValue
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    $('#editConfigModal').modal('hide');
+                    
+                    // Reload after short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showAlert(result.error, 'danger');
+                }
+            } catch (error) {
+                console.error('Error updating config:', error);
+                showAlert('Failed to update configuration', 'danger');
+            } finally {
+                btn.prop('disabled', false);
+                spinner.hide();
+            }
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = $('#messageAlert');
+            const messageSpan = $('#messageText');
+            
+            alertDiv.removeClass('alert-success alert-danger alert-info alert-warning');
+            alertDiv.addClass(`alert-${type}`);
+            messageSpan.text(message);
+            alertDiv.fadeIn().addClass('show');
+            
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+                alertDiv.fadeOut().removeClass('show');
+            }, 5000);
+        }
