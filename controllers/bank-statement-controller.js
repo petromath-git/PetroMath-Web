@@ -42,55 +42,75 @@ module.exports = {
         }
     },
 
-    saveTransactionData: async (req, res, next) => {
-        try {
-            const transactions = [];
-            const usedIndices = Object.keys(req.body)
-                .filter(key => key.startsWith('trans_date_'))
-                .map(key => key.replace('trans_date_', ''));
+   saveTransactionData: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const transactions = [];
+        const usedIndices = Object.keys(req.body)
+            .filter(key => key.startsWith('trans_date_'))
+            .map(key => key.replace('trans_date_', ''));
 
-            for (const index of usedIndices) {
-                const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
-                const debit = parseFloat(req.body[`debitamount_${index}`] || 0);
-                
-                if (credit === 0 && debit === 0) {
-                    return res.status(400).send({
-                        error: `Row ${parseInt(index) + 1} must have either credit or debit amount.`
-                    });
-                }
-
-                if (credit > 0 && debit > 0) {
-                    return res.status(400).send({
-                        error: `Row ${parseInt(index) + 1} cannot have both credit and debit amounts.`
-                    });
-                }
-
-                const transactionData = {
-                    trans_date: req.body[`trans_date_${index}`],
-                    bank_id: req.body[`bank_id_${index}`],
-                    ledger_name: req.body[`ledger_name_${index}`] || null,
-                    transaction_type: req.body[`transaction_type_${index}`] || null,
-                    accounting_type: req.body[`accounting_type_${index}`] || null,
-                    credit_amount: credit || null,
-                    debit_amount: debit || null,
-                    remarks: req.body[`remarks_${index}`] || '',
-                    created_by: req.user.Person_id || req.user.username
-                };
-
-                transactions.push(transactionData);
+        for (const index of usedIndices) {
+            const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
+            const debit = parseFloat(req.body[`debitamount_${index}`] || 0);
+            
+            if (credit === 0 && debit === 0) {
+                return res.status(400).send({
+                    error: `Row ${parseInt(index) + 1} must have either credit or debit amount.`
+                });
             }
 
-            // Save all transactions
-            for (const transaction of transactions) {
-                await BankStatementDao.saveTransaction(transaction);
+            if (credit > 0 && debit > 0) {
+                return res.status(400).send({
+                    error: `Row ${parseInt(index) + 1} cannot have both credit and debit amounts.`
+                });
             }
 
-            res.redirect(`/bank-statement?tbankfromDate=${req.body.tbank_fromDate_hiddenValue}&tbanktoDate=${req.body.tbank_toDate_hiddenValue}&bank_id=${req.body.bank_id || 0}`);
-        } catch (error) {
-            console.error('Error saving bank transactions:', error);
-            res.status(500).send({ error: 'Failed to save transactions.' });
+            const bankId = req.body[`bank_id_${index}`];
+            const ledgerName = req.body[`ledger_name_${index}`] || null;
+            
+            // Lookup external_id and external_source from allowed ledgers
+            let externalId = null;
+            let externalSource = null;
+            
+            if (ledgerName && bankId) {
+                const ledgerDetails = await BankStatementDao.getLedgerDetails(bankId, ledgerName, locationCode);
+                if (ledgerDetails) {
+                    externalId = ledgerDetails.external_id;
+                    externalSource = ledgerDetails.source_type;
+                }
+            }
+
+            const transactionData = {
+                trans_date: req.body[`trans_date_${index}`],
+                bank_id: bankId,
+                ledger_name: ledgerName,
+                transaction_type: req.body[`transaction_type_${index}`] || null,
+                accounting_type: req.body[`accounting_type_${index}`] || null,
+                credit_amount: credit || null,
+                debit_amount: debit || null,
+                remarks: req.body[`remarks_${index}`] || '',
+                external_id: externalId,
+                external_source: externalSource,
+                created_by: req.user.Person_id || req.user.username
+            };
+
+            transactions.push(transactionData);
         }
-    },
+
+        // Save all transactions
+        for (const transaction of transactions) {
+            await BankStatementDao.saveTransaction(transaction);
+        }
+
+        res.redirect(`/bank-statement?tbankfromDate=${req.body.tbank_fromDate_hiddenValue}&tbanktoDate=${req.body.tbank_toDate_hiddenValue}&bank_id=${req.body.bank_id || 0}`);
+    } catch (error) {
+        console.error('Error saving bank transactions:', error);
+        res.status(500).send({ error: 'Failed to save transactions.' });
+    }
+},
+
+
 
     deleteTransaction: async (req, res, next) => {
         try {
