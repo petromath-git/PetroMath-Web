@@ -58,6 +58,57 @@ router.post('/get', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTE
     }
 });
 
+
+// Display vehicles page with GET request
+router.get('/:creditlist_id', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function(req, res, next) {
+    try {
+        const creditlistId = req.params.creditlist_id;
+        
+        // Get customer info
+        const customer = await CreditDao.findCreditDetails([creditlistId]);
+        const customerInfo = customer && customer[0] ? customer[0] : null;
+        
+        // Get all vehicles for this customer
+        const vehicles = await creditVehiclesController.getVehiclesForDisplay(creditlistId);
+        
+        // Get products for dropdown
+        const products = await ProductDao.findPumpProducts(req.user.location_code);
+        
+        // Check permissions for UI
+        const canEdit = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'EDIT_CUSTOMER_MASTER'
+        );
+        const canAdd = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'ADD_CUSTOMER_MASTER'
+        );
+        const canDisable = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            req.user.location_code, 
+            'DISABLE_CUSTOMER_MASTER'
+        );
+        
+        res.render('vehicles', {
+            title: 'Vehicle Master',
+            user: req.user,
+            vehicles: vehicles,
+            products: products,
+            creditlist_id: creditlistId,
+            customer: customerInfo,
+            canEdit: canEdit,
+            canAdd: canAdd,
+            canDisable: canDisable
+        });
+    } catch (error) {
+        console.error('Error loading vehicles page:', error);
+        res.status(500).send('Error loading vehicles page');
+    }
+});
+
+
 // Create new vehicle - ADD permission required
 router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function(req, res, next) {
     try {
@@ -106,7 +157,7 @@ router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MA
 });
 
 // Disable vehicle - DISABLE permission required
-router.put('/disable-vehicle/:id', [isLoginEnsured, security.hasPermission('DISABLE_CUSTOMER_MASTER')], function (req, res) {
+router.put('/disable-vehicle/:id', [isLoginEnsured, security.hasPermission('DISABLE_CUSTOMER_MASTER')], function (req, res, next) {
     const vehicleId = req.params.id;
     req.body.vehicle_id = vehicleId;
     creditVehiclesController.disableVehicle(req, res, next);
@@ -117,6 +168,23 @@ router.put('/enable-vehicle/:id', [isLoginEnsured, security.hasPermission('EDIT_
     const vehicleId = req.params.id;
     req.body.vehicle_id = vehicleId;
     creditVehiclesController.enableVehicle(req, res, next);
+});
+
+
+router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function(req, res) {
+    try {
+        const creditlistId = req.params.creditlist_id;
+        const CreditVehiclesDao = require('../dao/credit-vehicles-dao');
+        const disabledVehicles = await CreditVehiclesDao.findDisabled(creditlistId);
+        
+        res.json({
+            success: true,
+            vehicles: disabledVehicles
+        });
+    } catch (error) {
+        console.error('Error fetching disabled vehicles:', error);
+        res.status(500).json({ success: false, error: 'Error fetching disabled vehicles' });
+    }
 });
 
 // Check for duplicate vehicle number

@@ -51,7 +51,12 @@ block content
                     .input-group-append
                         button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
                             i.bi.bi-x-circle
-        
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .custom-control.custom-switch
+                    input.custom-control-input#showDisabledToggle(type="checkbox")
+                    label.custom-control-label(for="showDisabledToggle") Show Disabled Vehicles
+
         // Desktop table view
         .desktop-table-view.d-none.d-lg-block
             .table-responsive.table-desktop-container
@@ -157,6 +162,35 @@ block content
                                                         selected=product.product_id == val.product_id
                                                     )= product.product_name
 
+        // Disabled Vehicles Section (hidden by default)
+        .disabled-vehicles-section(style="display: none;")
+            .row.mb-2
+                .col-12
+                    h5.text-muted
+                        i.bi.bi-archive
+                        |  Disabled Vehicles
+            
+            // Desktop table for disabled vehicles
+            .desktop-table-view.d-none.d-lg-block
+                .table-responsive.table-desktop-container
+                    table.table.table-hover.table-striped#disabled-vehicles-table
+                        thead.thead-dark.sticky-top
+                            tr
+                                th #
+                                th Vehicle Number
+                                th Vehicle Type
+                                th Fuel Type
+                                th Disabled Date
+                                if canEdit
+                                    th Enable
+                        tbody
+                            // Will be populated dynamically
+            
+            // Mobile cards for disabled vehicles
+            .mobile-cards-view.d-block.d-lg-none
+                .row#disabled-mobile-cards
+                    // Will be populated dynamically
+    
     // Add Vehicle Modal
     .modal.fade#addVehicleModal(tabindex="-1", role="dialog", aria-labelledby="addVehicleModalLabel", aria-hidden="true")
         .modal-dialog.modal-lg(role="document")
@@ -270,6 +304,28 @@ block content
         #vehicles-master-table tbody tr,
         .mobile-cards-view .col-12 { 
             transition: opacity 0.2s ease; 
+        }
+
+        /* Disabled vehicles styling */
+        .disabled-vehicles-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+        }
+
+        .disabled-vehicle-row {
+            background-color: #f8f9fa;
+            opacity: 0.7;
+        }
+
+        .disabled-vehicle-card {
+            border-left: 4px solid #dc3545;
+            opacity: 0.8;
+        }
+
+        .custom-control-label {
+            cursor: pointer;
+            user-select: none;
         }
 
     // JavaScript
@@ -529,4 +585,150 @@ block content
                     if (mt) mt.insertAdjacentHTML('beforeend', html);
                 }
             }
+
+
+            // Toggle disabled vehicles
+            const showDisabledToggle = document.getElementById('showDisabledToggle');
+            const disabledSection = document.querySelector('.disabled-vehicles-section');
+
+            showDisabledToggle.addEventListener('change', function() {
+                if (this.checked) {
+                    disabledSection.style.display = 'block';
+                    if (disabledVehiclesCache.length === 0) {
+                        fetchDisabledVehicles();
+                    } else {
+                        displayDisabledVehicles(disabledVehiclesCache);
+                    }
+                } else {
+                    disabledSection.style.display = 'none';
+                }
+            });
         });
+
+        let disabledVehiclesCache = [];
+
+        function fetchDisabledVehicles() {
+            fetch(`/vehicles/disabled/#{creditlist_id}`)
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    disabledVehiclesCache = d.vehicles;
+                    displayDisabledVehicles(d.vehicles);
+                } else {
+                    showMessage('Error fetching disabled vehicles', 'danger');
+                }
+            })
+            .catch(e => {
+                console.error('Error:', e);
+                showMessage('Error fetching disabled vehicles', 'danger');
+            });
+        }
+
+        function displayDisabledVehicles(vehicles) {
+            const desktopTable = document.querySelector('#disabled-vehicles-table tbody');
+            const mobileContainer = document.getElementById('disabled-mobile-cards');
+            
+            // Clear existing content
+            desktopTable.innerHTML = '';
+            mobileContainer.innerHTML = '';
+            
+            if (vehicles.length === 0) {
+                const noDataMsg = '<tr><td colspan="6" class="text-center text-muted py-4">No disabled vehicles found</td></tr>';
+                desktopTable.innerHTML = noDataMsg;
+                mobileContainer.innerHTML = '<div class="col-12 text-center text-muted py-4">No disabled vehicles found</div>';
+                return;
+            }
+            
+            vehicles.forEach((vehicle, index) => {
+                // Desktop row
+                const canEditFlag = #{canEdit ? 'true' : 'false'};
+                let desktopRow = `
+                    <tr class="disabled-vehicle-row">
+                        <th scope="row">${index + 1}</th>
+                        <td>${vehicle.vehicle_number || ''}</td>
+                        <td>${vehicle.vehicle_type || ''}</td>
+                        <td>${vehicle.product_name || 'Not Set'}</td>
+                        <td>${vehicle.effective_end_date ? new Date(vehicle.effective_end_date).toLocaleDateString() : ''}</td>
+                `;
+                
+                if (canEditFlag) {
+                    desktopRow += `
+                        <td>
+                            <button class="btn btn-success btn-sm" type="button" onclick="enableVehicle(${vehicle.vehicle_id})">
+                                <i class="bi bi-arrow-counterclockwise"></i> Enable
+                            </button>
+                        </td>
+                    `;
+                }
+                
+                desktopRow += '</tr>';
+                desktopTable.insertAdjacentHTML('beforeend', desktopRow);
+                
+                // Mobile card
+                let mobileCard = `
+                    <div class="col-12 mb-3">
+                        <div class="card disabled-vehicle-card shadow-sm">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div class="vehicle-name">
+                                    <strong class="text-uppercase">${vehicle.vehicle_number || ''}</strong>
+                                </div>
+                                <div class="vehicle-actions">
+                `;
+                
+                if (canEditFlag) {
+                    mobileCard += `
+                        <button class="btn btn-success btn-sm" type="button" onclick="enableVehicle(${vehicle.vehicle_id})">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                    `;
+                }
+                
+                mobileCard += `
+                                </div>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="vehicle-detail">
+                                            <small class="text-muted">Vehicle Type</small>
+                                            <div class="fw-bold text-uppercase">${vehicle.vehicle_type || ''}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="vehicle-detail">
+                                            <small class="text-muted">Fuel Type</small>
+                                            <div class="fw-bold">${vehicle.product_name || 'Not Set'}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="vehicle-detail">
+                                            <small class="text-muted">Disabled Date</small>
+                                            <div class="fw-bold">${vehicle.effective_end_date ? new Date(vehicle.effective_end_date).toLocaleDateString() : ''}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                mobileContainer.insertAdjacentHTML('beforeend', mobileCard);
+            });
+        }
+
+        function enableVehicle(vehicleId) {
+            if (confirm('Are you sure you want to enable this vehicle?')) {
+                fetch(`/vehicles/enable-vehicle/${vehicleId}`, {method: 'PUT'})
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success || d.message) {
+                        showMessage('Vehicle enabled successfully', 'success');
+                        // Refresh both lists
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showMessage('Error: ' + (d.error || 'Unknown error'), 'danger');
+                    }
+                })
+                .catch(e => showMessage('Error: ' + e.message, 'danger'));
+            }
+        }
