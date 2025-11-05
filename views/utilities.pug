@@ -1,6 +1,18 @@
 extends layout
 
 block content
+    if success
+        div.alert.alert-success.alert-dismissible.fade.show(role='alert')
+            strong Success! 
+            | #{success}
+            button.close(type='button', data-dismiss='alert', aria-label='Close')
+                span(aria-hidden='true') &times;
+    if error
+        div.alert.alert-danger.alert-dismissible.fade.show(role='alert')
+            strong Error! 
+            | #{error}
+            button.close(type='button', data-dismiss='alert', aria-label='Close')
+                span(aria-hidden='true') &times;
     div.row
         div.col-4
             div.card
@@ -73,7 +85,8 @@ block content
                                         option(value='12') December
                         br
                         div.text-center
-                            button.btn.btn-primary(type='submit') Download XML
+                            button.btn.btn-primary.mr-2(type='submit', formaction='/tally-export') Download XML
+                            button.btn.btn-success(type='submit', formaction='/tally/generate-daybook') Generate Daybook
 
                     hr
 

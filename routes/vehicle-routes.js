@@ -190,17 +190,17 @@ router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('
 // Check for duplicate vehicle number
 router.get('/check-duplicate', [isLoginEnsured], async function (req, res) {
     try {
-        const vehicleNumber = req.query.vehicle_number;
+        let vehicleNumber = req.query.vehicle_number?.trim().toUpperCase();
         const creditlistId = req.query.creditlist_id;
         const excludeId = req.query.excludeId;
-        
+
         const CreditVehiclesDao = require('../dao/credit-vehicles-dao');
         const existing = await CreditVehiclesDao.findByNumberAndCustomer(vehicleNumber, creditlistId);
-        
+
         if (existing && existing.vehicle_id != excludeId) {
             return res.json({ exists: true });
         }
-        
+
         res.json({ exists: false });
     } catch (error) {
         console.error('Error checking duplicate:', error);

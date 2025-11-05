@@ -21,7 +21,7 @@ module.exports = {
             
             const locationCheck = await db.sequelize.query(`
                 SELECT location_code 
-                FROM t_tankrcpt 
+                FROM t_tank_stk_rcpt 
                 WHERE ttank_id = :ttank_id
             `, {
                 replacements: { ttank_id },
