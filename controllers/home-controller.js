@@ -58,6 +58,8 @@ module.exports = {
     0  // default 0 days
     ));
 
+    
+    
       
 
         getDraftsCount(locationCode).then(data => {
@@ -407,7 +409,7 @@ deleteTxnDigitalSale: ((req, res, next) => {
     }
 };
 
-const getHomeData = (req, res, next) => {
+const getHomeData = async (req, res, next) => {
     let closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
     let closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
     const locationCode = req.user.location_code;
@@ -419,11 +421,31 @@ const getHomeData = (req, res, next) => {
         closingQueryToDate = req.query.toClosingDate;
     }
 
-    if(req.user.isAdmin) {
+    try {
+        // Fetch configuration from database instead of config file
+        const maxAllowedDrafts = Number(await locationConfig.getLocationConfigValue(
+            locationCode,
+            'MAX_ALLOWED_DRAFTS',
+            2  // default value
+        ));
+
+        const maxAllowedDraftDays = Number(await locationConfig.getLocationConfigValue(
+            locationCode,
+            'MAX_ALLOWED_DRAFT_DAYS',
+            2  // default value
+        ));
+
+        // Check permission for creating new shift closing
+        const canCreateShiftClosing = await rolePermissionsDao.hasPermission(
+            req.user.Role, 
+            locationCode, 
+            'CREATE_SHIFT_CLOSING'
+        );
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
-            getDraftsCountBeforeDays(locationCode, config.APP_CONFIGS.maxAllowedDraftsDays),
+            getDraftsCountBeforeDays(locationCode, maxAllowedDraftDays + 1),
             getDeadlineWarningMessage(locationCode),
             getLocationProductColumns(locationCode),
             rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
@@ -440,32 +462,17 @@ const getHomeData = (req, res, next) => {
                 draftDaysCnt: values[2].value,
                 deadlineMessage: values[3].value,
                 productColumns: values[4].value,
-                canSearchClosings: values[5].value
+                canSearchClosings: values[5].value,
+                maxAllowedDrafts: maxAllowedDrafts,
+                canCreateShiftClosing: canCreateShiftClosing
             });
         }).catch(error => {
             console.error('Error in getHomeData:', error);
             next(error);
         });
-    } else {
-        Promise.allSettled([
-            getUsersClosingDataByDate(req.user.Person_Name, locationCode, closingQueryFromDate, closingQueryToDate,rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')),
-            getLocationProductColumns(locationCode)
-        ]).then(values => {
-            res.render('home', {
-                title: 'Shift Closing',
-                user: req.user,
-                config: config.APP_CONFIGS,
-                closingValues: values[0].value,
-                currentDate: utils.currentDate(),
-                fromClosingDate: closingQueryFromDate,
-                toClosingDate: closingQueryToDate,
-                productColumns: values[1].value,
-                canSearchClosings: values[2].value
-            });
-        }).catch(error => {
-            console.error('Error in getHomeData for non-admin:', error);
-            next(error);
-        });
+    } catch (error) {
+        console.error('Error fetching location config:', error);
+        next(error);
     }
 };
 

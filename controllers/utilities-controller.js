@@ -5,27 +5,29 @@ const archiver = require('archiver');   // 👈 add this
 
 module.exports = {
     get: (req, res, next) => {
-        const currentYear = new Date().getFullYear();
-        const availableYears = [];
-        for (let year = 2020; year <= currentYear; year++) {
-            availableYears.push(year);
-        }
+    const currentYear = new Date().getFullYear();
+    const availableYears = [];
+    for (let year = 2020; year <= currentYear; year++) {
+        availableYears.push(year);
+    }
 
-        Promise.allSettled([getChartNames(req.user.location_code, 'DipChartName')])
-            .then((values) => {
-                res.render('utilities', {
-                    title: 'Utilities',
-                    user: req.user,
-                    currentDate: utils.currentDate(),
-                    currentYear: currentYear,
-                    availableYears: availableYears,
-                    chartNames: values[0].value,
-                });
-            }).catch((err) => {
-                console.warn("Error while getting data using promises " + err.toString());
-                Promise.reject(err);
+    Promise.allSettled([getChartNames(req.user.location_code, 'DipChartName')])
+        .then((values) => {
+            res.render('utilities', {
+                title: 'Utilities',
+                user: req.user,
+                currentDate: utils.currentDate(),
+                currentYear: currentYear,
+                availableYears: availableYears,
+                chartNames: values[0].value,
+                success: req.query.success,  // Add this
+                error: req.query.error        // Add this
             });
-    },
+        }).catch((err) => {
+            console.warn("Error while getting data using promises " + err.toString());
+            Promise.reject(err);
+        });
+},
 
     getDensity: (req, res, next) => {
         UtilsDao.getDensity(req.query.temperature, req.query.density).then((result) => {
@@ -72,6 +74,32 @@ module.exports = {
     }).catch((err) => {
         res.status(500).send({ error: err.message });
     });
+},
+
+generateDaybook: (req, res, next) => {
+    const { exportMonth, exportYear } = req.body;
+    const locationCode = req.user.location_code;
+
+    if (!exportMonth || !exportYear) {
+        return res.redirect('/utilities?error=Month and year are required');
+    }
+
+    // Format period as "Apr-2024"
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const period = monthNames[parseInt(exportMonth) - 1] + '-' + exportYear;
+
+    UtilsDao.runTallyExports(period, period, locationCode)
+        .then((result) => {
+            if (result && !result.error) {
+                res.redirect('/utilities?success=Daybook generated successfully for ' + period);
+            } else {
+                res.redirect('/utilities?error=' + encodeURIComponent(result ? result.error : 'Failed to generate daybook'));
+            }
+        })
+        .catch((err) => {
+            console.error('Error generating daybook:', err);
+            res.redirect('/utilities?error=' + encodeURIComponent(err.message));
+        });
 },
 
 

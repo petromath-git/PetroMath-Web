@@ -37,43 +37,50 @@ module.exports = {
 
     // Find vehicle by number and customer (NEW METHOD)
     findByNumberAndCustomer: async (vehicleNumber, creditlistId) => {
-        try {
-            const now = new Date();
-            const result = await db.sequelize.query(`
-                SELECT vehicle_id, vehicle_number, creditlist_id
-                FROM m_creditlist_vehicles
-                WHERE vehicle_number = :vehicleNumber
-                  AND creditlist_id = :creditlistId
-                  AND (effective_end_date IS NULL OR effective_end_date >= :now)
-                LIMIT 1
-            `, {
-                replacements: { vehicleNumber, creditlistId, now },
-                type: db.Sequelize.QueryTypes.SELECT
-            });
-            
-            return result && result[0] ? result[0] : null;
-        } catch (error) {
-            console.error('Error finding vehicle by number:', error);
-            throw error;
-        }
-    },
+    try {
+        if (!vehicleNumber || !creditlistId) return null;
+
+        const now = new Date();
+        const result = await db.sequelize.query(`
+            SELECT vehicle_id, vehicle_number, creditlist_id
+            FROM m_creditlist_vehicles
+            WHERE UPPER(TRIM(vehicle_number)) = UPPER(TRIM(:vehicleNumber))
+              AND creditlist_id = :creditlistId
+              AND (effective_end_date IS NULL OR effective_end_date >= :now)
+            LIMIT 1
+        `, {
+            replacements: { vehicleNumber, creditlistId, now },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        
+        return result?.[0] || null;
+    } catch (error) {
+        console.error('Error finding vehicle by number:', error);
+        throw error;
+    }
+},
+
 
     // Create a new vehicle (UPDATE THIS METHOD to include product_id)
-    create: (vehicleData) => {
-        return CreditListVehicle.create({
-            creditlist_id: vehicleData.creditlist_id,
-            vehicle_number: vehicleData.vehicle_number,
-            vehicle_type: vehicleData.vehicle_type,
-            product_id: vehicleData.product_id || null,
-            notes: vehicleData.notes,
-            created_by: vehicleData.created_by,
-            updated_by: vehicleData.updated_by,
-            creation_date: new Date(),
-            updation_date: new Date(),
-            effective_start_date: new Date(),
-            effective_end_date: null
-        });
-    },
+  create: (vehicleData) => {
+    const cleanVehicleNumber = vehicleData.vehicle_number
+        ?.toUpperCase()
+        .replace(/[^A-Z0-9]/g, ''); // remove all non-alphanumeric characters
+
+    return CreditListVehicle.create({
+        creditlist_id: vehicleData.creditlist_id,
+        vehicle_number: cleanVehicleNumber,
+        vehicle_type: vehicleData.vehicle_type, // leave exactly as selected
+        product_id: vehicleData.product_id || null,
+        notes: vehicleData.notes?.trim() || '',
+        created_by: vehicleData.created_by,
+        updated_by: vehicleData.updated_by,
+        creation_date: new Date(),
+        updation_date: new Date(),
+        effective_start_date: new Date(),
+        effective_end_date: null
+    });
+},
 
     // Update a vehicle (UPDATE THIS METHOD)
     update: (vehicleId, updatedData) => {
