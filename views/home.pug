@@ -275,15 +275,15 @@ block content
         else
             div.row.bg-light No records to display.
 
-        if user.isAdmin
-            if draftsCnt < config.maxAllowedDrafts && draftDaysCnt <= 0
+        if canCreateShiftClosing
+            if draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
                 form(method='GET' action='/new-closing' id='get-new-closing')
                     button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
             else if draftDaysCnt > 0
                 pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
             else
-                pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{config.maxAllowedDrafts} allowed drafts are met.
-            .mb-4    
+                pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{maxAllowedDrafts} allowed drafts are met.
+            .mb-4 
 
         if deadlineMessage && deadlineMessage.length > 0
             .deadline-section

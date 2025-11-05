@@ -1138,6 +1138,11 @@ app.post('/tally/export-range', isLoginEnsured, function (req, res) {
     utilitiesController.getTallyExportRange(req, res);
 });
 
+// Generate Daybook
+app.post('/tally/generate-daybook', isLoginEnsured, function (req, res) {
+    utilitiesController.generateDaybook(req, res);
+});
+
 
 
 app.get('/charts', isLoginEnsured, function (req, res) {

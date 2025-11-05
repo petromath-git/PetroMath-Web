@@ -51,5 +51,24 @@ module.exports = {
             }
             return null;
         });
-    }
+    },
+
+    runTallyExports: (startPeriod, endPeriod, locationCode) => {
+    return db.sequelize.query(
+        "CALL run_tally_exports(:startPeriod, :endPeriod, :locationCode)",
+        {
+            replacements: { 
+                startPeriod: startPeriod, 
+                endPeriod: endPeriod, 
+                locationCode: locationCode 
+            },
+            type: db.Sequelize.QueryTypes.RAW
+        }
+    ).then(result => {
+        return { success: true };
+    }).catch(err => {
+        console.error('Error in runTallyExports:', err);
+        return { error: err.message };
+    });
+}
 };
