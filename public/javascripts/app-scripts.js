@@ -127,6 +127,7 @@ function calculatePumpSale(uniquePumpId) {
 function hideAndDeleteReadingPump(elementId) {
     const deleteObj = document.getElementById(elementId.replace('_sub_header', '_hiddenId'));
     deleteAjax('remove-reading', deleteObj.value, elementId, 'col-3 d-md-none');
+    toggleSmartReadingSection();
 }
 
 // function updatePriceOnReadingTab(isOnLoad) {
@@ -258,6 +259,7 @@ function showReadingPump() {
         document.getElementById("s_" + pumpName + "_sub_header_price").innerHTML = currency + document.getElementById("reading-price").value;
         document.getElementById("s_" + pumpName + "_price").value = document.getElementById("reading-price").value;
     }
+    toggleSmartReadingSection();
 }
 
 
@@ -337,6 +339,8 @@ function addAllPumps() {
                 showSnackbar(`Skipped ${skippedPumps.length} pump(s): ${skippedPumps.join(', ')}`, 'warning', 5000);
             }, 3500); // Show after success message
         }
+
+        toggleSmartReadingSection();
 }
 
 
@@ -2704,3 +2708,196 @@ function showSnackbar(message, type = 'success', duration = 3000) {
 }
 
 
+// Smart Reading Entry Feature
+// Automatically finds and populates the nozzle with the closest opening reading
+
+/**
+ * Finds and populates the pump/nozzle with the closest opening reading
+ * @param {number} enteredReading - The reading value entered by the user
+ */
+function smartFillClosingReading(enteredReading) {
+    // Validate input
+    if (!enteredReading || enteredReading <= 0) {
+        showSnackbar('Please enter a valid reading value', 'warning', 3000);
+        return;
+    }
+
+    // Get all visible pumps that have been added to the closing
+    const allPumpHeaders = document.querySelectorAll('[id$="_sub_header"]');
+    
+    if (allPumpHeaders.length === 0) {
+        showSnackbar('No pumps have been added yet. Please add pumps first.', 'warning', 3000);
+        return;
+    }
+
+    let closestPump = null;
+    let smallestDifference = Infinity;
+    let foundMatch = false;
+
+    // Iterate through all visible pumps
+    allPumpHeaders.forEach(header => {
+        // Skip if pump is not visible (not added to shift)
+        if (header.className.includes('d-md-none')) {
+            return;
+        }
+
+        // Extract pump unique ID from header ID (remove _sub_header)
+        const pumpUniqueId = header.id.replace('_sub_header', '');
+        
+        // Get opening reading for this pump
+        const openingElement = document.getElementById(pumpUniqueId + 'pump_opening');
+        
+        if (!openingElement) {
+            return;
+        }
+
+        const openingReading = parseFloat(openingElement.value) || 0;
+
+        // Skip if entered reading is less than opening reading
+        if (enteredReading < openingReading) {
+            return;
+        }
+
+        // Calculate difference
+        const difference = Math.abs(enteredReading - openingReading);
+
+        // Track the closest pump
+        if (difference < smallestDifference) {
+            smallestDifference = difference;
+            closestPump = {
+                uniqueId: pumpUniqueId,
+                openingReading: openingReading,
+                pumpCode: header.querySelector('span').textContent.trim()
+            };
+            foundMatch = true;
+        }
+    });
+
+    // If no match found (all opening readings are greater than entered reading)
+    if (!foundMatch) {
+        showSnackbar('No pump found with opening reading less than or equal to ' + enteredReading, 'info', 3000);
+        return;
+    }
+
+    // Check if difference is too large (safety check - max 10,000 difference)
+    if (smallestDifference > 10000) {
+        showSnackbar(
+            `Difference too large! Entered: ${enteredReading}, Closest opening: ${closestPump.openingReading} (Difference: ${smallestDifference.toFixed(3)}). Maximum allowed difference is 10,000.`, 
+            'warning', 
+            5000
+        );
+        return;
+    }
+
+    // Populate the closing reading for the closest pump
+    const closingElement = document.getElementById(closestPump.uniqueId + 'pump_closing');
+    
+    if (!closingElement) {
+        showSnackbar('Error: Could not find closing reading field', 'danger', 3000);
+        return;
+    }
+
+    // Set the closing reading value
+    closingElement.value = enteredReading;
+
+    // Trigger calculation for this pump
+    calculatePumpSale(closestPump.uniqueId);
+
+    // Visual feedback: Highlight the pump
+    highlightPump(closestPump.uniqueId);
+
+    // Scroll to the pump
+    scrollToPump(closestPump.uniqueId);
+
+    // Clear the smart entry field
+    document.getElementById('smart-reading-entry').value = '';
+
+    // Show success message
+    showSnackbar(
+        `Reading ${enteredReading} entered for ${closestPump.pumpCode} (Opening: ${closestPump.openingReading})`, 
+        'success', 
+        3000
+    );
+}
+
+/**
+ * Highlights a pump temporarily to show user which one was filled
+ * @param {string} pumpUniqueId - The unique ID of the pump to highlight
+ */
+function highlightPump(pumpUniqueId) {
+    const readingsDiv = document.getElementById(pumpUniqueId + '_readings');
+    
+    if (!readingsDiv) {
+        return;
+    }
+
+    // Add highlight class
+    readingsDiv.style.border = '3px solid #28a745';
+    readingsDiv.style.boxShadow = '0 0 10px rgba(40, 167, 69, 0.5)';
+    readingsDiv.style.transition = 'all 0.3s ease';
+
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+        readingsDiv.style.border = '';
+        readingsDiv.style.boxShadow = '';
+    }, 3000);
+}
+
+/**
+ * Scrolls to the pump that was populated
+ * @param {string} pumpUniqueId - The unique ID of the pump to scroll to
+ */
+function scrollToPump(pumpUniqueId) {
+    const pumpHeader = document.getElementById(pumpUniqueId + '_sub_header');
+    
+    if (!pumpHeader) {
+        return;
+    }
+
+    // Smooth scroll to the pump
+    pumpHeader.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+    });
+}
+
+/**
+ * Handles Enter key press in smart reading entry field
+ * @param {Event} event - The keyboard event
+ */
+function handleSmartReadingKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const enteredReading = parseFloat(event.target.value);
+        smartFillClosingReading(enteredReading);
+    }
+}
+
+/**
+ * Shows or hides the smart reading entry section based on visible pumps
+ */
+function toggleSmartReadingSection() {
+    const smartSection = document.getElementById('smart-reading-section');
+    
+    if (!smartSection) {
+        return; // Section doesn't exist on this page
+    }
+    
+    // Count visible pumps (pumps that have been added to the shift)
+    const allPumpHeaders = document.querySelectorAll('[id$="_sub_header"]');
+    let visiblePumpCount = 0;
+    
+    allPumpHeaders.forEach(header => {
+        // Check if pump is visible (added to shift)
+        if (!header.className.includes('d-md-none')) {
+            visiblePumpCount++;
+        }
+    });
+    
+    // Show section only if 2 or more pumps are visible
+    if (visiblePumpCount >= 2) {
+        smartSection.style.display = '';
+    } else {
+        smartSection.style.display = 'none';
+    }
+}

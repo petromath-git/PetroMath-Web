@@ -7,6 +7,7 @@ function doubleCheckReadingPumps(obj) {
     }
     calculateReadingsAndSale();
     updatePriceOnReadingTab(true);
+    toggleSmartReadingSection();
 }
 
 
