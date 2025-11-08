@@ -283,6 +283,6 @@ block content
     script.
         const products = !{JSON.stringify(products)};
         const billData = !{JSON.stringify(bill)};
-        billsVehicleData = !{JSON.stringify(vehicleData)};
+        window.billsVehicleData = !{JSON.stringify(vehicleData)};
 
     script(src=`/javascripts/bills.js?v=${CACHE_BUST}`)
