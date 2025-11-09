@@ -187,4 +187,25 @@ findCustomerByPhone: async (phone) => {
             throw error;
         }
     },
+
+    getVendorLookbackDays: async (creditlistId, locationCode) => {
+  try {
+    const query = `
+      SELECT settlement_lookback_days 
+      FROM m_creditlist 
+      WHERE creditlist_id = ? AND location_code = ?
+    `;
+    const result = await db.query(query, [creditlistId, locationCode]);
+    
+    if (result && result[0] && result[0].settlement_lookback_days !== null) {
+      return result[0].settlement_lookback_days;
+    }
+    
+    return null; // Not configured at vendor level
+    
+  } catch (err) {
+    console.error('Error fetching vendor lookback days:', err);
+    return null;
+  }
+}
 };

@@ -5,6 +5,8 @@ const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 var CreditDao = require("../dao/credits-dao");
 const moment = require('moment');
+const locationConfig = require('../utils/location-config');
+
 
 module.exports = {
   getDigitalReconReport: async (req, res) => {
@@ -12,6 +14,36 @@ module.exports = {
     let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
     let cid = req.body.company_id;
+
+    let lookbackDays = 5; // Final fallback
+
+    const vendorLookbackDays = await CreditDao.getVendorLookbackDays(cid, locationCode);
+
+    if (vendorLookbackDays !== null) {
+      lookbackDays = vendorLookbackDays;
+      console.log(`Using vendor-specific lookback: ${lookbackDays} days`);
+    } else {
+      // Second: Check location config (location-specific or system default '*')
+      const configLookbackDays = await locationConfig.getLocationConfigValue(
+        locationCode,
+        'RECON_DEFAULT_LOOKBACK_DAYS',
+        '5' // default value if not configured
+      );
+      
+      lookbackDays = parseInt(configLookbackDays);
+      console.log(`Using config lookback: ${lookbackDays} days`);
+    }
+
+
+    // Get cross-vendor matching setting
+    const enableCrossVendorMatch = await locationConfig.getLocationConfigValue(
+      locationCode,
+      'RECON_CROSS_VENDOR_MATCH',
+      'N' // default: disabled
+    );
+
+
+
     let caller = req.body.caller;
     let credits = [];
 
@@ -106,7 +138,7 @@ module.exports = {
       Credit: creditstmtData.entry_type === 'CREDIT' ? creditstmtData.amount : null
     }));
 
-    function findMatchingTransactions(transactions) {
+    function findMatchingTransactions(transactions, lookbackDays) {
       const TOLERANCE = 1; // Reduced to Rs 1
 
       const processedData = transactions.map(tx => ({
@@ -151,14 +183,12 @@ module.exports = {
           prevDate.setDate(prevDate.getDate() - 1);
           const prevDateStr = prevDate.toISOString().split('T')[0];
 
-          const nextDate = new Date(creditDate);
-          nextDate.setDate(nextDate.getDate() + 1);
-          const nextDateStr = nextDate.toISOString().split('T')[0];
+          
 
           const relevantDebits = processedData.filter(tx =>
             tx.DebitAmount !== null &&
             !matchedDebitIds.has(tx.unique_id) &&
-            [prevDateStr, currentDateStr, nextDateStr].includes(tx.DateObj.toISOString().split('T')[0])
+            [prevDateStr, currentDateStr].includes(tx.DateObj.toISOString().split('T')[0])
           );
 
           // PRIORITY 1: Try EXACT single debit match first (difference = 0)
@@ -253,10 +283,9 @@ module.exports = {
 
           // Extended date range: ±5 days
           const fromDate = new Date(creditDate);
-          fromDate.setDate(fromDate.getDate() - 5);
+          fromDate.setDate(fromDate.getDate() - lookbackDays);
           
-          const toDate = new Date(creditDate);
-          toDate.setDate(toDate.getDate() + 5);
+          const toDate = new Date(creditDate);          
 
           const relevantDebits = processedData.filter(tx =>
             tx.DebitAmount !== null &&
@@ -329,10 +358,10 @@ module.exports = {
 
           // Extended date range: ±5 days
           const fromDate = new Date(debitDate);
-          fromDate.setDate(fromDate.getDate() - 5);
+          
           
           const toDate = new Date(debitDate);
-          toDate.setDate(toDate.getDate() + 5);
+          toDate.setDate(toDate.getDate() + lookbackDays);
 
           // Find unmatched credits within the date range
           const relevantCredits = creditTransactions.filter(tx =>
@@ -404,9 +433,13 @@ module.exports = {
     }
 
     // Get matches using two-pass reconciliation
-    const { matchedDebitIds, processedData } = findMatchingTransactions(fullDataset);
+    const { matchedDebitIds, processedData } = findMatchingTransactions(fullDataset, lookbackDays);
 
     // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors
+    // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors (OPTIONAL - Performance intensive)
+  if (enableCrossVendorMatch === 'Y') {
+    console.log('Cross-vendor matching is ENABLED - checking other vendors...');
+
     const unReconciledTransactions = processedData.filter(tx => !tx.reconciled);
     
     if (unReconciledTransactions.length > 0) {
@@ -479,6 +512,11 @@ module.exports = {
           });
         }
       }
+      }
+  }
+  else
+    {
+      console.log('Cross-vendor matching is DISABLED (for better performance)');
     }
 
     // Filter to date range and map reconciliation status
