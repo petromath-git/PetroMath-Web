@@ -212,10 +212,27 @@ block content
                                 option(value="22:00:00" selected=(closingData.closeReadingTime === "22:00:00")) 10:00 PM
                                 option(value="22:30:00" selected=(closingData.closeReadingTime === "22:30:00")) 10:30 PM
                                 option(value="23:00:00" selected=(closingData.closeReadingTime === "23:00:00")) 11:00 PM
-                                option(value="23:30:00" selected=(closingData.closeReadingTime === "23:30:00")) 11:30 PM
-                        div.col-md-8
-                            small.text-muted Select the time when pump readings were taken for this shift closure
-                                        
+                                option(value="23:30:00" selected=(closingData.closeReadingTime === "23:30:00")) 11:30 PM                                
+                            small.text-muted Select time when readings were taken for this shift closure
+                        div.col-md-8#smart-reading-section(style="display: none;")
+                            label.font-weight-bold Smart Entry
+                            div.row
+                                div.col-md-8
+                                    input#smart-reading-entry.form-control.form-control-sm(
+                                        type='number' 
+                                        step='0.001' 
+                                        min='0'
+                                        placeholder='Enter reading & press Enter to auto-fill'
+                                        onkeypress='handleSmartReadingKeyPress(event)'
+                                    )
+                                div.col-md-4
+                                    button.btn.btn-success.btn-sm.btn-block(
+                                        type='button'
+                                        onclick='smartFillClosingReading(parseFloat(document.getElementById("smart-reading-entry").value))'
+                                    )
+                                        i.fas.fa-check
+                                        |  Fill
+                            small.text-muted Auto-fills the nozzle with nearest opening reading                
                     div.row &nbsp;
                     if pumps && pumps.length > 0
                         div.row                            

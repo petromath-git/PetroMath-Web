@@ -1,6 +1,15 @@
-let billsVehicleData  = {};
+let billsVehicleData = window.billsVehicleData || {};
 
 document.addEventListener('DOMContentLoaded', function() {
+
+    console.log('=== BILLS.JS LOADED ===');
+    console.log('typeof billData:', typeof billData);
+    console.log('billData:', typeof billData !== 'undefined' ? billData : 'UNDEFINED');
+    console.log('typeof billsVehicleData:', typeof billsVehicleData);
+    console.log('billsVehicleData:', billsVehicleData);
+    console.log('Keys in billsVehicleData:', Object.keys(billsVehicleData));
+
+
     const billForm = document.getElementById('billForm');
     const billItemsTable = document.getElementById('billItemsTable');
     const addRowDesktopBtn = document.getElementById('addRowDesktop');
@@ -478,6 +487,35 @@ setTimeout(function() {
     });
 }, 200); // Increased timeout slightly
 
+// NEW CODE FOR EDIT PAGE - Load vehicles on page load for credit bills
+    if (typeof billData !== 'undefined' && billData.bill_type === 'CREDIT') {
+        console.log('Edit page detected - loading vehicles for credit bill');
+        console.log('Bill data:', billData);
+        
+        // Load vehicles for the selected customer
+        if (billData.creditlist_id) {
+            loadVehiclesForCustomer(billData.creditlist_id);
+            
+            // After loading vehicles, select the current vehicle
+            setTimeout(() => {
+                if (billData.vehicle_id) {
+                    const creditVehicleDesktop = document.getElementById('creditVehicle');
+                    const creditVehicleMobile = document.getElementById('creditVehicleMobile');
+                    
+                    if (creditVehicleDesktop) {
+                        creditVehicleDesktop.value = billData.vehicle_id;
+                        console.log('Selected vehicle (desktop):', billData.vehicle_id);
+                    }
+                    if (creditVehicleMobile) {
+                        creditVehicleMobile.value = billData.vehicle_id;
+                        console.log('Selected vehicle (mobile):', billData.vehicle_id);
+                    }
+                }
+            }, 100); // Small delay to ensure vehicles are loaded first
+        }
+    }
+
+
     });
 
 
@@ -523,20 +561,12 @@ function calculateRowTax(row) {
             console.log('Price or quantity is zero/negative, skipping calculation');
             return;
         }
-            
-
-
-    console.log('=== TAX CALCULATION DEBUG ===');
-    console.log('Product:', selectedOption.text);
-    console.log('Raw CGST:', selectedOption.dataset.cgstPercent);
-    console.log('Raw SGST:', selectedOption.dataset.sgstPercent);
+       
 
     const cgstPercent = parseFloat(selectedOption.dataset.cgstPercent || 0);
     const sgstPercent = parseFloat(selectedOption.dataset.sgstPercent || 0);
 
-     console.log('Parsed CGST:', cgstPercent);
-    console.log('Parsed SGST:', sgstPercent);
-    console.log('Total Tax %:', cgstPercent + sgstPercent);
+ 
     
  
     // Calculate line total after discount (RSP inclusive)
@@ -572,10 +602,6 @@ function calculateRowTax(row) {
     if (sgstDisplay) sgstDisplay.textContent = sgstAmount.toFixed(2);
     if (amountInput) amountInput.value = finalAmount.toFixed(2);
 
-     console.log('Calculated values:');
-    console.log('Base Amount:', baseAmount.toFixed(2));
-    console.log('CGST Amount:', cgstAmount.toFixed(2));
-    console.log('SGST Amount:', sgstAmount.toFixed(2)); 
     
     // Update hidden fields
     const subtotalHidden = row.querySelector('.subtotal-hidden');
@@ -599,10 +625,10 @@ function calculateRowTax(row) {
     calculateGrandTotal();
 
 
-    console.log('Hidden field values set:');
+    
     if (cgstAmountInput) console.log('cgst_amount field:', cgstAmountInput.value);
     if (sgstAmountInput) console.log('sgst_amount field:', sgstAmountInput.value);
-    console.log('=== END TAX CALCULATION ===');
+    
 }
 
 // Calculate grand total and tax summary
@@ -858,18 +884,64 @@ function initializeVehicleSelect2() {
 }
 
 function loadVehiclesForCustomer(creditListId) {
-    $('#vehicleSelect').empty().append('<option value="">Select Vehicle</option>');
+  
     
-    if (creditListId && billsVehicleData [creditListId]) {
-        billsVehicleData [creditListId].forEach(vehicle => {
-            const option = new Option(
-                `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
-                vehicle.vehicleId
-            );
-            $('#vehicleSelect').append(option);
+    // Get both desktop and mobile vehicle dropdowns
+    const creditVehicleDesktop = document.getElementById('creditVehicle');
+    const creditVehicleMobile = document.getElementById('creditVehicleMobile');
+    
+    // Clear both dropdowns
+    if (creditVehicleDesktop) {
+        creditVehicleDesktop.innerHTML = '<option value="">Select Vehicle</option>';
+    }
+    if (creditVehicleMobile) {
+        creditVehicleMobile.innerHTML = '<option value="">Select Vehicle</option>';
+    }
+    
+    // Populate vehicles if creditListId is selected and has vehicles
+    if (creditListId && billsVehicleData[creditListId]) {
+        console.log('Found vehicles:', billsVehicleData[creditListId]);
+        
+        billsVehicleData[creditListId].forEach(vehicle => {
+            // Create options for desktop
+            if (creditVehicleDesktop) {
+                const option1 = document.createElement('option');
+                option1.value = vehicle.vehicleId;
+                option1.textContent = `${vehicle.vehicleNumber} (${vehicle.vehicleType})`;
+                creditVehicleDesktop.appendChild(option1);
+            }
+            
+            // Create options for mobile
+            if (creditVehicleMobile) {
+                const option2 = document.createElement('option');
+                option2.value = vehicle.vehicleId;
+                option2.textContent = `${vehicle.vehicleNumber} (${vehicle.vehicleType})`;
+                creditVehicleMobile.appendChild(option2);
+            }
+        });
+        
+        console.log('Vehicles loaded successfully');
+    } else {
+        console.log('No vehicles found for this customer');
+    }
+    
+    // Add sync between desktop and mobile vehicle dropdowns
+    if (creditVehicleDesktop && creditVehicleMobile) {
+        // Remove existing listeners to prevent duplicates
+        const newDesktop = creditVehicleDesktop.cloneNode(true);
+        const newMobile = creditVehicleMobile.cloneNode(true);
+        creditVehicleDesktop.parentNode.replaceChild(newDesktop, creditVehicleDesktop);
+        creditVehicleMobile.parentNode.replaceChild(newMobile, creditVehicleMobile);
+        
+        // Add new listeners
+        newDesktop.addEventListener('change', function() {
+            newMobile.value = this.value;
+        });
+        
+        newMobile.addEventListener('change', function() {
+            newDesktop.value = this.value;
         });
     }
-    $('#vehicleSelect').trigger('change');
 }
 
 function getVehicleDataForSubmission() {

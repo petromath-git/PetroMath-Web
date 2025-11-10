@@ -24,6 +24,29 @@ module.exports = {
             });
         }
     },
+    findCreditsExcludeDigital: (locationCode) => {
+    const currentDate = utils.currentDate();
+    if (locationCode) {
+        return Credit.findAll({
+            where: {
+                location_code: locationCode,
+                effective_end_date: {
+                    [Op.or]: {
+                        [Op.gte]: currentDate,
+                        [Op.is]: null
+                    }
+                },
+                [Op.or]: [
+                    { card_flag: { [Op.ne]: 'Y' } },  // Not equal to 'Y'
+                    { card_flag: { [Op.is]: null } }   // Or NULL
+                ]
+            },
+            order: [Sequelize.literal('Company_Name')],
+        });
+    } else {
+        return Credit.findAll({});
+    }
+},
     findCredits: (locationCode) => {
         const currentDate = utils.currentDate();
         if (locationCode) {
@@ -164,4 +187,25 @@ findCustomerByPhone: async (phone) => {
             throw error;
         }
     },
+
+    getVendorLookbackDays: async (creditlistId, locationCode) => {
+  try {
+    const query = `
+      SELECT settlement_lookback_days 
+      FROM m_creditlist 
+      WHERE creditlist_id = ? AND location_code = ?
+    `;
+    const result = await db.query(query, [creditlistId, locationCode]);
+    
+    if (result && result[0] && result[0].settlement_lookback_days !== null) {
+      return result[0].settlement_lookback_days;
+    }
+    
+    return null; // Not configured at vendor level
+    
+  } catch (err) {
+    console.error('Error fetching vendor lookback days:', err);
+    return null;
+  }
+}
 };
