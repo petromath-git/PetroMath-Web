@@ -44,9 +44,13 @@ function minimumRequirementForTabbing() {
 }
 
 function disableLink(link) {
-    link.removeAttribute('data-toggle');
+    if (link) {
+        link.removeAttribute('data-toggle');
+    }
 }
 
 function enableLink(link) {
-    link.setAttribute('data-toggle', 'tab');
+    if (link) {
+        link.setAttribute('data-toggle', 'tab');
+    }
 }

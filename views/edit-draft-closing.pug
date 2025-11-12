@@ -49,8 +49,9 @@ block content
                             a.nav-link#attendance_tab(data-toggle="tab" href="#new_attendance" onclick=`trackMenu(this)`) Attendance
                         li.nav-item.col-md
                             a.nav-link#reading_tab(data-toggle="tab" href="#new_readings" onclick=`doubleCheckReadingPumps(this)`) Reading
-                        li.nav-item.col-md
-                            a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t" onclick=`calculateAll2TProducts(this)`) 2T Sales
+                        if show2TSalesTab
+                            li.nav-item.col-md
+                                a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t" onclick=`calculateAll2TProducts(this)`) 2T Sales
                     if(user.isAdmin)
                         li.nav-item.col-md
                             a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Cash Sales
@@ -75,8 +76,9 @@ block content
                             a.nav-link#attendance_tab(data-toggle="tab" href="#new_attendance") Attendance
                         li.nav-item.col-md
                             a.nav-link#reading_tab(data-toggle="tab" href="#new_readings" ) Reading
-                        li.nav-item.col-md
-                            a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t") 2T Sales
+                        if show2TSalesTab
+                            li.nav-item.col-md
+                                a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t") 2T Sales
                     li.nav-item.col-md
                         a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Lube Sales
                     li.nav-item.col-md
@@ -271,26 +273,27 @@ block content
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('sales_2t_tab')") Next &raquo;
 
-                // ----------------------- New 2T sales ---------------------------------
-                if(user.isAdmin)
-                    div.tab-pane.fade.container#sales_2t(class= divDisableClass)
-                        if product2TValues && product2TValues.length > 0
+                if show2TSalesTab
+                    // ----------------------- New 2T sales ---------------------------------
+                    if(user.isAdmin)
+                        div.tab-pane.fade.container#sales_2t(class= divDisableClass)
+                            if product2TValues && product2TValues.length > 0
+                                div.row
+                                    each val in product2TValues
+                                        +list2TProductNames(val)
+                                div.row &nbsp;
+                                div.row
+                                    // 2T details
+                                    each val in product2TValues
+                                        +add2TProducts(val)
+                            else
+                                div.row.bg-warning
+                                    pre.text-danger= `Note: 2T oil products' data is empty at backend.`
                             div.row
-                                each val in product2TValues
-                                    +list2TProductNames(val)
-                            div.row &nbsp;
-                            div.row
-                                // 2T details
-                                each val in product2TValues
-                                    +add2TProducts(val)
-                        else
-                            div.row.bg-warning
-                                pre.text-danger= `Note: 2T oil products' data is empty at backend.`
-                        div.row
-                            div.col &nbsp;
-                        div.row(align="center")
-                            div.col
-                                button.btn.btn-primary(type="button", onClick="trackMenuWithName('cash_sales_tab')") Next &raquo;
+                                div.col &nbsp;
+                            div.row(align="center")
+                                div.col
+                                    button.btn.btn-primary(type="button", onClick="trackMenuWithName('cash_sales_tab')") Next &raquo;
                 // ----------------------- New cash sales details ----------------------------
                 div#new_cash_sales(class = cashSalesTabActiveStatus + divDisableClass)
                     style.
@@ -629,17 +632,18 @@ block content
                                                             td                                           
                                         div.col-6
                                 div.row
-                                    // 2T loose details
-                                    div.col-3#v-2TLoose-sales
-                                        span.sub-header 2TLoose Rate :
-                                        span(id='val-loose2t-rate')
-                                        +summary2TSalesData('loose2t')
-                                        +gasSalesTotal()
-                                    // 2T pouch details
-                                    div.col-3#v-2TPouch-sales
-                                        span.sub-header 2TPouch Rate :
-                                        span(id='val-pouch2t-rate')
-                                        +summary2TSalesData('pouch2t')
+                                    if show2TSalesTab
+                                        // 2T loose details
+                                        div.col-3#v-2TLoose-sales
+                                            span.sub-header 2TLoose Rate :
+                                            span(id='val-loose2t-rate')
+                                            +summary2TSalesData('loose2t')                                            
+                                        // 2T pouch details
+                                        div.col-3#v-2TPouch-sales
+                                            span.sub-header 2TPouch Rate :
+                                            span(id='val-pouch2t-rate')
+                                            +summary2TSalesData('pouch2t')
+                                    +gasSalesTotal()        
                                     // Summary: Expenses
                                     div.col-3#v-expenses
                                         h6.sub-header Expenses

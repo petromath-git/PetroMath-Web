@@ -51,15 +51,17 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
         // OPTIMIZATION 2: Get products only if we have data
         console.time('Get products');
         const pumpProducts = await db.sequelize.query(`
-            SELECT DISTINCT mp.product_code 
-            FROM m_pump mp
-            JOIN t_reading r ON mp.pump_id = r.pump_id
-            JOIN t_closing c ON r.closing_id = c.closing_id
-            WHERE c.location_code = :locationCode 
-            AND mp.product_code IS NOT NULL 
-            AND mp.effective_end_date > NOW()
-            AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-            ORDER BY mp.product_code
+                SELECT DISTINCT mp.product_code 
+                FROM m_pump mp
+                JOIN t_reading r ON mp.pump_id = r.pump_id
+                JOIN t_closing c ON r.closing_id = c.closing_id
+                JOIN m_product prod ON mp.product_code = prod.product_name 
+                                    AND mp.location_code = prod.location_code
+                WHERE c.location_code = :locationCode 
+                AND mp.product_code IS NOT NULL 
+                AND mp.effective_end_date > NOW()
+                AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
+                ORDER BY prod.product_id 
         `, {
             replacements: { locationCode, fromDate, toDate },
             type: db.Sequelize.QueryTypes.SELECT
@@ -72,8 +74,8 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
         
         if (pumpProducts.length > 0) {
             pumpProducts.forEach(product => {
-                fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE((r.closing_reading - r.opening_reading - r.testing), 0) ELSE 0 END) as '${product.product_code}'`);
-                finalProductColumns.push(`COALESCE(fs.${product.product_code}, 0) as ${product.product_code}`);
+                fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE((r.closing_reading - r.opening_reading - r.testing), 0) ELSE 0 END) as \`${product.product_code}\``);
+                finalProductColumns.push(`COALESCE(fs.\`${product.product_code}\`, 0) as \`${product.product_code}\``);
             });
         }
         
@@ -180,13 +182,13 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
             FROM m_pump mp
             JOIN t_reading r ON mp.pump_id = r.pump_id
             JOIN t_closing c ON r.closing_id = c.closing_id
-            JOIN m_persons p ON c.cashier_id = p.Person_id
+            JOIN m_product prod ON mp.product_code = prod.product_name 
+                                AND mp.location_code = prod.location_code
             WHERE c.location_code = :locationCode 
-            AND p.Person_Name = :personName
             AND mp.product_code IS NOT NULL 
             AND mp.effective_end_date > NOW()
             AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-            ORDER BY mp.product_code
+            ORDER BY prod.product_id 
         `, {
             replacements: { locationCode, personName, fromDate, toDate },
             type: db.Sequelize.QueryTypes.SELECT
@@ -199,8 +201,8 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
         
         if (pumpProducts.length > 0) {
             pumpProducts.forEach(product => {
-                fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE((r.closing_reading - r.opening_reading - r.testing), 0) ELSE 0 END) as '${product.product_code}'`);
-                finalProductColumns.push(`COALESCE(fs.${product.product_code}, 0) as ${product.product_code}`);
+                fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE((r.closing_reading - r.opening_reading - r.testing), 0) ELSE 0 END) as \`${product.product_code}\``);
+                finalProductColumns.push(`COALESCE(fs.\`${product.product_code}\`, 0) as \`${product.product_code}\``);
             });
         }
         

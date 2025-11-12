@@ -58,7 +58,11 @@ module.exports = {
     0  // default 0 days
     ));
 
-    
+    const show2TSalesTab = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'SHOW_2T_SALES_TAB',
+    'N' // default - hide by default
+        );
     
       
 
@@ -96,7 +100,8 @@ module.exports = {
                             isOpeningReadonly: openingReadonlyConfig === 'Y',
                             allowSecondaryPump: allowSecondaryPump === 'true',
                             digitalSalesBackdateDays: digitalSalesBackdateDays,
-                            digitalSalesFutureDays: digitalSalesFutureDays
+                            digitalSalesFutureDays: digitalSalesFutureDays,
+                            show2TSalesTab: show2TSalesTab === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -520,12 +525,14 @@ const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDat
 const getLocationProductColumns = (locationCode) => {
     return new Promise((resolve, reject) => {
         const productQuery = `
-            SELECT DISTINCT product_code 
-            FROM m_pump 
-            WHERE location_code = :locationCode 
-            AND product_code IS NOT NULL 
-            AND effective_end_date > NOW()
-            ORDER BY product_code
+            SELECT DISTINCT mp.product_code 
+            FROM m_pump mp
+            JOIN m_product prod ON mp.product_code = prod.product_name 
+                                AND mp.location_code = prod.location_code
+            WHERE mp.location_code = :locationCode 
+            AND mp.product_code IS NOT NULL 
+            AND mp.effective_end_date > NOW()
+            ORDER BY prod.product_id
         `;
         
         db.sequelize.query(productQuery, {
