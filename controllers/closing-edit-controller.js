@@ -96,6 +96,12 @@ module.exports = {
             0  // default 0 days
             ));    
 
+            const show2TSalesTab = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'SHOW_2T_SALES_TAB',
+                'N' // default - hide by default
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -126,6 +132,7 @@ module.exports = {
                         allowSecondaryPump: allowSecondaryPump === 'true',
                         digitalSalesBackdateDays: digitalSalesBackdateDays,
                         digitalSalesFutureDays: digitalSalesFutureDays,
+                        show2TSalesTab: show2TSalesTab === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,

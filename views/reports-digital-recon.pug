@@ -2,232 +2,227 @@ extends layout
 
 block content
     style.
-        /* Sticky header styling */
         .table-responsive {
             max-height: calc(100vh - 250px);
             overflow-y: auto;
         }
-        
+
         .table thead {
             position: sticky;
             top: 0;
             z-index: 10;
             background-color: #f8f9fa;
         }
-        
-        /* Red highlight for unreconciled amounts */
+
         .unreconciled-amount {
             color: #dc3545 !important;
             font-weight: 600;
         }
 
+        /* Checkbox styling */
+        .txn-checkbox {
+            width: 15px;
+            height: 15px;
+            accent-color: #0d6efd; /* Bootstrap primary blue */
+            cursor: pointer;
+            transform: scale(1.05);
+            border-radius: 4px;
+        }
+
+        /* Selected row (darker) */
+        tr.selected-row {
+            background-color: rgba(13, 110, 253, 0.20) !important; /* darker than before */
+        }
+
+        tr:hover {
+            background-color: #f5faff !important;
+        }
+
+        /* Narration column narrower with ellipsis */
+        td.narration-cell {
+            max-width: 220px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Selected summary sticky */
+        #selected-summary {
+            position: sticky;
+            bottom: 0;
+            background: #ffffff;
+            z-index: 999;
+            border-top: 2px solid #dee2e6;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+        }
+
     script.
-        // Javascript that gets table data
-        var creditstmtFromServer = !{JSON.stringify(creditstmt)} 
+        var creditstmtFromServer = !{JSON.stringify(creditstmt)};
         var currentData = creditstmtFromServer;
 
+        // Render table (checkbox column always visible)
         function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
-            // Start directly with the table
             var result = "<div class='table-responsive'>";
             result += "<table class='table table-bordered table-sm table-hover' style='width: 100%; border: 1px solid #dee2e6; margin-top: 10px;'>";
-            
-            // Headers
+
             if (array.length > 0 && typeof array[0] === 'object') {
-                result += "<thead class='thead-light' style='background-color: #f8f9fa;'><tr>";
-                
-                // Add Match ID header first
-                result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Match ID</th>";
-                
+                result += "<thead class='thead-light'><tr>";
+                // Checkbox header column - wider
+                result += "<th class='text-center' style='width: 80px; border: 1px solid #dee2e6;'>Select<br><input type='checkbox' id='selectAll' onclick='toggleSelectAll(this)' /></th>";
+                result += "<th class='text-center' style='min-width:90px; border: 1px solid #dee2e6;'>Match ID</th>";
+
                 Object.keys(array[0]).forEach(key => {
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
-                        result += "<th style='border: 1px solid #dee2e6;' class='text-center'>" + key + "</th>";
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass' && key !== 'unique_id') {
+                        // make Narration column narrower
+                        let widthStyle = (key === 'Narration') ? "max-width:220px;" : "";
+                        result += `<th class='text-center' style='border: 1px solid #dee2e6; ${widthStyle}'>${key}</th>`;
                     }
                 });
-                result += "<th style='border: 1px solid #dee2e6;' class='text-center'>Status</th>";
+                result += "<th class='text-center' style='width:120px; border: 1px solid #dee2e6;'>Status</th>";
                 result += "</tr></thead>";
             }
 
             result += "<tbody>";
 
             for (var i = 0; i < array.length; i++) {
+                let row = array[i];
                 let rowClass = '';
-
-                // Check if it's the last row and contains "Total"
                 if (i === array.length - 1) {
-                    let isTotalRow = Object.values(array[i]).some(value => value && 
-                        (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
+                    let isTotalRow = Object.values(row).some(value => value &&
+                        (value.toString().toLowerCase().includes('total') || value.toString().toLowerCase().includes('excess'))
                     );
-
-                    if (isTotalRow) {
-                        rowClass = 'font-weight-bold text-dark bg-light';
-                    }
+                    if (isTotalRow) rowClass = 'font-weight-bold text-dark bg-light';
                 }
 
                 result += `<tr class='${rowClass}'>`;
 
-                // Add Match ID column first
-                const matchId = array[i].match_id;
-                const displayMatchId = matchId !== null && matchId !== undefined ? matchId : '';
+                // Checkbox cell (always visible)
+                result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>
+                             <input type='checkbox' class='row-select txn-checkbox' onchange='updateSelectedTotals()'
+                             data-debit='${row.Debit || 0}' data-credit='${row.Credit || 0}'>
+                           </td>`;
+
+                // Match ID column
+                const matchId = row.match_id || '';
                 const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
-                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6;'>${displayMatchId || '-'}</td>`;
+                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${matchId || '-'}</td>`;
 
-                Object.keys(array[i]).forEach(key => {
-                    // Skip 'companyName', 'reconciled', 'match_id', 'possibleMatch', and 'reconciliation_pass' columns
-                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass') {
-                        let dataValue = array[i][key];
-                        
-                        // Check if this is an amount column and if the row is unreconciled
-                        const isAmountColumn = numberColumns.includes(key);
-                        const isUnreconciled = !array[i].reconciled;
-                        const amountClass = isAmountColumn && isUnreconciled ? 'unreconciled-amount' : '';
+                // Data columns
+                Object.keys(row).forEach(key => {
+                    if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass' && key !== 'unique_id') {
+                        let dataValue = row[key];
+                        const isAmount = numberColumns.includes(key);
+                        const isUnreconciled = !row.reconciled;
+                        const amountClass = isAmount && isUnreconciled ? 'unreconciled-amount' : '';
+                        const tdClass = (key === 'Narration') ? 'narration-cell' : '';
 
-                        if (isAmountColumn && dataValue !== "" && dataValue !== null && !isNaN(dataValue)) {
-                            printedValue = new Intl.NumberFormat('en-IN', {
+                        if (isAmount && dataValue && !isNaN(dataValue)) {
+                            const printedValue = new Intl.NumberFormat('en-IN', {
                                 style: 'decimal',
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
                             }).format(dataValue);
-
-                            result += `<td class='text-right ${amountClass}' style='border: 1px solid #dee2e6;'>${printedValue}</td>`;
+                            result += `<td class='text-right ${amountClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${printedValue}</td>`;
                         } else {
-                            result += `<td class='text-left' style='border: 1px solid #dee2e6;'>${dataValue || ''}</td>`;
+                            result += `<td class='${tdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${dataValue || ''}</td>`;
                         }
                     }
                 });
 
-                // Add Status column with colored tick based on reconciliation pass
+                // Status icon logic (preserve your pass colors)
                 let statusIcon;
-                if (array[i].reconciled) {
-                    if (array[i].reconciliation_pass === 2) {
-                        // Yellow/orange tick for Pass 2 (extended reconciliation)
-                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #ffa500;' title='Matched in extended pass (±5 days)'></i>";
-                    } else if (array[i].reconciliation_pass === 3) {
-                        // Purple/violet tick for Pass 3 (reverse matching: 1 debit → multiple credits)
-                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #9333ea;' title='Reverse match: 1 debit → multiple credits (±5 days)'></i>";
-                    } else {
-                        // Green tick for Pass 1 (standard reconciliation)
-                        statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched in standard pass (±1 day)'></i>";
-                    }
+                if (row.reconciled) {
+                    if (row.reconciliation_pass === 2)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #ffa500;' title='Extended match (±5 days)'></i>";
+                    else if (row.reconciliation_pass === 3)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #9333ea;' title='Reverse match (1→N)'></i>";
+                    else if (row.reconciliation_pass === 4)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #198754;' title='Adjustment/Commission reconciliation'></i>";
+                    else if (row.reconciliation_pass === 5)
+                        statusIcon = "<i class='bi bi-check-circle-fill' style='color: #0dcaf0;' title='Shift offset carryover'></i>";
+                    else
+                        statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched (standard pass)'></i>";
                 } else {
-                    // Gray X for unmatched
                     statusIcon = "<i class='bi bi-x-circle text-muted'></i>";
                 }
-                
+
                 let statusCell = statusIcon;
-                
-                // Add possible match hint if exists
-                if (array[i].possibleMatch && !array[i].reconciled) {
-                    const pm = array[i].possibleMatch;
-                    statusCell += `<br><small class='text-warning' style='cursor: help;' title='Possible entry error'>
-                        <i class='bi bi-exclamation-triangle-fill'></i> 
-                        Found in ${pm.vendor}
+                if (row.possibleMatch && !row.reconciled) {
+                    const pm = row.possibleMatch;
+                    statusCell += `<br><small class='text-warning'>
+                        <i class='bi bi-exclamation-triangle-fill'></i> Found in ${pm.vendor}
                     </small>`;
                 }
-                
-                result += `<td class='text-center' style='border: 1px solid #dee2e6;'>${statusCell}</td>`;
+
+                result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>${statusCell}</td>`;
                 result += "</tr>";
             }
 
-            result += "</tbody>";
-            result += "</table>";
-            result += "</div>";
+            result += "</tbody></table></div>";
             return result;
         }
 
-        // Live search function
+        // Live search (kept unchanged logic)
         function liveSearch() {
-            const searchValue = document.getElementById('searchInput').value.toLowerCase();
-            const showUnreconciled = document.getElementById('showUnreconciled').checked;
-            
+            const searchValue = document.getElementById('searchInput').value ? document.getElementById('searchInput').value.toLowerCase() : '';
+            const showUnreconciled = document.getElementById('showUnreconciled') ? document.getElementById('showUnreconciled').checked : false;
             let filteredData = creditstmtFromServer;
-            
-            // Filter by reconciliation status
-            if (showUnreconciled) {
+
+            if (showUnreconciled)
                 filteredData = filteredData.filter(tx => !tx.reconciled);
-            }
-            
-            // Filter by search term
+
             if (searchValue) {
                 filteredData = filteredData.filter(tx => {
                     return Object.values(tx).some(value => {
-                        if (value !== null && value !== undefined) {
+                        if (value !== null && value !== undefined)
                             return value.toString().toLowerCase().includes(searchValue);
-                        }
                         return false;
                     });
                 });
             }
-            
+
             currentData = filteredData;
-            
-            // Calculate totals
             updateTotals(filteredData);
-            
             document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
         }
 
-        // Function to calculate and display totals
-        function updateTotals(data) {
-            let totalDebit = 0;
-            let totalCredit = 0;
-            let reconciledCount = 0;
-            let unreconciledCount = 0;
-            
+       function updateTotals(data) {
+            let unreconciledDebit = 0, unreconciledCredit = 0;
+
             data.forEach(tx => {
-                if (tx.Debit) {
-                    totalDebit += parseFloat(tx.Debit);
-                }
-                if (tx.Credit) {
-                    totalCredit += parseFloat(tx.Credit);
-                }
-                
-                if (tx.reconciled) {
-                    reconciledCount++;
-                } else {
-                    unreconciledCount++;
+                if (!tx.reconciled) {
+                    if (tx.Debit) unreconciledDebit += parseFloat(tx.Debit);
+                    if (tx.Credit) unreconciledCredit += parseFloat(tx.Credit);
                 }
             });
-            
-            const difference = totalDebit - totalCredit;
-            
-            // Format numbers
-            const formatCurrency = (num) => {
-                return new Intl.NumberFormat('en-IN', {
-                    style: 'decimal',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }).format(num);
-            };
-            
-            // Build totals HTML
-            let totalsHTML = `
-                <div class="card mt-3 mb-3" style="border: 2px solid #dee2e6;">
-                    <div class="card-body py-2">
-                        <div class="row text-center">
-                            <div class="col-md-3 col-6">
-                                <small class="text-muted d-block">Total Debit</small>
-                                <strong class="text-danger fs-5">₹${formatCurrency(totalDebit)}</strong>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <small class="text-muted d-block">Total Credit</small>
-                                <strong class="text-success fs-5">₹${formatCurrency(totalCredit)}</strong>
-                            </div>
-                            <div class="col-md-3 col-6 mt-2 mt-md-0">
-                                <small class="text-muted d-block">Difference</small>
-                                <strong class="${difference === 0 ? 'text-success' : 'text-warning'} fs-5">₹${formatCurrency(Math.abs(difference))}</strong>
-                                ${difference !== 0 ? `<small class="d-block text-muted">(${difference > 0 ? 'Debit excess' : 'Credit excess'})</small>` : ''}
-                            </div>
-                            <div class="col-md-3 col-6 mt-2 mt-md-0">
-                                <small class="text-muted d-block">Transactions</small>
-                                <strong class="text-primary fs-5">${data.length}</strong>
-                                <small class="d-block text-muted">${reconciledCount} matched, ${unreconciledCount} unmatched</small>
-                            </div>
+
+            const diff = unreconciledDebit - unreconciledCredit;
+            const absDiff = Math.abs(diff);
+
+            const formatCurrency = num => new Intl.NumberFormat('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+
+            // Color logic
+            const colorClass = diff > 0 ? 'text-danger' : (diff < 0 ? 'text-success' : 'text-muted');
+            const labelText = diff > 0 ? 'Debit Excess' : (diff < 0 ? 'Credit Excess' : 'Perfectly Balanced');
+
+            const totalsHTML = `
+                <div class="card mt-3 mb-3 border-2 shadow-sm">
+                    <div class="card-body py-3 text-center">
+                        <div>
+                            <small class="text-muted d-block mb-1">
+                                <i class="bi bi-exclamation-diamond me-1 text-secondary"></i>
+                                Unreconciled Difference
+                            </small>
+                            <h3 class="${colorClass}" style="font-weight:700;">₹${formatCurrency(absDiff)}</h3>
+                            <div class="small text-muted">${labelText}</div>
                         </div>
                     </div>
                 </div>
             `;
-            
-            // Update or create totals div
+
             let totalsDiv = document.getElementById('totals-summary');
             if (!totalsDiv) {
                 totalsDiv = document.createElement('div');
@@ -238,186 +233,161 @@ block content
             totalsDiv.innerHTML = totalsHTML;
         }
 
-        // Function to get all data for PDF/print export (ignores filters)
-        function getAllDataForExport() {
-            return creditstmtFromServer;
+
+        // Inline calculator + row highlight (unchanged logic)
+        function updateSelectedTotals() {
+            const checkboxes = document.querySelectorAll('.row-select');
+            let totalDebit = 0, totalCredit = 0, count = 0;
+
+            checkboxes.forEach(cb => {
+                const row = cb.closest('tr');
+                if (cb.checked) {
+                    totalDebit += parseFloat(cb.dataset.debit || 0);
+                    totalCredit += parseFloat(cb.dataset.credit || 0);
+                    count++;
+                    row.classList.add('selected-row'); // highlight
+                } else {
+                    row.classList.remove('selected-row');
+                }
+            });
+
+            const diff = totalDebit - totalCredit;
+            document.getElementById('selected-count').textContent = count;
+            document.getElementById('selected-debit').textContent = totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+            document.getElementById('selected-credit').textContent = totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+            document.getElementById('selected-diff').textContent = Math.abs(diff).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+            const diffElement = document.getElementById('selected-diff');
+            if (diffElement && diffElement.parentNode) {
+                diffElement.parentNode.classList.remove('text-success', 'text-danger');
+                diffElement.parentNode.classList.add(diff >= 0 ? 'text-danger' : 'text-success');
+            }
+
+            const summary = document.getElementById('selected-summary');
+            if (summary) summary.classList.toggle('d-none', count === 0);
         }
 
-        // Function to get current filtered data for PDF/print export
-        function getCurrentDataForExport() {
-            return currentData;
+        // Select All toggle
+        function toggleSelectAll(masterCheckbox) {
+            const checkboxes = document.querySelectorAll('.row-select');
+            checkboxes.forEach(cb => {
+                cb.checked = masterCheckbox.checked;
+                const row = cb.closest('tr');
+                if (masterCheckbox.checked) {
+                    row.classList.add('selected-row');
+                } else {
+                    row.classList.remove('selected-row');
+                }
+            });
+            updateSelectedTotals();
         }
 
-        // Function to filter data based on reconciliation status
-        function filterUnreconciledTransactions() {
-            liveSearch();
+        // Clear selections
+        function clearSelections() {
+            document.querySelectorAll('.row-select').forEach(cb => {
+                cb.checked = false;
+                const row = cb.closest('tr');
+                if (row) row.classList.remove('selected-row');
+            });
+            const master = document.getElementById('selectAll');
+            if (master) master.checked = false;
+            updateSelectedTotals();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Initial table rendering
             liveSearch();
         });
 
-        // Get current date in YYYY-MM-DD format for max date validation
-        var today = new Date();
-        var dd = String(today.getDate()).padStart(2, '0');
-        var mm = String(today.getMonth() + 1).padStart(2, '0');
-        var yyyy = today.getFullYear();
-        var currentDate = yyyy + '-' + mm + '-' + dd;
-
-        function updateDateRange() {
-            var dateRange = document.getElementById('dateRange').value;
-            var fromDate = new Date();
-            var toDate = new Date();
-
-            if (dateRange === 'this_month') {
-                fromDate.setDate(1);
-                toDate = new Date();
-            } else if (dateRange === 'last_month') {
-                fromDate.setMonth(fromDate.getMonth() - 1);
-                fromDate.setDate(1);
-                toDate.setDate(0);
-            } else if (dateRange === 'custom') {
-                return;
-            }
-
-            document.getElementById('fromclosingDate').value = fromDate.toISOString().split('T')[0];
-            document.getElementById('toclosingDate').value = toDate.toISOString().split('T')[0];
-        }
-
-        // Toggle filter collapse
-        function toggleFilters() {
-            const filterContent = document.getElementById('filterContent');
-            const icon = document.getElementById('filter-toggle-icon');
-            
-            if (filterContent.classList.contains('show')) {
-                filterContent.classList.remove('show');
-                icon.classList.remove('bi-chevron-up');
-                icon.classList.add('bi-chevron-down');
-            } else {
-                filterContent.classList.add('show');
-                icon.classList.remove('bi-chevron-down');
-                icon.classList.add('bi-chevron-up');
-            }
-        }
-
-    // Collapsible Filter Section - Modern Style
+    // Filter + Controls (removed enable selection toggle)
     .card.mb-3
-        .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
+        .card-header(style='cursor: pointer; background-color: #f8f9fa;')
             .d-flex.justify-content-between.align-items-center
                 h6.mb-0 
                     i.bi.bi-funnel.me-2
                     | Digital Reconciliation Filters
-                i#filter-toggle-icon.bi.bi-chevron-down
-        .filter-content.collapse.show#filterContent
-            .card-body
-                form(method='POST' action='/reports-digital-recon')
-                    .row.g-3.align-items-end
-                        // Period Dropdown
-                        .col-lg-2.col-md-3.col-6
-                            label.form-label(for='dateRange') Date Range:
-                            select#dateRange.form-control(onchange='updateDateRange()')
-                                option(value='this_month') This Month
-                                option(value='last_month') Last Month
-                                option(value='custom' selected) Custom Date
-                        
-                        // From Date
-                        .col-lg-2.col-md-3.col-6
-                            label.form-label(for='fromclosingDate') From Date:
-                            input#fromclosingDate.form-control(
-                                type='date' 
-                                name='fromClosingDate' 
-                                value=fromClosingDate 
-                                max=currentDate
-                                required
-                            )
-                        
-                        // To Date
-                        .col-lg-2.col-md-3.col-6
-                            label.form-label(for='toclosingDate') To Date:
-                            input#toclosingDate.form-control(
-                                type='date' 
-                                name='toClosingDate' 
-                                value=toClosingDate 
-                                max=currentDate
-                                required
-                            )
-                        
-                        // Digital Vendor - Reduced width
-                        .col-lg-2.col-md-3.col-6
-                            label.form-label(for='company_id') Digital Vendor:
-                            select#company_id.form-control(name='company_id' required)
-                                if credits                           
-                                    each val in credits
-                                        option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
-                        
-                        // Live Search - Reduced width
-                        .col-lg-2.col-md-6.col-12
-                            label.form-label(for='searchInput') Search:
-                            input#searchInput.form-control(
-                                type='text' 
-                                placeholder='Search transactions...' 
-                                oninput='liveSearch()'
-                            )
-                        
-                        // Action Buttons (Go, Download, Print) on same line
-                        .col-lg-2.col-md-6.col-12
-                            label.form-label &nbsp;
-                            .d-flex.gap-2
-                                include report-print-download.pug
-                    
-                    // Show Unreconciled Checkbox Row
-                    .row.mt-3
-                        .col-12
-                            .form-check
-                                input#showUnreconciled.form-check-input(
-                                    type='checkbox' 
-                                    onchange='filterUnreconciledTransactions()'
-                                )
-                                label.form-check-label(for='showUnreconciled') 
-                                    i.bi.bi-filter-circle.me-1
-                                    | Show Only Unreconciled Transactions
+        .card-body
+            form(method='POST' action='/reports-digital-recon')
+                .row.g-3.align-items-end
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label Date Range:
+                        select#dateRange.form-control(onchange='updateDateRange()')
+                            option(value='this_month') This Month
+                            option(value='last_month') Last Month
+                            option(value='custom' selected) Custom
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label From:
+                        input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label To:
+                        input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label Digital Vendor:
+                        select#company_id.form-control(name='company_id' required)
+                            if credits
+                                each val in credits
+                                    option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label Search:
+                        input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label &nbsp;
+                        .d-flex.gap-2
+                            include report-print-download.pug
+                .row.mt-3
+                    .col-12
+                        .form-check
+                            input#showUnreconciled.form-check-input(type='checkbox', onchange='liveSearch()')
+                            label.form-check-label(for='showUnreconciled')
+                                i.bi.bi-filter-circle.me-1
+                                | Show Only Unreconciled
 
-    div &nbsp;
-    
-    // Error message display
-    if error_message
-        .alert.alert-danger.alert-dismissible.fade.show.mx-3(role='alert')
-            i.bi.bi-exclamation-triangle-fill.me-2
-            strong Error: 
-            = error_message
-            button.btn-close(type='button' data-bs-dismiss='alert' aria-label='Close')
-    
     .container-fluid
         if creditstmt && creditstmt.length > 0
-            - var companyName = creditstmt[0].companyName            
+            - var companyName = creditstmt[0].companyName
             div
-                h5.font-weight-bold.text-center.mb-1 Digital Reconciliation Report
-                h6.font-weight-bold.text-center.text-uppercase.text-primary= companyName                 
-                p.text-center.text-muted.mb-2
+                h5.text-center.mb-1 Digital Reconciliation Report
+                h6.text-center.text-primary.text-uppercase= companyName
+                p.text-center.text-muted
                     i.bi.bi-calendar-range.me-2
                     = `${formattedFromDate} to ${formattedToDate}`
-                
-                // Legend for status indicators
+
                 .d-flex.justify-content-center.gap-4.mb-3.small
                     div
                         i.bi.bi-check-circle-fill.text-success.me-1
-                        span Standard Match (±1 day)
+                        span Standard Match (±1d)
                     div
-                        i.bi.bi-check-circle-fill.me-1(style='color: #ffa500;')
-                        span Extended Match (±5 days)
+                        i.bi.bi-check-circle-fill.me-1(style='color:#ffa500;')
+                        span Extended (±5d)
                     div
-                        i.bi.bi-check-circle-fill.me-1(style='color: #9333ea;')
-                        span Reverse Match (1→N)
+                        i.bi.bi-check-circle-fill.me-1(style='color:#9333ea;')
+                        span Reverse (1→N)
                     div
                         i.bi.bi-x-circle.text-muted.me-1
                         span Unmatched
                 
-                div#creditstmt-table-container               
+                div#creditstmt-table-container
+                #selected-summary.card.shadow-sm.border.mt-2.px-3.py-2.d-none
+                    .d-flex.justify-content-around.align-items-center.small
+                        div
+                            b Selected: 
+                            span#selected-count 0
+                        div
+                            b Debit: 
+                            span.text-danger ₹
+                            span#selected-debit 0.00
+                        div
+                            b Credit: 
+                            span.text-success ₹
+                            span#selected-credit 0.00
+                        div
+                            b Difference: 
+                            span#selected-diff 0.00
+                        button.btn.btn-sm.btn-outline-secondary(onclick='clearSelections()')
+                            i.bi.bi-x-circle.me-1
+                            | Clear
         else
             .alert.alert-info.text-center.mt-4(role='alert')
                 i.bi.bi-info-circle.me-2
                 | No transactions found for the selected period.
 
-    // Include the overlay
     include overlay.pug
