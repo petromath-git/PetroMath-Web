@@ -281,6 +281,35 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
         return [];
     }
 },
+
+getMostRecentClosingDate: async (locationCode) => {
+    try {
+        const query = `
+            SELECT DATE(closing_date) as most_recent_date
+            FROM t_closing
+            WHERE location_code = :locationCode
+            ORDER BY closing_date DESC
+            LIMIT 1
+        `;
+        
+        const result = await db.sequelize.query(query, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        
+        if (result && result.length > 0 && result[0].most_recent_date) {
+            return moment(result[0].most_recent_date).format('YYYY-MM-DD');
+        }
+        
+        // If no closings found, return today's date as fallback
+        return moment().format('YYYY-MM-DD');
+        
+    } catch (error) {
+        console.error('Error in getMostRecentClosingDate:', error.message);
+        // Return today's date as fallback on error
+        return moment().format('YYYY-MM-DD');
+    }
+},
     
     // getClosingDetailsByDateFormat: (locationCode, fromDate, toDate) => {
     //     return TxnClosing.findAll({
@@ -480,5 +509,5 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
     return TxnDigitalSales.findAll({
         where: {'closing_id': closingId}
     });
-    },
+    }
 };
