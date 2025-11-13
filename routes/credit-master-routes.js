@@ -10,14 +10,17 @@ const PersonDao = require('../dao/person-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const lookupDao = require('../dao/lookup-dao');
 const rolePermissionsDao = require('../dao/role-permissions-dao');
+const BankDao = require('../dao/bank-dao');
 
 // ===== CREDIT CUSTOMER ROUTES =====
+
 
 // Display credit customers page (excludes digital)
 router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function (req, res) {
     try {
         const credits = await creditController.findCreditCustomersOnly(req.user.location_code);
         const customerTypes = await lookupDao.getCustomerTypes(req.user.location_code);
+        const banks = await BankDao.findAll(req.user.location_code); // ADD THIS LINE
         
         // Check individual permissions for UI
         const canEdit = await rolePermissionsDao.hasPermission(
@@ -41,6 +44,7 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
             user: req.user, 
             credits: credits,
             customerTypes: customerTypes,
+            banks: banks, 
             canEdit: canEdit,
             canAdd: canAdd,
             canDisable: canDisable
@@ -87,6 +91,7 @@ router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')]
 });
 
 
+
 // API endpoint for updating customer
 router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
     try {
@@ -112,6 +117,7 @@ router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MA
             address: req.body.address,
             phoneno: req.body.phoneno,
             gst: req.body.gst,
+            remittance_bank_id: req.body.remittance_bank_id && req.body.remittance_bank_id !== '' ? req.body.remittance_bank_id : null, // ADD THIS LINE
             updated_by: req.user.Person_id,
             updation_date: new Date()
         };

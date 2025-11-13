@@ -33,6 +33,7 @@ module.exports = {
             phoneno: req.body.m_credit_phoneno_0,
             gst: req.body.m_credit_gst_0,
             short_name: req.body.m_credit_short_name_0,
+            remittance_bank_id: req.body[`m_credit_remittance_bank_id_${rowIndex}`] && req.body[`m_credit_remittance_bank_id_${rowIndex}`] !== '' ? req.body[`m_credit_remittance_bank_id_${rowIndex}`] : null,
             Opening_Balance : 0,
             location_code: req.user.location_code,
             created_by: req.user.Person_id,
