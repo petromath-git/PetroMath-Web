@@ -1,0 +1,110 @@
+extends layout
+
+block content
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button", data-dismiss="alert", aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Header
+    .container-fluid.py-3
+        .row.align-items-center
+            .col
+                h4.mb-0.text-warning Disabled Digital Vendors
+            .col-auto
+                button.btn.btn-primary.btn-sm(type="button", onclick="window.location.href='/digital-vendors'")
+                    i.bi.bi-arrow-left.me-1
+                    | Back to Active Vendors
+
+    // Content
+    .container-fluid
+        .row.mb-3
+            .col-12
+                .alert.alert-info
+                    i.bi.bi-info-circle.me-2
+                    | These vendors have been disabled and are no longer active in the system
+
+        .row
+            .col-12
+                if vendors && vendors.length > 0
+                    .table-responsive
+                        table.table.table-hover.table-striped
+                            thead.thead-dark
+                                tr
+                                    th #
+                                    th Company Name
+                                    th Short Name
+                                    th Ledger Name
+                                    th Remittance Bank
+                                    th Settlement Days
+                                    th GST
+                                    th Phone
+                                    th Disabled Date
+                                    th Actions
+                            tbody
+                                each val, index in vendors
+                                    tr(data-vendor-id=val.id)
+                                        td= index + 1
+                                        td= val.name
+                                        td= val.short_name || '-'
+                                        td= val.ledger_name || '-'
+                                        td= val.bank_name || '-'
+                                        td.text-center= val.settlement_lookback_days || '-'
+                                        td= val.gst || '-'
+                                        td= val.phoneno || '-'
+                                        td= val.effective_end_date
+                                        td
+                                            button.btn.btn-sm.btn-success.enable-vendor-btn(
+                                                type="button",
+                                                data-vendor-id=val.id,
+                                                data-vendor-name=val.name
+                                            )
+                                                i.bi.bi-check-circle.me-1
+                                                | Enable
+                else
+                    .alert.alert-secondary.text-center
+                        | No disabled digital vendors found
+
+    // JavaScript
+    script.
+        // Enable vendor functionality
+        document.querySelectorAll('.enable-vendor-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const vendorId = this.getAttribute('data-vendor-id');
+                const vendorName = this.getAttribute('data-vendor-name');
+                
+                if (confirm(`Are you sure you want to enable ${vendorName}?`)) {
+                    fetch(`/digital-vendors/${vendorId}/enable`, {
+                        method: 'PUT'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showMessage('Vendor enabled successfully', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            showMessage(data.error || 'Error enabling vendor', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showMessage('Error enabling vendor', 'danger');
+                    });
+                }
+            });
+        });
+
+        // Message display function
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            messageText.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
