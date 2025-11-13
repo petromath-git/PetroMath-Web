@@ -2,57 +2,332 @@ extends layout
 include mixins/mixins
 
 block content
-    form(method='POST' action='/digital')
-        table(class="table" id="digital-master-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Company Name
-                    th(scope="col") Phone Number
-                    th(scope="col") GST Number
-                    th(scope="col") Disable Digital                    
-            tbody
-                each val, index in digitalCustomers
-                    tr(id='digital-' + index)
-                        th(scope="row")= index + 1
-                        td= val.name
-                        td= val.phoneno
-                        td= val.gst
-                        td
-                            div.align-items-start
-                                button.btn.btn-info(id="disable-digital-"+index, onclick="disableDigital('"+index+"', '"+ val.id +"')")
-                                    span.oi.oi-delete
-                                    
-                - var rowCnt = 0
-                while rowCnt < 1
-                    +addMasterDigital(rowCnt++)
-        div(align="center")
-            button.btn.btn-primary(type="button", onClick="window.location.href='/enable_digital'", id="enable-digital", title="Enable Digital Customer") Enable Digital
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'digital-master')", id='digital-master-add-new') Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", id='digital-master-save', disabled=true) Save
+    // Alert for messages
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button", data-dismiss="alert", aria-label="Close")
+            span(aria-hidden="true") &times;
+    
+    // Sticky header
+    .vendors-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col
+                    h4.mb-0.text-primary Digital Vendor Master
+                .col-auto
+                    if canAdd
+                        button.btn.btn-success.btn-sm#addVendorBtn(type="button", data-toggle="modal", data-target="#addVendorModal")
+                            i.bi.bi-plus-circle.me-1
+                            | Add Digital Vendor
+                    button.btn.btn-warning.btn-sm.ms-2#viewDisabledBtn(type="button", onclick="window.location.href='/digital-vendors/enable'")
+                        i.bi.bi-eye-slash.me-1
+                        | View Disabled
+                    button.btn.btn-info.btn-sm.ms-2#refreshDataBtn(type="button")
+                        i.bi.bi-arrow-clockwise.me-1
+                        | Refresh
+
+    // Vendors content
+    .vendors-container
+        // Search Box
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(
+                        type="text",
+                        placeholder="Search by name, ledger, phone, GST...",
+                        autocomplete="off"
+                    )
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
+                            i.bi.bi-x-circle
+        
+        // Desktop table view
+        .table-responsive
+            table.table.table-hover.table-striped(id="vendors-master-table")
+                thead.thead-dark.sticky-top
+                    tr
+                        th #
+                        th Company Name
+                        th Short Name
+                        th Ledger Name
+                        th Remittance Bank
+                        th Settlement Days
+                        th GST
+                        th Phone
+                        th Address
+                        if canEdit || canDisable
+                            th Actions
+                tbody#vendorsTableBody
+                    if vendors && vendors.length > 0
+                        each val, index in vendors
+                            tr(data-vendor-id=val.id)
+                                td= index + 1
+                                td= val.name
+                                td= val.short_name || '-'
+                                td= val.ledger_name || '-'
+                                td= val.bank_name || '-'
+                                td.text-center= val.settlement_lookback_days || '-'
+                                td= val.gst || '-'
+                                td= val.phoneno || '-'
+                                td= val.address || '-'
+                                if canEdit || canDisable
+                                    td
+                                        if canEdit
+                                            button.btn.btn-sm.btn-outline-primary.edit-vendor-btn(
+                                                type="button",
+                                                data-vendor-id=val.id,
+                                                data-toggle="modal",
+                                                data-target="#editVendorModal"
+                                            )
+                                                i.bi.bi-pencil
+                                        if canDisable
+                                            button.btn.btn-sm.btn-outline-danger.ms-1.disable-vendor-btn(
+                                                type="button",
+                                                data-vendor-id=val.id,
+                                                data-vendor-name=val.name
+                                            )
+                                                i.bi.bi-trash
+                    else
+                        tr
+                            td.text-center(colspan="10") No digital vendors found
+
+    // Add Vendor Modal
+    .modal.fade#addVendorModal(tabindex="-1", role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Add New Digital Vendor
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#addVendorForm(method='POST', action='/digital-vendors')
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Company Name *
+                                input.form-control.text-uppercase(type="text", name="company_name", required)
+                            .col-md-6.mb-3
+                                label.form-label Short Name
+                                input.form-control.text-uppercase(type="text", name="short_name", maxlength="20")
+                            .col-md-6.mb-3
+                                label.form-label Ledger Name
+                                input.form-control(type="text", name="ledger_name", maxlength="250")
+                            .col-md-6.mb-3
+                                label.form-label Remittance Bank
+                                select.form-control(name="remittance_bank_id")
+                                    option(value="") Select Bank
+                                    if banks
+                                        each bank in banks
+                                            option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                            .col-md-6.mb-3
+                                label.form-label Settlement Lookback Days
+                                input.form-control(type="number", name="settlement_lookback_days", min="0", max="365", placeholder="e.g., 3")
+                                small.form-text.text-muted Days to look back for matching transactions
+                            .col-md-6.mb-3
+                                label.form-label GST Number
+                                input.form-control.text-uppercase(type="text", name="gst", maxlength="15")
+                            .col-md-6.mb-3
+                                label.form-label Phone Number
+                                input.form-control(type="text", name="phoneno", maxlength="50")
+                            .col-md-6.mb-3
+                                label.form-label Address
+                                textarea.form-control(name="address", rows="2", maxlength="300")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="addVendorForm") Save Vendor
+
+    // Edit Vendor Modal
+    .modal.fade#editVendorModal(tabindex="-1", role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Digital Vendor
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editVendorForm(method='POST')
+                        input(type="hidden", name="vendor_id", id="edit_vendor_id")
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Company Name *
+                                input.form-control.text-uppercase(type="text", name="company_name", id="edit_company_name", required)
+                            .col-md-6.mb-3
+                                label.form-label Short Name
+                                input.form-control.text-uppercase(type="text", name="short_name", id="edit_short_name", maxlength="20")
+                            .col-md-6.mb-3
+                                label.form-label Ledger Name
+                                input.form-control(type="text", name="ledger_name", id="edit_ledger_name", maxlength="250")
+                            .col-md-6.mb-3
+                                label.form-label Remittance Bank
+                                select.form-control(name="remittance_bank_id", id="edit_remittance_bank_id")
+                                    option(value="") Select Bank
+                                    if banks
+                                        each bank in banks
+                                            option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                            .col-md-6.mb-3
+                                label.form-label Settlement Lookback Days
+                                input.form-control(type="number", name="settlement_lookback_days", id="edit_settlement_lookback_days", min="0", max="365")
+                                small.form-text.text-muted Days to look back for matching transactions
+                            .col-md-6.mb-3
+                                label.form-label GST Number
+                                input.form-control.text-uppercase(type="text", name="gst", id="edit_gst", maxlength="15")
+                            .col-md-6.mb-3
+                                label.form-label Phone Number
+                                input.form-control(type="text", name="phoneno", id="edit_phoneno", maxlength="50")
+                            .col-md-6.mb-3
+                                label.form-label Address
+                                textarea.form-control(name="address", id="edit_address", rows="2", maxlength="300")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="editVendorForm") Update Vendor
+
+    // Custom CSS
+    style.
+        .vendors-header-sticky {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .vendors-container {
+            padding: 20px;
+        }
+        .text-uppercase {
+            text-transform: uppercase;
+        }
+
+    // JavaScript
     script.
-        function disableDigital(index, digitalId) {
-            if (confirm('Are you sure you want to disable this digital customer?')) {
-                fetch(`/disable-digital/${digitalId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.message) {
-                        alert(data.message);
-                        location.reload();
-                    } else if (data.error) {
-                        alert('Error: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred while disabling the digital customer.');
-                });
+        let vendorsData = !{JSON.stringify(vendors || [])};
+        let banksData = !{JSON.stringify(banks || [])};
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const clearBtn = document.getElementById('clearSearch');
+            
+            if (searchTerm) {
+                clearBtn.style.display = 'block';
+            } else {
+                clearBtn.style.display = 'none';
             }
+            
+            filterVendors(searchTerm);
+        });
+
+        document.getElementById('clearSearch').addEventListener('click', function() {
+            document.getElementById('searchInput').value = '';
+            this.style.display = 'none';
+            filterVendors('');
+        });
+
+        function filterVendors(searchTerm) {
+            const tbody = document.getElementById('vendorsTableBody');
+            const rows = tbody.getElementsByTagName('tr');
+            
+            Array.from(rows).forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // Refresh functionality
+        document.getElementById('refreshDataBtn').addEventListener('click', function() {
+            location.reload();
+        });
+
+        // Edit vendor functionality
+        document.querySelectorAll('.edit-vendor-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const vendorId = this.getAttribute('data-vendor-id');
+                const vendor = vendorsData.find(v => v.id == vendorId);
+                
+                if (vendor) {
+                    document.getElementById('edit_vendor_id').value = vendor.id;
+                    document.getElementById('edit_company_name').value = vendor.name;
+                    document.getElementById('edit_short_name').value = vendor.short_name || '';
+                    document.getElementById('edit_ledger_name').value = vendor.ledger_name || '';
+                    document.getElementById('edit_remittance_bank_id').value = vendor.remittance_bank_id || '';
+                    document.getElementById('edit_settlement_lookback_days').value = vendor.settlement_lookback_days || '';
+                    document.getElementById('edit_gst').value = vendor.gst || '';
+                    document.getElementById('edit_phoneno').value = vendor.phoneno || '';
+                    document.getElementById('edit_address').value = vendor.address || '';
+                }
+            });
+        });
+
+        // Edit form submission
+        document.getElementById('editVendorForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const vendorId = formData.get('vendor_id');
+            
+            fetch(`/digital-vendors/${vendorId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(Object.fromEntries(formData))
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Vendor updated successfully', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showMessage(data.error || 'Error updating vendor', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error updating vendor', 'danger');
+            });
+        });
+
+        // Disable vendor functionality
+        document.querySelectorAll('.disable-vendor-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const vendorId = this.getAttribute('data-vendor-id');
+                const vendorName = this.getAttribute('data-vendor-name');
+                
+                if (confirm(`Are you sure you want to disable ${vendorName}?`)) {
+                    fetch(`/digital-vendors/${vendorId}/disable`, {
+                        method: 'PUT'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showMessage('Vendor disabled successfully', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            showMessage(data.error || 'Error disabling vendor', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showMessage('Error disabling vendor', 'danger');
+                    });
+                }
+            });
+        });
+
+        // Message display function
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            messageText.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
         }
