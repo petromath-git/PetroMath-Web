@@ -139,44 +139,73 @@ saveReadings: (data) => {
             updateOnDuplicate: ["denomcount", "updated_by", "updation_date"]});
         return denomTxn;
     },
+ 
     finishClosing: async (closingId) => {
-        const transaction = await db.sequelize.transaction();
-        
-        try {
-            // Step 1: Calculate excess/shortage using the stored procedure
-            const shortageResult = await db.sequelize.query(`
-                SELECT calculate_exshortage(?) as excess_shortage
-            `, {
-                replacements: [closingId],
-                type: db.Sequelize.QueryTypes.SELECT,
-                transaction
-            });
+    const transaction = await db.sequelize.transaction();
     
-            const excessShortage = shortageResult[0]?.excess_shortage || 0;
-    
-            // Step 2: Update closing status and populate ex_short field
-            const closingTxn = await TxnClosing.update(
-                { 
-                    closing_status: 'CLOSED',
-                    ex_short: excessShortage,
-                    updated_by: 'system', // or you can pass this as parameter
-                    updation_date: new Date()
-                },
-                { 
-                    where: { closing_id: closingId },
-                    transaction 
-                }
-            );
-    
-            await transaction.commit();
-            return closingTxn;
-    
-        } catch (error) {
-            await transaction.rollback();
-            console.error('Error in finishClosing:', error);
-            throw error;
+    try {
+        // STEP 0: Check if closing is already closed to prevent duplicate closing
+        const existingClosing = await db.sequelize.query(`
+            SELECT closing_status 
+            FROM t_closing 
+            WHERE closing_id = :closingId
+        `, {
+            replacements: { closingId },
+            type: db.Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        const closing = existingClosing[0];
+
+        if (!closing) {
+            // No changes made, just return error (transaction will auto-cleanup)
+            return { error: 'Closing record not found' };
         }
-    },
+
+        if (closing.closing_status === 'CLOSED') {
+            // No changes made, just return error (transaction will auto-cleanup)
+            return { error: 'This shift is already closed. Cannot close again.' };
+        }
+
+        // Step 1: Calculate excess/shortage using the stored procedure
+        const shortageResult = await db.sequelize.query(`
+            SELECT calculate_exshortage(?) as excess_shortage
+        `, {
+            replacements: [closingId],
+            type: db.Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        const excessShortage = shortageResult[0]?.excess_shortage || 0;
+
+        // Step 2: Update closing status and populate ex_short field
+        const closingTxn = await TxnClosing.update(
+            { 
+                closing_status: 'CLOSED',
+                ex_short: excessShortage,
+                updated_by: 'system',
+                updation_date: new Date()
+            },
+            { 
+                where: { closing_id: closingId },
+                transaction 
+            }
+        );
+
+        await transaction.commit();
+        return closingTxn;
+
+    } catch (error) {
+        // Only rollback if transaction hasn't finished
+        if (!transaction.finished) {
+            await transaction.rollback();
+        }
+        console.error('Error in finishClosing:', error);
+        return { error: error.message || 'Error closing shift' };
+    }
+},
+
+
     deleteClosing: (closingId) => {
         const closingTxn = db.sequelize.query(
             'CALL delete_closing(' + closingId + ');', null, { raw: true }
