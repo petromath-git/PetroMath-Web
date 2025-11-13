@@ -25,11 +25,14 @@ function calculateAll2TProducts(obj) {
     if(obj) {
         trackMenu(obj);
     }
-    const products = document.getElementById('sales_2t').querySelectorAll('[id$=_sale]');
-    products.forEach(product => {
-        const productTag = product.id.replace('_sale', '');
-        calculate2TSale(productTag);
-    });
+    const sales2tElement = document.getElementById('sales_2t');
+    if (sales2tElement) {
+        const products = sales2tElement.querySelectorAll('[id$=_sale]');
+        products.forEach(product => {
+            const productTag = product.id.replace('_sale', '');
+            calculate2TSale(productTag);
+        });
+    }
 }
 
 function calculateTestings(obj) {

@@ -58,7 +58,11 @@ module.exports = {
     0  // default 0 days
     ));
 
-    
+    const show2TSalesTab = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'SHOW_2T_SALES_TAB',
+    'N' // default - hide by default
+        );
     
       
 
@@ -96,7 +100,8 @@ module.exports = {
                             isOpeningReadonly: openingReadonlyConfig === 'Y',
                             allowSecondaryPump: allowSecondaryPump === 'true',
                             digitalSalesBackdateDays: digitalSalesBackdateDays,
-                            digitalSalesFutureDays: digitalSalesFutureDays
+                            digitalSalesFutureDays: digitalSalesFutureDays,
+                            show2TSalesTab: show2TSalesTab === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -410,16 +415,24 @@ deleteTxnDigitalSale: ((req, res, next) => {
 };
 
 const getHomeData = async (req, res, next) => {
-    let closingQueryFromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    let closingQueryToDate = dateFormat(new Date(), "yyyy-mm-dd");
+   
     const locationCode = req.user.location_code;
 
-    if(req.query.fromClosingDate) {
+    // Check if user has manually searched with date filters
+    let closingQueryFromDate;
+    let closingQueryToDate;
+
+    if(req.query.fromClosingDate && req.query.toClosingDate) {
+        // User has manually searched - use their dates
         closingQueryFromDate = req.query.fromClosingDate;
-    }
-    if(req.query.toClosingDate) {
         closingQueryToDate = req.query.toClosingDate;
+    } else {
+        // Auto-filter to most recent closing date
+        const mostRecentDate = await TxnReadDao.getMostRecentClosingDate(locationCode);
+        closingQueryFromDate = mostRecentDate;
+        closingQueryToDate = mostRecentDate;
     }
+
 
     try {
         // Fetch configuration from database instead of config file
@@ -517,15 +530,18 @@ const getUsersClosingDataByDate = (personName, locationCode, closingQueryFromDat
     });
 }
 
+
 const getLocationProductColumns = (locationCode) => {
     return new Promise((resolve, reject) => {
         const productQuery = `
-            SELECT DISTINCT product_code 
-            FROM m_pump 
-            WHERE location_code = :locationCode 
-            AND product_code IS NOT NULL 
-            AND effective_end_date > NOW()
-            ORDER BY product_code
+            SELECT DISTINCT mp.product_code 
+            FROM m_pump mp
+            JOIN m_product prod ON mp.product_code = prod.product_name 
+                                AND mp.location_code = prod.location_code
+            WHERE mp.location_code = :locationCode 
+            AND mp.product_code IS NOT NULL 
+            AND mp.effective_end_date > NOW()
+            ORDER BY prod.product_id
         `;
         
         db.sequelize.query(productQuery, {
@@ -543,32 +559,45 @@ const getLocationProductColumns = (locationCode) => {
                 });
             });
             
-            // UPDATED: Only check for 2T LOOSE
-            const twoTQuery = `
-                SELECT COUNT(*) as count 
-                FROM m_product 
-                WHERE location_code = :locationCode 
-                AND product_name = '2T LOOSE'
-            `;
-            
-            db.sequelize.query(twoTQuery, {
-                replacements: { locationCode: locationCode },
-                type: db.Sequelize.QueryTypes.SELECT
-            }).then(twoTResult => {
-                // UPDATED: Only add 2T Loose if it exists
-                if (twoTResult[0].count > 0) {
-                    productColumns.push({
-                        key: '2T_LOOSE',
-                        label: '2T Loose',
-                        type: '2t'
-                    });
+            // Check if SHOW_2T_SALES_TAB is enabled
+            locationConfig.getLocationConfigValue(
+                locationCode,
+                'SHOW_2T_SALES_TAB',
+                'Y'  // default to 'Y' if config doesn't exist
+            ).then(show2TTab => {
+                // If tab is hidden (N), don't add any 2T columns
+                if (show2TTab === 'N') {
+                    resolve(productColumns);
+                    return;
                 }
                 
-                resolve(productColumns);
+                // Tab is visible, check for 2T LOOSE product
+                const twoTQuery = `
+                    SELECT COUNT(*) as count 
+                    FROM m_product 
+                    WHERE location_code = :locationCode 
+                    AND product_name = '2T LOOSE'
+                `;
+                
+                db.sequelize.query(twoTQuery, {
+                    replacements: { locationCode: locationCode },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }).then(twoTResult => {
+                    if (twoTResult[0].count > 0) {
+                        productColumns.push({
+                            key: '2T_LOOSE',
+                            label: '2T Loose',
+                            type: '2t'
+                        });
+                    }
+                    
+                    resolve(productColumns);
+                }).catch(() => resolve(productColumns));
             }).catch(() => resolve(productColumns));
         }).catch(() => resolve([]));
     });
 };
+
 
 // Home page: Get closings order by closing  id
 const getClosingDataByDate = (locationCode, closingQueryFromDate, closingQueryToDate) => {
