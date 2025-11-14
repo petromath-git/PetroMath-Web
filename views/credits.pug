@@ -1,5 +1,4 @@
 extends layout
-include mixins/mixins
 
 block content
     // Alert for messages
@@ -16,17 +15,15 @@ block content
                     h4.mb-0.text-primary Customer Master
                 .col-auto
                     if canAdd
-                        button.btn.btn-success.btn-sm#addCustomerBtn(type="button", data-toggle="modal", data-target="#addCustomerModal", style="margin-right: 8px;")
-                            i.bi.bi-plus-circle
-                            span.d-none.d-md-inline.ms-1 Add Customer
-                            span.d-inline.d-md-none.ms-1 Add
-                    button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick="window.location.href='/credit-master/enable'", style="margin-right: 8px;")
-                        i.bi.bi-eye-slash
-                        span.d-none.d-md-inline.ms-1 View Disabled
-                        span.d-inline.d-md-none.ms-1 Disabled
-                    button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
-                        i.bi.bi-arrow-clockwise
-                        span.d-none.d-md-inline.ms-1 Refresh
+                        button.btn.btn-success.btn-sm#addCustomerBtn(type="button", data-toggle="modal", data-target="#addCustomerModal")
+                            i.bi.bi-plus-circle.me-1
+                            | Add Customer
+                    button.btn.btn-warning.btn-sm.ms-2#viewDisabledBtn(type="button", onclick="window.location.href='/credit-master/enable'")
+                        i.bi.bi-eye-slash.me-1
+                        | View Disabled
+                    button.btn.btn-info.btn-sm.ms-2#refreshDataBtn(type="button")
+                        i.bi.bi-arrow-clockwise.me-1
+                        | Refresh
 
     // Customers content
     .customers-container
@@ -39,7 +36,7 @@ block content
                             i.bi.bi-search
                     input.form-control#searchInput(
                         type="text",
-                        placeholder="Search by name, type, phone, address, GST...",
+                        placeholder="Search by name, phone, GST...",
                         autocomplete="off"
                     )
                     .input-group-append
@@ -47,117 +44,69 @@ block content
                             i.bi.bi-x-circle
         
         // Desktop table view
-        .desktop-table-view.d-none.d-lg-block
-            .table-responsive.table-desktop-container
-                table.table.table-hover.table-striped(id="customers-master-table")
-                    thead.thead-dark.sticky-top
-                        tr
-                            th #
-                            th Company Name
+        .table-responsive
+            table.table.table-hover.table-striped(id="customers-master-table")
+                thead.thead-dark.sticky-top
+                    tr
+                        th #
+                        th Company Name
+                        if customerTypes && customerTypes.length > 1
                             th Type
-                            th Short Name
-                            th Address
-                            th Phone
-                            th GST
-                            th Vehicles
-                            if canEdit
-                                th Edit
-                            if canDisable    
-                                th Disable
-                    tbody
+                        th Short Name
+                        th Phone
+                        th Address
+                        th GST
+                        th Remittance Bank
+                        if canEdit || canDisable
+                            th Actions
+                tbody#customersTableBody
+                    if credits && credits.length > 0
                         each val, index in credits
-                            tr(id=`customer-row-${index}`)
-                                th(scope="row")= index + 1
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`customer-name-${index}`, 
-                                        value=val.name || '', 
-                                        readonly,
-                                        title=`Username: ${val.username}`,
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    span.badge(class=val.type === 'credit' ? 'badge-primary' : 'badge-info')= val.type
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(type="text", id=`customer-shortname-${index}`, value=val.short_name || '', readonly, style="text-transform: uppercase;")
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(type="text", id=`customer-address-${index}`, value=val.address || '', readonly, style="text-transform: uppercase;")
-                                td(scope="row")
-                                    input.form-control.form-control-sm(type="text", id=`customer-phone-${index}`, value=val.phoneno || '', readonly)
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(type="text", id=`customer-gst-${index}`, value=val.gst || '', readonly, style="text-transform: uppercase;")
-                                td(scope="row")
-                                    button.btn.btn-info.btn-sm(type="button", onclick=`viewVehicles('${val.id}')`)
-                                        i.bi.bi-eye
-                                if canEdit
-                                    td(scope="row")
-                                        button.btn.btn-primary.btn-sm(type="button", onclick=`editCustomer(${index}, ${val.id})`)
-                                            i.bi.bi-pencil
-                                if canDisable
-                                    td(scope="row")
-                                        button.btn.btn-danger.btn-sm(type="button", onclick=`disableCredit(${index}, ${val.id})`)
-                                            i.bi.bi-trash
-
-        // Mobile cards view
-        .mobile-cards-view.d-block.d-lg-none
-            .row
-                each val, index in credits
-                    .col-12.mb-3
-                        .card.customer-card.shadow-sm(id=`mobile-customer-card-${index}`)
-                            .card-header.d-flex.justify-content-between.align-items-center
-                                .customer-name
-                                    input.mobile-input.fw-bold.text-uppercase(
-                                        type="text",
-                                        id=`mobile-name-${index}`,
-                                        value=val.name || '',
-                                        readonly,
-                                        title=`Username: ${val.username}`,
-                                        style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
-                                    )
-                                    span.badge.badge-sm.ms-2(class=val.type === 'credit' ? 'badge-primary' : 'badge-info')= val.type
-                                .customer-actions
-                                    if canEdit
-                                        button.btn.btn-primary.btn-sm.me-1(type="button", onclick=`editCustomerMobile(${index}, ${val.id})`)
-                                            i.bi.bi-pencil
-                                    button.btn.btn-info.btn-sm.me-1(type="button", onclick=`viewVehicles('${val.id}')`)
-                                        i.bi.bi-eye
-                                    if canDisable    
-                                        button.btn.btn-danger.btn-sm(type="button", onclick=`disableCredit(${index}, ${val.id})`)
-                                            i.bi.bi-trash
-                            .card-body.p-3
-                                .row.g-2
-                                    .col-6
-                                        .customer-detail
-                                            small.text-muted Short Name
-                                            input.mobile-input.fw-bold.text-uppercase(type="text", id=`mobile-shortname-${index}`, value=val.short_name || '', readonly, style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;")
-                                    .col-6
-                                        .customer-detail
-                                            small.text-muted Phone
-                                            input.mobile-input.fw-bold(type="text", id=`mobile-phone-${index}`, value=val.phoneno || '', readonly, style="border: none; background: transparent; padding: 0; font-weight: bold;")
-                                    .col-12
-                                        .customer-detail
-                                            small.text-muted Address
-                                            input.mobile-input.fw-bold.text-uppercase(type="text", id=`mobile-address-${index}`, value=val.address || '', readonly, style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;")
-                                    .col-6
-                                        .customer-detail
-                                            small.text-muted GST
-                                            input.mobile-input.fw-bold.text-uppercase(type="text", id=`mobile-gst-${index}`, value=val.gst || '', readonly, style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;")
+                            tr(data-customer-id=val.creditlist_id)
+                                td= index + 1
+                                td= val.Company_Name
+                                if customerTypes && customerTypes.length > 1
+                                    td= val.type || '-'
+                                td= val.short_name || '-'
+                                td= val.phoneno || '-'
+                                td= val.address || '-'
+                                td= val.gst || '-'
+                                td= val.bank_name || '-'
+                                if canEdit || canDisable
+                                    td
+                                        if canEdit
+                                            button.btn.btn-sm.btn-outline-primary.edit-customer-btn(
+                                                type="button",
+                                                data-customer-id=val.creditlist_id,
+                                                data-toggle="modal",
+                                                data-target="#editCustomerModal"
+                                            )
+                                                i.bi.bi-pencil
+                                        if canDisable
+                                            button.btn.btn-sm.btn-outline-danger.ms-1.disable-customer-btn(
+                                                type="button",
+                                                data-customer-id=val.creditlist_id,
+                                                data-customer-name=val.Company_Name
+                                            )
+                                                i.bi.bi-trash
+                    else
+                        tr
+                            td.text-center(colspan="9") No customers found
 
     // Add Customer Modal
-    .modal.fade#addCustomerModal(tabindex="-1", role="dialog", aria-labelledby="addCustomerModalLabel", aria-hidden="true")
+    .modal.fade#addCustomerModal(tabindex="-1", role="dialog")
         .modal-dialog.modal-lg(role="document")
             .modal-content
                 .modal-header
-                    h5.modal-title#addCustomerModalLabel Add New Customer
+                    h5.modal-title Add New Customer
                     button.close(type="button", data-dismiss="modal", aria-label="Close")
                         span(aria-hidden="true") &times;
                 .modal-body
                     form#addCustomerForm(method='POST', action='/credit-master')
                         .row
                             .col-md-6.mb-3
-                                label.form-label Company Name
-                                input.form-control.text-uppercase(type="text", name="m_credit_name_0", required, style="text-transform: uppercase;")
+                                label.form-label Company Name *
+                                input.form-control.text-uppercase(type="text", name="m_credit_name_0", required)
                             if customerTypes && customerTypes.length > 1
                                 .col-md-6.mb-3
                                     label.form-label Type *
@@ -168,204 +117,209 @@ block content
                                 input(type="hidden", name="m_credit_type_0", value=customerTypes[0].description)
                             .col-md-6.mb-3
                                 label.form-label Short Name
-                                input.form-control.text-uppercase(type="text", name="m_credit_short_name_0", required, style="text-transform: uppercase;")
+                                input.form-control.text-uppercase(type="text", name="m_credit_short_name_0", maxlength="20")
                             .col-md-6.mb-3
                                 label.form-label Phone
-                                input.form-control(type="text", name="m_credit_phoneno_0")
+                                input.form-control(type="text", name="m_credit_phoneno_0", maxlength="50")
                             .col-md-12.mb-3
                                 label.form-label Address
-                                textarea.form-control.text-uppercase(name="m_credit_address_0", rows="2", style="text-transform: uppercase;")
+                                textarea.form-control.text-uppercase(name="m_credit_address_0", rows="2", maxlength="300")
                             .col-md-6.mb-3
                                 label.form-label GST Number
-                                input.form-control.text-uppercase(type="text", name="m_credit_gst_0", style="text-transform: uppercase;")
+                                input.form-control.text-uppercase(type="text", name="m_credit_gst_0", maxlength="15")
+                            .col-md-6.mb-3
+                                label.form-label Remittance Bank
+                                select.form-control(name="m_credit_remittance_bank_id_0")
+                                    option(value="") Select Bank
+                                    if banks
+                                        each bank in banks
+                                            option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
-                    button.btn.btn-success(type="submit", form="addCustomerForm") Add Customer
+                    button.btn.btn-primary(type="submit", form="addCustomerForm") Save Customer
 
-    // CSS
+    // Edit Customer Modal
+    .modal.fade#editCustomerModal(tabindex="-1", role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Customer
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editCustomerForm(method='POST')
+                        input(type="hidden", name="customer_id", id="edit_customer_id")
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Company Name *
+                                input.form-control.text-uppercase(type="text", name="Company_Name", id="edit_company_name", required)
+                            .col-md-6.mb-3
+                                label.form-label Short Name
+                                input.form-control.text-uppercase(type="text", name="short_name", id="edit_short_name", maxlength="20")
+                            .col-md-6.mb-3
+                                label.form-label Phone
+                                input.form-control(type="text", name="phoneno", id="edit_phoneno", maxlength="50")
+                            .col-md-12.mb-3
+                                label.form-label Address
+                                textarea.form-control.text-uppercase(name="address", id="edit_address", rows="2", maxlength="300")
+                            .col-md-6.mb-3
+                                label.form-label GST Number
+                                input.form-control.text-uppercase(type="text", name="gst", id="edit_gst", maxlength="15")
+                            .col-md-6.mb-3
+                                label.form-label Remittance Bank
+                                select.form-control(name="remittance_bank_id", id="edit_remittance_bank_id")
+                                    option(value="") Select Bank
+                                    if banks
+                                        each bank in banks
+                                            option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="editCustomerForm") Update Customer
+
+    // Custom CSS
     style.
-        .is-invalid { border-color: #dc3545 !important; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e"); background-repeat:no-repeat;background-position:right .5em center;background-size:.75em .75em;}
-        .is-valid { border-color:#28a745 !important; background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e"); background-repeat:no-repeat;background-position:right .5em center;background-size:.75em .75em;}
-        
-        /* Search box styling */
-        #searchInput { border-radius: 0; }
-        #searchInput:focus { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); border-color: #80bdff; }
-        .input-group-text { background-color: #f8f9fa; border-right: 0; }
-        #clearSearch { border-left: 0; }
-        
-        /* Search placeholder styling */
-        #searchInput::placeholder { color: #6c757d; opacity: 0.8; font-style: italic; }
-        
-        /* Smooth transitions for search results */
-        #customers-master-table tbody tr,
-        .mobile-cards-view .col-12 { transition: opacity 0.2s ease; }
+        .customers-header-sticky {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .customers-container {
+            padding: 20px;
+        }
+        .text-uppercase {
+            text-transform: uppercase;
+        }
 
     // JavaScript
     script.
-        function makeUppercase(input){ input.value=input.value.toUpperCase(); }
+        let creditsData = !{JSON.stringify(credits || [])};
+        let banksData = !{JSON.stringify(banks || [])};
+        let customerTypesData = !{JSON.stringify(customerTypes || [])};
 
-        // Duplicate check on Add Customer
-        let checkTimeout;
-        function setupDuplicateCheck(){
-            const name=document.querySelector('input[name="m_credit_name_0"]');
-            const submit=document.querySelector('#addCustomerForm button[type="submit"]');
-            if(name){
-                name.addEventListener('input',function(){
-                    clearTimeout(checkTimeout);
-                    const val=this.value.trim().toUpperCase();
-                    this.classList.remove('is-valid','is-invalid');
-                    if(val.length>2){
-                        checkTimeout=setTimeout(()=>checkDuplicateName(val,this,submit),500);
-                    } else submit.disabled=false;
-                });
+        // Show message function
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            messageText.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const clearBtn = document.getElementById('clearSearch');
+            
+            if (searchTerm) {
+                clearBtn.style.display = 'block';
+            } else {
+                clearBtn.style.display = 'none';
             }
-        }
-        function checkDuplicateName(name,input,btn){
-            fetch(`/credit-master/check-duplicate?name=${encodeURIComponent(name)}`)
-            .then(r=>r.json()).then(d=>{
-                if(d.exists){input.classList.add('is-invalid');btn.disabled=true;showMessage('Customer name already exists','warning');}
-                else{input.classList.add('is-valid');btn.disabled=false;}
-            }).catch(()=>btn.disabled=false);
+            
+            filterCustomers(searchTerm);
+        });
+
+        document.getElementById('clearSearch').addEventListener('click', function() {
+            document.getElementById('searchInput').value = '';
+            this.style.display = 'none';
+            filterCustomers('');
+        });
+
+        function filterCustomers(searchTerm) {
+            const tbody = document.getElementById('customersTableBody');
+            const rows = tbody.getElementsByTagName('tr');
+            
+            Array.from(rows).forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
         }
 
-        // Duplicate check during Edit
-        function checkDuplicateForEdit(name,excludeId,input){
-            fetch(`/credit-master/check-duplicate?name=${encodeURIComponent(name)}&excludeId=${excludeId}`)
-            .then(r=>r.json()).then(d=>{
-                if(d.exists){input.classList.add('is-invalid');showMessage('Customer name already exists','warning');}
-                else{input.classList.add('is-valid');input.classList.remove('is-invalid');}
-            }).catch(()=>input.classList.remove('is-valid','is-invalid'));
-        }
+        // Refresh functionality
+        document.getElementById('refreshDataBtn').addEventListener('click', function() {
+            location.reload();
+        });
 
-        function editCustomer(i,id){
-            const row=document.getElementById(`customer-row-${i}`);
-            const inputs=row.querySelectorAll('input[readonly]');
-            inputs.forEach(inp=>{
-                inp.removeAttribute('readonly');
-                inp.classList.add('bg-light');
-                if(!inp.id.includes('phone')) inp.addEventListener('input',()=>makeUppercase(inp));
-                if(inp.id===`customer-name-${i}`){
-                    let t;inp.addEventListener('input',function(){
-                        clearTimeout(t);const val=this.value.trim().toUpperCase();
-                        this.classList.remove('is-valid','is-invalid');
-                        if(val.length>2)t=setTimeout(()=>checkDuplicateForEdit(val,id,this),500);
+        // Edit customer functionality
+        document.querySelectorAll('.edit-customer-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const customerId = this.getAttribute('data-customer-id');
+                const customer = creditsData.find(c => c.creditlist_id == customerId);
+                
+                if (customer) {
+                    document.getElementById('edit_customer_id').value = customer.creditlist_id;
+                    document.getElementById('edit_company_name').value = customer.Company_Name;
+                    document.getElementById('edit_short_name').value = customer.short_name || '';
+                    document.getElementById('edit_phoneno').value = customer.phoneno || '';
+                    document.getElementById('edit_address').value = customer.address || '';
+                    document.getElementById('edit_gst').value = customer.gst || '';
+                    document.getElementById('edit_remittance_bank_id').value = customer.remittance_bank_id || '';
+                }
+            });
+        });
+
+        // Edit form submission
+        document.getElementById('editCustomerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const customerId = formData.get('customer_id');
+            
+            fetch(`/credit-master/api/${customerId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(Object.fromEntries(formData))
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Customer updated successfully', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showMessage(data.error || 'Error updating customer', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('Error updating customer', 'danger');
+            });
+        });
+
+        // Disable customer functionality
+        document.querySelectorAll('.disable-customer-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const customerId = this.getAttribute('data-customer-id');
+                const customerName = this.getAttribute('data-customer-name');
+                
+                if (confirm(`Are you sure you want to disable customer "${customerName}"?`)) {
+                    fetch(`/credit-master/disable/${customerId}`, {
+                        method: 'PUT'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.message) {
+                            showMessage('Customer disabled successfully', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            showMessage(data.error || 'Error disabling customer', 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showMessage('Error disabling customer', 'danger');
                     });
                 }
             });
-            const btn=row.querySelector('button.btn-primary');
-            btn.innerHTML='<i class="bi bi-check"></i>';
-            btn.classList.replace('btn-primary','btn-success');
-            btn.setAttribute('onclick',`saveCustomer(${i},${id})`);
-        }
-
-        function editCustomerMobile(i,id){
-            const card=document.getElementById(`mobile-customer-card-${i}`);
-            const inputs=card.querySelectorAll('input[readonly]');
-            inputs.forEach(inp=>{
-                inp.removeAttribute('readonly');
-                inp.classList.add('editable');
-                if(!inp.id.includes('phone')) inp.addEventListener('input',()=>makeUppercase(inp));
-                if(inp.id===`mobile-name-${i}`){
-                    let t;inp.addEventListener('input',function(){
-                        clearTimeout(t);const val=this.value.trim().toUpperCase();
-                        this.classList.remove('is-valid','is-invalid');
-                        if(val.length>2)t=setTimeout(()=>checkDuplicateForEdit(val,id,this),500);
-                    });
-                }
-            });
-            const btn=card.querySelector('button.btn-primary');
-            btn.innerHTML='<i class="bi bi-check"></i>';
-            btn.classList.replace('btn-primary','btn-success');
-            btn.setAttribute('onclick',`saveCustomerMobile(${i},${id})`);
-        }
-
-        function saveCustomer(i,id){
-            const data={
-                Company_Name:document.getElementById(`customer-name-${i}`).value.toUpperCase(),
-                short_name:document.getElementById(`customer-shortname-${i}`).value.toUpperCase(),
-                address:document.getElementById(`customer-address-${i}`).value.toUpperCase(),
-                phoneno:document.getElementById(`customer-phone-${i}`).value,
-                gst:document.getElementById(`customer-gst-${i}`).value.toUpperCase()
-            };
-            fetch(`/credit-master/api/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-            .then(r=>r.json()).then(d=>{
-                if(d.success){showMessage('Customer updated successfully','success');
-                    const row=document.getElementById(`customer-row-${i}`);
-                    row.querySelectorAll('input').forEach(x=>{x.readOnly=true;x.classList.remove('bg-light');});
-                    const b=row.querySelector('button.btn-success');b.innerHTML='<i class="bi bi-pencil"></i>';b.classList.replace('btn-success','btn-primary');b.setAttribute('onclick',`editCustomer(${i},${id})`);
-                }else showMessage('Error updating: '+d.error,'danger');
-            }).catch(e=>showMessage('Error updating: '+e.message,'danger'));
-        }
-
-        function saveCustomerMobile(i,id){
-            const data={
-                Company_Name:document.getElementById(`mobile-name-${i}`).value.toUpperCase(),
-                short_name:document.getElementById(`mobile-shortname-${i}`).value.toUpperCase(),
-                address:document.getElementById(`mobile-address-${i}`).value.toUpperCase(),
-                phoneno:document.getElementById(`mobile-phone-${i}`).value,
-                gst:document.getElementById(`mobile-gst-${i}`).value.toUpperCase()
-            };
-            fetch(`/credit-master/api/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-            .then(r=>r.json()).then(d=>{
-                if(d.success){showMessage('Customer updated successfully','success');
-                    const card=document.getElementById(`mobile-customer-card-${i}`);
-                    card.querySelectorAll('input').forEach(x=>{x.readOnly=true;x.classList.remove('editable');});
-                    const b=card.querySelector('button.btn-success');b.innerHTML='<i class="bi bi-pencil"></i>';b.classList.replace('btn-success','btn-primary');b.setAttribute('onclick',`editCustomerMobile(${i},${id})`);
-                }else showMessage('Error updating: '+d.error,'danger');
-            }).catch(e=>showMessage('Error updating: '+e.message,'danger'));
-        }
-
-        function viewVehicles(id){const f=document.createElement('form');f.method='POST';f.action='/vehicles/get';f.style.display='none';const i=document.createElement('input');i.type='hidden';i.name='creditlist_id';i.value=id;f.appendChild(i);document.body.appendChild(f);f.submit();}
-        function disableCredit(i,id){if(confirm('Are you sure?'))fetch(`/credit-master/disable/${id}`,{method:'PUT'}).then(r=>r.json()).then(d=>{if(d.message){showMessage(d.message,'success');document.getElementById(`customer-row-${i}`).style.display='none';const c=document.getElementById(`mobile-customer-card-${i}`);if(c)c.parentElement.style.display='none';}else showMessage('Error: '+d.error,'danger');}).catch(e=>showMessage('Error: '+e.message,'danger'));}
-        function refreshData(){location.reload();}
-        function showMessage(m,t){const a=document.getElementById('messageAlert');const tx=document.getElementById('messageText');a.className=`alert alert-${t} alert-dismissible fade show`;tx.textContent=m;a.style.display='block';setTimeout(()=>{a.classList.remove('show');setTimeout(()=>a.style.display='none',150);},3000);}
-        
-        document.addEventListener('DOMContentLoaded',()=>{
-            setupDuplicateCheck();
-            document.getElementById('refreshDataBtn').addEventListener('click',refreshData);
-            document.querySelectorAll('input.text-uppercase').forEach(x=>x.addEventListener('input',()=>makeUppercase(x)));
-            
-            // Search functionality
-            const searchInput=document.getElementById('searchInput');
-            const clearSearchBtn=document.getElementById('clearSearch');
-            const desktopRows=document.querySelectorAll('#customers-master-table tbody tr');
-            const mobileCards=document.querySelectorAll('.mobile-cards-view .card');
-            
-            searchInput.addEventListener('input',function(){
-                const term=this.value.toLowerCase().trim();
-                clearSearchBtn.style.display=term?'block':'none';
-                
-                // Search desktop table
-                desktopRows.forEach(row=>{
-                    const text=row.textContent.toLowerCase();
-                    const inputs=Array.from(row.querySelectorAll('input')).map(i=>(i.value||'').toLowerCase()).join(' ');
-                    row.style.display=(text+' '+inputs).includes(term)?'':'none';
-                });
-                
-                // Search mobile cards
-                mobileCards.forEach(card=>{
-                    const text=card.textContent.toLowerCase();
-                    const inputs=Array.from(card.querySelectorAll('input')).map(i=>(i.value||'').toLowerCase()).join(' ');
-                    card.closest('.col-12').style.display=(text+' '+inputs).includes(term)?'':'none';
-                });
-                
-                updateNoResults(term);
-            });
-            
-            clearSearchBtn.addEventListener('click',()=>{searchInput.value='';searchInput.dispatchEvent(new Event('input'));searchInput.focus();});
-            
-            function updateNoResults(term){
-                const msg=document.getElementById('noResultsMessage');
-                if(msg)msg.remove();
-                if(!term)return;
-                const visD=Array.from(desktopRows).some(r=>r.style.display!=='none');
-                const visM=Array.from(mobileCards).some(c=>c.closest('.col-12').style.display!=='none');
-                if(!visD&&!visM){
-                    const html='<div id="noResultsMessage" class="col-12 text-center py-5"><i class="bi bi-search" style="font-size:3rem;color:#ccc;"></i><h5 class="text-muted mt-3">No customers found</h5><p class="text-muted">Try adjusting your search terms</p></div>';
-                    const dt=document.querySelector('.desktop-table-view');
-                    const mt=document.querySelector('.mobile-cards-view .row');
-                    if(dt)dt.insertAdjacentHTML('beforeend',html);
-                    if(mt)mt.insertAdjacentHTML('beforeend',html);
-                }
-            }
         });

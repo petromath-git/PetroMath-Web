@@ -16,16 +16,53 @@ module.exports = {
         );
         
     },
-    getDayBalance: (locationCode,closingQueryToDate) => {             
-        return db.sequelize.query(
-            `select upper(mcl.company_name) company_name,get_closing_credit_balance(mcl.creditlist_id,:closing_date) as ClosingData
-             from m_credit_list mcl where location_code = :locationCode
-             and  COALESCE(mcl.card_flag,'N') <> 'Y' order by 2 desc `,
-            {   replacements: { locationCode: locationCode,closing_date: closingQueryToDate}, 
-                 type: Sequelize.QueryTypes.SELECT }           
-        );
+    // getDayBalance: (locationCode,closingQueryToDate) => {             
+    //     return db.sequelize.query(
+    //         `select upper(mcl.company_name) company_name,get_closing_credit_balance(mcl.creditlist_id,:closing_date) as ClosingData
+    //          from m_credit_list mcl where location_code = :locationCode
+    //          and  COALESCE(mcl.card_flag,'N') <> 'Y' order by 2 desc `,
+    //         {   replacements: { locationCode: locationCode,closing_date: closingQueryToDate}, 
+    //              type: Sequelize.QueryTypes.SELECT }           
+    //     );
         
-    }    ,   
+    // }    ,   
+
+    getDayBalance: (locationCode, closingQueryToDate) => {             
+    return db.sequelize.query(
+        `SELECT 
+            mcl.creditlist_id,
+            UPPER(mcl.company_name) company_name,
+            get_closing_credit_balance(mcl.creditlist_id, :closing_date) as ClosingData,
+            (SELECT MAX(tr.receipt_date) 
+             FROM t_receipts tr 
+             WHERE tr.creditlist_id = mcl.creditlist_id
+             AND DATE(tr.receipt_date) <= :closing_date) as last_payment_date,
+            (SELECT tr.amount 
+             FROM t_receipts tr 
+             WHERE tr.creditlist_id = mcl.creditlist_id
+             AND DATE(tr.receipt_date) = (SELECT MAX(receipt_date) 
+                                          FROM t_receipts 
+                                          WHERE creditlist_id = mcl.creditlist_id
+                                          AND DATE(receipt_date) <= :closing_date)
+             LIMIT 1) as last_payment_amount,
+            DATEDIFF(:closing_date, 
+                    (SELECT MAX(tr.receipt_date) 
+                     FROM t_receipts tr 
+                     WHERE tr.creditlist_id = mcl.creditlist_id
+                     AND DATE(tr.receipt_date) <= :closing_date)) as days_since_payment
+         FROM m_credit_list mcl 
+         WHERE location_code = :locationCode
+         AND COALESCE(mcl.card_flag,'N') <> 'Y' 
+         ORDER BY 3 DESC`,
+        {   
+            replacements: { 
+                locationCode: locationCode,
+                closing_date: closingQueryToDate
+            }, 
+            type: Sequelize.QueryTypes.SELECT 
+        }           
+    );
+},
 // getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
 //     return db.sequelize.query(
 //         `SELECT 

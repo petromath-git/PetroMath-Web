@@ -531,8 +531,8 @@ module.exports = {
         Cashflowstmtlist.push({
           Transaction: "Total",
           Description: "-",
-          InFlow: totalCredits,
-          OutFlow: totalDebits
+          InFlow: parseFloat(totalCredits.toFixed(2)),
+          OutFlow: parseFloat(totalDebits.toFixed(2))
         });
 
       // Calculate the result of credits - debits
