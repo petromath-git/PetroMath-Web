@@ -209,7 +209,7 @@ block content
                // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
                 document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price'], 'col-sm-8 mx-auto');
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
-                document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["Credit", "Debit"],"col-sm-8 mx-auto");
+                document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["InFlow", "OutFlow"],"col-sm-8 mx-auto");
                 document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Cashflow Balance','Denomination Total','Excess/Shortage'],"col-sm-8 mx-auto");
                   document.getElementById('creditoutstanding-table-container').innerHTML = renderTable(CreditsummarylistFromServer,creditSummaryTitle,['Balance','Notional Interest @ 12% (Today)'],"col-sm-6 mx-auto");
                 
