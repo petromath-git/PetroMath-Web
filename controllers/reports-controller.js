@@ -5,6 +5,7 @@ const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 var CreditDao = require("../dao/credits-dao");
 const moment = require('moment');
+const locationConfig = require('../utils/location-config');
 
 module.exports = {
      getCreditReport: async(req, res) => {
@@ -425,62 +426,90 @@ module.exports = {
              
              
                        },          
-    getCreditSummaryReport: async(req, res) => {
+
+getCreditSummaryReport: async(req, res) => {
+   
+   let locationCode = req.user.location_code;  
+   let caller = req.body.caller;     
+   
+   let toDate = dateFormat(new Date(), "yyyy-mm-dd");   
+   const closingDate = new Date(req.body.toClosingDate);
+  
+   if(req.body.toClosingDate) {
+     toDate = closingDate.toISOString().slice(0, 10);
+   }
+
+   // Get credit terms from config
+   const defaultCreditDays = await locationConfig.getLocationConfigValue(
+       locationCode, 
+       'DEFAULT_CREDIT_DAYS', 
+       '30'  // default to 30 days if not configured
+   );
+
+   const Creditsummarylist = [];
+   let serialNumber = 1;
+
+   const data = await ReportDao.getDayBalance(locationCode, toDate);
+
+   data.forEach((creditSummaryData) => {
+     if (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) {
        
-       let locationCode = req.user.location_code;  
-       let caller = req.body.caller;     
+       // Determine if overdue
+       const daysOverdue = creditSummaryData.days_since_payment !== null ? 
+           creditSummaryData.days_since_payment - parseInt(defaultCreditDays) : 0;
        
+       const isOverdue = daysOverdue > 0;
        
-       let toDate = dateFormat(new Date(), "yyyy-mm-dd");   
-       const closingDate = new Date(req.body.toClosingDate); // Convert to a Date object   
-      
-       if(req.body.toClosingDate) {
-         toDate = closingDate.toISOString().slice(0, 10); // remove the timestamp.
-       }   
+       Creditsummarylist.push({
+         'S.no': serialNumber++,
+         'Credit Customer': creditSummaryData.company_name,
+         'Balance': creditSummaryData.ClosingData,
+         'Last Receipt Date': creditSummaryData.last_payment_date ? 
+             moment(creditSummaryData.last_payment_date).format('DD/MM/YYYY') : '-',
+         'Last Receipt Amount': creditSummaryData.last_payment_amount ? 
+             parseFloat(creditSummaryData.last_payment_amount) : '-',
+         'Days Since Receipt': creditSummaryData.days_since_payment !== null ? 
+             creditSummaryData.days_since_payment : '-',
+         '_isOverdue': isOverdue,  // Flag for frontend
+         '_daysOverdue': daysOverdue > 0 ? daysOverdue : 0
+       });
+     }
+   });
 
-       const Creditsummarylist = [];
-          let serialNumber = 1;  // Initialize serial number counter
+   const formattedtoDate = moment(toDate).format('DD/MM/YYYY');
 
-          const data = await ReportDao.getDayBalance(locationCode, toDate);
+   if(caller=='notpdf') {          
+       res.render('reports-creditsummary', {
+           title: 'Credit Summary Reports', 
+           user: req.user,
+           toClosingDate: toDate,
+           formattedtoDate: formattedtoDate, 
+           creditsummary: Creditsummarylist,
+           creditTermsDays: defaultCreditDays  // Pass to template
+       });
+   } else {
+       return new Promise((resolve, reject) => {
+         res.render('reports-creditsummary', {
+             title: 'Credit Summary Reports', 
+             user: req.user,
+             toClosingDate: toDate,
+             formattedtoDate: formattedtoDate, 
+             creditsummary: Creditsummarylist,
+             creditTermsDays: defaultCreditDays
+         }, (err, html) => {
+           if (err) {
+             console.error('getCreditSummaryReport: Error in res.render:', err);
+             reject(err);
+           } else {
+             console.log('getCreditSummaryReport: Successfully rendered HTML');
+             resolve(html);
+           }
+         });
+       }); 
+   }
+},
 
-          data.forEach((creditSummaryData) => {
-            // Check if ClosingData is not between -10 and 10
-            if (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) {
-              Creditsummarylist.push({
-                'S.no': serialNumber++,  // Increment serial number
-                'Credit Customer': creditSummaryData.company_name,
-                'Balance': creditSummaryData.ClosingData
-              });
-            }
-          });
 
-          const formattedtoDate = moment(toDate).format('DD/MM/YYYY');
-                        
-
-       if(caller=='notpdf') {          
-                      
-                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate,formattedtoDate:formattedtoDate, creditsummary: Creditsummarylist});
-                 
-                  
-          } else
-          {                
-                
-                return new Promise((resolve, reject) => {
-                  res.render('reports-creditsummary', {title: 'Credit Summary Reports', user: req.user,toClosingDate: toDate,formattedtoDate:formattedtoDate, creditsummary: Creditsummarylist},
-                     (err, html) => {
-                      if (err) {
-                        console.error('getCreditSummaryReport: Error in res.render:', err);
-                        reject(err); // Reject the promise if there's an error
-                      } else {
-                        console.log('getCreditSummaryReport: Successfully rendered HTML');
-                        resolve(html); // Resolve the promise with the HTML content
-                      }
-                  });
-                }); 
-               
-
-          }
-  },
   getSalesSummaryReport: async(req, res) => {
     //console.log(req);
      let locationCode = req.user.location_code;
