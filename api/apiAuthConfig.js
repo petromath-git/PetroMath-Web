@@ -2,6 +2,8 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const rolePermissionsDao = require("../dao/role-permissions-dao");
+
 
 // ORM DB - start
 const db = require("../db/db-connection");
@@ -116,3 +118,116 @@ module.exports.apiLoginLimiter = rateLimit({
     }
 });
 
+
+
+
+
+
+/**
+ * API-compatible permission middleware
+ * Works with JWT tokens (req.user from verifyToken)
+ * Uses the same m_role_permissions table as web app
+ * 
+ * Usage in routes:
+ * router.get('/bills', verifyToken, hasPermission('VIEW_BILLS'), billController.getBillsApi);
+ */
+module.exports.hasPermission = (permissionType) => {
+    return async (req, res, next) => {
+        try {
+            // 1. Check if user is authenticated (from verifyToken middleware)
+            if (!req.user) {
+                return res.status(401).json({ 
+                    success: false, 
+                    message: "Unauthorized: No user in request" 
+                });
+            }
+
+            // 2. Extract role and location from JWT token
+            const userRole = req.user.role;  // JWT uses lowercase 'role'
+            const userLocation = req.user.location_code;
+
+            if (!userRole || !userLocation) {
+                return res.status(403).json({ 
+                    success: false, 
+                    message: "Access Denied: Invalid user session - missing role or location" 
+                });
+            }
+
+            // 3. Check permission in database (same method as web)
+            const hasPermission = await rolePermissionsDao.hasPermission(
+                userRole,
+                userLocation,
+                permissionType
+            );
+
+            // 4. Allow or deny
+            if (hasPermission) {
+                return next();
+            }
+
+            // 5. Return JSON error (not HTML like web version)
+            return res.status(403).json({
+                success: false,
+                message: `Access Denied: You do not have permission for ${permissionType}`,
+                requiredPermission: permissionType,
+                userRole: userRole,
+                userLocation: userLocation
+            });
+
+        } catch (error) {
+            console.error(`Error checking API permission ${permissionType}:`, error);
+            return res.status(500).json({
+                success: false,
+                message: 'Internal server error while checking permissions',
+                error: error.message
+            });
+        }
+    };
+};
+
+/**
+ * Shortcut middleware for customer-only routes
+ * Already exists, but including here for completeness
+ */
+module.exports.isCustomerOnly = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ 
+            success: false, 
+            message: "Unauthorized: No user in request" 
+        });
+    }
+
+    if (req.user.role !== 'Customer') {
+        return res.status(403).json({
+            success: false,
+            message: 'Access denied. This feature is only available for customers.'
+        });
+    }
+    
+    next();
+};
+
+/**
+ * Shortcut middleware for staff-only routes (not customers)
+ * Useful for billing, shifts, reports, etc.
+ */
+module.exports.isStaffOnly = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ 
+            success: false, 
+            message: "Unauthorized: No user in request" 
+        });
+    }
+
+    const staffRoles = ['Admin', 'SuperUser', 'Manager', 'Cashier'];
+    
+    if (!staffRoles.includes(req.user.role)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Access denied. This feature is only available for staff members.',
+            userRole: req.user.role
+        });
+    }
+    
+    next();
+};

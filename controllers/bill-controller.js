@@ -1362,44 +1362,183 @@ printBillPDF: async (req, res, next) => {
 },
 
 
-
-
 getBillsApi: async (req, res, next) => {
     try {
-        const locationCode = req.location_code; // Now always from token
-        console.log("locationCode",locationCode);
+        const locationCode = req.user.location_code;
+        
+        // Optional query parameters for filtering
+        const { fromDate, toDate, billType, billStatus } = req.query;
+
+        // Build WHERE clause dynamically
+        let whereConditions = ['b.location_code = :locationCode'];
+        let replacements = { locationCode };
+
+        if (fromDate) {
+            whereConditions.push('DATE(b.creation_date) >= :fromDate');
+            replacements.fromDate = fromDate;
+        }
+
+        if (toDate) {
+            whereConditions.push('DATE(b.creation_date) <= :toDate');
+            replacements.toDate = toDate;
+        }
+
+        if (billType) {
+            whereConditions.push('b.bill_type = :billType');
+            replacements.billType = billType;
+        }
+
+        if (billStatus) {
+            whereConditions.push('b.bill_status = :billStatus');
+            replacements.billStatus = billStatus;
+        }
+
+        const whereClause = whereConditions.join(' AND ');
 
         const bills = await db.sequelize.query(`
-            SELECT b.*, 
+            SELECT 
+                b.bill_id,
+                b.bill_no,
+                b.bill_type,
+                b.bill_status,
+                b.closing_id,
+                b.total_amount,
+                b.print_count,
+                b.creation_date,
+                b.created_by,
+                
+                -- Customer name (improved handling for both CREDIT and CASH)
                 CASE 
-                    WHEN b.bill_type = 'CREDIT' THEN c.Company_Name
-                    ELSE NULL
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT DISTINCT c.Company_Name 
+                        FROM t_credits tc 
+                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        LIMIT 1
+                    )
+                    WHEN b.bill_type = 'CASH' THEN COALESCE(b.customer_name, 'Cash Customer')    
+                    ELSE 'Cash Customer'
                 END as customer_name,
-                p.Person_Name as cashier_name
+                
+                -- Vehicle information (from first item with vehicle info)
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT CONCAT(v.vehicle_number, ' (', v.vehicle_type, ')')
+                        FROM t_credits tc 
+                        JOIN m_creditlist_vehicles v ON tc.vehicle_id = v.vehicle_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        AND tc.vehicle_id IS NOT NULL
+                        LIMIT 1
+                    )
+                    ELSE (
+                        SELECT cs.vehicle_number
+                        FROM t_cashsales cs 
+                        WHERE cs.bill_id = b.bill_id 
+                        AND cs.vehicle_number IS NOT NULL
+                        AND cs.vehicle_number != ''
+                        LIMIT 1
+                    )
+                END as vehicle_info,
+                
+                -- Odometer reading (from first item with reading)
+                COALESCE(
+                    (SELECT tc.odometer_reading 
+                     FROM t_credits tc 
+                     WHERE tc.bill_id = b.bill_id 
+                     AND tc.odometer_reading IS NOT NULL 
+                     LIMIT 1),
+                    (SELECT cs.odometer_reading 
+                     FROM t_cashsales cs 
+                     WHERE cs.bill_id = b.bill_id 
+                     AND cs.odometer_reading IS NOT NULL 
+                     LIMIT 1)
+                ) as odometer_reading,
+                
+                -- Cashier details
+                p.Person_Name as cashier_name,
+                cl.creation_date as shift_date
+                
             FROM t_bills b
-            LEFT JOIN t_credits tc ON b.bill_id = tc.bill_id
-            LEFT JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id
             LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
             LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
-            WHERE b.location_code = :locationCode
+            WHERE ${whereClause}
             ORDER BY b.creation_date DESC
         `, {
-            replacements: { locationCode },
+            replacements,
             type: Sequelize.QueryTypes.SELECT
         });
 
         res.status(200).json({
             success: true,
             count: bills.length,
-            bills
+            bills: bills,
+            filters: {
+                fromDate: fromDate || null,
+                toDate: toDate || null,
+                billType: billType || null,
+                billStatus: billStatus || null
+            }
         });
+
     } catch (error) {
         console.error("Error fetching bills:", error);
-        res.status(203).json({
+        res.status(500).json({
             success: false,
+            message: "Failed to fetch bills",
+            error: error.message
         });
     }
 },
+
+// getNewBillApi: async (req, res, next) => {
+//     try {
+//         const locationCode = req.user.location_code;
+
+//         if (!locationCode) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "Location code missing in token"
+//             });
+//         }
+
+//         // Get active shifts with cashier name
+//         const activeShifts = await db.sequelize.query(`
+//             SELECT c.closing_id, c.creation_date, c.cashier_id,
+//                    p.Person_Name as cashier_name
+//             FROM t_closing c
+//             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
+//             WHERE c.location_code = :locationCode 
+//             AND c.closing_status != 'CLOSED'
+//             ORDER BY c.creation_date DESC
+//         `, {
+//             replacements: { locationCode },
+//             type: Sequelize.QueryTypes.SELECT
+//         });
+
+//         // Get products for the location
+//         const products = await ProductDao.findProducts(locationCode);
+
+//         // Get credit customers for the location
+//         const credits = await CreditDao.findCredits(locationCode);
+
+//         // Return JSON response
+//         res.status(200).json({
+//             success: true,
+//             locationCode,
+//             shifts: activeShifts,
+//             products,
+//             credits
+//         });
+
+//     } catch (error) {
+//         console.error(error);
+//         res.status(203).json({
+//             success: false,
+//         });
+//     }
+// },
+
+
 
 getNewBillApi: async (req, res, next) => {
     try {
@@ -1412,10 +1551,11 @@ getNewBillApi: async (req, res, next) => {
             });
         }
 
-        // Get active shifts with cashier name
+        // 1. Get active shifts with cashier name
         const activeShifts = await db.sequelize.query(`
             SELECT c.closing_id, c.creation_date, c.cashier_id,
-                   p.Person_Name as cashier_name
+                   p.Person_Name as cashier_name,
+                   DATE_FORMAT(c.creation_date, '%Y-%m-%d %H:%i') as shift_date
             FROM t_closing c
             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
             WHERE c.location_code = :locationCode 
@@ -1426,90 +1566,388 @@ getNewBillApi: async (req, res, next) => {
             type: Sequelize.QueryTypes.SELECT
         });
 
-        // Get products for the location
+        // 2. Get products for the location
         const products = await ProductDao.findProducts(locationCode);
 
-        // Get credit customers for the location
+        // 3. Get credit customers for the location (exclude digital-only)
         const credits = await CreditDao.findCredits(locationCode);
 
-        // Return JSON response
-        res.status(200).json({
+        // 4. Get ALL vehicles for the location (grouped by customer)
+        const vehicleData = await CreditVehicleDao.findAllVehiclesForLocation(locationCode);
+
+        // 5. Group vehicles by creditlist_id for easier Flutter consumption
+        const vehiclesByCredit = {};
+        vehicleData.forEach(vehicle => {
+            if (!vehiclesByCredit[vehicle.creditlist_id]) {
+                vehiclesByCredit[vehicle.creditlist_id] = [];
+            }
+            vehiclesByCredit[vehicle.creditlist_id].push({
+                vehicleId: vehicle.vehicle_id,
+                vehicleNumber: vehicle.vehicle_number,
+                vehicleType: vehicle.vehicle_type,
+                companyName: vehicle.company_name
+            });
+        });
+
+        // Return JSON response with all data needed to create a bill
+        return res.status(200).json({
             success: true,
-            locationCode,
+            locationCode: locationCode,
             shifts: activeShifts,
-            products,
-            credits
+            products: products,
+            credits: credits,
+            vehiclesByCredit: vehiclesByCredit,  // ← NEW: Vehicles grouped by customer
+            meta: {
+                totalShifts: activeShifts.length,
+                totalProducts: products.length,
+                totalCustomers: credits.length,
+                totalVehicles: vehicleData.length
+            }
         });
 
     } catch (error) {
-        console.error(error);
-        res.status(203).json({
+        console.error("Error in getNewBillApi:", error);
+        return res.status(500).json({
             success: false,
+            message: "Failed to fetch bill requirements",
+            error: error.message
         });
     }
 },
+
+
+// NEW METHOD: getBillDetailsApi
+// Add this to bill-controller.js in module.exports
+
+getBillDetailsApi: async (req, res, next) => {
+    try {
+        const billId = req.params.billId;
+        const locationCode = req.user.location_code;
+
+        if (!billId) {
+            return res.status(400).json({
+                success: false,
+                message: "Bill ID is required"
+            });
+        }
+
+        // 1. Get bill header information
+        const billData = await db.sequelize.query(`
+            SELECT 
+                b.bill_id,
+                b.bill_no,
+                b.bill_type,
+                b.bill_status,
+                b.closing_id,
+                b.total_amount,
+                b.print_count,
+                b.creation_date,
+                b.created_by,
+                b.updation_date,
+                b.updated_by,
+                
+                -- Customer information
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT DISTINCT c.Company_Name 
+                        FROM t_credits tc 
+                        JOIN m_credit_list c ON tc.creditlist_id = c.creditlist_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        LIMIT 1
+                    )
+                    WHEN b.bill_type = 'CASH' THEN COALESCE(b.customer_name, 'Cash Customer')    
+                    ELSE 'Cash Customer'
+                END as customer_name,
+                
+                -- Credit customer ID (for credit bills)
+                (
+                    SELECT DISTINCT tc.creditlist_id
+                    FROM t_credits tc 
+                    WHERE tc.bill_id = b.bill_id 
+                    LIMIT 1
+                ) as creditlist_id,
+                
+                -- Vehicle information
+                CASE 
+                    WHEN b.bill_type = 'CREDIT' THEN (
+                        SELECT CONCAT(v.vehicle_number, ' (', v.vehicle_type, ')')
+                        FROM t_credits tc 
+                        JOIN m_creditlist_vehicles v ON tc.vehicle_id = v.vehicle_id 
+                        WHERE tc.bill_id = b.bill_id 
+                        AND tc.vehicle_id IS NOT NULL
+                        LIMIT 1
+                    )
+                    ELSE (
+                        SELECT cs.vehicle_number
+                        FROM t_cashsales cs 
+                        WHERE cs.bill_id = b.bill_id 
+                        AND cs.vehicle_number IS NOT NULL
+                        AND cs.vehicle_number != ''
+                        LIMIT 1
+                    )
+                END as vehicle_info,
+                
+                -- Vehicle ID (for credit bills)
+                (
+                    SELECT tc.vehicle_id
+                    FROM t_credits tc 
+                    WHERE tc.bill_id = b.bill_id 
+                    AND tc.vehicle_id IS NOT NULL
+                    LIMIT 1
+                ) as vehicle_id,
+                
+                -- Odometer reading
+                COALESCE(
+                    (SELECT tc.odometer_reading 
+                     FROM t_credits tc 
+                     WHERE tc.bill_id = b.bill_id 
+                     AND tc.odometer_reading IS NOT NULL 
+                     LIMIT 1),
+                    (SELECT cs.odometer_reading 
+                     FROM t_cashsales cs 
+                     WHERE cs.bill_id = b.bill_id 
+                     AND cs.odometer_reading IS NOT NULL 
+                     LIMIT 1)
+                ) as odometer_reading,
+                
+                -- Cashier details
+                p.Person_Name as cashier_name,
+                cl.creation_date as shift_date
+                
+            FROM t_bills b
+            LEFT JOIN t_closing cl ON b.closing_id = cl.closing_id
+            LEFT JOIN m_persons p ON cl.cashier_id = p.Person_id
+            WHERE b.bill_id = :billId
+            AND b.location_code = :locationCode
+        `, {
+            replacements: { billId, locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (!billData.length) {
+            return res.status(404).json({
+                success: false,
+                message: "Bill not found or does not belong to this location"
+            });
+        }
+
+        const bill = billData[0];
+
+        // 2. Get bill items (line items) based on bill type
+        let billItems = [];
+        
+        if (bill.bill_type === 'CREDIT') {
+            billItems = await db.sequelize.query(`
+                SELECT 
+                    tc.product_id,
+                    mp.product_name,
+                    mp.unit,
+                    tc.price,
+                    COALESCE(tc.price_discount, 0) as price_discount,
+                    tc.qty,
+                    tc.amount,
+                    COALESCE(tc.base_amount, tc.amount) as base_amount,
+                    COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                    COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                    COALESCE(tc.cgst_amount, 0) as cgst_amount,
+                    COALESCE(tc.sgst_amount, 0) as sgst_amount,
+                    tc.notes,
+                    tc.odometer_reading,
+                    tc.vehicle_id,
+                    CASE 
+                        WHEN tc.vehicle_id IS NOT NULL THEN 
+                            CONCAT(v.vehicle_number, ' (', v.vehicle_type, ')')
+                        ELSE NULL 
+                    END as vehicle_info
+                FROM t_credits tc
+                JOIN m_product mp ON tc.product_id = mp.product_id
+                LEFT JOIN m_creditlist_vehicles v ON tc.vehicle_id = v.vehicle_id
+                WHERE tc.bill_id = :billId
+                ORDER BY tc.creation_date
+            `, {
+                replacements: { billId },
+                type: Sequelize.QueryTypes.SELECT
+            });
+        } else {
+            // CASH bill
+            billItems = await db.sequelize.query(`
+                SELECT 
+                    cs.product_id,
+                    mp.product_name,
+                    mp.unit,
+                    cs.price,
+                    COALESCE(cs.price_discount, 0) as price_discount,
+                    cs.qty,
+                    cs.amount,
+                    COALESCE(cs.base_amount, cs.amount) as base_amount,
+                    COALESCE(cs.cgst_percent, 0) as cgst_percent,
+                    COALESCE(cs.sgst_percent, 0) as sgst_percent,
+                    COALESCE(cs.cgst_amount, 0) as cgst_amount,
+                    COALESCE(cs.sgst_amount, 0) as sgst_amount,
+                    cs.notes,
+                    cs.odometer_reading,
+                    cs.vehicle_number as vehicle_info
+                FROM t_cashsales cs
+                JOIN m_product mp ON cs.product_id = mp.product_id
+                WHERE cs.bill_id = :billId
+                ORDER BY cs.creation_date
+            `, {
+                replacements: { billId },
+                type: Sequelize.QueryTypes.SELECT
+            });
+        }
+
+        // 3. Calculate totals
+        const summary = {
+            subtotal: 0,
+            totalDiscount: 0,
+            totalCGST: 0,
+            totalSGST: 0,
+            totalTax: 0,
+            grandTotal: bill.total_amount,
+            itemCount: billItems.length
+        };
+
+        billItems.forEach(item => {
+            const itemSubtotal = parseFloat(item.price) * parseFloat(item.qty);
+            summary.subtotal += itemSubtotal;
+            summary.totalDiscount += parseFloat(item.price_discount || 0);
+            summary.totalCGST += parseFloat(item.cgst_amount || 0);
+            summary.totalSGST += parseFloat(item.sgst_amount || 0);
+        });
+
+        summary.totalTax = summary.totalCGST + summary.totalSGST;
+
+        // 4. Return complete bill details
+        return res.status(200).json({
+            success: true,
+            bill: {
+                // Header info
+                billId: bill.bill_id,
+                billNo: bill.bill_no,
+                billType: bill.bill_type,
+                billStatus: bill.bill_status,
+                closingId: bill.closing_id,
+                
+                // Customer info
+                customerName: bill.customer_name,
+                creditlistId: bill.creditlist_id,
+                
+                // Vehicle info
+                vehicleInfo: bill.vehicle_info,
+                vehicleId: bill.vehicle_id,
+                odometerReading: bill.odometer_reading,
+                
+                // Amounts
+                totalAmount: parseFloat(bill.total_amount),
+                
+                // Dates and audit
+                createdDate: bill.creation_date,
+                createdBy: bill.created_by,
+                updatedDate: bill.updation_date,
+                updatedBy: bill.updated_by,
+                printCount: bill.print_count,
+                
+                // Cashier info
+                cashierName: bill.cashier_name,
+                shiftDate: bill.shift_date
+            },
+            items: billItems.map(item => ({
+                productId: item.product_id,
+                productName: item.product_name,
+                unit: item.unit,
+                price: parseFloat(item.price),
+                discount: parseFloat(item.price_discount),
+                qty: parseFloat(item.qty),
+                amount: parseFloat(item.amount),
+                baseAmount: parseFloat(item.base_amount),
+                cgstPercent: parseFloat(item.cgst_percent),
+                sgstPercent: parseFloat(item.sgst_percent),
+                cgstAmount: parseFloat(item.cgst_amount),
+                sgstAmount: parseFloat(item.sgst_amount),
+                notes: item.notes,
+                odometerReading: item.odometer_reading,
+                vehicleInfo: item.vehicle_info,
+                vehicleId: item.vehicle_id
+            })),
+            summary: summary
+        });
+
+    } catch (error) {
+        console.error("Error in getBillDetailsApi:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch bill details",
+            error: error.message
+        });
+    }
+},
+
+
+
+// UPDATED createBillApi - Replace in bill-controller.js
+// This version includes ALL validations from the web version
 
 createBillApi: async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
 
     try {
-        // 1️⃣ Validate closing status
-        const closing = await db.sequelize.query(`
-            SELECT closing_status 
-            FROM t_closing 
-            WHERE closing_id = :closingId
-            AND location_code = :locationCode
-        `, {
-            replacements: { 
-                closingId: req.body.closing_id,
-                locationCode: req.user.location_code 
-            },
-            type: Sequelize.QueryTypes.SELECT
-        });
-
-        if (!closing.length || closing[0].closing_status === 'CLOSED') {
+        const locationCode = req.user.location_code;
+        
+        // 1. Validate bill items FIRST
+        const validation = await validateBillItems(req.body.items, locationCode);
+        if (!validation.valid) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
-                message: 'Cannot create bills for closed or invalid shifts'
+                message: 'Bill validation failed',
+                errors: validation.errors
             });
         }
 
-        // 2️⃣ Get next bill number
-        const maxBillResult = await db.sequelize.query(`
-            SELECT COALESCE(MAX(CAST(SUBSTRING(bill_no, 4) AS UNSIGNED)), 0) as max_bill 
-            FROM t_bills 
-            WHERE location_code = :locationCode
-            AND bill_no LIKE :prefix
-        `, {
-            replacements: { 
-                locationCode: req.user.location_code,
-                prefix: req.body.bill_type === 'CREDIT' ? 'CR/%' : 'CS/%'
-            },
-            type: Sequelize.QueryTypes.SELECT
-        });
-        
-        const nextNumber = maxBillResult[0].max_bill + 1;
-        const prefix = req.body.bill_type === 'CREDIT' ? 'CR/' : 'CS/';
-        const paddedNumber = String(nextNumber).padStart(6, '0');
-        const nextBillNo = `${prefix}${paddedNumber}`;
+        // 2. Validate shift status
+        await validateShiftForBillOperation(req.body.closing_id, locationCode, 'create');
 
-        // 3️⃣ Create bill
+        // 3. Validate pump readings for fuel products
+        await validateProductPumpReadings(locationCode, req.body.closing_id, req.body.items);
+
+        // 4. Generate next bill number using BillNumberingService
+        const nextBillNo = await BillNumberingService.generateNextBillNumber(
+            locationCode, 
+            req.body.bill_type
+        );
+
+        // 5. Calculate total amount
+        let totalAmount = 0;
+        req.body.items.forEach(item => {
+            if (item.product_id) {
+                totalAmount += parseFloat(item.amount || 0);
+            }
+        });
+
+        // 6. Prepare customer name (for cash bills)
+        const customerName = req.body.bill_type === 'CASH' 
+            ? (req.body.customer_name || req.body.customer_name_mobile || null) 
+            : null;
+
+        // 7. Create bill header
         const [billResult] = await db.sequelize.query(`
             INSERT INTO t_bills (
                 location_code, bill_no, bill_type, closing_id,
-                total_amount, created_by, creation_date
+                customer_name, total_amount, created_by, creation_date
             ) VALUES (
                 :locationCode, :billNo, :billType, :closingId,
-                :totalAmount, :createdBy, NOW()
+                :customerName, :totalAmount, :createdBy, NOW()
             )
         `, {
             replacements: {
-                locationCode: req.user.location_code,
+                locationCode: locationCode,
                 billNo: nextBillNo,
                 billType: req.body.bill_type,
                 closingId: req.body.closing_id,
-                totalAmount: req.body.items.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0),
-                createdBy: req.user.person_id // ✅ from token
+                customerName: customerName,
+                totalAmount: totalAmount,
+                createdBy: req.user.person_id
             },
             type: Sequelize.QueryTypes.INSERT,
             transaction
@@ -1517,59 +1955,82 @@ createBillApi: async (req, res, next) => {
 
         const billId = billResult;
 
-        // 4️⃣ Create bill items
+        // 8. Insert bill items based on bill type
         for (const item of req.body.items) {
+            if (!item.product_id) continue; // Skip empty rows
+
             if (req.body.bill_type === 'CREDIT') {
+                // Insert into t_credits
                 await db.sequelize.query(`
                     INSERT INTO t_credits (
-                        closing_id, bill_no, bill_id, creditlist_id,
+                        closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                         product_id, price, price_discount, qty, amount,
-                        notes, created_by, creation_date
+                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                        notes, odometer_reading, created_by, creation_date
                     ) VALUES (
-                        :closingId, :billNo, :billId, :creditlistId,
-                        :productId, :price, :discount, :qty, :amount,
-                        :notes, :createdBy, NOW()
+                        :closingId, :billNo, :billId, :creditlistId, :vehicleId,
+                        :productId, :price, :priceDiscount, :qty, :amount,
+                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                        :notes, :odometerReading, :createdBy, NOW()
                     )
                 `, {
                     replacements: {
                         closingId: req.body.closing_id,
                         billNo: nextBillNo,
                         billId: billId,
-                        creditlistId: req.body.creditlist_id,
+                        creditlistId: req.body.creditlist_id || req.body.creditlist_id_mobile,
+                        vehicleId: req.body.bill_vehicle_id || req.body.bill_vehicle_id_mobile || null,
                         productId: parseInt(item.product_id),
                         price: parseFloat(item.price),
-                        discount: parseFloat(item.price_discount || 0),
+                        priceDiscount: parseFloat(item.price_discount || 0),
                         qty: parseFloat(item.qty),
                         amount: parseFloat(item.amount),
+                        baseAmount: parseFloat(item.base_amount || item.amount),
+                        cgstPercent: parseFloat(item.cgst_percent || 0),
+                        sgstPercent: parseFloat(item.sgst_percent || 0),
+                        cgstAmount: parseFloat(item.cgst_amount || 0),
+                        sgstAmount: parseFloat(item.sgst_amount || 0),
                         notes: item.notes || '',
-                        createdBy: req.user.person_id // ✅ from token
+                        odometerReading: parseFloat(req.body.bill_odometer_reading || req.body.bill_odometer_reading_mobile || 0) || null,
+                        createdBy: req.user.person_id
                     },
                     type: Sequelize.QueryTypes.INSERT,
                     transaction
                 });
             } else {
+                // Insert into t_cashsales
                 await db.sequelize.query(`
                     INSERT INTO t_cashsales (
-                        closing_id, bill_no, bill_id,
+                        closing_id, bill_no, bill_id, customer_name,
                         product_id, price, price_discount, qty, amount,
-                        notes, created_by, creation_date
+                        base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
+                        notes, vehicle_number, odometer_reading, created_by, creation_date
                     ) VALUES (
-                        :closingId, :billNo, :billId,
-                        :productId, :price, :discount, :qty, :amount,
-                        :notes, :createdBy, NOW()
+                        :closingId, :billNo, :billId, :customerName,
+                        :productId, :price, :priceDiscount, :qty, :amount,
+                        :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
+                        :notes, :vehicleNumber, :odometerReading, :createdBy, NOW()
                     )
                 `, {
                     replacements: {
                         closingId: req.body.closing_id,
                         billNo: nextBillNo,
                         billId: billId,
+                        customerName: customerName,
                         productId: parseInt(item.product_id),
                         price: parseFloat(item.price),
-                        discount: parseFloat(item.price_discount || 0),
+                        priceDiscount: parseFloat(item.price_discount || 0),
                         qty: parseFloat(item.qty),
                         amount: parseFloat(item.amount),
+                        baseAmount: parseFloat(item.base_amount || item.amount),
+                        cgstPercent: parseFloat(item.cgst_percent || 0),
+                        sgstPercent: parseFloat(item.sgst_percent || 0),
+                        cgstAmount: parseFloat(item.cgst_amount || 0),
+                        sgstAmount: parseFloat(item.sgst_amount || 0),
                         notes: item.notes || '',
-                        createdBy: req.user.person_id // ✅ from token
+                        vehicleNumber: req.body.bill_vehicle_number || req.body.bill_vehicle_number_mobile || null,
+                        odometerReading: parseFloat(req.body.bill_odometer_reading || req.body.bill_odometer_reading_mobile || 0) || null,
+                        createdBy: req.user.person_id
                     },
                     type: Sequelize.QueryTypes.INSERT,
                     transaction
@@ -1582,25 +2043,159 @@ createBillApi: async (req, res, next) => {
         return res.status(201).json({
             success: true,
             message: `Bill ${nextBillNo} created successfully`,
-            bill_no: nextBillNo,
-            bill_id: billId
+            billNo: nextBillNo,
+            billId: billId,
+            totalAmount: totalAmount
         });
 
     } catch (error) {
         await transaction.rollback();
-        console.error('Bill creation error details:', {
-            error: error.message,
-            items: req.body.items,
-            billType: req.body.bill_type
-        });
+        console.error('Bill creation error:', error);
+
+        // Friendly error messages
+        let errorMessage = 'Error creating bill';
+        if (error.message.includes('Shift')) {
+            errorMessage = error.message;
+        } else if (error.message.includes('pump readings')) {
+            errorMessage = error.message;
+        } else if (error.message.includes('validation')) {
+            errorMessage = 'Invalid bill data';
+        }
 
         return res.status(500).json({
             success: false,
-            message: 'Error creating bill',
+            message: errorMessage,
             error: error.message
         });
     }
 },
+
+// NEW METHOD: deleteBillApi
+// Add this to bill-controller.js in module.exports
+
+deleteBillApi: async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+    
+    try {
+        const billId = req.params.billId;
+        const locationCode = req.user.location_code;
+
+        if (!billId) {
+            return res.status(400).json({
+                success: false,
+                message: "Bill ID is required"
+            });
+        }
+
+        // 1. Get bill info and validate it belongs to this location
+        const bill = await db.sequelize.query(`
+            SELECT bill_id, bill_no, bill_type, closing_id, bill_status
+            FROM t_bills 
+            WHERE bill_id = :billId 
+            AND location_code = :locationCode
+        `, {
+            replacements: { 
+                billId,
+                locationCode 
+            },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        if (!bill.length) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Bill not found or does not belong to this location'
+            });
+        }
+
+        const billInfo = bill[0];
+
+        // 2. Only allow deletion of DRAFT bills (optional - remove if you want to allow all)
+        // Uncomment if you want to restrict deletion to DRAFT bills only
+        /*
+        if (billInfo.bill_status !== 'DRAFT') {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Cannot delete ${billInfo.bill_status} bills. Only DRAFT bills can be deleted.`
+            });
+        }
+        */
+
+        // 3. Validate shift status before deletion (CRITICAL - prevents deletion on closed shifts)
+        await validateShiftForBillOperation(
+            billInfo.closing_id, 
+            locationCode, 
+            'delete'
+        );
+
+        // 4. Delete bill items based on bill type
+        if (billInfo.bill_type === 'CREDIT') {
+            await db.sequelize.query(`
+                DELETE FROM t_credits 
+                WHERE bill_id = :billId
+            `, {
+                replacements: { billId },
+                type: Sequelize.QueryTypes.DELETE,
+                transaction
+            });
+        } else {
+            await db.sequelize.query(`
+                DELETE FROM t_cashsales 
+                WHERE bill_id = :billId
+            `, {
+                replacements: { billId },
+                type: Sequelize.QueryTypes.DELETE,
+                transaction
+            });
+        }
+
+        // 5. Delete bill header
+        await db.sequelize.query(`
+            DELETE FROM t_bills 
+            WHERE bill_id = :billId
+        `, {
+            replacements: { billId },
+            type: Sequelize.QueryTypes.DELETE,
+            transaction
+        });
+
+        await transaction.commit();
+
+        return res.status(200).json({
+            success: true,
+            message: `Bill ${billInfo.bill_no} deleted successfully`,
+            deletedBillNo: billInfo.bill_no,
+            deletedBillId: billId
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Bill deletion error:', error);
+
+        // Friendly error messages
+        let errorMessage = 'Error deleting bill';
+        let statusCode = 500;
+
+        if (error.message.includes('Shift')) {
+            // Shift-related errors (closed shift, etc.)
+            errorMessage = error.message;
+            statusCode = 400;
+        } else if (error.message.includes('not found')) {
+            errorMessage = error.message;
+            statusCode = 404;
+        }
+
+        return res.status(statusCode).json({
+            success: false,
+            message: errorMessage,
+            error: error.message
+        });
+    }
+},
+
 
     
 };

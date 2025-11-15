@@ -1,6 +1,6 @@
 const express = require("express");
 const passport = require("passport");
-const { generateToken, verifyToken,apiLoginLimiter,isCustomerOnly } = require("./apiAuthConfig");
+const { generateToken, verifyToken, apiLoginLimiter, isCustomerOnly, hasPermission } = require("./apiAuthConfig");
 require("./apiAuthConfig"); // Load API strategy
 const router = express.Router();
 const LoginLogDao = require("../dao/login-log-dao");
@@ -104,21 +104,173 @@ router.get('/users', verifyToken, async (req, res) => {
     }
 });
 
-// Billing routes
-router.get('/bills', verifyToken, (req, res, next) => {
-    req.location_code = req.user.location_code;
-    billController.getBillsApi(req, res, next);
-});
+// // Billing routes
+// router.get('/bills', verifyToken, (req, res, next) => {
+//     req.location_code = req.user.location_code;
+//     billController.getBillsApi(req, res, next);
+// });
 
-router.get('/bills/needs', verifyToken, (req, res, next) => {
-    req.location_code = req.user.location_code;
-    billController.getNewBillApi(req, res, next);
-});
+// router.get('/bills/needs', verifyToken, (req, res, next) => {
+//     req.location_code = req.user.location_code;
+//     billController.getNewBillApi(req, res, next);
+// });
 
-router.post('/bills/create', verifyToken, (req, res, next) => {
-    req.location_code = req.user.location_code;
-    billController.createBillApi(req, res, next);
-});
+// router.post('/bills/create', verifyToken, (req, res, next) => {
+//     req.location_code = req.user.location_code;
+//     billController.createBillApi(req, res, next);
+// });
+
+
+// Import permission middleware (should already exist at top of file)
+// const { verifyToken, hasPermission, isStaffOnly } = require('./apiAuthConfig');
+
+/**
+ * BILLING PERMISSIONS NEEDED:
+ * - VIEW_BILLS: List and view bills
+ * - CREATE_BILLS: Create new bills  
+ * - EDIT_BILLS: Update existing bills
+ * - DELETE_BILLS: Delete bills
+ * - PRINT_BILLS: Generate bill PDFs
+ * 
+ * Note: These permissions should exist in m_role_permissions table
+ * If not present, run the permission setup SQL first
+ */
+
+// ============================================
+// 1. LIST BILLS
+// ============================================
+// GET /api/bills
+// Query params: 
+//   - fromDate (optional)
+//   - toDate (optional)  
+//   - billType (optional): 'CREDIT' or 'CASH'
+//   - billStatus (optional): 'DRAFT' or 'ACTIVE'
+// Returns: Array of bills with customer info, vehicle info, cashier info
+router.get('/bills', 
+    verifyToken, 
+    hasPermission('VIEW_BILLS'),
+    (req, res, next) => {
+        billController.getBillsApi(req, res, next);
+    }
+);
+
+// ============================================
+// 2. GET BILL CREATION REQUIREMENTS
+// ============================================
+// GET /api/bills/needs
+// Returns: 
+//   - shifts: Active shifts for current location
+//   - products: Available products
+//   - credits: Credit customers (if applicable)
+router.get('/bills/needs', 
+    verifyToken,
+    hasPermission('CREATE_BILLS'),
+    (req, res, next) => {
+        billController.getNewBillApi(req, res, next);
+    }
+);
+
+// ============================================
+// 3. CREATE NEW BILL
+// ============================================
+// POST /api/bills
+// Body:
+//   - closing_id: Shift ID (required)
+//   - bill_type: 'CREDIT' or 'CASH' (required)
+//   - items: Array of bill items (required)
+//   - creditlist_id: Customer ID (required for CREDIT bills)
+//   - bill_vehicle_id: Vehicle ID (optional for CREDIT)
+//   - bill_vehicle_number: Vehicle number (optional for CASH)
+//   - bill_odometer_reading: Odometer reading (optional)
+//   - customer_name: Customer name (optional for CASH)
+// Returns: { success, message, bill_no, bill_id }
+router.post('/bills', 
+    verifyToken,
+    hasPermission('CREATE_BILLS'),
+    (req, res, next) => {
+        billController.createBillApi(req, res, next);
+    }
+);
+
+// ============================================
+// 4. GET SINGLE BILL DETAILS
+// ============================================
+// GET /api/bills/:billId
+// Returns: Complete bill with all line items
+router.get('/bills/:billId', 
+    verifyToken,
+    hasPermission('VIEW_BILLS'),
+    (req, res, next) => {
+        billController.getBillDetailsApi(req, res, next);
+    }
+);
+
+// ============================================
+// 5. UPDATE EXISTING BILL
+// ============================================
+// PUT /api/bills/:billId
+// Body: Same as create, but for existing DRAFT bill
+// Returns: { success, message, bill_no }
+// Note: Only DRAFT bills can be updated
+router.put('/bills/:billId', 
+    verifyToken,
+    hasPermission('EDIT_BILLS'),
+    (req, res, next) => {
+        billController.updateBillApi(req, res, next);
+    }
+);
+
+// ============================================
+// 6. DELETE BILL
+// ============================================
+// DELETE /api/bills/:billId
+// Returns: { success, message }
+// Note: Only DRAFT bills can be deleted, shift must be open
+router.delete('/bills/:billId', 
+    verifyToken,
+    hasPermission('DELETE_BILLS'),
+    (req, res, next) => {
+        billController.deleteBillApi(req, res, next);
+    }
+);
+
+// ============================================
+// 7. GET BILL PDF
+// ============================================
+// GET /api/bills/:billId/pdf
+// Returns: PDF buffer as base64 string or download link
+// For mobile apps, we'll return base64 encoded PDF
+router.get('/bills/:billId/pdf', 
+    verifyToken,
+    hasPermission('PRINT_BILLS'),
+    (req, res, next) => {
+        billController.getBillPDFApi(req, res, next);
+    }
+);
+
+// ============================================
+// OPTIONAL: BILL STATISTICS (FOR DASHBOARD)
+// ============================================
+// GET /api/bills/stats
+// Query params: fromDate, toDate
+// Returns: Summary statistics (total bills, total amount, by type, etc.)
+router.get('/bills/stats', 
+    verifyToken,
+    hasPermission('VIEW_BILLS'),
+    (req, res, next) => {
+        billController.getBillStatsApi(req, res, next);
+    }
+);
+
+
+
+
+
+
+
+
+
+
 
 
 
