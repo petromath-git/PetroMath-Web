@@ -56,6 +56,50 @@ block content
             box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
         }
 
+        @media print {
+            .table-responsive {
+                max-height: none !important;
+                overflow-y: visible !important;
+                overflow-x: visible !important;
+            }
+            
+            table {
+                page-break-inside: auto;
+            }
+            
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+            
+            thead {
+                display: table-header-group;
+            }
+            
+            tfoot {
+                display: table-footer-group;
+            }
+            
+            /* Hide checkboxes and interactive elements in print */
+            .row-select,
+            #selectAll,
+            button,
+            .btn {
+                display: none !important;
+            }
+            
+            /* Ensure selected summary is visible */
+            #selected-summary {
+                position: static !important;
+                page-break-before: avoid;
+            }
+            
+            /* Remove sticky positioning from headers */
+            .table thead {
+                position: static !important;
+            }
+        }
+
     script.
         var creditstmtFromServer = !{JSON.stringify(creditstmt)};
         var currentData = creditstmtFromServer;
