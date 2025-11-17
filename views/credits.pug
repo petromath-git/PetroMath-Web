@@ -74,6 +74,12 @@ block content
                                 td= val.bank_name || '-'
                                 if canEdit || canDisable
                                     td
+                                        // Vehicle Management Link
+                                        a.btn.btn-sm.btn-outline-info.me-1(
+                                            href=`/vehicles/${val.creditlist_id}`,
+                                            title="Manage Vehicles"
+                                        )
+                                             i.bi.bi-truck
                                         if canEdit
                                             button.btn.btn-sm.btn-outline-primary.edit-customer-btn(
                                                 type="button",
