@@ -3,137 +3,227 @@ extends layout
 block content
     form(method='POST' action='/reports-sales-summary')
         script.
-            
-            // Javascript that gets table data
-            var SaleSummaryFromServer = !{JSON.stringify(Saleslist)}   
+            // ================================
+            // RAW DATA FROM BACKEND (NO TOTAL ROW)
+            // ================================
+            var SaleSummaryFromServer = !{JSON.stringify(Saleslist)};
 
-            function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
 
-                   // Check if the array is empty
-                    if (array.length === 0) {
-                        return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";  // Just return a simple message if no data
-                    }
+            // ================================
+            // RENDER TABLE (unchanged except alignment)
+            // ================================
+            function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
 
-                    // If no numberColumns provided, assume all keys except 'Date' are numeric.
-                    if (numberColumns.length === 0 && typeof array[0] === 'object') {
-                        numberColumns = Object.keys(array[0]).filter(key => key !== 'Date');
-                    }
-
-                var result = "<div class='card' style='margin-bottom: 10px;'>"; // Start card container
-                        result += "<div class='card-header text-center font-weight-bold' >"+tabletitle+"</div>"; // Card header
-                        result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>"; // Card body with optional width class
-                        result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>"; // Darker border for the table                                       
-                
-                 // If the array is not empty, add headers from the keys of the first object
-                if (array.length > 0 && typeof array[0] === 'object') {
-                    result += "<thead class='thead-light text-center'><tr>";
-                    Object.keys(array[0]).forEach(key => {                       
-                        result += "<th style='border: 1px solid #000;'>" + key + "</th>"; // Darker border for headers
-                    });
-                    result += "</tr></thead>";
+                if (array.length === 0) {
+                    return "<p class='text-center'><strong> *** No "+tabletitle+" *** </strong></p>";
                 }
-            
-                // Loop through the array to build table rows
+
+                // Detect numeric columns
+                if (numberColumns.length === 0) {
+                    numberColumns = Object.keys(array[0])
+                        .filter(key => key !== 'Date' && key !== 'Day');
+                }
+
+                var result = "<div class='card' style='margin-bottom: 10px;'>";
+                result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>";
+                result += "<div class='card-body "+tableWidthClass+"' style='padding-bottom: 10px;'>";
+                result += "<table class='table table-bordered table-sm' style='width:100%; border:1px solid #000;'>";
+
+                // Headers
+                result += "<thead class='thead-light text-center'><tr>";
+                Object.keys(array[0]).forEach(key => {
+                    result += "<th style='border:1px solid #000;'>" + key + "</th>";
+                });
+                result += "</tr></thead>";
+
+                // Body
                 result += "<tbody>";
-                
-                for (var i = 0; i < array.length; i++) {
 
+                for (let i = 0; i < array.length; i++) {
 
+                    let row = array[i];
+                    let rowClass = "";
 
-                    let rowClass = '';  // Default row class (no styling)
-
-                    // Check if it's the last row and contains "Total"
-                    if (i === array.length - 1) {
-                        // Check if it's the last row and contains "Total" or "Excess"
-                        let isTotalRow = Object.values(array[i]).some(value => value && 
-                            (value.toString().toLowerCase().includes("total") || value.toString().toLowerCase().includes("excess"))
-                         );
-
-                        if (isTotalRow) {
-                            rowClass = 'font-weight-bold text-danger'; // Apply bold and red color for "Total" row
-                        }
+                    // Weekend highlight
+                    if (row.Day === "Sat" || row.Day === "Sun") {
+                        rowClass += " bg-warning ";
                     }
 
+                    // Total row formatting
+                    if (row.Date === "Total") {
+                        rowClass += " font-weight-bold text-danger ";
+                    }
 
-                    result += "<tr>";                   
-                     Object.keys(array[i]).forEach(key => {
-                        let dataValue = array[i][key];   
+                    result += "<tr class='"+rowClass+"'>";
 
-                     
-                     
-                       // Check if the current column should be formatted as a number
-                        if (numberColumns.includes(key) && dataValue !== "" &&!isNaN(dataValue))
-                        {
-                                let printedValue;
-                            // If this is the total row (detected by the presence of "text-danger" in rowClass), convert to KL.
-                            if (rowClass.indexOf('text-danger') !== -1) {
-                                let numericValue = Number(dataValue) / 1000;
-                                printedValue = new Intl.NumberFormat('en-IN', {
-                                    style: 'decimal',
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2	
-                                }).format(numericValue) + " KL";
+                    Object.keys(row).forEach(key => {
+                        let dataValue = row[key];
+
+                        // Numeric formatting
+                        if (numberColumns.includes(key) && dataValue !== "" && !isNaN(dataValue)) {
+
+                            let printedValue;
+
+                            // Convert totals to KL
+                            if (row.Date === "Total") {
+                                printedValue = (Number(dataValue) / 1000).toLocaleString('en-IN', {
+                                    minimumFractionDigits: 2, maximumFractionDigits: 2
+                                }) + " KL";
                             } else {
-                                printedValue = new Intl.NumberFormat('en-IN', {
-                                    style: 'decimal',
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2	
-                                }).format(dataValue);
+                                printedValue = Number(dataValue).toLocaleString('en-IN', {
+                                    minimumFractionDigits: 2, maximumFractionDigits: 2
+                                });
                             }
-                           
-                            result += "<td class='" + rowClass + " text-right' style='border: 1px solid #000;'>" + printedValue + "</td>";
 
+                            result += "<td class='text-right "+rowClass+"' style='border:1px solid #000;'>" + printedValue + "</td>";
                         }
-                        else
-                            result += "<td class='" + rowClass + " text-left' style='border: 1px solid #000;'>" + dataValue + "</td>"; // Darker border for cells
-                     });
+                        else {
+                            // CENTER ONLY THE DAY COLUMN
+                            let align = (key === "Day") ? "text-center" : "text-left";
+
+                            result += "<td class='"+align+" "+rowClass+"' style='border:1px solid #000;'>" + dataValue + "</td>";
+                        }
+                    });
+
                     result += "</tr>";
                 }
-                result += "</tbody>";
-                result += "</table>";
-                result += "</div>"; // Close card body
-                result += "</div>"; // Close card container
+
+                result += "</tbody></table></div></div>";
                 return result;
             }
 
-   
 
-            document.addEventListener('DOMContentLoaded', function() {                    
-                document.getElementById('SalesSummary-table-container').innerHTML = renderTable(SaleSummaryFromServer,'Sales (Ltrs.)');
+            // ================================
+            // APPLY FILTERS (Day + Weekend + Totals)
+            // ================================
+            function applyFilters() {
+
+                let selectedDay = document.getElementById("dayFilter").value;
+                let weekendOnly = document.getElementById("weekendOnly").checked;
+
+                // Remove backend total rows if any
+                let rows = SaleSummaryFromServer.filter(r => r.Date !== "Total");
+
+                // FILTERING
+                let filtered = rows.filter(row => {
+
+                    // Weekend-only mode
+                    if (weekendOnly) {
+                        return (row.Day === "Sat" || row.Day === "Sun");
+                    }
+
+                    // Day dropdown filter
+                    if (selectedDay && row.Day !== selectedDay) return false;
+
+                    return true;
+                });
+
+
+                // ================================
+                // CLIENT-SIDE TOTAL CALCULATION
+                // ================================
+                if (filtered.length > 0) {
+
+                    let totals = {};
+                    let sample = filtered[0];
+
+                    let totalRow = { Date: "Total", Day: "" };
+
+                    Object.keys(sample).forEach(key => {
+                        if (!isNaN(sample[key]) && key !== "Date" && key !== "Day") {
+                            totals[key] = 0;
+                        }
+                    });
+
+                    filtered.forEach(row => {
+                        Object.keys(totals).forEach(key => {
+                            totals[key] += Number(row[key] || 0);
+                        });
+                    });
+
+                    Object.keys(totals).forEach(key => {
+                        totalRow[key] = totals[key];
+                    });
+
+                    filtered.push(totalRow);
+                }
+
+                // RENDER
+                document.getElementById("SalesSummary-table-container").innerHTML =
+                    renderTable(filtered, "Sales (Ltrs.)");
+            }
+
+
+            // INITIAL TABLE RENDER
+            document.addEventListener("DOMContentLoaded", function() {
+                applyFilters(); // Automatically calculate totals on first load
             });
 
+
+
+        // ================================
+        // FILTER BAR (UI)
+        // ================================
         table.center
             tr
                 td Date Range:
                 td
                     select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='this_month',selected=true) This Month
+                        option(value='today', selected=true) Today
+                        option(value='yesterday') yesterday
+                        option(value='this_week') This Week
+                        option(value='this_month') This Month
                         option(value='last_month') Last Month
                         option(value='this_financial_year') This Financial Year
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom') Custom Date
-                td &nbsp;                   
-                td#fromDateLabel From Date:
-                td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;                   
-                td#toDateLabel To Date:
-                td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td &nbsp;
+
+                td Day:
+                td
+                    select#dayFilter.form-control(onchange="applyFilters()")
+                        option(value='') All Days
+                        option(value='Mon') Mon
+                        option(value='Tue') Tue
+                        option(value='Wed') Wed
+                        option(value='Thu') Thu
+                        option(value='Fri') Fri
+                        option(value='Sat') Sat
+                        option(value='Sun') Sun
+                td &nbsp;
+
+                td Weekend Only:
+                td
+                    input#weekendOnly(type='checkbox', onchange='applyFilters()')
+                td &nbsp;
+
+                td From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, required)
+                td &nbsp;
+
+                td To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, required)
+                td &nbsp;
+
                 include report-print-download.pug
+
+
+    // ================================
+    // REPORT BODY
+    // ================================
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center= "Fuel Sales Summary "                                                                
-        h6.text-center= `${formattedFromDate}   to   ${formattedToDate}` 
-        h4.font-weight-bold.text-success.text-center                           
-    if(Saleslist)                
-            div.col-md-12
-                div.row &nbsp;               
-                div(id="SalesSummary-table-container")       
+        h4.font-weight-bold.text-center Fuel Sales Summary
+        h6.text-center= `${formattedFromDate} to ${formattedToDate}` 
+        h4.font-weight-bold.text-success.text-center
+
+    if (Saleslist)
+        div.col-md-12
+            div.row &nbsp;
+            div(id="SalesSummary-table-container")
     else
-        div.row &nbsp;
         div.row.bg-light No Transactions.
 
-    // Include the overlay
-    include overlay.pug                         
+    include overlay.pug
