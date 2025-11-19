@@ -183,7 +183,8 @@ module.exports = {
         return await lookupDao.getOilCompanies();
     },
 
-    // Check if a location is active
+    
+// Check if a location is active and get service tier
 isLocationActive: async function (locationCode) {
     try {
         const currentDate = new Date();
@@ -192,9 +193,20 @@ isLocationActive: async function (locationCode) {
                 location_code: locationCode,
                 start_date: { [Op.lte]: currentDate },
                 effective_end_date: { [Op.gt]: currentDate }
-            }
+            },
+            attributes: ['location_code', 'service_tier']
         });
-        return !!location; // Returns true if location is active, false otherwise
+        
+        if (location) {
+            return {
+                isActive: true,
+                service_tier: location.service_tier || 'standard'
+            };
+        }
+        return {
+            isActive: false,
+            service_tier: null
+        };
     } catch (error) {
         console.error("Error checking if location is active:", error);
         throw error;

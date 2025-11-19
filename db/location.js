@@ -41,6 +41,11 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: false,
             defaultValue: '9999-12-31'
         },
+        service_tier: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+            defaultValue: 'standard'
+        },
         created_by: {
             type: DataTypes.STRING(45),
             allowNull: true

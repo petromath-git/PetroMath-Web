@@ -51,13 +51,13 @@ passport.use(new LocalStrategy(
                             
                             if (data.effective_end_date > today_date) {
 
-                                 // Check if user's location is active
-                                    const isLocationActive = await LocationDao.isLocationActive(data.location_code);
-                                    if (!isLocationActive) {
+                                 // Check if user's location is active and get service tier
+                                    const locationStatus = await LocationDao.isLocationActive(data.location_code);
+                                    console.log("locationStatus:", locationStatus);
+                                    if (!locationStatus.isActive) {
                                         done(null, false, { message: 'This location is currently inactive. Please contact your administrator.' });
                                         return;
                                     }
-
                                 // Fetch menu access from DAO
                                 const role = data.Role;
                                 const location = data.location_code;
@@ -68,7 +68,7 @@ passport.use(new LocalStrategy(
                                 const menuDetails = menus;
 
                                 // Construct enriched UserData
-                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails);                               
+                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails, locationStatus.service_tier);                               
 
                                 return done(null, userInfo);
                             } else {
@@ -1445,6 +1445,15 @@ app.post('/select-location', isLoginEnsured, async function (req, res) {
         req.user.Role = newRole;
         req.session.selectedLocation = selectedLocationCode;
         req.session.selectedRole = newRole;
+
+        // Load service tier for the new location
+        const locationStatus = await LocationDao.isLocationActive(selectedLocationCode);
+        req.user.service_tier = locationStatus.service_tier || 'standard';
+
+        // Reload menus for new location/role
+        const menus = await MenuAccessDao.getAllowedMenusForUser(newRole, selectedLocationCode);
+        req.user.allowedMenus = menus.map(m => m.menu_code);
+        req.user.menuDetails = menus;
 
         // Clear any cached menu data so it gets refreshed for new location/role
         if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
