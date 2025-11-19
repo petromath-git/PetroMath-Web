@@ -16,6 +16,8 @@ const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const db = require("../db/db-connection");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
+const serviceTier = require('../utils/service-tier');
+
 
 module.exports = {
 
@@ -25,6 +27,8 @@ module.exports = {
     },
 
     getNewData: async (req, res, next) => {
+        console.log("User service_tier:", req.user.service_tier);
+        await serviceTier.applyThrottle(req.user.service_tier);
         const locationCode = req.user.location_code;
 
 
