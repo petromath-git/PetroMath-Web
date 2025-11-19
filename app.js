@@ -1446,6 +1446,15 @@ app.post('/select-location', isLoginEnsured, async function (req, res) {
         req.session.selectedLocation = selectedLocationCode;
         req.session.selectedRole = newRole;
 
+        // Load service tier for the new location
+        const locationStatus = await LocationDao.isLocationActive(selectedLocationCode);
+        req.user.service_tier = locationStatus.service_tier || 'standard';
+
+        // Reload menus for new location/role
+        const menus = await MenuAccessDao.getAllowedMenusForUser(newRole, selectedLocationCode);
+        req.user.allowedMenus = menus.map(m => m.menu_code);
+        req.user.menuDetails = menus;
+
         // Clear any cached menu data so it gets refreshed for new location/role
         if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') {
             req.session.menuCacheCleared = true; // Signal to bypass to refresh menus
