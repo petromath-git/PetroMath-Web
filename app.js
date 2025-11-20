@@ -217,6 +217,7 @@ const bankMasterRoutes = require('./routes/bank-master-routes');
 const locationConfigRoutes = require('./routes/location-config-routes');
 //const accountHeadsRoutes = require("./routes/account-heads-routes");
 const digitalVendorsRoutes = require('./routes/digital-vendors-routes');
+const importantLinksRoutes = require('./routes/important-links-routes');
 
 
 
@@ -374,6 +375,7 @@ app.use('/bank-master', bankMasterRoutes);
 app.use('/location-config', locationConfigRoutes);
 //app.use("/account-heads", accountHeadsRoutes);
 app.use('/digital-vendors', digitalVendorsRoutes);
+app.use('/important-links', importantLinksRoutes);
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
