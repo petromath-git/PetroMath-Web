@@ -1,0 +1,153 @@
+extends layout
+
+block content
+    .container-fluid
+        // Header
+        .row.mb-4
+            .col-12
+                .d-flex.justify-content-between.align-items-center
+                    h3.mb-0
+                        i.bi.bi-link-45deg.me-2
+                        | Important Links
+                    button.btn.btn-info(type="button" onclick="location.reload()")
+                        i.bi.bi-arrow-clockwise.me-1
+                        | Refresh
+
+        // Search
+        .row.mb-3
+            .col-md-4
+                input.form-control#searchInput(type="text" placeholder="Search links..." autocomplete="off")
+
+        // Links by Category
+        if Object.keys(linksByCategory).length === 0
+            .row
+                .col-12
+                    .alert.alert-info
+                        i.bi.bi-info-circle.me-2
+                        | No links available for your role and location.
+        else
+            each links, category in linksByCategory
+                .row.mb-4
+                    .col-12
+                        .card
+                            .card-header.bg-light
+                                h5.mb-0
+                                    i.bi.bi-folder.me-2
+                                    = category
+                            .card-body.p-0
+                                table.table.table-hover.mb-0.links-table
+                                    thead
+                                        tr
+                                            th Title
+                                            th Scope
+                                            th Credentials
+                                            th Actions
+                                    tbody
+                                        each link in links
+                                            tr.link-row
+                                                td
+                                                    strong= link.title
+                                                    if link.description
+                                                        br
+                                                        small.text-muted= link.description
+                                                td
+                                                    if link.scope_type === 'GLOBAL'
+                                                        span.badge.bg-primary Global
+                                                    else if link.scope_type === 'COMPANY'
+                                                        span.badge.bg-info= link.company_name
+                                                    else
+                                                        span.badge.bg-secondary= link.location_name
+                                                td
+                                                    if link.username
+                                                        .credentials-container(data-username=link.username data-password=link.password_decrypted)
+                                                            .mb-1
+                                                                small.text-muted User: 
+                                                                span.username-display= link.username
+                                                                button.btn.btn-sm.btn-outline-secondary.ms-1.copy-btn(type="button" onclick=`copyToClipboard('${link.username}', this)` title="Copy Username")
+                                                                    i.bi.bi-clipboard
+                                                            if link.password_decrypted
+                                                                .mb-0
+                                                                    small.text-muted Pass: 
+                                                                    span.password-display ••••••••
+                                                                    button.btn.btn-sm.btn-outline-secondary.ms-1.reveal-btn(type="button" onclick="toggleReveal(this)" title="Show Password")
+                                                                        i.bi.bi-eye
+                                                                    button.btn.btn-sm.btn-outline-secondary.ms-1.copy-btn(type="button" onclick=`copyToClipboard('${link.password_decrypted}', this)` title="Copy Password")
+                                                                        i.bi.bi-clipboard
+                                                    else
+                                                        span.text-muted -
+                                                td
+                                                    a.btn.btn-sm.btn-primary(href=link.url target="_blank" title="Open Link")
+                                                        i.bi.bi-box-arrow-up-right.me-1
+                                                        | Open
+
+    // JavaScript
+    script.
+        $(document).ready(function() {
+            // Search functionality
+            $('#searchInput').on('keyup', function() {
+                const search = $(this).val().toLowerCase();
+                
+                $('.link-row').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).toggle(text.includes(search));
+                });
+                
+                // Hide empty category cards
+                $('.card').each(function() {
+                    const visibleRows = $(this).find('.link-row:visible').length;
+                    $(this).closest('.row').toggle(visibleRows > 0);
+                });
+            });
+        });
+
+        function toggleReveal(btn) {
+            const container = $(btn).closest('.credentials-container');
+            const passwordDisplay = container.find('.password-display');
+            const password = container.data('password');
+            const icon = $(btn).find('i');
+            
+            if (passwordDisplay.text() === '••••••••') {
+                passwordDisplay.text(password);
+                icon.removeClass('bi-eye').addClass('bi-eye-slash');
+                $(btn).attr('title', 'Hide Password');
+            } else {
+                passwordDisplay.text('••••••••');
+                icon.removeClass('bi-eye-slash').addClass('bi-eye');
+                $(btn).attr('title', 'Show Password');
+            }
+        }
+
+        function copyToClipboard(text, btn) {
+            navigator.clipboard.writeText(text).then(function() {
+                // Show feedback
+                const icon = $(btn).find('i');
+                icon.removeClass('bi-clipboard').addClass('bi-check');
+                $(btn).addClass('btn-success').removeClass('btn-outline-secondary');
+                
+                setTimeout(function() {
+                    icon.removeClass('bi-check').addClass('bi-clipboard');
+                    $(btn).removeClass('btn-success').addClass('btn-outline-secondary');
+                }, 1500);
+            }).catch(function(err) {
+                alert('Failed to copy: ' + err);
+            });
+        }
+
+    // Styles
+    style.
+        .links-table th {
+            border-top: none;
+        }
+        .credentials-container {
+            font-size: 0.85rem;
+        }
+        .copy-btn, .reveal-btn {
+            padding: 0.15rem 0.35rem;
+            font-size: 0.75rem;
+        }
+        .card-header h5 {
+            font-size: 1.1rem;
+        }
+        .password-display {
+            font-family: monospace;
+        }

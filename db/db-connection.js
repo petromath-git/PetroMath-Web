@@ -73,6 +73,8 @@ db.menu_access_global = require("./menu-access-global")(sequelize, Sequelize);
 db.menu_access_override = require("./menu-access-override")(sequelize, Sequelize);
 db.stock_adjustment = require("./stock-adjustment")(sequelize, Sequelize);
 db.personLocation = require("./person-location")(sequelize, Sequelize);
+db.important_links = require("./important-links")(sequelize, Sequelize);
+db.important_link_roles = require("./important-link-roles")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -269,5 +271,10 @@ db.personLocation.belongsTo(db.location, {foreignKey: 'location_code', targetKey
 
 db.menu_groups.hasMany(db.menu_items, {foreignKey: 'group_code', sourceKey: 'group_code'});
 db.menu_items.belongsTo(db.menu_groups, {foreignKey: 'group_code', targetKey: 'group_code'});
+
+// Important Links relations
+db.important_links.hasMany(db.important_link_roles, {foreignKey: 'link_id'});
+db.important_link_roles.belongsTo(db.important_links, {foreignKey: 'link_id'});
+db.important_links.belongsTo(db.location, {foreignKey: 'location_id'});
 
 module.exports = db;
