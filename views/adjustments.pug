@@ -376,7 +376,19 @@ block content
                         }
                     },
                     error: function(xhr, status, error) {
-                        alert('Error reversing adjustment: ' + error);
+                        // Parse the JSON response from 400/500 errors
+                        let errorMessage = 'Error reversing adjustment';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMessage = xhr.responseJSON.error;
+                        } else if (xhr.responseText) {
+                            try {
+                                const parsed = JSON.parse(xhr.responseText);
+                                errorMessage = parsed.error || errorMessage;
+                            } catch(e) {
+                                errorMessage = error || errorMessage;
+                            }
+                        }
+                        alert('Failed to reverse adjustment: ' + errorMessage);
                     }
                 });
             }

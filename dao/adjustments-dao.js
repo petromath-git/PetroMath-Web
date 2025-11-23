@@ -5,6 +5,7 @@ const Credit = db.credit;
 const Bank = db.m_bank;
 const Lookup = db.lookup;
 const { Sequelize, Op } = require("sequelize");
+const locationConfig = require('../utils/location-config');
 
 module.exports = {
     
@@ -252,7 +253,8 @@ module.exports = {
     },
 
     // Check if adjustment can be modified/deleted (business rules)
-    canModifyAdjustment: async (adjustmentId) => {
+    
+     canModifyAdjustment: async (adjustmentId) => {
         try {
             const adjustment = await Adjustments.findByPk(adjustmentId);
             if (!adjustment) {
@@ -263,10 +265,16 @@ module.exports = {
                 return { canModify: false, reason: 'Adjustment is already reversed' };
             }
 
-            // Add business rules here - e.g., can't modify adjustments older than X days
+            // Get max days from config (global or location-specific)
+            const maxDays = Number(await locationConfig.getLocationConfigValue(
+                adjustment.location_code,
+                'ADJUSTMENT_MODIFY_MAX_DAYS',
+                30  // default fallback
+            ));
+
             const daysDiff = Math.floor((new Date() - new Date(adjustment.adjustment_date)) / (1000 * 60 * 60 * 24));
-            if (daysDiff > 30) {
-                return { canModify: false, reason: 'Cannot modify adjustments older than 30 days' };
+            if (daysDiff > maxDays) {
+                return { canModify: false, reason: `Cannot modify adjustments older than ${maxDays} days` };
             }
 
             return { canModify: true, reason: null };
