@@ -50,10 +50,10 @@ block content
         #selected-summary {
             position: sticky;
             bottom: 0;
-            background: #ffffff;
+            background: #fff3cd;
             z-index: 999;
-            border-top: 2px solid #dee2e6;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+            border-top: 2px solid #ffc107;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
         }
 
         @media print {
@@ -206,28 +206,53 @@ block content
             return result;
         }
 
-        // Live search (kept unchanged logic)
+        
+        
+        
+        // Live search
         function liveSearch() {
-            const searchValue = document.getElementById('searchInput').value ? document.getElementById('searchInput').value.toLowerCase() : '';
-            const showUnreconciled = document.getElementById('showUnreconciled') ? document.getElementById('showUnreconciled').checked : false;
-            let filteredData = creditstmtFromServer;
-
-            if (showUnreconciled)
-                filteredData = filteredData.filter(tx => !tx.reconciled);
-
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const transactionType = document.getElementById('transactionType').value;
+            const showUnreconciledOnly = document.getElementById('showUnreconciled').checked;
+            
+            let filteredData = currentData;
+            
+            // First apply "Show Only Unreconciled" filter
+            if (showUnreconciledOnly) {
+                filteredData = filteredData.filter(row => !row.reconciled);
+            }
+            
+            // Then apply transaction type filter
+            if (transactionType === 'credit') {
+                filteredData = filteredData.filter(row => {
+                    return row.Credit && parseFloat(row.Credit) > 0;
+                });
+            } else if (transactionType === 'debit') {
+                filteredData = filteredData.filter(row => {
+                    return row.Debit && parseFloat(row.Debit) > 0;
+                });
+            }
+            
+            // Finally apply search filter
             if (searchValue) {
-                filteredData = filteredData.filter(tx => {
-                    return Object.values(tx).some(value => {
-                        if (value !== null && value !== undefined)
-                            return value.toString().toLowerCase().includes(searchValue);
-                        return false;
+                filteredData = filteredData.filter(row => {
+                    return Object.values(row).some(value => {
+                        if (value === null || value === undefined) return false;
+                        return value.toString().toLowerCase().includes(searchValue);
                     });
                 });
             }
-
-            currentData = filteredData;
+            
+            document.getElementById('creditstmt').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
             updateTotals(filteredData);
-            document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
+            clearSelections();
+        }
+
+
+
+        // Filter by transaction type (Credit/Debit)
+        function filterByTransactionType() {
+           liveSearch(); // Just call liveSearch since it handles all filters now
         }
 
        function updateTotals(data) {
@@ -370,6 +395,12 @@ block content
                             if credits
                                 each val in credits
                                     option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
+                    .col-lg-2.col-md-3.col-6
+                        label.form-label Transaction Type:
+                        select#transactionType.form-control(onchange='filterByTransactionType()')
+                            option(value='all') All
+                            option(value='credit') Credit Only
+                            option(value='debit') Debit Only
                     .col-lg-2.col-md-3.col-6
                         label.form-label Search:
                         input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
