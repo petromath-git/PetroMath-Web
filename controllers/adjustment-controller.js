@@ -1,6 +1,7 @@
 // controllers/adjustment-controller.js
 const adjustmentDao = require('../dao/adjustments-dao');
 const moment = require('moment');
+const locationConfig = require('../utils/location-config');
 
 module.exports = {
 
@@ -100,7 +101,7 @@ module.exports = {
             };
 
             // Validation
-            const validationResult = validateAdjustmentData(adjustmentData);
+            const validationResult = await validateAdjustmentData(adjustmentData, locationCode);
             if (!validationResult.isValid) {
                 req.flash('error', validationResult.message);
                 return res.redirect('/adjustments');
@@ -471,8 +472,9 @@ module.exports = {
     }
 };
 
+
 // Helper function to validate adjustment data
-function validateAdjustmentData(data) {
+async function validateAdjustmentData(data, locationCode) {
     // Check required fields
     if (!data.adjustment_date) {
         return { isValid: false, message: 'Adjustment date is required' };
@@ -513,6 +515,21 @@ function validateAdjustmentData(data) {
 
     if (adjustmentDate > today) {
         return { isValid: false, message: 'Adjustment date cannot be in the future' };
+    }
+
+    // Check backdate limit from config
+    const maxBackdateDays = Number(await locationConfig.getLocationConfigValue(
+        locationCode,
+        'ADJUSTMENT_MODIFY_MAX_DAYS',
+        30  // default fallback
+    ));
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const daysDiff = Math.floor((todayStart - adjustmentDate) / (1000 * 60 * 60 * 24));
+    
+    if (daysDiff > maxBackdateDays) {
+        return { isValid: false, message: `Cannot create adjustments older than ${maxBackdateDays} days` };
     }
 
     return { isValid: true, message: null };
