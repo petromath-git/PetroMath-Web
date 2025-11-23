@@ -76,7 +76,7 @@ module.exports = {
                 company_name: company_name.toUpperCase().trim(),
                 gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
                 phone: phone.trim(),
-                start_date: start_date || new Date(),
+                start_date: start_date ? new Date(start_date + 'T00:00:00') : new Date(new Date().setHours(0,0,0,0)),
                 created_by: req.user.Person_id.toString()
             });
 
@@ -109,7 +109,7 @@ module.exports = {
         company_name: company_name.toUpperCase().trim(),
         gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
         phone: phone.trim(),
-        start_date,
+        start_date: start_date ? new Date(start_date + 'T00:00:00') : new Date(new Date().setHours(0,0,0,0)),
         effective_end_date: '9999-12-31',
         updated_by: req.user.Person_id.toString()
     });
