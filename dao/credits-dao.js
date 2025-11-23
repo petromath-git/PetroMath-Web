@@ -187,18 +187,20 @@ findCustomerByPhone: async (phone) => {
             throw error;
         }
     },
-
-    getVendorLookbackDays: async (creditlistId, locationCode) => {
+getVendorLookbackDays: async (creditlistId, locationCode) => {
   try {
     const query = `
       SELECT settlement_lookback_days 
       FROM m_creditlist 
       WHERE creditlist_id = ? AND location_code = ?
     `;
-    const result = await db.query(query, [creditlistId, locationCode]);
+    const [results] = await sequelize.query(query, {
+      replacements: [creditlistId, locationCode],
+      type: sequelize.QueryTypes.SELECT
+    });
     
-    if (result && result[0] && result[0].settlement_lookback_days !== null) {
-      return result[0].settlement_lookback_days;
+    if (results && results.settlement_lookback_days !== null) {
+      return results.settlement_lookback_days;
     }
     
     return null; // Not configured at vendor level
@@ -208,4 +210,6 @@ findCustomerByPhone: async (phone) => {
     return null;
   }
 }
+  
+
 };

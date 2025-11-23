@@ -23,7 +23,7 @@ block content
         .txn-checkbox {
             width: 15px;
             height: 15px;
-            accent-color: #0d6efd; /* Bootstrap primary blue */
+            accent-color: #0d6efd;
             cursor: pointer;
             transform: scale(1.05);
             border-radius: 4px;
@@ -31,11 +31,16 @@ block content
 
         /* Selected row (darker) */
         tr.selected-row {
-            background-color: rgba(13, 110, 253, 0.20) !important; /* darker than before */
+            background-color: rgba(13, 110, 253, 0.20) !important;
         }
 
         tr:hover {
             background-color: #f5faff !important;
+        }
+
+        /* Make rows clickable */
+        tbody tr {
+            cursor: pointer;
         }
 
         /* Narration column narrower with ellipsis */
@@ -50,10 +55,10 @@ block content
         #selected-summary {
             position: sticky;
             bottom: 0;
-            background: #ffffff;
+            background: #fff3cd;
             z-index: 999;
-            border-top: 2px solid #dee2e6;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+            border-top: 2px solid #ffc107;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
         }
 
         @media print {
@@ -80,7 +85,6 @@ block content
                 display: table-footer-group;
             }
             
-            /* Hide checkboxes and interactive elements in print */
             .row-select,
             #selectAll,
             button,
@@ -88,20 +92,18 @@ block content
                 display: none !important;
             }
             
-            /* Ensure selected summary is visible */
             #selected-summary {
                 position: static !important;
                 page-break-before: avoid;
             }
             
-            /* Remove sticky positioning from headers */
             .table thead {
                 position: static !important;
             }
         }
 
     script.
-        var creditstmtFromServer = !{JSON.stringify(creditstmt)};
+        var creditstmtFromServer = !{JSON.stringify(creditstmt || [])};
         var currentData = creditstmtFromServer;
 
         // Render table (checkbox column always visible)
@@ -111,13 +113,11 @@ block content
 
             if (array.length > 0 && typeof array[0] === 'object') {
                 result += "<thead class='thead-light'><tr>";
-                // Checkbox header column - wider
                 result += "<th class='text-center' style='width: 80px; border: 1px solid #dee2e6;'>Select<br><input type='checkbox' id='selectAll' onclick='toggleSelectAll(this)' /></th>";
                 result += "<th class='text-center' style='min-width:90px; border: 1px solid #dee2e6;'>Match ID</th>";
 
                 Object.keys(array[0]).forEach(key => {
                     if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass' && key !== 'unique_id') {
-                        // make Narration column narrower
                         let widthStyle = (key === 'Narration') ? "max-width:220px;" : "";
                         result += `<th class='text-center' style='border: 1px solid #dee2e6; ${widthStyle}'>${key}</th>`;
                     }
@@ -140,18 +140,15 @@ block content
 
                 result += `<tr class='${rowClass}'>`;
 
-                // Checkbox cell (always visible)
                 result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>
                              <input type='checkbox' class='row-select txn-checkbox' onchange='updateSelectedTotals()'
                              data-debit='${row.Debit || 0}' data-credit='${row.Credit || 0}'>
                            </td>`;
 
-                // Match ID column
                 const matchId = row.match_id || '';
                 const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
                 result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${matchId || '-'}</td>`;
 
-                // Data columns
                 Object.keys(row).forEach(key => {
                     if (key !== 'companyName' && key !== 'reconciled' && key !== 'match_id' && key !== 'possibleMatch' && key !== 'reconciliation_pass' && key !== 'unique_id') {
                         let dataValue = row[key];
@@ -173,7 +170,6 @@ block content
                     }
                 });
 
-                // Status icon logic (preserve your pass colors)
                 let statusIcon;
                 if (row.reconciled) {
                     if (row.reconciliation_pass === 2)
@@ -206,31 +202,84 @@ block content
             return result;
         }
 
-        // Live search (kept unchanged logic)
+        // Local date range function
+        function updateDateRangev1() {
+            const dateRangeEl = document.getElementById('dateRange');
+            if (!dateRangeEl) return;
+            
+            const dateRange = dateRangeEl.value;
+            const fromDateInput = document.getElementById('fromclosingDate');
+            const toDateInput = document.getElementById('toclosingDate');
+
+            if (!fromDateInput || !toDateInput) return;
+
+            const currentDate = new Date();
+            let fromDate, toDate;
+
+            if (dateRange === 'this_month') {
+                fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                toDate = new Date();
+            } else if (dateRange === 'last_month') {
+                fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+                toDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+            } else {
+                return;
+            }
+
+            function formatDateToISOString(date) {
+                const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+                return utcDate.toISOString().split('T')[0];
+            }
+
+            fromDateInput.value = fromDate ? formatDateToISOString(fromDate) : '';
+            toDateInput.value = toDate ? formatDateToISOString(toDate) : '';
+        }
+
+        // Live search
         function liveSearch() {
-            const searchValue = document.getElementById('searchInput').value ? document.getElementById('searchInput').value.toLowerCase() : '';
-            const showUnreconciled = document.getElementById('showUnreconciled') ? document.getElementById('showUnreconciled').checked : false;
-            let filteredData = creditstmtFromServer;
-
-            if (showUnreconciled)
-                filteredData = filteredData.filter(tx => !tx.reconciled);
-
+            const container = document.getElementById('creditstmt-table-container');
+            if (!container) return;
+            
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const transactionType = document.getElementById('transactionType').value;
+            const showUnreconciledOnly = document.getElementById('showUnreconciled').checked;
+            
+            let filteredData = currentData;
+            
+            if (showUnreconciledOnly) {
+                filteredData = filteredData.filter(row => !row.reconciled);
+            }
+            
+            if (transactionType === 'credit') {
+                filteredData = filteredData.filter(row => {
+                    return row.Credit && parseFloat(row.Credit) > 0;
+                });
+            } else if (transactionType === 'debit') {
+                filteredData = filteredData.filter(row => {
+                    return row.Debit && parseFloat(row.Debit) > 0;
+                });
+            }
+            
             if (searchValue) {
-                filteredData = filteredData.filter(tx => {
-                    return Object.values(tx).some(value => {
-                        if (value !== null && value !== undefined)
-                            return value.toString().toLowerCase().includes(searchValue);
-                        return false;
+                filteredData = filteredData.filter(row => {
+                    return Object.values(row).some(value => {
+                        if (value === null || value === undefined) return false;
+                        return value.toString().toLowerCase().includes(searchValue);
                     });
                 });
             }
-
-            currentData = filteredData;
+            
+            container.innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
             updateTotals(filteredData);
-            document.getElementById('creditstmt-table-container').innerHTML = renderTable(filteredData, 'Digital Reconciliation', ['Debit', 'Credit']);
+            clearSelections();
         }
 
-       function updateTotals(data) {
+        // Filter by transaction type
+        function filterByTransactionType() {
+           liveSearch();
+        }
+
+        function updateTotals(data) {
             let unreconciledDebit = 0, unreconciledCredit = 0;
 
             data.forEach(tx => {
@@ -248,7 +297,6 @@ block content
                 maximumFractionDigits: 2
             }).format(num);
 
-            // Color logic
             const colorClass = diff > 0 ? 'text-danger' : (diff < 0 ? 'text-success' : 'text-muted');
             const labelText = diff > 0 ? 'Debit Excess' : (diff < 0 ? 'Credit Excess' : 'Perfectly Balanced');
 
@@ -277,8 +325,7 @@ block content
             totalsDiv.innerHTML = totalsHTML;
         }
 
-
-        // Inline calculator + row highlight (unchanged logic)
+        // Inline calculator + row highlight
         function updateSelectedTotals() {
             const checkboxes = document.querySelectorAll('.row-select');
             let totalDebit = 0, totalCredit = 0, count = 0;
@@ -289,7 +336,7 @@ block content
                     totalDebit += parseFloat(cb.dataset.debit || 0);
                     totalCredit += parseFloat(cb.dataset.credit || 0);
                     count++;
-                    row.classList.add('selected-row'); // highlight
+                    row.classList.add('selected-row');
                 } else {
                     row.classList.remove('selected-row');
                 }
@@ -338,11 +385,36 @@ block content
             updateSelectedTotals();
         }
 
+        // Make entire row clickable to toggle checkbox
+        document.addEventListener('click', function(e) {
+            const row = e.target.closest('tbody tr');
+            if (!row) return;
+            
+            // Don't toggle if clicking directly on checkbox
+            if (e.target.type === 'checkbox') return;
+            
+            // Don't toggle if clicking on a link or button
+            if (e.target.closest('a') || e.target.closest('button')) return;
+            
+            const checkbox = row.querySelector('.row-select');
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                updateSelectedTotals();
+            }
+        });
+
+        // Press Escape to clear selections
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                clearSelections();
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', function() {
             liveSearch();
         });
 
-    // Filter + Controls (removed enable selection toggle)
+    // Filter + Controls
     .card.mb-3
         .card-header(style='cursor: pointer; background-color: #f8f9fa;')
             .d-flex.justify-content-between.align-items-center
@@ -354,7 +426,7 @@ block content
                 .row.g-3.align-items-end
                     .col-lg-2.col-md-3.col-6
                         label.form-label Date Range:
-                        select#dateRange.form-control(onchange='updateDateRange()')
+                        select#dateRange.form-control(onchange='updateDateRangev1()')
                             option(value='this_month') This Month
                             option(value='last_month') Last Month
                             option(value='custom' selected) Custom
@@ -371,15 +443,21 @@ block content
                                 each val in credits
                                     option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                     .col-lg-2.col-md-3.col-6
+                        label.form-label Transaction Type:
+                        select#transactionType.form-control(onchange='filterByTransactionType()')
+                            option(value='all') All
+                            option(value='credit') Credit Only
+                            option(value='debit') Debit Only
+                    .col-lg-2.col-md-3.col-6
                         label.form-label Search:
                         input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
-                    .col-lg-2.col-md-3.col-6
+                    .col-lg-3.col-md-4.col-6
                         label.form-label &nbsp;
-                        .d-flex.gap-2
+                        .d-flex.gap-2.flex-wrap
                             include report-print-download.pug
-                .row.mt-3
-                    .col-12
-                        .form-check
+                    .col-lg-3.col-md-4.col-12
+                        label.form-label &nbsp;
+                        .form-check.pt-2
                             input#showUnreconciled.form-check-input(type='checkbox', onchange='liveSearch()')
                             label.form-check-label(for='showUnreconciled')
                                 i.bi.bi-filter-circle.me-1
