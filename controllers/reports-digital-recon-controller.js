@@ -125,30 +125,51 @@ module.exports = {
     );
 
     // Create full dataset for reconciliation - WITH UNIQUE ID
-    const fullDataset = data1.map((creditstmtData, index) => ({
-      unique_id: `${index}`,
-      Date: creditstmtData.tran_date,
-      bill_no: creditstmtData.bill_no,
-      Narration: [creditstmtData.bill_no, creditstmtData.notes]
-        .filter(Boolean)
-        .join(" - "),
-      companyName: creditstmtData.company_name,
-      entry_type: creditstmtData.entry_type,
-      Debit: creditstmtData.entry_type === 'DEBIT' ? creditstmtData.amount : null,
-      Credit: creditstmtData.entry_type === 'CREDIT' ? creditstmtData.amount : null
-    }));
+ const fullDataset = data1.map((row, index) => {
+    const amount = parseFloat(row.amount);
+    const isDebit = row.entry_type === "DEBIT";
+
+    return {
+        unique_id: `${index}`,
+
+        // Existing display fields
+        Date: row.tran_date,
+        bill_no: row.bill_no,
+        Narration: [row.bill_no, row.notes].filter(Boolean).join(" - "),
+        companyName: row.company_name,
+        entry_type: row.entry_type,
+        Debit: isDebit ? amount : null,
+        Credit: !isDebit ? amount : null,
+
+        // New fields for DB reconciliation
+        source_table: row.source_table,
+        source_id: row.source_id,
+        recon_match_id_db: row.recon_match_id,
+        manual_recon_flag_db: row.manual_recon_flag,
+        manual_recon_by_db: row.manual_recon_by,
+        manual_recon_date_db: row.manual_recon_date,
+
+        // IMPORTANT: Mark DB matches as already reconciled
+        reconciled: row.recon_match_id ? true : false,
+        match_id: row.recon_match_id || null,
+
+        // Additional metadata (optional)
+        reconciliation_pass: row.recon_match_id ? 0 : null
+    };
+});
+
 
    function findMatchingTransactions(transactions, lookbackDays) {
   const TOLERANCE = 1; // Rs 1 tolerance
-  const processedData = transactions.map(tx => ({
-    ...tx,
-    DateObj: new Date(tx.Date.split('-').reverse().join('-')),
-    DebitAmount: tx.Debit ? parseFloat(tx.Debit) : null,
-    CreditAmount: tx.Credit ? parseFloat(tx.Credit) : null,
-    reconciled: false,
-    match_id: null,
-    reconciliation_pass: null,
-  }));
+ const processedData = transactions.map(tx => ({
+  ...tx,
+  DateObj: new Date(tx.Date.split('-').reverse().join('-')),
+  DebitAmount: tx.Debit ? parseFloat(tx.Debit) : null,
+  CreditAmount: tx.Credit ? parseFloat(tx.Credit) : null,  
+  reconciled: tx.reconciled ? true : false,
+  match_id: tx.match_id || null,
+  reconciliation_pass: tx.reconciled ? 0 : null,
+}));
 
   let matchCounter = 1;
 

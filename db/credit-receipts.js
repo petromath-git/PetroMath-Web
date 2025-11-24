@@ -11,7 +11,7 @@ module.exports = function (sequelize, DataTypes) {
       },
       receipt_no: DataTypes.INTEGER,
       creditlist_id: DataTypes.INTEGER,
-      digital_creditlist_id: DataTypes.INTEGER,  // ← NEW FIELD
+      digital_creditlist_id: DataTypes.INTEGER,
       receipt_type: DataTypes.STRING,
       amount: DataTypes.DECIMAL,
       notes: DataTypes.STRING,
@@ -22,7 +22,24 @@ module.exports = function (sequelize, DataTypes) {
       updation_date: DataTypes.DATE,
       receipt_date: DataTypes.DATE,
       receipt_date_fmt: {
-          type: DataTypes.DATE        // Dummy fields for UI date formats
+        type: DataTypes.DATE
+      },
+      recon_match_id: {
+        type: DataTypes.BIGINT,
+        allowNull: true
+      },
+      manual_recon_flag: {
+        type: DataTypes.TINYINT,
+        allowNull: true,
+        defaultValue: 0
+      },
+      manual_recon_by: {
+        type: DataTypes.STRING(50),
+        allowNull: true
+      },
+      manual_recon_date: {
+        type: DataTypes.DATE,
+        allowNull: true
       },
     },
     {

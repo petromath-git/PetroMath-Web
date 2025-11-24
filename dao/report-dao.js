@@ -231,13 +231,23 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
             'Digital Sale' as product_name,
             tds.amount,
             COALESCE(tds.transaction_date, tc.closing_date) as sort_date,
-            'DEBIT' as entry_type
+            'DEBIT' as entry_type,
+
+            -- NEW recon fields
+            't_digital_sales' AS source_table,
+            tds.digital_sales_id AS source_id,
+            tds.recon_match_id,
+            tds.manual_recon_flag,
+            tds.manual_recon_by,
+            tds.manual_recon_date
+
         FROM t_digital_sales tds
         INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
         WHERE tc.location_code = :locationCode
           AND DATE(COALESCE(tds.transaction_date, tc.closing_date)) BETWEEN :fromDate AND :toDate
           AND tds.vendor_id = :vendorId
+
 
         UNION ALL
 
@@ -255,13 +265,23 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
             NULL as product_name,
             tr.amount,
             tr.receipt_date as sort_date,
-            'DEBIT' as entry_type
+            'DEBIT' as entry_type,
+
+            -- NEW recon fields
+            't_receipts' AS source_table,
+            tr.treceipt_id AS source_id,
+            tr.recon_match_id,
+            tr.manual_recon_flag,
+            tr.manual_recon_by,
+            tr.manual_recon_date
+
         FROM t_receipts tr
         INNER JOIN m_credit_list mcl ON tr.digital_creditlist_id = mcl.creditlist_id
         LEFT JOIN m_credit_list mcl_payer ON tr.creditlist_id = mcl_payer.creditlist_id
         WHERE tr.location_code = :locationCode
           AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
           AND tr.digital_creditlist_id = :vendorId
+
 
         UNION ALL
 
@@ -274,12 +294,22 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
             NULL as product_name,
             tr.amount,
             tr.receipt_date as sort_date,
-            'CREDIT' as entry_type
+            'CREDIT' as entry_type,
+
+            -- NEW recon fields
+            't_receipts' AS source_table,
+            tr.treceipt_id AS source_id,
+            tr.recon_match_id,
+            tr.manual_recon_flag,
+            tr.manual_recon_by,
+            tr.manual_recon_date
+
         FROM t_receipts tr
         INNER JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
         WHERE tr.location_code = :locationCode
           AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
           AND tr.creditlist_id = :vendorId
+
 
         UNION ALL
 
@@ -295,7 +325,16 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
             CASE 
                 WHEN ta.debit_amount > 0 THEN 'DEBIT'
                 ELSE 'CREDIT'
-            END as entry_type
+            END as entry_type,
+
+            -- NEW recon fields
+            't_adjustments' AS source_table,
+            ta.adjustment_id AS source_id,
+            ta.recon_match_id,
+            ta.manual_recon_flag,
+            ta.manual_recon_by,
+            ta.manual_recon_date
+
         FROM t_adjustments ta
         INNER JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
         WHERE ta.external_source = 'DIGITAL_VENDOR'
@@ -304,14 +343,15 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
           AND ta.location_code = :locationCode
           AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
 
+
         ORDER BY sort_date, entry_type DESC, bill_no`,
         {
             replacements: { 
-                locationCode: locationCode,
-                vendorId: vendorId,
-                fromDate: fromDate,
-                toDate: toDate
-            }, 
+                locationCode,
+                vendorId,
+                fromDate,
+                toDate
+            },
             type: db.Sequelize.QueryTypes.SELECT
         }
     );
