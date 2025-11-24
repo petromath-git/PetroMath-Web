@@ -194,7 +194,7 @@ module.exports = {
                     :phoneno,
                     :address,
                     'Y',
-                    'digital',
+                    'Credit',
                     0,
                     CURDATE(),
                     '9999-12-31',

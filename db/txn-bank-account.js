@@ -76,6 +76,23 @@ module.exports = function(sequelize, DataTypes) {
             field: 'external_source',
             type: DataTypes.STRING(50),  // or DataTypes.STRING
             allowNull: true
+        },
+        recon_match_id: {
+            type: DataTypes.BIGINT,
+            allowNull: true
+        },
+        manual_recon_flag: {
+            type: DataTypes.TINYINT,
+            allowNull: true,
+            defaultValue: 0
+        },
+        manual_recon_by: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
+        manual_recon_date: {
+            type: DataTypes.DATE,
+            allowNull: true
         }
     }, {
         timestamps: false,
