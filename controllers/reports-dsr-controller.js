@@ -257,18 +257,21 @@ module.exports = {
         const creditAmount = parseFloat(salesCollection.crsaleamt); 
 
      
-        // Accumulate totals
-        totalCash += cashAmount;
-        totalCredit += creditAmount;
+         // Only add if valid numbers
+          if (!isNaN(cashAmount)) totalCash += cashAmount;
+          if (!isNaN(creditAmount)) totalCredit += creditAmount;
         
         
       });
 
 
+      // Handle digital sales with proper validation
       if (digitalData && digitalData.digital_sales) {
-          totalCard = parseFloat(digitalData.digital_sales);
+        const digitalSales = parseFloat(digitalData.digital_sales);
+        if (!isNaN(digitalSales)) {
+          totalCard = digitalSales;
+        }
       } 
-
       // Adjust totalCash to exclude digital sales
       totalCash = totalCash - totalCard;
 
@@ -278,11 +281,13 @@ module.exports = {
       let totalOilCash = 0;
       let totalOilCredit = 0;
        // Process sales Collection data
-       oilCollectionData.forEach((oilCollection) => { 
-     
-        totalOilCash += parseFloat(oilCollection.oil_cash);
-        totalOilCredit += parseFloat(oilCollection.oil_credit);    
+      // Process oil collection data
+      oilCollectionData.forEach((oilCollection) => { 
+        const oilCash = parseFloat(oilCollection.oil_cash);
+        const oilCredit = parseFloat(oilCollection.oil_credit);
         
+        if (!isNaN(oilCash)) totalOilCash += oilCash;
+        if (!isNaN(oilCredit)) totalOilCredit += oilCredit;
       });
 
       const formatter = new Intl.NumberFormat('en-IN', {
@@ -293,13 +298,13 @@ module.exports = {
 
         const grandTotal = totalCash + totalOilCash + totalCard + totalCredit + totalOilCredit;
 
-              // Add totals to the collection list
+        // Add totals to the collection list with safe percentage calculation
         Collectionlist.push({         
-          Cash: `${formatter.format(totalCash + totalOilCash)} (${((totalCash + totalOilCash) / grandTotal * 100).toFixed(2)}%)`,
-          Digital: `${formatter.format(totalCard)} (${(totalCard / grandTotal * 100).toFixed(2)}%)`,
-          Credit: `${formatter.format(totalCredit + totalOilCredit)} (${((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2)}%)`
+          Cash: `${formatter.format(totalCash + totalOilCash)} (${grandTotal > 0 ? ((totalCash + totalOilCash) / grandTotal * 100).toFixed(2) : '0.00'}%)`,
+          Digital: `${formatter.format(totalCard)} (${grandTotal > 0 ? (totalCard / grandTotal * 100).toFixed(2) : '0.00'}%)`,
+          Credit: `${formatter.format(totalCredit + totalOilCredit)} (${grandTotal > 0 ? ((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2) : '0.00'}%)`
         });
-
+        
         let totalCreditSales = 0;
         
 
