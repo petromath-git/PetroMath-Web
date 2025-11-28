@@ -134,9 +134,9 @@ function trackMenu(obj) {
                 setTimeout(() => updatePriceOnReadingTab(false), 100);
             }
             
-            // NEW: Populate summary when navigating to summary tab
+            // Populate summary when navigating to summary tab
             if (obj.id === 'summary_tab') {
-                setTimeout(() => populateSummary(obj), 100);
+                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
             }
 
             return;
@@ -149,9 +149,9 @@ function trackMenu(obj) {
                 setTimeout(() => updatePriceOnReadingTab(false), 100);
             }
             
-            // NEW: Populate summary when navigating to summary tab
+            // Populate summary when navigating to summary tab
             if (obj.id === 'summary_tab') {
-                setTimeout(() => populateSummary(obj), 100);
+                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
             }
 
             return;
@@ -167,9 +167,9 @@ function trackMenu(obj) {
                         setTimeout(() => updatePriceOnReadingTab(false), 100);
                     }
                     
-                    // NEW: Populate summary when navigating to summary tab
+                    // Populate summary when navigating to summary tab
                     if (obj.id === 'summary_tab') {
-                        setTimeout(() => populateSummary(obj), 100);
+                        setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
                     }
                 }
                 ajaxLoading('d-md-none');

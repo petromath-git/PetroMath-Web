@@ -459,6 +459,13 @@ const getHomeData = async (req, res, next) => {
             'CREATE_SHIFT_CLOSING'
         );
 
+        // NEW: Get day close grouping config
+        const showDayCloseGrouping = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'SHOW_DAY_CLOSE_GROUPING',
+            'N'  // default value - disabled by default
+        );    
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
@@ -481,7 +488,8 @@ const getHomeData = async (req, res, next) => {
                 productColumns: values[4].value,
                 canSearchClosings: values[5].value,
                 maxAllowedDrafts: maxAllowedDrafts,
-                canCreateShiftClosing: canCreateShiftClosing
+                canCreateShiftClosing: canCreateShiftClosing,
+                showDayCloseGrouping: showDayCloseGrouping
             });
         }).catch(error => {
             console.error('Error in getHomeData:', error);
@@ -872,20 +880,22 @@ const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) 
                         closingDate: closingData.closing_date_formatted,
                         period: closingData.period,
                         closingStatus: closingData.closing_status,
-                        expenseData: parseFloat(closingData.ex_short) || 0
+                        expenseData: parseFloat(closingData.ex_short) || 0,
+                        cashflowId: closingData.cashflow_id || null,
+                        dayCloseDate: closingData.day_close_date || null
                     };
 
                     // Add dynamic product columns
                     Object.keys(closingData).forEach((key) => {
-                        // UPDATED: Remove p_2t from the exclusion list since we don't want it
                         if (!['closing_id', 'person_name', 'closing_date_formatted', 
                               'closing_date', 'period', 'closing_status', 'ex_short', 
-                              'notes', 'location_code', 'loose'].includes(key)) {
+                              'notes', 'location_code', 'loose', 'cashflow_id', 
+                              'cashflow_date', 'day_close_date'].includes(key)) {
                             dynamicClosingData[key] = parseFloat(closingData[key]) || 0;
                         }
                     });
 
-                    // UPDATED: Only handle 2T Loose, remove 2T Pouch
+                    // Only handle 2T Loose
                     if (closingData.loose !== undefined) {
                         dynamicClosingData['2T_LOOSE'] = parseFloat(closingData.loose) || 0;
                     }
@@ -898,7 +908,6 @@ const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) 
             .catch(reject);
     });
 };
-
 
 
 // Add API endpoint for dynamic vehicle loading

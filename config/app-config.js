@@ -38,8 +38,7 @@ const MAX_CASHFLOWS_ROW_CNT = 30;
 const CURRENCY = "Rs. ";
 const PRODUCT_ALIASES = [MS_LABEL, HSD_LABEL, XMS_LABEL];
 const DENOMINATION_VALUES = [
-  { id: 0, label: "Cash" },
-  { id: 2000, label: "2000*" },
+  { id: 0, label: "Cash" },  
   { id: 500, label: "500*" },
   { id: 200, label: "200*" },
   { id: 100, label: "100*" },
@@ -48,8 +47,7 @@ const DENOMINATION_VALUES = [
   { id: 10, label: "10*" },
   { id: 1, label: "Coins" },
 ];
-const CASH_FLOW_DENOMINATION_VALUES = [
-    { id: 2000, label: "2000*" },
+const CASH_FLOW_DENOMINATION_VALUES = [    
     { id: 500, label: "500*" },
     { id: 200, label: "200*" },
     { id: 100, label: "100*" },
