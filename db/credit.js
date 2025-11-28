@@ -16,6 +16,7 @@ module.exports = function(sequelize, DataTypes) {
         phoneno: DataTypes.STRING,
         gst: DataTypes.STRING,
         short_name: DataTypes.STRING,
+        remittance_bank_id: DataTypes.INTEGER,
         Opening_Balance: DataTypes.DECIMAL,
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
