@@ -134,37 +134,49 @@ function trackMenu(obj) {
                 setTimeout(() => updatePriceOnReadingTab(false), 100);
             }
             
+            // Populate summary when navigating to summary tab
+            if (obj.id === 'summary_tab') {
+                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
+            }
 
             return;
         }
         if (previousSaveFun === 'NoSaveClick') {
             document.getElementById('currentTabForSave').value = callSaveFunctionForMenu;
 
-             // Initialize reading tab price when navigating to it via Next button
+            // Initialize reading tab price when navigating to it via Next button
             if (obj.id === 'reading_tab') {
                 setTimeout(() => updatePriceOnReadingTab(false), 100);
             }
+            
+            // Populate summary when navigating to summary tab
+            if (obj.id === 'summary_tab') {
+                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
+            }
 
+            return;
         } else {            
             ajaxLoading('d-md-block');
             window[previousSaveFun]().then((data) => {
                 if (data) {
                     setSaveFunction(obj.id);
                     activateTabDirectly(obj);
-                    //obj.click();
+                    
                     // Initialize reading tab price when navigating to it via Next button
                     if (obj.id === 'reading_tab') {
                         setTimeout(() => updatePriceOnReadingTab(false), 100);
                     }
-
-
+                    
+                    // Populate summary when navigating to summary tab
+                    if (obj.id === 'summary_tab') {
+                        setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
+                    }
                 }
                 ajaxLoading('d-md-none');
             });
         }
     }
 }
-
 
 // Add this helper function
 function activateTabDirectly(tabElement) {

@@ -25,7 +25,7 @@ module.exports = {
     };
     return data;
 },
-    newCredit : function (req) {
+    newCredit : function (req, rowIndex = 0) {
         const data = {
             Company_Name: req.body.m_credit_name_0,
             type: req.body.m_credit_type_0,

@@ -23,6 +23,13 @@ block content
             z-index: 10;
             background-color: #f8f9fa;
         }
+        
+        /* Day close header styling */
+        .day-close-header td {
+            padding: 8px 12px !important;
+            font-weight: 500;
+        }
+        
     // Collapsible Filter Section - Desktop & Mobile
     .card.mb-3
         .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
@@ -117,8 +124,22 @@ block content
                             th Edit/View
                             th Delete
                     tbody
+                        - var currentDayClose = null
+                        - var colorIndex = 0
+                        - var dayCloseColors = ['#f0f8ff', '#fff5f0', '#f0fff0', '#fff0f5', '#f5f5dc']
                         each val in closingValues
-                            tr(id=`closing-record-${val.closingId}`)
+                            - var dayCloseChanged = showDayCloseGrouping === 'Y' ? (val.dayCloseDate !== currentDayClose) : false
+                            - if (dayCloseChanged) { currentDayClose = val.dayCloseDate; if (val.dayCloseDate) colorIndex = (colorIndex + 1) % dayCloseColors.length; }
+                            - var rowBgColor = showDayCloseGrouping === 'Y' && val.dayCloseDate ? dayCloseColors[colorIndex] : (showDayCloseGrouping && !val.dayCloseDate ? '#f5f5f5' : '')
+                            
+                            if showDayCloseGrouping === 'Y' && dayCloseChanged && val.dayCloseDate
+                                tr.day-close-header(style=`background-color: ${rowBgColor}; border-top: 2px solid #dee2e6;`)
+                                    td(colspan="100%")
+                                        small.text-muted
+                                            i.bi.bi-calendar-check.me-1
+                                            strong Day Close: #{val.dayCloseDate}
+                            
+                            tr(id=`closing-record-${val.closingId}` style=rowBgColor ? `background-color: ${rowBgColor};` : '' data-original-bg=rowBgColor)
                                 td
                                     span= val.closingDate
                                 td
@@ -317,6 +338,7 @@ block content
         }
 
         // Live search function for closings table with dynamic totals recalculation
+      // Live search function for closings table with dynamic totals recalculation
         function searchClosingsTable() {
             const searchInput = document.getElementById('searchInput');
             if (!searchInput) return;
@@ -345,11 +367,17 @@ block content
                 const totals = new Array(productColumnCount).fill(0);
                 let visibleCount = 0;
                 
+                // Hide all day close header rows when searching
+                const dayCloseHeaders = tbody.querySelectorAll('tr.day-close-header');
+                dayCloseHeaders.forEach(header => {
+                    header.style.display = searchValue ? 'none' : '';
+                });
+                
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
                     
-                    // Skip total row
-                    if (row.classList.contains('table-info')) {
+                    // Skip total row and day close header rows
+                    if (row.classList.contains('table-info') || row.classList.contains('day-close-header')) {
                         continue;
                     }
                     
@@ -368,6 +396,17 @@ block content
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
+                        
+                        // Remove background color when searching
+                        if (searchValue) {
+                            row.style.backgroundColor = '';
+                        } else {
+                            // Restore original background color when search is cleared
+                            const originalBgColor = row.getAttribute('data-original-bg');
+                            if (originalBgColor) {
+                                row.style.backgroundColor = originalBgColor;
+                            }
+                        }
                         
                         // Add product values to totals
                         for (let j = productStartIndex; j < productEndIndex; j++) {
@@ -414,4 +453,4 @@ block content
                     card.style.display = 'none';
                 }
             });
-        }    
+        }
