@@ -139,7 +139,7 @@ block content
                                             i.bi.bi-calendar-check.me-1
                                             strong Day Close: #{val.dayCloseDate}
                             
-                            tr(id=`closing-record-${val.closingId}` style=rowBgColor ? `background-color: ${rowBgColor};` : '')
+                            tr(id=`closing-record-${val.closingId}` style=rowBgColor ? `background-color: ${rowBgColor};` : '' data-original-bg=rowBgColor)
                                 td
                                     span= val.closingDate
                                 td
@@ -338,6 +338,7 @@ block content
         }
 
         // Live search function for closings table with dynamic totals recalculation
+      // Live search function for closings table with dynamic totals recalculation
         function searchClosingsTable() {
             const searchInput = document.getElementById('searchInput');
             if (!searchInput) return;
@@ -366,6 +367,12 @@ block content
                 const totals = new Array(productColumnCount).fill(0);
                 let visibleCount = 0;
                 
+                // Hide all day close header rows when searching
+                const dayCloseHeaders = tbody.querySelectorAll('tr.day-close-header');
+                dayCloseHeaders.forEach(header => {
+                    header.style.display = searchValue ? 'none' : '';
+                });
+                
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
                     
@@ -389,6 +396,17 @@ block content
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
+                        
+                        // Remove background color when searching
+                        if (searchValue) {
+                            row.style.backgroundColor = '';
+                        } else {
+                            // Restore original background color when search is cleared
+                            const originalBgColor = row.getAttribute('data-original-bg');
+                            if (originalBgColor) {
+                                row.style.backgroundColor = originalBgColor;
+                            }
+                        }
                         
                         // Add product values to totals
                         for (let j = productStartIndex; j < productEndIndex; j++) {
@@ -435,4 +453,4 @@ block content
                     card.style.display = 'none';
                 }
             });
-        }    
+        }
