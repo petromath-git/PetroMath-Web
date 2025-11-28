@@ -110,6 +110,7 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
             SELECT 
                 c.closing_id,
                 c.location_code,
+                c.cashflow_id,
                 COALESCE(p.Person_Name, 'Unknown') as person_name,
                 c.closing_date,
                 DATE_FORMAT(c.closing_date, '%d-%b-%Y') as closing_date_formatted,
@@ -119,12 +120,15 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
                 END as period,
                 c.closing_status,
                 COALESCE(c.notes, '') as notes,
-                COALESCE(c.ex_short, 0) as ex_short${dynamicFinalColumns},
+                COALESCE(c.ex_short, 0) as ex_short,
+                cf.cashflow_date,
+                DATE_FORMAT(cf.cashflow_date, '%d-%b-%Y') as day_close_date${dynamicFinalColumns},
                 COALESCE(os.loose, 0) as loose
             FROM t_closing c
             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
             LEFT JOIN fuel_sales fs ON c.closing_id = fs.closing_id
             LEFT JOIN oil_sales os ON c.closing_id = os.closing_id
+            LEFT JOIN t_cashflow_closing cf ON c.cashflow_id = cf.cashflow_id
             WHERE c.location_code = :locationCode
             AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
             ORDER BY c.closing_date ASC, c.closing_id ASC
