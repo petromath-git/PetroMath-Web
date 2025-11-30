@@ -1,16 +1,18 @@
 extends layout
 
 block content
-    form(method='POST' action='/reports-sales-summary')
+    form(method='POST' action='/reports-sales-summary' id='salesSummaryForm')
+        input(type='hidden' name='viewType' id='viewTypeInput' value=viewType || 'daily')
+        
         script.
             // ================================
             // RAW DATA FROM BACKEND (NO TOTAL ROW)
             // ================================
             var SaleSummaryFromServer = !{JSON.stringify(Saleslist)};
-
+            var currentViewType = '#{viewType}' || 'daily';
 
             // ================================
-            // RENDER TABLE (unchanged except alignment)
+            // RENDER TABLE
             // ================================
             function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
 
@@ -21,7 +23,7 @@ block content
                 // Detect numeric columns
                 if (numberColumns.length === 0) {
                     numberColumns = Object.keys(array[0])
-                        .filter(key => key !== 'Date' && key !== 'Day');
+                        .filter(key => key !== 'Date' && key !== 'Day' && key !== 'Month');
                 }
 
                 var result = "<div class='card' style='margin-bottom: 10px;'>";
@@ -44,13 +46,13 @@ block content
                     let row = array[i];
                     let rowClass = "";
 
-                    // Weekend highlight
-                    if (row.Day === "Sat" || row.Day === "Sun") {
+                    // Weekend highlight (only for daily view)
+                    if (currentViewType === 'daily' && (row.Day === "Sat" || row.Day === "Sun")) {
                         rowClass += " bg-warning ";
                     }
 
                     // Total row formatting
-                    if (row.Date === "Total") {
+                    if (row.Date === "Total" || row.Month === "Total") {
                         rowClass += " font-weight-bold text-danger ";
                     }
 
@@ -65,7 +67,7 @@ block content
                             let printedValue;
 
                             // Convert totals to KL
-                            if (row.Date === "Total") {
+                            if (row.Date === "Total" || row.Month === "Total") {
                                 printedValue = (Number(dataValue) / 1000).toLocaleString('en-IN', {
                                     minimumFractionDigits: 2, maximumFractionDigits: 2
                                 }) + " KL";
@@ -94,15 +96,23 @@ block content
 
 
             // ================================
-            // APPLY FILTERS (Day + Weekend + Totals)
+            // APPLY FILTERS (Day + Weekend + Totals) - Only for Daily View
             // ================================
             function applyFilters() {
 
+                // For monthly view, just render without filters
+                if (currentViewType === 'monthly') {
+                    document.getElementById("SalesSummary-table-container").innerHTML =
+                        renderTable(SaleSummaryFromServer, "Sales (Ltrs.)");
+                    return;
+                }
+
+                // Daily view filtering
                 let selectedDay = document.getElementById("dayFilter").value;
                 let weekendOnly = document.getElementById("weekendOnly").checked;
 
                 // Remove backend total rows if any
-                let rows = SaleSummaryFromServer.filter(r => r.Date !== "Total");
+                let rows = SaleSummaryFromServer.filter(r => r.Date !== "Total" && r.Month !== "Total");
 
                 // FILTERING
                 let filtered = rows.filter(row => {
@@ -127,10 +137,10 @@ block content
                     let totals = {};
                     let sample = filtered[0];
 
-                    let totalRow = { Date: "Total", Day: "" };
+                    let totalRow = currentViewType === 'monthly' ? { Month: "Total" } : { Date: "Total", Day: "" };
 
                     Object.keys(sample).forEach(key => {
-                        if (!isNaN(sample[key]) && key !== "Date" && key !== "Day") {
+                        if (!isNaN(sample[key]) && key !== "Date" && key !== "Day" && key !== "Month") {
                             totals[key] = 0;
                         }
                     });
@@ -153,14 +163,46 @@ block content
                     renderTable(filtered, "Sales (Ltrs.)");
             }
 
+            // Switch between Day-wise and Month-wise views
+            function switchView(viewType) {
+                document.getElementById('viewTypeInput').value = viewType;
+                document.getElementById('salesSummaryForm').submit();
+            }
 
             // INITIAL TABLE RENDER
             document.addEventListener("DOMContentLoaded", function() {
                 applyFilters(); // Automatically calculate totals on first load
+                
+                // Show/hide filters based on view type
+                toggleFilters();
             });
 
+            // Show/hide day filters for monthly view
+            function toggleFilters() {
+                let dayFilterCell = document.getElementById('dayFilterCell');
+                let weekendFilterCell = document.getElementById('weekendFilterCell');
+                
+                if (currentViewType === 'monthly') {
+                    if (dayFilterCell) dayFilterCell.style.display = 'none';
+                    if (weekendFilterCell) weekendFilterCell.style.display = 'none';
+                } else {
+                    if (dayFilterCell) dayFilterCell.style.display = 'table-cell';
+                    if (weekendFilterCell) weekendFilterCell.style.display = 'table-cell';
+                }
+            }
 
+        // ================================
+        // TABS for Day-wise and Month-wise
+        // ================================
+        ul.nav.nav-tabs
+            li.nav-item
+                a.nav-link(class=viewType === 'daily' ? 'active' : '', href='#', onclick='switchView("daily"); return false;') Day-wise
+            li.nav-item
+                a.nav-link(class=viewType === 'monthly' ? 'active' : '', href='#', onclick='switchView("monthly"); return false;') Month-wise
 
+        div.row &nbsp;
+
+      
         // ================================
         // FILTER BAR (UI)
         // ================================
@@ -169,33 +211,34 @@ block content
                 td Date Range:
                 td
                     select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='today', selected=true) Today
-                        option(value='yesterday') yesterday
+                        option(value='today') Today
+                        option(value='yesterday') Yesterday
                         option(value='this_week') This Week
-                        option(value='this_month') This Month
+                        option(value='this_month', selected=true) This Month
                         option(value='last_month') Last Month
                         option(value='this_financial_year') This Financial Year
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom') Custom Date
                 td &nbsp;
 
-                td Day:
-                td
-                    select#dayFilter.form-control(onchange="applyFilters()")
-                        option(value='') All Days
-                        option(value='Mon') Mon
-                        option(value='Tue') Tue
-                        option(value='Wed') Wed
-                        option(value='Thu') Thu
-                        option(value='Fri') Fri
-                        option(value='Sat') Sat
-                        option(value='Sun') Sun
-                td &nbsp;
+                if viewType === 'daily'
+                    td Day:
+                    td
+                        select#dayFilter.form-control(onchange="applyFilters()")
+                            option(value='') All Days
+                            option(value='Mon') Mon
+                            option(value='Tue') Tue
+                            option(value='Wed') Wed
+                            option(value='Thu') Thu
+                            option(value='Fri') Fri
+                            option(value='Sat') Sat
+                            option(value='Sun') Sun
+                    td &nbsp;
 
-                td Weekend Only:
-                td
-                    input#weekendOnly(type='checkbox', onchange='applyFilters()')
-                td &nbsp;
+                    td Weekend Only:
+                    td
+                        input#weekendOnly(type='checkbox', onchange='applyFilters()')
+                    td &nbsp;
 
                 td From Date:
                 td
@@ -215,7 +258,7 @@ block content
     // ================================
     div 
         div.row &nbsp;
-        h4.font-weight-bold.text-center Fuel Sales Summary
+        h4.font-weight-bold.text-center= viewType === 'monthly' ? "Fuel Sales Summary - Month-wise" : "Fuel Sales Summary - Day-wise"
         h6.text-center= `${formattedFromDate} to ${formattedToDate}` 
         h4.font-weight-bold.text-success.text-center
 
