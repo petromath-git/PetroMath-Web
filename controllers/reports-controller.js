@@ -509,121 +509,119 @@ getCreditSummaryReport: async(req, res) => {
    }
 },
 
-
-  getSalesSummaryReport: async(req, res) => {
-    //console.log(req);
-     let locationCode = req.user.location_code;
-     let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
-     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+getSalesSummaryReport: async(req, res) => {
+    let locationCode = req.user.location_code;
+    let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+    let toDate = dateFormat(new Date(), "yyyy-mm-dd");
     
-     let caller = req.body.caller;
-     
-   
+    let caller = req.body.caller;
+    let viewType = req.body.viewType || 'daily'; // 'daily' or 'monthly'
+    
+    if(req.body.fromClosingDate) {
+        fromDate = req.body.fromClosingDate;
+    }
+    if(req.body.toClosingDate) {
+        toDate = req.body.toClosingDate;
+    }
+    
+    let Saleslist = [];     
+    let renderData = {};
 
-     
-     if(req.body.fromClosingDate) {
-       fromDate =req.body.fromClosingDate;
-     }
-     if(req.body.toClosingDate) {
-       toDate = req.body.toClosingDate;
-     }
-     let Saleslist=[];     
-     let renderData = {};
+    // Fetch data based on view type
+    let data1;
+    if (viewType === 'monthly') {
+        data1 = await ReportDao.getMonthlySales(locationCode, fromDate, toDate);
+    } else {
+        data1 = await ReportDao.getSales(locationCode, fromDate, toDate);
+    }
 
-      
-             
-           
-
-
-           const data1 = await ReportDao.getSales(locationCode, fromDate,toDate);
-
-       
-           data1.forEach((salesSummary) => {
-            const keyValue = {};
-          
-            // Handle known columns directly
+    // Process the data
+    data1.forEach((salesSummary) => {
+        const keyValue = {};
+        
+        // Handle date column based on view type
+        if (viewType === 'monthly') {
+            keyValue['Month'] = salesSummary.month_formatted;
+        } else {
             keyValue['Date'] = salesSummary.closing_date_formatted;
-            keyValue['Day'] = moment(salesSummary.closing_date_formatted, "DD-MMM-YYYY").format("ddd");
-                 
-          
-            // Handle unknown columns dynamically (for product sales data)
-            Object.keys(salesSummary).forEach((key) => {
-              // Skip already handled known columns
-              if (!['closing_date_formatted','loose'].includes(key)) {
-                keyValue[key] = salesSummary[key];
-              }
-            });
-
-            // Add the '2T Loose' column
-            keyValue['2T Loose'] = salesSummary.loose;  
-
-            // Push the created key-value pair object to shiftSummaryList
-            Saleslist.push(keyValue);
             
-          });
+            // ADD DAY COLUMN FOR DAILY VIEW
+            const dateObj = new Date(salesSummary.closing_date_formatted.split('-').reverse().join('-'));
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            keyValue['Day'] = dayNames[dateObj.getDay()];
+        }
+        
+        // Handle unknown columns dynamically (for product sales data)
+        Object.keys(salesSummary).forEach((key) => {
+            // Skip already handled known columns
+            if (!['closing_date_formatted', 'month_formatted', 'month_key', 'loose'].includes(key)) {
+                keyValue[key] = salesSummary[key];
+            }
+        });
 
-          // Compute totals for each column (excluding the 'Date' column)
-          // removed as we are doing this in the UI.
-                  // if (Saleslist.length > 0) {
-                  //   const totals = {};
-                  //   Saleslist.forEach((row) => {
-                  //     for (const key in row) {
-                  //       if (key === 'Date'|| key === 'Day') continue;
-                  //       // Convert values to numbers; if not a number, treat as 0.
-                  //       totals[key] = (totals[key] || 0) + Number(row[key] || 0);
-                  //     }
-                  //   });
+        // Add the '2T Loose' column
+        keyValue['2T Loose'] = salesSummary.loose;  
 
-                  //   // Create a new row for totals.
-                  //   const totalRow = { 'Date': 'Total', 'Day': '' };
-                  //   Object.keys(totals).forEach((key) => {
-                  //     totalRow[key] = totals[key];
-                  //   });
-                  //   // Append the total row to the Saleslist.
-                  //   Saleslist.push(totalRow);
-                  // }
-      
-                     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
-                     const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
-                     
-                       // Prepare the render data
-                   renderData ={
-                     title: 'Sales Summary Reports', 
-                     user: req.user, 
-                     fromClosingDate: fromDate,
-                     toClosingDate: toDate, 
-                     formattedFromDate: formattedFromDate,
-                     formattedToDate: formattedToDate,
-                     Saleslist: Saleslist,                                   
-                  
-                   }
+        // Push the created key-value pair object to Saleslist
+        Saleslist.push(keyValue);
+    });
 
-                 if(caller=='notpdf') {
-                 res.render('report-sales-summary',renderData);
-                 }else
-                 {                
-             
-                   return new Promise((resolve, reject) => {
-                     res.render('report-sales-summary',renderData,
-                        (err, html) => {
-                         if (err) {
-                           console.error('getSalesSummaryReport: Error in res.render:', err);
-                           reject(err); // Reject the promise if there's an error
-                         } else {
-                           console.log('getSalesSummaryReport: Successfully rendered HTML');
-                           resolve(html); // Resolve the promise with the HTML content
-                         }
-                     });
-                   }); 
-                  
-   
-             }
- 
- 
- 
-           },
+    // Compute totals for each column (excluding the 'Date'/'Month'/'Day' column)
+    if (Saleslist.length > 0) {
+        const totals = {};
+        Saleslist.forEach((row) => {
+            for (const key in row) {
+                if (key === 'Date' || key === 'Month' || key === 'Day') continue;
+                // Convert values to numbers; if not a number, treat as 0.
+                totals[key] = (totals[key] || 0) + Number(row[key] || 0);
+            }
+        });
 
-           getApiCreditReport1: async (req, res) => {
+        // Create a new row for totals
+        const totalRow = viewType === 'monthly' ? { 'Month': 'Total' } : { 'Date': 'Total', 'Day': '' };
+        Object.keys(totals).forEach((key) => {
+            totalRow[key] = totals[key];
+        });
+        // Append the total row to the Saleslist
+        Saleslist.push(totalRow);
+    }
+    
+    const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
+    const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
+    
+    // Prepare the render data
+    renderData = {
+        title: 'Sales Summary Reports', 
+        user: req.user, 
+        fromClosingDate: fromDate,
+        toClosingDate: toDate, 
+        formattedFromDate: formattedFromDate,
+        formattedToDate: formattedToDate,
+        Saleslist: Saleslist,
+        viewType: viewType // Pass viewType to pug
+    }
+
+    if(caller == 'notpdf') {
+        res.render('report-sales-summary', renderData);
+    } else {                
+        return new Promise((resolve, reject) => {
+            res.render('report-sales-summary', renderData,
+                (err, html) => {
+                    if (err) {
+                        console.error('getSalesSummaryReport: Error in res.render:', err);
+                        reject(err);
+                    } else {
+                        console.log('getSalesSummaryReport: Successfully rendered HTML');
+                        resolve(html);
+                    }
+                });
+        }); 
+    }
+},
+
+
+
+getApiCreditReport1: async (req, res) => {
   try {
     // Extract data directly from verified JWT
     const locationCode = req.user.location_code;
