@@ -730,6 +730,11 @@ app.post('/reports-digital-recon', isLoginEnsured, function (req, res, next) {
     digitalReconreportsController.getDigitalReconReport(req, res, next);
 });
 
+app.post('/digital-recon/manual-match', isLoginEnsured, function (req, res, next) {
+    digitalReconreportsController.manualMatch(req, res, next);
+});
+
+
 app.get('/reports-gst-summary', isLoginEnsured, function (req, res, next) {   
     req.body.caller = 'notpdf';
     gstsummaryreportsController.getgstsummaryReport(req, res, next);
