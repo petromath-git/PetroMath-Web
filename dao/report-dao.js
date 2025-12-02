@@ -535,5 +535,27 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     }
 },    
       
+updateReconMatch: async ({ tableName, recordId, matchId, user }) => {
+    return db.sequelize.query(
+        `
+        UPDATE ${tableName}
+        SET 
+            recon_match_id = :matchId,
+            manual_recon_flag = 1,
+            manual_recon_by = :user,
+            manual_recon_date = NOW()
+        WHERE ${tableName.endsWith('t_receipts') ? 'treceipt_id' :
+               tableName.endsWith('t_digital_sales') ? 'digital_sales_id' :
+               tableName.endsWith('t_bank_transaction') ? 't_bank_id' :
+               tableName.endsWith('t_adjustments') ? 'adjustment_id' :
+               tableName.endsWith('t_cashflow_transaction') ? 'transaction_id' :
+               'id'} = :recordId
+        `,
+        {
+            replacements: { matchId, user, recordId },
+            type: db.Sequelize.QueryTypes.UPDATE
+        }
+    );
+}
       
 }

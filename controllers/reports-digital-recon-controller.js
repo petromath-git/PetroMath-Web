@@ -6,6 +6,7 @@ const appCache = require("../utils/app-cache");
 var CreditDao = require("../dao/credits-dao");
 const moment = require('moment');
 const locationConfig = require('../utils/location-config');
+const db = require("../db/db-connection");
 
 
 module.exports = {
@@ -42,7 +43,12 @@ module.exports = {
       'N' // default: disabled
     );
 
-
+    // Manual Match Tolerance
+    const manualTolerance = await locationConfig.getLocationConfigValue(
+        locationCode,
+        'RECON_MANUAL_MATCH_TOLERANCE',
+        '1' // default = ₹1 tolerance
+    );
 
     let caller = req.body.caller;
     let credits = [];
@@ -84,6 +90,7 @@ module.exports = {
         OpeningBal: 0,
         closingBal: 0,
         currentDate: dateFormat(new Date(), "yyyy-mm-dd"),
+        manualTolerance,
         error_message: `Date range cannot exceed 65 days. Current range: ${daysDifference} days. Please select a shorter period.`
       });
     }
@@ -565,7 +572,9 @@ function fifthPassShiftOffsetReconciliation(
         reconciled: transaction.reconciled,
         match_id: transaction.match_id,
         reconciliation_pass: transaction.reconciliation_pass, // 1 = standard, 2 = extended
-        possibleMatch: transaction.possibleMatch || null // Add possible match hint
+        possibleMatch: transaction.possibleMatch || null, // Add possible match hint
+        source_table: transaction.source_table,
+        source_id: transaction.source_id
       }));
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
@@ -584,6 +593,7 @@ function fifthPassShiftOffsetReconciliation(
       creditstmt: Creditstmtlist,
       openingbalance: OpeningBal,
       closingbalance: closingBal,
+      manualTolerance,
       cidparam: cid,
     }
 
@@ -605,3 +615,96 @@ function fifthPassShiftOffsetReconciliation(
     }
   }
 }
+
+
+// ============================
+// PRIMARY KEY MAP
+// ============================
+const PK_MAP = {
+    t_digital_sales: "digital_sales_id",
+    t_receipts: "treceipt_id",
+    t_adjustments: "adjustment_id",
+    t_bank_transaction: "transaction_id",
+    t_cashflow_transaction: "transaction_id"
+};
+
+// ============================
+// POST /digital-recon/manual-match
+// ============================
+module.exports.manualMatch = async (req, res) => {
+    console.log("Inside manualMatch API, body = ", req.body);
+
+    try {
+        const { rows } = req.body;
+        const user = req.user.User_Name || req.user.username || req.user.user_id;
+
+        if (!rows || rows.length < 2) {
+            return res.status(400).json({ error: "Select at least two rows to match." });
+        }
+
+        // ============================
+        // 1️⃣ BACKEND GUARD: BLOCK MATCH IF ANY ROW IS ALREADY MATCHED
+        // ============================
+        for (const row of rows) {
+            const table = row.source_table;
+            const pk = PK_MAP[table];
+
+            if (!pk) {
+                return res.json({
+                    success: false,
+                    error: `Manual match not supported for table: ${table}`
+                });
+            }
+
+            const sql = `
+                SELECT recon_match_id, manual_recon_flag 
+                FROM ${table}
+                WHERE ${pk} = :id
+            `;
+
+            const result = await db.sequelize.query(sql, {
+                replacements: { id: row.source_id },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+
+            if (result.length > 0) {
+                const record = result[0];
+
+                if (record.recon_match_id || record.manual_recon_flag === 1) {
+                    return res.json({
+                        success: false,
+                        error:
+                            "One or more selected rows are already reconciled. Please unmatch first."
+                    });
+                }
+            }
+        }
+
+        // ============================
+        // CREATE CLEAN MANUAL MATCH ID (M-12345)
+        // ============================
+        const matchId = Date.now();
+
+        // ============================
+        // 3️⃣ APPLY MATCH TO ALL SELECTED ROWS
+        // ============================
+        for (const row of rows) {
+            await ReportDao.updateReconMatch({
+                tableName: row.source_table,
+                recordId: row.source_id,
+                matchId,
+                user
+            });
+        }
+
+        return res.json({
+            success: true,
+            match_id: matchId,
+            message: "Manual match saved successfully."
+        });
+
+    } catch (err) {
+        console.error("Manual Match Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
