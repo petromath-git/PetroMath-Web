@@ -2825,3 +2825,54 @@ body {
 .reading-validation-warning .close:hover {
     opacity: 0.75;
 }
+
+.auto-fill-badge {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+    z-index: 10;
+    pointer-events: none;
+    animation: badgeFadeIn 0.3s ease;
+}
+
+.auto-fill-badge::before {
+    content: "⚡";
+    font-size: 11px;
+}
+
+.reading-input-wrapper {
+    position: relative;
+}
+
+.reading-input-wrapper input.auto-filled {
+    padding-right: 65px;
+}
+
+@keyframes badgeFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) scale(1);
+    }
+}
+
+@media (max-width: 768px) {
+    .auto-fill-badge {
+        font-size: 9px;
+        padding: 1px 5px;
+    }
+}
