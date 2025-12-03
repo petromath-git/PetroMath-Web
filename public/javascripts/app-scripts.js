@@ -2708,9 +2708,6 @@ function showSnackbar(message, type = 'success', duration = 3000) {
 }
 
 
-// Smart Reading Entry Feature
-// Automatically finds and populates the nozzle with the closest opening reading
-
 /**
  * Finds and populates the pump/nozzle with the closest opening reading
  * @param {number} enteredReading - The reading value entered by the user
@@ -2730,59 +2727,50 @@ function smartFillClosingReading(enteredReading) {
         return;
     }
 
-    let closestPump = null;
-    let smallestDifference = Infinity;
-    let foundMatch = false;
-
-    // Iterate through all visible pumps
+    // Build array of pumps with their opening readings
+    const pumps = [];
     allPumpHeaders.forEach(header => {
-        // Skip if pump is not visible (not added to shift)
+        // Skip hidden pumps (not added to shift)
         if (header.className.includes('d-md-none')) {
             return;
         }
 
-        // Extract pump unique ID from header ID (remove _sub_header)
-        const pumpUniqueId = header.id.replace('_sub_header', '');
+        const uniqueId = header.id.replace('_sub_header', '');
+        const openingElement = document.getElementById(uniqueId + 'pump_opening');
         
-        // Get opening reading for this pump
-        const openingElement = document.getElementById(pumpUniqueId + 'pump_opening');
-        
-        if (!openingElement) {
-            return;
-        }
-
-        const openingReading = parseFloat(openingElement.value) || 0;
-
-        // Skip if entered reading is less than opening reading
-        if (enteredReading < openingReading) {
-            return;
-        }
-
-        // Calculate difference
-        const difference = Math.abs(enteredReading - openingReading);
-
-        // Track the closest pump
-        if (difference < smallestDifference) {
-            smallestDifference = difference;
-            closestPump = {
-                uniqueId: pumpUniqueId,
+        if (openingElement) {
+            const openingReading = parseFloat(openingElement.value) || 0;
+            const pumpCodeElement = header.querySelector('span');
+            
+            pumps.push({
+                uniqueId: uniqueId,
                 openingReading: openingReading,
-                pumpCode: header.querySelector('span').textContent.trim()
-            };
-            foundMatch = true;
+                pumpCode: pumpCodeElement ? pumpCodeElement.textContent.trim() : 'Unknown'
+            });
         }
     });
 
-    // If no match found (all opening readings are greater than entered reading)
-    if (!foundMatch) {
-        showSnackbar('No pump found with opening reading less than or equal to ' + enteredReading, 'info', 3000);
+    if (pumps.length === 0) {
+        showSnackbar('No valid pumps found with opening readings', 'warning', 3000);
         return;
     }
 
-    // Check if difference is too large (safety check - max 10,000 difference)
+    // Find pump with closest opening reading
+    let closestPump = null;
+    let smallestDifference = Infinity;
+
+    pumps.forEach(pump => {
+        const difference = Math.abs(enteredReading - pump.openingReading);
+        if (difference < smallestDifference) {
+            smallestDifference = difference;
+            closestPump = pump;
+        }
+    });
+
+    // Validate that the difference is within acceptable range (10,000 liters)
     if (smallestDifference > 10000) {
         showSnackbar(
-            `Difference too large! Entered: ${enteredReading}, Closest opening: ${closestPump.openingReading} (Difference: ${smallestDifference.toFixed(3)}). Maximum allowed difference is 10,000.`, 
+            `Warning: Large difference detected. Entered: ${enteredReading}, Closest opening: ${closestPump.openingReading} (Difference: ${smallestDifference.toFixed(3)}). Maximum allowed difference is 10,000.`, 
             'warning', 
             5000
         );
@@ -2799,6 +2787,9 @@ function smartFillClosingReading(enteredReading) {
 
     // Set the closing reading value
     closingElement.value = enteredReading;
+
+    // Add auto-fill indicator badge
+    addAutoFillBadge(closestPump.uniqueId);
 
     // Trigger calculation for this pump
     calculatePumpSale(closestPump.uniqueId);
@@ -2818,6 +2809,53 @@ function smartFillClosingReading(enteredReading) {
         'success', 
         3000
     );
+}
+
+/**
+ * Adds a visual badge indicator to show a reading was auto-filled
+ * @param {string} pumpUniqueId - The unique ID of the pump
+ */
+function addAutoFillBadge(pumpUniqueId) {
+    const closingElement = document.getElementById(pumpUniqueId + 'pump_closing');
+    
+    if (!closingElement) {
+        return;
+    }
+
+    // Check if badge already exists, remove it first
+    const existingBadge = closingElement.parentElement.querySelector('.auto-fill-badge');
+    if (existingBadge) {
+        existingBadge.remove();
+    }
+
+    // Wrap input in a wrapper if not already wrapped
+    if (!closingElement.parentElement.classList.contains('reading-input-wrapper')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'reading-input-wrapper';
+        closingElement.parentNode.insertBefore(wrapper, closingElement);
+        wrapper.appendChild(closingElement);
+    }
+
+    // Add auto-filled class to input
+    closingElement.classList.add('auto-filled');
+
+    // Create and add badge
+    const badge = document.createElement('span');
+    badge.className = 'auto-fill-badge';
+    badge.textContent = 'Smart';
+    badge.title = 'This reading was auto-filled by Smart Fill';
+    
+    closingElement.parentElement.appendChild(badge);
+
+    // Remove badge if user manually edits the field
+    closingElement.addEventListener('input', function removeBadgeOnEdit() {
+        const badge = closingElement.parentElement.querySelector('.auto-fill-badge');
+        if (badge) {
+            badge.remove();
+        }
+        closingElement.classList.remove('auto-filled');
+        closingElement.removeEventListener('input', removeBadgeOnEdit);
+    }, { once: true });
 }
 
 /**
