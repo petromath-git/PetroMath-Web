@@ -556,6 +556,155 @@ updateReconMatch: async ({ tableName, recordId, matchId, user }) => {
             type: db.Sequelize.QueryTypes.UPDATE
         }
     );
+},
+// Supplier Statement Methods (using stored procedures)
+getSupplierBalance: (supplierId, closingQueryFromDate, closingQueryToDate) => {
+    return db.sequelize.query(
+        `SELECT 
+            get_opening_supplier_balance(:supplierId, :fromDate) as OpeningData,
+            get_closing_supplier_balance(:supplierId, :toDate) as ClosingData`,
+        {
+            replacements: { 
+                supplierId: supplierId,
+                fromDate: closingQueryFromDate,
+                toDate: closingQueryToDate
+            },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+},
+
+getSupplierStmt: (locationCode, closingQueryFromDate, closingQueryToDate, supplierId) => {
+    return db.sequelize.query(
+        `-- Invoices (Debit)
+        SELECT 
+            tlh.invoice_date AS tran_date,
+            tlh.invoice_number AS bill_no,
+            ms.supplier_name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            tlh.invoice_amount AS amount,
+            tlh.notes,
+            'INVOICE' AS transaction_type
+        FROM t_lubes_inv_hdr tlh
+        JOIN m_supplier ms ON tlh.supplier_id = ms.supplier_id
+        WHERE tlh.location_code = :locationCode
+          AND tlh.supplier_id = :supplierId
+          AND tlh.closing_status = 'CLOSED'
+          AND DATE(tlh.invoice_date) BETWEEN :fromDate AND :toDate
+
+        UNION ALL
+
+        -- Payments (Credit)
+        SELECT 
+            tbt.trans_date AS tran_date,
+            CONCAT('Payment Ref: ', COALESCE(tbt.remarks, tbt.t_bank_id)) AS bill_no,
+            ms.supplier_name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            tbt.debit_amount AS amount,
+            tbt.remarks AS notes,
+            'PAYMENT' AS transaction_type
+        FROM t_bank_transaction tbt
+        JOIN m_supplier ms ON tbt.external_id = ms.supplier_id
+        WHERE tbt.external_source = 'Supplier'
+          AND tbt.external_id = :supplierId
+          AND DATE(tbt.trans_date) BETWEEN :fromDate AND :toDate
+          AND tbt.debit_amount > 0
+
+        UNION ALL
+
+        -- Refunds from Supplier (Debit - rare)
+        SELECT 
+            tbt.trans_date AS tran_date,
+            CONCAT('Refund Ref: ', COALESCE(tbt.remarks, tbt.t_bank_id)) AS bill_no,
+            ms.supplier_name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            tbt.credit_amount AS amount,
+            tbt.remarks AS notes,
+            'REFUND' AS transaction_type
+        FROM t_bank_transaction tbt
+        JOIN m_supplier ms ON tbt.external_id = ms.supplier_id
+        WHERE tbt.external_source = 'Supplier'
+          AND tbt.external_id = :supplierId
+          AND DATE(tbt.trans_date) BETWEEN :fromDate AND :toDate
+          AND tbt.credit_amount > 0
+
+        UNION ALL
+
+        -- Adjustment Debits
+        SELECT 
+            ta.adjustment_date AS tran_date,
+            ta.reference_no AS bill_no,
+            ms.supplier_name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            ta.debit_amount AS amount,
+            ta.description AS notes,
+            'ADJUSTMENT_DEBIT' AS transaction_type
+        FROM t_adjustments ta
+        JOIN m_supplier ms ON ta.external_id = ms.supplier_id
+        WHERE ta.external_source = 'Supplier'
+          AND ta.external_id = :supplierId
+          AND ta.status = 'ACTIVE'
+          AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
+          AND ta.debit_amount > 0
+
+        UNION ALL
+
+        -- Adjustment Credits
+        SELECT 
+            ta.adjustment_date AS tran_date,
+            ta.reference_no AS bill_no,
+            ms.supplier_name AS company_name,
+            NULL AS product_name,
+            NULL AS price,
+            NULL AS price_discount,
+            NULL AS qty,
+            ta.credit_amount AS amount,
+            ta.description AS notes,
+            'ADJUSTMENT_CREDIT' AS transaction_type
+        FROM t_adjustments ta
+        JOIN m_supplier ms ON ta.external_id = ms.supplier_id
+        WHERE ta.external_source = 'Supplier'
+          AND ta.external_id = :supplierId
+          AND ta.status = 'ACTIVE'
+          AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
+          AND ta.credit_amount > 0
+
+        ORDER BY tran_date, transaction_type`,
+        {
+            replacements: { 
+                locationCode: locationCode,
+                supplierId: supplierId,
+                fromDate: closingQueryFromDate,
+                toDate: closingQueryToDate
+            },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+},
+
+// Get earliest opening balance date for a supplier
+getSupplierOpeningBalanceDate: (supplierId) => {
+    return db.sequelize.query(
+        `SELECT MIN(balance_date) as earliest_opening_date
+         FROM r_supplier_open_bal
+         WHERE supplier_id = :supplierId`,
+        {
+            replacements: { supplierId: supplierId },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
 }
       
 }

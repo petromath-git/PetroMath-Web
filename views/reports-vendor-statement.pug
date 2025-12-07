@@ -1,0 +1,120 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-vendor-statement')
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month') This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom', selected=true) Custom Date
+                td &nbsp;                   
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate || earliestDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;                   
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
+                td &nbsp;
+                td Supplier Name:
+                td
+                    select#supplier_id.form-control(name='supplier_id', required)
+                        if suppliers
+                            option(value='', selected=!selectedSupplierId) Select Supplier
+                            each val in suppliers
+                                option(value=`${val.id}`, selected=selectedSupplierId == val.id)= val.name
+                include report-print-download.pug
+    div &nbsp;
+    
+    //- NEW: Error message section
+    if error && errorMessage
+        .container
+            .row.justify-content-center
+                .col-12.col-md-8
+                    .alert.alert-warning.text-center(style="padding: 30px; margin-top: 20px;")
+                        i.fas.fa-exclamation-triangle(style="font-size: 2em; color: #856404; margin-bottom: 15px;")
+                        h5.mt-3 Cannot Generate Statement
+                        p.mb-0= errorMessage
+    
+    div
+        if SupplierStmtlist && SupplierStmtlist.length > 0
+            - var companyName = SupplierStmtlist[0].companyName
+            div.row &nbsp;
+            h6.font-weight-bold.text-center= "Vendor Statement"
+            h5.font-weight-bold.text-center.text-uppercase= companyName                 
+            h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
+            h4.font-weight-bold.text-success.text-center
+            .container
+                .row.justify-content-center
+                    .col-12
+                        if(typeof totalDebits !== 'undefined' && typeof totalCredits !== 'undefined')
+                            .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                                div(style="font-size: 1.1em; color: #495057; line-height: 1.6;")
+                                    div(style="text-align: center; margin-bottom: 15px;")
+                                        strong(style="font-size: 1.2em; color: #212529;") Period Summary
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Opening: 
+                                        span(style="font-weight: 600;")  #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(OpeningBal)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Invoices: 
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Payments: 
+                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                    div(style="text-align: right; margin-bottom: 4px;")
+                                        span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Closing: 
+                                        span(style="color: #495057;font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ClosingBal)}
+                        table.table.table-bordered.border.table-sm
+                            thead(class="thead-light")
+                                tr
+                                    th.text-center Date                        
+                                    th.text-center Particulars                                              
+                                    th.text-center Debit (Rs.)
+                                    th.text-center Credit (Rs.)
+                                    th.text-center Balance (Rs.)
+                                    th.text-center Narration
+                            tbody
+                                if(OpeningBal != 0)
+                                    tr
+                                        td &nbsp;                                       
+                                        td.text-left.font-weight-bold Opening Balance                                                  
+                                        td &nbsp;
+                                        td &nbsp;
+                                        td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(OpeningBal)}
+                                        td &nbsp;
+                                each val in SupplierStmtlist                         
+                                    tr
+                                        td.text-center(scope="row")= val.Date
+                                        td(scope="row")= val.Particulars
+                                        td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
+                                        td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
+                                        td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
+                                        td(scope="row")= val.Narration                                                        
+                                if(totalDebits > 0 || totalCredits > 0)
+                                    tr.bg-light.font-weight-bold
+                                        td &nbsp;
+                                        td.text-left Total
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                        td &nbsp;
+                                        td &nbsp;
+                                tr
+                                    td &nbsp;                                     
+                                    td.text-left.font-weight-bold Closing Balance 
+                                    td &nbsp;
+                                    td &nbsp;                                                  
+                                    td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(ClosingBal)}
+                                    td &nbsp;
+                        div.col-12.text-right E &amp; OE
+                        div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                
+        else if !error
+            div.row &nbsp;
+            div.row.bg-light No Transactions.  
+
+        // Include the overlay
+        include overlay.pug
