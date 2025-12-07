@@ -712,6 +712,147 @@ getApiCreditReport1: async (req, res) => {
     console.error("getApiCreditReport error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
+},
+
+getSupplierReport: async(req, res) => {
+    let locationCode = req.user.location_code;
+    let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+    let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+    let supplierId;
+    let route = 'reports-vendor-statement';
+    
+    supplierId = req.body.supplier_id;
+    let caller = req.body.caller;
+    let reportType = req.body.reportType;
+    
+    if(req.body.fromClosingDate) {
+        fromDate = req.body.fromClosingDate;
+    }
+    if(req.body.toClosingDate) {
+        toDate = req.body.toClosingDate;
+    }
+    
+    let SupplierStmtlist = [];
+    let suppliers = [];
+    let OpeningBal;
+    let closingBal;
+    let totalDebits = 0;
+    let totalCredits = 0;
+    let renderData = {};
+
+    const SupplierDao = require("../dao/supplier-dao");
+    
+    SupplierDao.findSuppliers(locationCode)
+        .then(data => {
+            data.forEach((supplier) => {
+                suppliers.push({
+                    id: supplier.supplier_id,
+                    name: supplier.supplier_name
+                });
+            });
+        });
+    
+    // NEW: Check if opening balance date exists and validate
+    const openingBalCheck = await ReportDao.getSupplierOpeningBalanceDate(supplierId);
+    
+    if (openingBalCheck && openingBalCheck.length > 0) {
+        const earliestOpeningDate = openingBalCheck[0].earliest_opening_date;
+        
+        if (earliestOpeningDate && fromDate < earliestOpeningDate) {
+            // Return error message
+            renderData = {
+                title: 'Vendor Statement',
+                user: req.user,
+                suppliers: suppliers,
+                error: true,
+                errorMessage: `Statement can only be generated from ${dateFormat(earliestOpeningDate, "dd-mm-yyyy")} onwards. Please select a date range starting from this date or later.`,
+                earliestDate: dateFormat(earliestOpeningDate, "yyyy-mm-dd"),
+                selectedSupplierId: supplierId
+            };
+            
+            return res.render(route, renderData);
+        }
+    }
+    
+    const balanceData = await ReportDao.getSupplierBalance(supplierId, fromDate, toDate);
+    OpeningBal = balanceData[0].OpeningData;
+    closingBal = balanceData[0].ClosingData;
+
+    const data1 = await ReportDao.getSupplierStmt(locationCode, fromDate, toDate, supplierId);
+
+    let runningBalance = Number(OpeningBal);
+    
+    data1.forEach((supplierStmtData) => {
+        let transactionAmount = Number(supplierStmtData.amount);
+        
+        switch(supplierStmtData.transaction_type) {
+            case 'INVOICE':
+            case 'ADJUSTMENT_DEBIT':
+            case 'REFUND':
+                runningBalance += transactionAmount;
+                totalDebits += transactionAmount;
+                break;
+                
+            case 'PAYMENT':
+            case 'ADJUSTMENT_CREDIT':
+                runningBalance -= transactionAmount;
+                totalCredits += transactionAmount;
+                break;
+                
+            default:
+                console.warn('Unknown transaction type:', supplierStmtData.transaction_type);
+                break;
+        }
+        
+        SupplierStmtlist.push({
+            Date: dateFormat(supplierStmtData.tran_date, "dd-mm-yyyy"),
+            Particulars: supplierStmtData.bill_no,
+            companyName: supplierStmtData.company_name,
+            Debit: (supplierStmtData.transaction_type === 'INVOICE' || 
+                    supplierStmtData.transaction_type === 'ADJUSTMENT_DEBIT' || 
+                    supplierStmtData.transaction_type === 'REFUND') ? transactionAmount : null,
+            Credit: (supplierStmtData.transaction_type === 'PAYMENT' || 
+                     supplierStmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,
+            Narration: supplierStmtData.notes,
+            Balance: runningBalance
+        });
+    });
+
+    const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
+    const formattedToDate = moment(toDate).format('DD/MM/YYYY');
+
+    renderData = {
+        title: 'Vendor Statement',
+        user: req.user,
+        fromClosingDate: fromDate,
+        toClosingDate: toDate,
+        formattedFromDate: formattedFromDate,
+        formattedToDate: formattedToDate,
+        OpeningBal: OpeningBal,
+        ClosingBal: closingBal,
+        totalDebits: totalDebits,
+        totalCredits: totalCredits,
+        SupplierStmtlist: SupplierStmtlist,
+        suppliers: suppliers,
+        selectedSupplierId: supplierId
+    };
+
+    if(caller == 'notpdf') {
+        res.render(route, renderData);
+    } else {
+        return new Promise((resolve, reject) => {
+            res.render(route, renderData,
+                (err, html) => {
+                    if (err) {
+                        console.error('getSupplierReport: Error in res.render:', err);
+                        reject(err);
+                    } else {
+                        console.log('getSupplierReport: Successfully rendered HTML');
+                        resolve(html);
+                    }
+                });
+        }); 
+    }
 }
 
 }

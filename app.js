@@ -692,6 +692,41 @@ app.post('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditReport(req, res, next);
 });
 
+// Vendor Statement Routes
+app.get('/reports-vendor-statement', isLoginEnsured, function (req, res, next) {
+    let locationCode = req.user.location_code;
+    let suppliers = [];
+    req.body.caller = 'notpdf';
+    req.body.reportType = 'VendorStatement';
+
+    SupplierDao.findSuppliers(locationCode)
+        .then(data => {
+            data.forEach((supplier) => {
+                suppliers.push({
+                    id: supplier.supplier_id,
+                    name: supplier.supplier_name
+                });
+            });
+
+            res.render('reports-vendor-statement', { 
+                title: 'Vendor Statement', 
+                user: req.user, 
+                suppliers: suppliers 
+            });
+        })
+        .catch(err => {
+            console.error('Error fetching suppliers:', err);
+            res.status(500).render('error', { 
+                message: 'Error loading vendor statement page' 
+            });
+        });
+});
+
+app.post('/reports-vendor-statement', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'VendorStatement';
+    reportsController.getSupplierReport(req, res, next);
+});
+
 
 app.get('/reports-digital-recon', isLoginEnsured, function (req, res, next) {
     let locationCode = req.user.location_code;
