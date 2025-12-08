@@ -47,7 +47,11 @@ module.exports = {
         }else if (req.body.reportType == 'Creditledger')
         {
              htmlContent = await reportsController.getCreditReport(req, res, next);
-        }else if (req.body.reportType == 'GstSummary')
+        }else if (req.body.reportType == 'VendorStatement')
+        {
+            htmlContent = await reportsController.getSupplierReport(req, res, next);
+        }
+        else if (req.body.reportType == 'GstSummary')
         {
             htmlContent = await gstReportsController.getgstsummaryReport(req, res, next);
         }
