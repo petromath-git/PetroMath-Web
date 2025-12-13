@@ -220,6 +220,10 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
 },
 
 
+
+// MODIFIED getDigitalStmt METHOD
+// This version treats vendors with the same recon_group_id as ONE for reconciliation
+
 getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     const result = await db.sequelize.query(
         `-- DEBIT: Digital Sales
@@ -246,7 +250,19 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
         WHERE tc.location_code = :locationCode
           AND DATE(COALESCE(tds.transaction_date, tc.closing_date)) BETWEEN :fromDate AND :toDate
-          AND tds.vendor_id = :vendorId
+          AND (
+              tds.vendor_id = :vendorId
+              OR tds.vendor_id IN (
+                  SELECT creditlist_id 
+                  FROM m_credit_list 
+                  WHERE recon_group_id = (
+                      SELECT recon_group_id 
+                      FROM m_credit_list 
+                      WHERE creditlist_id = :vendorId
+                  )
+                  AND recon_group_id IS NOT NULL
+              )
+          )
 
 
         UNION ALL
@@ -280,7 +296,19 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         LEFT JOIN m_credit_list mcl_payer ON tr.creditlist_id = mcl_payer.creditlist_id
         WHERE tr.location_code = :locationCode
           AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
-          AND tr.digital_creditlist_id = :vendorId
+          AND (
+              tr.digital_creditlist_id = :vendorId
+              OR tr.digital_creditlist_id IN (
+                  SELECT creditlist_id 
+                  FROM m_credit_list 
+                  WHERE recon_group_id = (
+                      SELECT recon_group_id 
+                      FROM m_credit_list 
+                      WHERE creditlist_id = :vendorId
+                  )
+                  AND recon_group_id IS NOT NULL
+              )
+          )
 
 
         UNION ALL
@@ -308,7 +336,19 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         INNER JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
         WHERE tr.location_code = :locationCode
           AND DATE(tr.receipt_date) BETWEEN :fromDate AND :toDate
-          AND tr.creditlist_id = :vendorId
+          AND (
+              tr.creditlist_id = :vendorId
+              OR tr.creditlist_id IN (
+                  SELECT creditlist_id 
+                  FROM m_credit_list 
+                  WHERE recon_group_id = (
+                      SELECT recon_group_id 
+                      FROM m_credit_list 
+                      WHERE creditlist_id = :vendorId
+                  )
+                  AND recon_group_id IS NOT NULL
+              )
+          )
 
 
         UNION ALL
@@ -338,10 +378,22 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         FROM t_adjustments ta
         INNER JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
         WHERE ta.external_source = 'DIGITAL_VENDOR'
-          AND ta.external_id = :vendorId
           AND ta.status = 'ACTIVE'
           AND ta.location_code = :locationCode
           AND DATE(ta.adjustment_date) BETWEEN :fromDate AND :toDate
+          AND (
+              ta.external_id = :vendorId
+              OR ta.external_id IN (
+                  SELECT creditlist_id 
+                  FROM m_credit_list 
+                  WHERE recon_group_id = (
+                      SELECT recon_group_id 
+                      FROM m_credit_list 
+                      WHERE creditlist_id = :vendorId
+                  )
+                  AND recon_group_id IS NOT NULL
+              )
+          )
 
 
         ORDER BY sort_date, entry_type DESC, bill_no`,
@@ -357,7 +409,6 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
     );
     return result;
 },
-
 
     getLocationDetails: (location_code) => {
         return db.sequelize.query(

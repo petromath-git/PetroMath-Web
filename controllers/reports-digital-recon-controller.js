@@ -574,7 +574,8 @@ function fifthPassShiftOffsetReconciliation(
         reconciliation_pass: transaction.reconciliation_pass, // 1 = standard, 2 = extended
         possibleMatch: transaction.possibleMatch || null, // Add possible match hint
         source_table: transaction.source_table,
-        source_id: transaction.source_id
+        source_id: transaction.source_id,
+        manual_recon_flag: transaction.manual_recon_flag_db || 0
       }));
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
@@ -670,7 +671,7 @@ module.exports.manualMatch = async (req, res) => {
             if (result.length > 0) {
                 const record = result[0];
 
-                if (record.recon_match_id || record.manual_recon_flag === 1) {
+                if (record.recon_match_id && record.manual_recon_flag === 1) {
                     return res.json({
                         success: false,
                         error:

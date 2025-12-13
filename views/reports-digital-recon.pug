@@ -149,15 +149,16 @@ block content
                 result += `<tr class='${rowClass}'>`;
 
                 result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>
-                             <input type='checkbox' 
-                                class='row-select txn-checkbox' 
-                                onchange='updateSelectedTotals()'
-                                data-debit='${row.Debit || 0}' 
-                                data-credit='${row.Credit || 0}'
-                                data-source-table='${row.source_table || ""}'
-                                data-source-id='${row.source_id || ""}'
-                            >
-                           </td>`;
+                                <input type='checkbox' 
+                                    class='row-select txn-checkbox' 
+                                    onchange='updateSelectedTotals()'
+                                    data-debit='${row.Debit || 0}' 
+                                    data-credit='${row.Credit || 0}'
+                                    data-source-table='${row.source_table || ""}'
+                                    data-source-id='${row.source_id || ""}'
+                                    data-manual-flag='${row.manual_recon_flag || 0}'
+                                >
+                            </td>`;
 
                 const matchId = row.match_id || '';
                 const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
@@ -243,8 +244,10 @@ block content
                 const matchIdCell = rowEl.children[1];
                 const matchId = matchIdCell ? matchIdCell.innerText.trim() : "";
 
+                const manualFlag = parseInt(cb.dataset.manualFlag || 0);
+
                 // BLOCK: Do not allow manual match on already reconciled lines
-                if (matchId && matchId !== "-") {
+                if (matchId && matchId !== "-" && manualFlag === 1) {
                     alert("One or more selected rows are already reconciled. Please unmatch first.");
                     return;
                 }
