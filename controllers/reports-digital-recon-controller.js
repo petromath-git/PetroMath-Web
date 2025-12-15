@@ -9,8 +9,8 @@ const locationConfig = require('../utils/location-config');
 const db = require("../db/db-connection");
 
 
-module.exports = {
-  getDigitalReconReport: async (req, res) => {
+
+exports.getDigitalReconReport = async (req, res) => {
     let locationCode = req.user.location_code;
     let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
     let toDate = dateFormat(new Date(), "yyyy-mm-dd");
@@ -615,7 +615,7 @@ function fifthPassShiftOffsetReconciliation(
       });
     }
   }
-}
+
 
 
 // ============================
@@ -629,83 +629,240 @@ const PK_MAP = {
     t_cashflow_transaction: "transaction_id"
 };
 
-// ============================
-// POST /digital-recon/manual-match
-// ============================
-module.exports.manualMatch = async (req, res) => {
-    console.log("Inside manualMatch API, body = ", req.body);
-
+// Update the existing manualMatch function
+exports.manualMatch = async (req, res) => {
     try {
-        const { rows } = req.body;
-        const user = req.user.User_Name || req.user.username || req.user.user_id;
+        const { rows } = req.body;  // Changed from selectedRows to rows
+        const locationCode = req.user.location_code;
+        const userId = req.user.Person_id;
+        const userRole = req.user.Role;
 
-        if (!rows || rows.length < 2) {
-            return res.status(400).json({ error: "Select at least two rows to match." });
+        console.log('manualMatch called with rows:', rows);
+
+        // Determine allowed difference based on role
+        const allowedDifference = (userRole === 'Admin' || userRole === 'SuperUser') ? 1000 : 100;
+
+        if (!rows || rows.length === 0) {
+            return res.status(400).json({ success: false, message: 'No rows selected' });
         }
 
-        // ============================
-        // 1️⃣ BACKEND GUARD: BLOCK MATCH IF ANY ROW IS ALREADY MATCHED
-        // ============================
-        for (const row of rows) {
-            const table = row.source_table;
-            const pk = PK_MAP[table];
+        // Calculate totals
+        let debitTotal = 0;
+        let creditTotal = 0;
 
-            if (!pk) {
-                return res.json({
-                    success: false,
-                    error: `Manual match not supported for table: ${table}`
-                });
+        rows.forEach(row => {
+            const debit = parseFloat(row.Debit || 0);
+            const credit = parseFloat(row.Credit || 0);
+            
+            if (debit > 0) {
+                debitTotal += debit;
             }
+            if (credit > 0) {
+                creditTotal += credit;
+            }
+        });
 
-            const sql = `
-                SELECT recon_match_id, manual_recon_flag 
-                FROM ${table}
-                WHERE ${pk} = :id
-            `;
+        const difference = Math.abs(debitTotal - creditTotal);
 
-            const result = await db.sequelize.query(sql, {
-                replacements: { id: row.source_id },
-                type: db.Sequelize.QueryTypes.SELECT
+        console.log('Calculated totals:', { debitTotal, creditTotal, difference });
+
+        // Check if difference is within allowed limit
+        if (difference > allowedDifference) {
+            return res.json({
+                success: false,
+                message: `Difference of ₹${difference.toFixed(2)} exceeds allowed limit of ₹${allowedDifference.toFixed(2)}`,
+                allowedDifference: allowedDifference
             });
-
-            if (result.length > 0) {
-                const record = result[0];
-
-                if (record.recon_match_id && record.manual_recon_flag === 1) {
-                    return res.json({
-                        success: false,
-                        error:
-                            "One or more selected rows are already reconciled. Please unmatch first."
-                    });
-                }
-            }
         }
 
-        // ============================
-        // CREATE CLEAN MANUAL MATCH ID (M-12345)
-        // ============================
+        // If there's a difference (but within limit), ask for confirmation
+        if (difference > 0) {
+            // Get earliest date from selected rows
+            const dates = rows.map(row => {
+                // Parse the date from dd-mm-yyyy format
+                const dateStr = row.Date;
+                const [day, month, year] = dateStr.split('-');
+                return new Date(year, month - 1, day);
+            });
+            
+            const earliestDate = new Date(Math.min(...dates));
+
+            return res.json({
+                success: false,
+                requiresConfirmation: true,
+                difference: difference,
+                debitTotal: debitTotal,
+                creditTotal: creditTotal,
+                earliestDate: earliestDate.toISOString().split('T')[0],
+                message: `There is a difference of ₹${difference.toFixed(2)}. Would you like to save this difference?`
+            });
+        }
+
+        // If no difference, proceed with normal matching
         const matchId = Date.now();
 
-        // ============================
-        // 3️⃣ APPLY MATCH TO ALL SELECTED ROWS
-        // ============================
+        console.log('No difference, proceeding with matchId:', matchId);
+
         for (const row of rows) {
+            console.log('Updating row:', row.source_table, row.source_id);
             await ReportDao.updateReconMatch({
                 tableName: row.source_table,
                 recordId: row.source_id,
-                matchId,
-                user
+                matchId: matchId,
+                user: userId
             });
         }
 
-        return res.json({
+        res.json({
             success: true,
-            match_id: matchId,
-            message: "Manual match saved successfully."
+            message: 'Manual match completed successfully',
+            match_id: matchId  // Changed from matchId to match_id to match expected response
         });
 
-    } catch (err) {
-        console.error("Manual Match Error:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+        console.error('Error in manual match:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            error: error.message  // Changed from message to error to match frontend expectation
+        });
+    }
+};
+
+// NEW FUNCTION: Save difference after user confirmation
+exports.saveDifferenceAndMatch = async (req, res) => {
+    console.log('saveDifferenceAndMatch ENTRY');
+    console.log('req.body:', req.body);
+    
+    try {
+        const { rows, notes, earliestDate } = req.body;
+        const locationCode = req.user.location_code;
+        const userId = req.user.Person_id;
+        const userRole = req.user.Role;
+
+        console.log('Extracted data:', { rows, notes, earliestDate, locationCode, userId, userRole });
+
+        const allowedDifference = (userRole === 'Admin' || userRole === 'SuperUser') ? 1000 : 100;
+
+        if (!rows || rows.length === 0) {
+            return res.status(400).json({ success: false, message: 'No rows selected' });
+        }
+
+        if (!notes || notes.trim() === '') {
+            return res.status(400).json({ success: false, message: 'Notes are required for saving difference' });
+        }
+
+        let debitTotal = 0;
+        let creditTotal = 0;
+
+        rows.forEach(row => {
+            const debit = parseFloat(row.Debit || 0);
+            const credit = parseFloat(row.Credit || 0);
+            
+            if (debit > 0) {
+                debitTotal += debit;
+            }
+            if (credit > 0) {
+                creditTotal += credit;
+            }
+        });
+
+        const calculatedDifference = debitTotal - creditTotal;
+        
+        // INVERT THE SIGN FOR STORAGE:
+        // Debit > Credit (shortage) → store as negative
+        // Credit > Debit (excess) → store as positive
+        const differenceToStore = -calculatedDifference;
+
+        console.log('Calculated difference:', { 
+            debitTotal, 
+            creditTotal, 
+            calculatedDifference, 
+            differenceToStore 
+        });
+
+        if (Math.abs(calculatedDifference) > allowedDifference) {
+            return res.json({
+                success: false,
+                message: `Difference exceeds allowed limit of ₹${allowedDifference.toFixed(2)}`
+            });
+        }
+
+        const matchId = Date.now();
+
+        console.log('Inserting difference record with matchId:', matchId);
+
+        await ReportDao.insertDigitalReconDifference({
+            location_code: locationCode,
+            user_id: userId,
+            match_id: matchId.toString(),
+            difference_amount: differenceToStore,  // Store with inverted sign
+            earliest_transaction_date: earliestDate,
+            notes: notes
+        });
+
+        console.log('Difference record inserted, now updating recon matches');
+
+        for (const row of rows) {
+            console.log('Updating row:', row.source_table, row.source_id);
+            await ReportDao.updateReconMatch({
+                tableName: row.source_table,
+                recordId: row.source_id,
+                matchId: matchId,
+                user: userId
+            });
+        }
+
+        console.log('All updates complete');
+
+        res.json({
+            success: true,
+            message: 'Manual match completed and difference saved successfully',
+            matchId: matchId,
+            difference: Math.abs(calculatedDifference)
+        });
+
+    } catch (error) {
+        console.error('Error in saveDifferenceAndMatch:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Error saving difference and performing match',
+            error: error.message
+        });
+    }
+};
+
+
+exports.getDifferences = async (req, res) => {
+    console.log('getDifferences ENTRY POINT');
+    
+    try {
+        const { fromDate, toDate } = req.body;
+        const locationCode = req.user.location_code;
+
+        console.log('getDifferences called with:', { locationCode, fromDate, toDate });
+
+        const differences = await ReportDao.getDigitalReconDifferences(
+            locationCode,
+            fromDate,
+            toDate
+        );
+
+        console.log('Differences found:', differences ? differences.length : 0);
+
+        res.json({
+            success: true,
+            differences: differences || []
+        });
+
+    } catch (error) {
+        console.error('Error in getDifferences controller:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching differences',
+            error: error.message
+        });
     }
 };
