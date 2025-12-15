@@ -587,6 +587,13 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
 },    
       
 updateReconMatch: async ({ tableName, recordId, matchId, user }) => {
+
+    console.log('=== updateReconMatch DEBUG ===');
+    console.log('tableName:', tableName);
+    console.log('recordId:', recordId);
+    console.log('matchId:', matchId);
+    console.log('user:', user);
+
     return db.sequelize.query(
         `
         UPDATE ${tableName}
@@ -756,6 +763,59 @@ getSupplierOpeningBalanceDate: (supplierId) => {
             type: Sequelize.QueryTypes.SELECT
         }
     );
+},
+
+// ADD NEW METHODS HERE:
+insertDigitalReconDifference: async (differenceData) => {
+    const query = `
+        INSERT INTO t_digital_recon_differences 
+        (location_code, user_id, match_id, difference_amount, earliest_transaction_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    
+    try {
+        const result = await db.sequelize.query(query, {
+            replacements: [
+                differenceData.location_code,
+                differenceData.user_id,
+                differenceData.match_id,
+                differenceData.difference_amount,
+                differenceData.earliest_transaction_date,
+                differenceData.notes
+            ],
+            type: Sequelize.QueryTypes.INSERT
+        });
+        return result;
+    } catch (error) {
+        console.error('Error inserting digital recon difference:', error);
+        throw error;
+    }
+},
+
+getDigitalReconDifferences: async (locationCode, startDate, endDate) => {
+    const query = `
+        SELECT 
+            drd.*,
+            mp.User_Name as user_name
+        FROM t_digital_recon_differences drd
+        LEFT JOIN m_persons mp ON drd.user_id = mp.Person_id
+        WHERE drd.location_code = ?
+        AND drd.earliest_transaction_date BETWEEN ? AND ?
+        ORDER BY drd.earliest_transaction_date DESC, drd.created_date DESC
+    `;
+    
+    try {
+        const results = await db.sequelize.query(query, {
+            replacements: [locationCode, startDate, endDate],
+            type: Sequelize.QueryTypes.SELECT
+        });       
+        return results;
+    } catch (error) {
+        console.error('Error in getDigitalReconDifferences DAO:', error);
+        throw error;
+    }
 }
       
 }
+
+

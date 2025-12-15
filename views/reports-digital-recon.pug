@@ -106,6 +106,7 @@ block content
         var creditstmtFromServer = !{JSON.stringify(creditstmt || [])};
         var currentData = creditstmtFromServer;
         const MANUAL_TOLERANCE = Number(!{manualTolerance || 1});
+        let currentSelectedRows = [];
 
         // Render table (checkbox column always visible)
         function renderTable(array, tabletitle, numberColumns = [], tableWidthClass = '') {
@@ -157,6 +158,7 @@ block content
                                     data-source-table='${row.source_table || ""}'
                                     data-source-id='${row.source_id || ""}'
                                     data-manual-flag='${row.manual_recon_flag || 0}'
+                                    data-tran-date='${row.Date || ""}'
                                 >
                             </td>`;
 
@@ -234,8 +236,8 @@ block content
 
             let totalDebit = 0;
             let totalCredit = 0;
-
             const rows = [];
+            const tranDates = [];
 
             for (const cb of selected) {
                 const rowEl = cb.closest('tr');
@@ -256,30 +258,62 @@ block content
                 totalDebit += parseFloat(cb.dataset.debit || 0);
                 totalCredit += parseFloat(cb.dataset.credit || 0);
 
+                // Collect transaction dates
+                if (cb.dataset.tranDate) {
+                    tranDates.push(cb.dataset.tranDate);
+                }
+
                 // Prepare payload
                 rows.push({
                     source_table: cb.dataset.sourceTable,
-                    source_id: cb.dataset.sourceId
+                    source_id: cb.dataset.sourceId,
+                    amount: parseFloat(cb.dataset.debit || 0) || parseFloat(cb.dataset.credit || 0),
+                    entry_type: parseFloat(cb.dataset.debit || 0) > 0 ? 'DEBIT' : 'CREDIT',
+                    tran_date: cb.dataset.tranDate
                 });
             }
+
+            // Store for later use
+            currentSelectedRows = rows;
 
             // Calculate the difference
             const diff = Math.abs(totalDebit - totalCredit);
 
-            //  Manual tolerance check (comes from controller via Pug)
-            const TOL = typeof MANUAL_TOLERANCE !== "undefined" ? parseFloat(MANUAL_TOLERANCE) : 1;
+            // Determine allowed limit based on user role (passed from backend)
+            const userRole = '#{user.Role}';
+            const allowedDifference = (userRole === 'Admin' || userRole === 'SuperUser') ? 1000 : 100;
 
-            if (diff > TOL) {
+            // Check if difference exceeds allowed limit
+            if (diff > allowedDifference) {
                 alert(
                     `Manual match rejected.\n\n` +
                     `Total Debit: ${totalDebit.toFixed(2)}\n` +
                     `Total Credit: ${totalCredit.toFixed(2)}\n` +
-                    `Difference: ${diff.toFixed(2)} exceeds tolerance (${TOL}).`
+                    `Difference: ${diff.toFixed(2)} exceeds allowed limit (₹${allowedDifference}).`
                 );
                 return;
             }
 
-            // Proceed to save manual match
+            // If there's a difference (but within limit), show modal for notes
+            if (diff > 0) {
+                // Get earliest date from selected transactions
+                const dates = tranDates.map(d => {
+                    const parts = d.split('-');
+                    return new Date(parts[2], parts[1] - 1, parts[0]);
+                });
+                const earliestDate = new Date(Math.min(...dates));
+                const earliestDateStr = earliestDate.toISOString().split('T')[0];
+
+                showDifferenceModal({
+                    difference: diff,
+                    debitTotal: totalDebit,
+                    creditTotal: totalCredit,
+                    earliestDate: earliestDateStr
+                });
+                return;
+            }
+
+            // If no difference, proceed with normal matching
             try {
                 const response = await fetch('/digital-recon/manual-match', {
                     method: 'POST',
@@ -305,8 +339,154 @@ block content
             }
         }
 
+        // Show Difference Modal
+        function showDifferenceModal(data) {
+            const message = `There is a difference of ₹${data.difference.toFixed(2)}.<br>` +
+                           `Debit Total: ₹${data.debitTotal.toFixed(2)}<br>` +
+                           `Credit Total: ₹${data.creditTotal.toFixed(2)}<br><br>` +
+                           `Please enter notes to explain this difference.`;
+            
+            document.getElementById('differenceMessage').innerHTML = message;
+            document.getElementById('differenceAmount').value = data.difference;
+            document.getElementById('earliestDate').value = data.earliestDate;
+            document.getElementById('differenceNotes').value = '';
+            
+            $('#differenceNotesModal').modal('show');
+        }
 
+        // Save Difference and Match
+        async function saveDifferenceAndMatch() {
+            const notes = document.getElementById('differenceNotes').value.trim();
+            
+            if (!notes) {
+                alert('Please enter notes');
+                return;
+            }
+            
+            const earliestDate = document.getElementById('earliestDate').value;
+            
+            try {
+                const response = await fetch('/digital-recon/save-difference', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rows: currentSelectedRows,
+                        notes: notes,
+                        earliestDate: earliestDate
+                    })
+                });
 
+                const result = await response.json();
+                
+                $('#differenceNotesModal').modal('hide');
+                
+                if (result.success) {
+                    alert(result.message);
+                    location.reload();
+                } else {
+                    alert(result.error || result.message || "Unknown error");
+                }
+            } catch (err) {
+                console.error('Save difference error:', err);
+                alert('Server error while saving difference');
+            }
+        }
+
+        // Load Historical Differences
+        async function loadHistoricalDifferences(fromDate, toDate) {
+            try {
+                const response = await fetch('/digital-recon/get-differences', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fromDate: fromDate,
+                        toDate: toDate
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success && result.differences.length > 0) {
+                    displayHistoricalDifferences(result.differences);
+                } else {
+                    document.getElementById('historicalDifferencesSection').style.display = 'none';
+                }
+            } catch (err) {
+                console.error('Error loading differences:', err);
+            }
+        }
+
+        
+        // Display Historical Differences
+        function displayHistoricalDifferences(differences) {
+            const tbody = document.getElementById('historicalDifferencesBody');
+            tbody.innerHTML = '';
+            
+            differences.forEach(function(diff) {
+                const amount = parseFloat(diff.difference_amount);
+                
+                let amountClass, amountText, label;
+                
+                if (amount < 0) {
+                    // Negative in DB = Debit > Credit = Shortage
+                    amountClass = 'text-danger';
+                    amountText = `₹${Math.abs(amount).toFixed(2)}`;
+                    label = 'Shortage';
+                } else if (amount > 0) {
+                    // Positive in DB = Credit > Debit = Excess
+                    amountClass = 'text-success';
+                    amountText = `₹${amount.toFixed(2)}`;
+                    label = 'Excess';
+                } else {
+                    amountClass = 'text-muted';
+                    amountText = '₹0.00';
+                    label = 'Balanced';
+                }
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatDate(diff.earliest_transaction_date)}</td>
+                    <td>${diff.match_id}</td>
+                    <td class="text-right ${amountClass}">
+                        ${amountText}
+                        <br><small class="text-muted">${label}</small>
+                    </td>
+                    <td>${diff.notes}</td>
+                    <td>${diff.user_name || 'Unknown'}</td>
+                    <td>${formatDateTime(diff.created_date)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            document.getElementById('historicalDifferencesSection').style.display = 'block';
+        }
+        // Helper function to format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
+
+        // Helper function to format datetime
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            const options = { 
+                day: '2-digit', 
+                month: '2-digit', 
+                year: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit'
+            };
+            return date.toLocaleString('en-IN', options);
+        }
 
         // Local date range function
         function updateDateRangev1() {
@@ -518,6 +698,13 @@ block content
 
         document.addEventListener('DOMContentLoaded', function() {
             liveSearch();
+            
+            // Load historical differences if dates are available
+            const fromDate = document.getElementById('fromclosingDate').value;
+            const toDate = document.getElementById('toclosingDate').value;
+            if (fromDate && toDate) {
+                loadHistoricalDifferences(fromDate, toDate);
+            }
         });
 
     // Filter + Controls
@@ -594,6 +781,7 @@ block content
                         span Unmatched
                 
                 div#creditstmt-table-container
+                
                 #selected-summary.card.shadow-sm.border.mt-2.px-3.py-2.d-none
                     .d-flex.justify-content-around.align-items-center.small
                         div
@@ -610,16 +798,55 @@ block content
                         div
                             b Difference: 
                             span#selected-diff 0.00
-                        //  Manual Match button
                         button.btn.btn-sm.btn-primary(onclick='submitManualMatch()')
                             i.bi.bi-check-all.me-1
                             | Manual Match    
                         button.btn.btn-sm.btn-outline-secondary(onclick='clearSelections()')
                             i.bi.bi-x-circle.me-1
                             | Clear
+                
+                // Historical Differences Section
+                .row#historicalDifferencesSection.mt-4(style='display:none;')
+                    .col-12
+                        .card
+                            .card-header.bg-warning.text-dark
+                                h6.mb-0
+                                    i.bi.bi-exclamation-triangle.me-2
+                                    | Historical Reconciliation Differences
+                            .card-body
+                                .table-responsive
+                                    table.table.table-bordered.table-striped.table-sm
+                                        thead.thead-dark
+                                            tr
+                                                th Date
+                                                th Match ID
+                                                th Difference Amount
+                                                th Notes
+                                                th User
+                                                th Created Date
+                                        tbody#historicalDifferencesBody
         else
             .alert.alert-info.text-center.mt-4(role='alert')
                 i.bi.bi-info-circle.me-2
                 | No transactions found for the selected period.
+
+    // Modal for Manual Match Difference Notes
+    #differenceNotesModal.modal.fade(tabindex='-1', role='dialog', aria-labelledby='differenceNotesModalLabel', aria-hidden='true')
+        .modal-dialog(role='document')
+            .modal-content
+                .modal-header
+                    h5#differenceNotesModalLabel.modal-title Manual Match - Difference Confirmation
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    p#differenceMessage
+                    .form-group
+                        label(for='differenceNotes') Notes (Required):
+                        textarea#differenceNotes.form-control(rows='3', placeholder='Enter notes explaining the difference...', required)
+                    input#differenceAmount(type='hidden')
+                    input#earliestDate(type='hidden')
+                .modal-footer
+                    button.btn.btn-secondary(type='button', data-dismiss='modal') Cancel
+                    button#saveDifferenceBtn.btn.btn-primary(type='button', onclick='saveDifferenceAndMatch()') Save & Match
 
     include overlay.pug
