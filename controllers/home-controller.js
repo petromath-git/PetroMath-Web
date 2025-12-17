@@ -475,7 +475,7 @@ const getHomeData = async (req, res, next) => {
             rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
         ]).then(values => {
             res.render('home', {
-                title: 'Shift Closing',
+                title: 'Cashier Shift',
                 user: req.user,
                 config: config.APP_CONFIGS,
                 closingValues: values[0].value,

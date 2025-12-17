@@ -20,7 +20,7 @@ const PAGE_TITLES = {
     '/home': 'Home Dashboard',
     '/login': 'Login Page',
     '/select-location': 'Location Selection',
-    '/shift-closing': 'Shift Closing',
+    '/shift-closing': 'Cashier Shift',
     '/credit-sales': 'Credit Sales Entry',
     '/cash-sales': 'Cash Sales Entry',
     '/products': 'Products Master',
