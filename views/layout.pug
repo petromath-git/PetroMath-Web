@@ -2,7 +2,7 @@ doctype html
 html
   head
     title PetroMath:#{title}
-    - var mobileReadyPages = ['Shift Closing', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
+    - var mobileReadyPages = ['Cashier Shift', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
     if mobileReadyPages.includes(title)
       meta(name="viewport" content="width=device-width, initial-scale=1.0")   
     link(rel='stylesheet', href=`/stylesheets/style.css?v=${CACHE_BUST}`)        
@@ -107,7 +107,7 @@ html
         -
            function getMenuIcon(menuName, groupName) {
             // DAILY_OPS group icons
-            if (menuName === 'Shift Closing') return 'bi-clock';
+            if (menuName === 'Cashier Shift') return 'bi-clock';
             if (menuName === 'Day Close') return 'bi-sunrise';
             if (menuName === 'Day-Close Report') return 'bi-file-earmark-text';
             
