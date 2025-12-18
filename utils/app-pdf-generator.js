@@ -9,12 +9,36 @@ const digitalReconreportsController = require("../controllers/reports-digital-re
 const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
 const stockReportsController = require("../controllers/stock-reports-controller");
 const cashflowDetailedController = require("../controllers/reports-cashflow-detailed-controller");
-var locationdao = require("../dao/report-dao");
+var locationdao = require("../dao/location-dao");
+var reportdao = require("../dao/report-dao");
 require('dotenv').config();
 const { getBrowser } = require('./browserHelper');
 const performance = require('perf_hooks').performance;
 
 const msToSeconds = ms => (ms / 1000).toFixed(2);
+
+function getCompanyLogoBase64(companyName) {
+    try {
+        const logoFileName = companyName ? `${companyName}.png` : 'default.png';
+        const logoPath = path.join(process.cwd(), 'public', 'images', 'company-logos', logoFileName);
+        
+        // Check if logo file exists
+        if (fs.existsSync(logoPath)) {
+            const imageBuffer = fs.readFileSync(logoPath);
+            return `data:image/png;base64,${imageBuffer.toString('base64')}`;
+        } else {
+            // Fallback to default logo
+            const defaultLogoPath = path.join(process.cwd(), 'public', 'images', 'company-logos', 'default.png');
+            if (fs.existsSync(defaultLogoPath)) {
+                const imageBuffer = fs.readFileSync(defaultLogoPath);
+                return `data:image/png;base64,${imageBuffer.toString('base64')}`;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading company logo:', error);
+    }
+    return null;
+}
 
 module.exports = {   
 
@@ -28,7 +52,10 @@ module.exports = {
         let location = req.body.locationCode||req.user.location_code;
         console.log('Location '+location);
         
-        const locationDetails = await locationdao.getLocationDetails(location);
+        const locationDetails = await reportdao.getLocationDetails(location);
+        const locationInfo = await locationdao.findByLocationCode(location);
+        const companyLogo = getCompanyLogoBase64(locationInfo?.company_name);
+
 
         const contentStart = performance.now();
 
@@ -288,10 +315,13 @@ module.exports = {
             format: 'A4',
             printBackground: true,
             displayHeaderFooter: true,
-            headerTemplate:`<div style="font-size: 16px; text-align: center; width: 100%; margin-bottom: 20px;">
-                                <strong>${locationDetails.location_name}</strong><br>
-                                <span style="font-size: 14px;">${locationDetails.address}</span>
-                                <div style="border-bottom: 2px solid #ccc; margin: 10px auto 5px auto; width: 90%;"></div>
+            headerTemplate: `<div style="width: 100%; padding: 10px 20px;">
+                                ${companyLogo ? `<img src="${companyLogo}" style="position: absolute; left: 20px; top: 10px; height: 60px; width: auto;" />` : ''}
+                                <div style="text-align: center; margin-bottom: 10px;">
+                                    <div style="font-size: 16px; font-weight: bold;">${locationDetails.location_name}</div>
+                                    <div style="font-size: 14px;">${locationDetails.address}</div>
+                                </div>
+                                <div style="border-bottom: 2px solid #000; width: 100%;"></div>
                             </div>`,
             footerTemplate: `<div style="font-size: 14px; text-align: center; width: 100%;">
                 <div style="border-top: 1px solid #ccc; margin: 0 auto 5px auto; width: 90%;"></div>
