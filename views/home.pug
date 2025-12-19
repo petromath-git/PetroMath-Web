@@ -8,6 +8,16 @@ block content
             max-height: calc(100vh - 350px);
             overflow-y: auto;
         }
+
+        .action-btn.btn-reopen {
+                background-color: #ffc107;
+                color: #000;
+            }
+
+            .action-btn.btn-reopen:hover {
+                background-color: #e0a800;
+                color: #000;
+            }
         
         .sticky-top {
             position: sticky;
@@ -292,7 +302,9 @@ block content
                                     button.action-btn.btn-delete(onClick=`deleteClosing(${val.closingId})`) Delete
                             else
                                 a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) View
-
+                                if user.Role === 'SuperUser' || user.User_Name === 'GOBI-INC'
+                                    if !val.cashflowId
+                                        button.action-btn.btn-reopen(onClick=`reopenShift(${val.closingId})`) Reopen
         else
             div.row.bg-light No records to display.
 
@@ -335,6 +347,32 @@ block content
                 icon.classList.remove('bi-chevron-up');
                 icon.classList.add('bi-chevron-down');
             }
+        }
+
+        function reopenShift(closingId) {
+            if (!confirm('Are you sure you want to reopen this shift? It will change status back to DRAFT.')) {
+                return;
+            }
+
+            fetch('/reopen-shift?id=' + closingId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    alert(data.message);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while reopening the shift.');
+            });
         }
 
         // Live search function for closings table with dynamic totals recalculation

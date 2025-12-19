@@ -214,6 +214,55 @@ module.exports = {
             });
         }
     },
+
+    
+
+reopenShift: async (req, res, next) => {
+    const closingId = req.query.id;
+    const locationCode = req.user.location_code;
+    const username = req.user.User_Name;
+    const userId = req.user.Person_id;
+
+    try {
+        // Check if user has permission (SuperUser or GOBI-INC)
+        const isSuperUser = req.user.Role === 'SuperUser';
+        const isGobiInc = username === 'GOBI-INC';
+
+        if (!isSuperUser && !isGobiInc) {
+            return res.status(403).json({
+                error: 'You do not have access to reopen shifts.'
+            });
+        }
+
+        // Check if shift can be reopened
+        const canReopen = await TxnWriteDao.canReopenShift(closingId, locationCode);
+
+        if (!canReopen.canReopen) {
+            return res.status(400).json({
+                error: canReopen.reason
+            });
+        }
+
+        // Reopen the shift
+        const result = await TxnWriteDao.reopenShift(closingId, locationCode, userId);
+
+        if (result > 0) {
+            res.status(200).json({
+                message: 'Shift reopened successfully. Status changed to DRAFT.'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to reopen shift. Please try again.'
+            });
+        }
+
+    } catch (error) {
+        console.error('Error reopening shift:', error);
+        res.status(500).json({
+            error: 'Error while reopening the shift.'
+        });
+    }
+},
 }
 
 // Edit closing data flow: Getting txn closing data based on closing id

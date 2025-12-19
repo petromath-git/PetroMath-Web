@@ -941,6 +941,12 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
+// Reopen shift closing
+app.post('/reopen-shift', isLoginEnsured, function (req, res, next) {
+    ClosingEditController.reopenShift(req, res, next);
+});
+
+
 
 app.get('/api/shift-products/:closingId', (req, res) => {
     
@@ -1110,6 +1116,11 @@ app.get('/cashflowhome', isLoginEnsured, function (req, res) {
 
 app.post('/close-cashflow', [isLoginEnsured, security.hasPermission('CLOSE_DAY_CLOSE')], function (req, res, next) {
     cashflowController.closeData(req, res, next);  // response returned inside controller
+});
+
+// Reopen cashflow closing
+app.post('/reopen-cashflow', isLoginEnsured, function (req, res, next) {
+    cashflowController.reopenCashflow(req, res, next);
 });
 
 app.get('/tankreceipts', [isLoginEnsured, security.isAdmin()], function (req, res, next) {

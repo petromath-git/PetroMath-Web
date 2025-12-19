@@ -366,4 +366,32 @@ function deleteCashflow(cashflowId) {
         }
     }
 }
+
+function reopenCashflow(cashflowId) {
+    if (!confirm('Are you sure you want to reopen this cashflow? It will change status back to DRAFT. This is only allowed if no future cashflows exist.')) {
+        return;
+    }
+
+    fetch('/reopen-cashflow?id=' + cashflowId, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while reopening the cashflow.');
+    });
+}
+
+
 // Cash flow related scripts - end
