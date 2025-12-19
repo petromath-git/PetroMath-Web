@@ -65,3 +65,8 @@ block content
                                     td
                                         a.btn.btn-info(href='/cashflow?id=' + val.cashflowId)
                                             span.oi.oi-envelope-open
+                                        // Add reopen button for SuperUser and GOBI-INC
+                                        if (user.Role === 'SuperUser' || user.User_Name === 'GOBI-INC')
+                                            span &nbsp;
+                                            button.btn.btn-warning(onClick=`reopenCashflow(${val.cashflowId})`)
+                                                span.oi.oi-action-undo
