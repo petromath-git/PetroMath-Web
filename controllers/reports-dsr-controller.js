@@ -302,7 +302,8 @@ module.exports = {
         Collectionlist.push({         
           Cash: `${formatter.format(totalCash + totalOilCash)} (${grandTotal > 0 ? ((totalCash + totalOilCash) / grandTotal * 100).toFixed(2) : '0.00'}%)`,
           Digital: `${formatter.format(totalCard)} (${grandTotal > 0 ? (totalCard / grandTotal * 100).toFixed(2) : '0.00'}%)`,
-          Credit: `${formatter.format(totalCredit + totalOilCredit)} (${grandTotal > 0 ? ((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2) : '0.00'}%)`
+          Credit: `${formatter.format(totalCredit + totalOilCredit)} (${grandTotal > 0 ? ((totalCredit + totalOilCredit) / grandTotal * 100).toFixed(2) : '0.00'}%)`,
+          'Total Collection': formatter.format(grandTotal)
         });
         
         let totalCreditSales = 0;

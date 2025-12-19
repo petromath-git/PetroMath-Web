@@ -60,6 +60,14 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
 router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function (req, res, next) {
     try {
 
+        // Convert to uppercase before processing
+        if (req.body.m_credit_name_0) {
+            req.body.m_credit_name_0 = req.body.m_credit_name_0.toUpperCase();
+        }
+        if (req.body.m_credit_short_name_0) {
+            req.body.m_credit_short_name_0 = req.body.m_credit_short_name_0.toUpperCase();
+        }
+
         // Extract data from request - ADD THESE LINES
         const companyName = req.body.m_credit_name_0;
         const locationCode = req.user.location_code;
@@ -95,6 +103,15 @@ router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')]
 // API endpoint for updating customer
 router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
     try {
+
+        // Convert to uppercase before processing
+        if (req.body.Company_Name) {
+            req.body.Company_Name = req.body.Company_Name.toUpperCase();
+        }
+        if (req.body.short_name) {
+            req.body.short_name = req.body.short_name.toUpperCase();
+        }
+
         const creditlistId = req.params.id;
         const newCompanyName = req.body.Company_Name;
         const locationCode = req.user.location_code;
