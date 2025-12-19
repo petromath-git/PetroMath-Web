@@ -200,7 +200,63 @@ module.exports = {
             res.status(500).send({error: 'Error while closing the record.'});
         }
     },
+// Add these methods to module.exports in controllers/cash-flow-controller.js
 
+reopenCashflow: async (req, res, next) => {
+    const cashflowId = req.query.id;
+    const locationCode = req.user.location_code;
+    const username = req.user.User_Name;
+    const userId = req.user.Person_id;
+
+    try {
+        // Check if user has permission (SuperUser or GOBI-INC)
+        const isSuperUser = req.user.Role === 'SuperUser';
+        const isGobiInc = username === 'GOBI-INC';
+
+        if (!isSuperUser && !isGobiInc) {
+            return res.status(403).json({
+                error: 'You do not have access to reopen cashflows.'
+            });
+        }
+
+        // Validate cashflow belongs to user's location
+        const cashflow = await cashflowDao.findCashflow(locationCode, cashflowId);
+        
+        if (!cashflow) {
+            return res.status(403).json({ 
+                error: 'Unauthorized: You cannot reopen cashflow records from other locations' 
+            });
+        }
+
+        // Check if cashflow can be reopened
+        const canReopen = await cashflowDao.canReopenCashflow(cashflowId, locationCode);
+
+        if (!canReopen.canReopen) {
+            return res.status(400).json({
+                error: canReopen.reason
+            });
+        }
+
+        // Reopen the cashflow
+        const result = await cashflowDao.reopenCashflow(cashflowId, locationCode, userId);
+
+        if (result > 0) {
+            res.status(200).json({
+                message: 'Cashflow reopened successfully. Status changed to DRAFT.'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to reopen cashflow. Please try again.'
+            });
+        }
+
+    } catch (error) {
+        console.error('Error reopening cashflow:', error);
+        res.status(500).json({
+            error: 'Error while reopening the cashflow.'
+        });
+    }
+},
 
 
 };

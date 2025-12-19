@@ -27,12 +27,12 @@ module.exports = {
 },
     newCredit : function (req, rowIndex = 0) {
         const data = {
-            Company_Name: req.body.m_credit_name_0,
+            Company_Name: req.body.m_credit_name_0 ? req.body.m_credit_name_0.toUpperCase() : null,
             type: req.body.m_credit_type_0,
             address: req.body.m_credit_address_0,
             phoneno: req.body.m_credit_phoneno_0,
             gst: req.body.m_credit_gst_0,
-            short_name: req.body.m_credit_short_name_0,
+            short_name: req.body.m_credit_short_name_0 ? req.body.m_credit_short_name_0.toUpperCase() : null,
             remittance_bank_id: req.body[`m_credit_remittance_bank_id_${rowIndex}`] && req.body[`m_credit_remittance_bank_id_${rowIndex}`] !== '' ? req.body[`m_credit_remittance_bank_id_${rowIndex}`] : null,
             Opening_Balance : 0,
             location_code: req.user.location_code,

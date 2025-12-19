@@ -267,4 +267,54 @@ saveReadings: (data) => {
         
         return result.length > 0 && result[0].bill_id !== null;
     },
+
+    
+
+// Check if shift can be reopened (no cashflow_id linked)
+canReopenShift: async (closingId, locationCode) => {
+    const result = await db.sequelize.query(
+        `SELECT 
+            closing_id,
+            closing_status,
+            cashflow_id
+        FROM t_closing
+        WHERE closing_id = :closingId
+        AND location_code = :locationCode
+        AND closing_status = 'CLOSED'`,
+        {
+            replacements: { closingId, locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        }
+    );
+    
+    if (result.length === 0) {
+        return { canReopen: false, reason: 'Shift not found or not closed' };
+    }
+    
+    if (result[0].cashflow_id !== null) {
+        return { canReopen: false, reason: 'Shift is linked to a cashflow and cannot be reopened' };
+    }
+    
+    return { canReopen: true };
+},
+
+// Reopen shift (update status to DRAFT)
+reopenShift: async (closingId, locationCode, userId) => {
+    const result = await db.sequelize.query(
+        `UPDATE t_closing 
+        SET closing_status = 'DRAFT',
+            updated_by = :userId,
+            updation_date = NOW()
+        WHERE closing_id = :closingId
+        AND location_code = :locationCode
+        AND closing_status = 'CLOSED'
+        AND cashflow_id IS NULL`,
+        {
+            replacements: { closingId, locationCode, userId },
+            type: db.Sequelize.QueryTypes.UPDATE
+        }
+    );
+    
+    return result[1]; // returns number of rows affected
+},
 }
