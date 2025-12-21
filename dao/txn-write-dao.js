@@ -271,16 +271,19 @@ saveReadings: (data) => {
     
 
 // Check if shift can be reopened (no cashflow_id linked)
+// Check if shift can be reopened (cashflow_id is null OR linked cashflow is DRAFT)
 canReopenShift: async (closingId, locationCode) => {
     const result = await db.sequelize.query(
         `SELECT 
-            closing_id,
-            closing_status,
-            cashflow_id
-        FROM t_closing
-        WHERE closing_id = :closingId
-        AND location_code = :locationCode
-        AND closing_status = 'CLOSED'`,
+            t.closing_id,
+            t.closing_status,
+            t.cashflow_id,
+            cf.closing_status as cashflow_status
+        FROM t_closing t
+        LEFT JOIN t_cashflow_closing cf ON t.cashflow_id = cf.cashflow_id
+        WHERE t.closing_id = :closingId
+        AND t.location_code = :locationCode
+        AND t.closing_status = 'CLOSED'`,
         {
             replacements: { closingId, locationCode },
             type: db.Sequelize.QueryTypes.SELECT
@@ -291,24 +294,33 @@ canReopenShift: async (closingId, locationCode) => {
         return { canReopen: false, reason: 'Shift not found or not closed' };
     }
     
-    if (result[0].cashflow_id !== null) {
-        return { canReopen: false, reason: 'Shift is linked to a cashflow and cannot be reopened' };
+    const shift = result[0];
+    
+    // Can reopen if cashflow_id is null
+    if (shift.cashflow_id === null) {
+        return { canReopen: true };
     }
     
-    return { canReopen: true };
+    // Can reopen if linked cashflow is in DRAFT status
+    if (shift.cashflow_status === 'DRAFT') {
+        return { canReopen: true };
+    }
+    
+    // Cannot reopen if linked to a CLOSED cashflow
+    return { canReopen: false, reason: 'Shift is linked to a closed cashflow and cannot be reopened' };
 },
 
-// Reopen shift (update status to DRAFT)
+// Reopen shift (update status to DRAFT and set cashflow_id to NULL)
 reopenShift: async (closingId, locationCode, userId) => {
     const result = await db.sequelize.query(
         `UPDATE t_closing 
         SET closing_status = 'DRAFT',
+            cashflow_id = NULL,
             updated_by = :userId,
             updation_date = NOW()
         WHERE closing_id = :closingId
         AND location_code = :locationCode
-        AND closing_status = 'CLOSED'
-        AND cashflow_id IS NULL`,
+        AND closing_status = 'CLOSED'`,
         {
             replacements: { closingId, locationCode, userId },
             type: db.Sequelize.QueryTypes.UPDATE
@@ -317,4 +329,6 @@ reopenShift: async (closingId, locationCode, userId) => {
     
     return result[1]; // returns number of rows affected
 },
+
+
 }

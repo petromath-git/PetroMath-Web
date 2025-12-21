@@ -220,15 +220,32 @@ module.exports = {
 reopenShift: async (req, res, next) => {
     const closingId = req.query.id;
     const locationCode = req.user.location_code;
-    const username = req.user.User_Name;
+    const userRole = req.user.Role;
     const userId = req.user.Person_id;
 
     try {
-        // Check if user has permission (SuperUser or GOBI-INC)
-        const isSuperUser = req.user.Role === 'SuperUser';
-        const isGobiInc = username === 'GOBI-INC';
+        // Check if user has permission
+        let hasPermission = false;
 
-        if (!isSuperUser && !isGobiInc) {
+        // SuperUser always has access
+        if (userRole === 'SuperUser') {
+            hasPermission = true;
+        } 
+        // Admin role - check location config
+        else if (userRole === 'Admin') {
+            const locationConfig = require('../utils/location-config');
+            const allowShiftReopen = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'ALLOW_SHIFT_REOPEN',
+                'N' // default value if not configured
+            );
+            
+            if (allowShiftReopen === 'Y') {
+                hasPermission = true;
+            }
+        }
+
+        if (!hasPermission) {
             return res.status(403).json({
                 error: 'You do not have access to reopen shifts.'
             });
@@ -243,7 +260,7 @@ reopenShift: async (req, res, next) => {
             });
         }
 
-        // Reopen the shift
+        // Reopen the shift (trigger will automatically log to audit table)
         const result = await TxnWriteDao.reopenShift(closingId, locationCode, userId);
 
         if (result > 0) {
@@ -263,6 +280,7 @@ reopenShift: async (req, res, next) => {
         });
     }
 },
+
 }
 
 // Edit closing data flow: Getting txn closing data based on closing id

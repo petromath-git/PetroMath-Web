@@ -466,6 +466,12 @@ const getHomeData = async (req, res, next) => {
             'N'  // default value - disabled by default
         );    
 
+        const allowShiftReopen = await locationConfig.getLocationConfigValue(
+            req.user.location_code,
+            'ALLOW_SHIFT_REOPEN',
+            'N' // default value if not configured
+        );
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
@@ -489,7 +495,8 @@ const getHomeData = async (req, res, next) => {
                 canSearchClosings: values[5].value,
                 maxAllowedDrafts: maxAllowedDrafts,
                 canCreateShiftClosing: canCreateShiftClosing,
-                showDayCloseGrouping: showDayCloseGrouping
+                showDayCloseGrouping: showDayCloseGrouping,
+                allowShiftReopen: allowShiftReopen,
             });
         }).catch(error => {
             console.error('Error in getHomeData:', error);
@@ -882,6 +889,7 @@ const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) 
                         closingStatus: closingData.closing_status,
                         expenseData: parseFloat(closingData.ex_short) || 0,
                         cashflowId: closingData.cashflow_id || null,
+                        cashflowStatus: closingData.cashflow_status || null,
                         dayCloseDate: closingData.day_close_date || null
                     };
 

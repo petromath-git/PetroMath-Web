@@ -122,7 +122,8 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
                 COALESCE(c.notes, '') as notes,
                 COALESCE(c.ex_short, 0) as ex_short,
                 cf.cashflow_date,
-                DATE_FORMAT(cf.cashflow_date, '%d-%b-%Y') as day_close_date${dynamicFinalColumns},
+                DATE_FORMAT(cf.cashflow_date, '%d-%b-%Y') as day_close_date,
+                cf.closing_status as cashflow_status${dynamicFinalColumns},
                 COALESCE(os.loose, 0) as loose
             FROM t_closing c
             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
