@@ -769,8 +769,8 @@ getSupplierOpeningBalanceDate: (supplierId) => {
 insertDigitalReconDifference: async (differenceData) => {
     const query = `
         INSERT INTO t_digital_recon_differences 
-        (location_code, user_id, match_id, difference_amount, earliest_transaction_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (location_code, user_id, vendor_id, match_id, difference_amount, earliest_transaction_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     
     try {
@@ -778,6 +778,7 @@ insertDigitalReconDifference: async (differenceData) => {
             replacements: [
                 differenceData.location_code,
                 differenceData.user_id,
+                differenceData.vendor_id,  // Add vendor_id
                 differenceData.match_id,
                 differenceData.difference_amount,
                 differenceData.earliest_transaction_date,
@@ -792,23 +793,39 @@ insertDigitalReconDifference: async (differenceData) => {
     }
 },
 
-getDigitalReconDifferences: async (locationCode, startDate, endDate) => {
+getDigitalReconDifferences: async (locationCode, startDate, endDate, vendorId) => {
     const query = `
         SELECT 
             drd.*,
-            mp.User_Name as user_name
+            mp.User_Name as user_name,
+            mcl.Company_Name as vendor_name
         FROM t_digital_recon_differences drd
         LEFT JOIN m_persons mp ON drd.user_id = mp.Person_id
+        LEFT JOIN m_credit_list mcl ON drd.vendor_id = mcl.creditlist_id
         WHERE drd.location_code = ?
         AND drd.earliest_transaction_date BETWEEN ? AND ?
+        AND (
+            drd.vendor_id = ?
+            OR drd.vendor_id IN (
+                SELECT creditlist_id 
+                FROM m_credit_list 
+                WHERE recon_group_id = (
+                    SELECT recon_group_id 
+                    FROM m_credit_list 
+                    WHERE creditlist_id = ?
+                )
+                AND recon_group_id IS NOT NULL
+            )
+        )
         ORDER BY drd.earliest_transaction_date DESC, drd.created_date DESC
     `;
     
     try {
         const results = await db.sequelize.query(query, {
-            replacements: [locationCode, startDate, endDate],
+            replacements: [locationCode, startDate, endDate, vendorId, vendorId],
             type: Sequelize.QueryTypes.SELECT
-        });       
+        });
+        console.log('DAO query results:', results);
         return results;
     } catch (error) {
         console.error('Error in getDigitalReconDifferences DAO:', error);

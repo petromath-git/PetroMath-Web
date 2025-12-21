@@ -735,7 +735,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
     console.log('req.body:', req.body);
     
     try {
-        const { rows, notes, earliestDate } = req.body;
+        const { rows, notes, earliestDate, vendorId } = req.body;
         const locationCode = req.user.location_code;
         const userId = req.user.Person_id;
         const userRole = req.user.Role;
@@ -795,6 +795,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
         await ReportDao.insertDigitalReconDifference({
             location_code: locationCode,
             user_id: userId,
+            vendor_id: vendorId,
             match_id: matchId.toString(),
             difference_amount: differenceToStore,  // Store with inverted sign
             earliest_transaction_date: earliestDate,
@@ -838,15 +839,16 @@ exports.getDifferences = async (req, res) => {
     console.log('getDifferences ENTRY POINT');
     
     try {
-        const { fromDate, toDate } = req.body;
+        const { fromDate, toDate, vendorId } = req.body;
         const locationCode = req.user.location_code;
 
-        console.log('getDifferences called with:', { locationCode, fromDate, toDate });
+        console.log('getDifferences called with:', { locationCode, fromDate, toDate, vendorId });
 
         const differences = await ReportDao.getDigitalReconDifferences(
             locationCode,
             fromDate,
-            toDate
+            toDate,
+            vendorId 
         );
 
         console.log('Differences found:', differences ? differences.length : 0);
