@@ -25,6 +25,7 @@ block content
             var CreditsummarylistFromServer = !{JSON.stringify(Creditsummarylist)}
             var creditSummaryTitle = !{JSON.stringify(creditSummaryTitle)};
             const skippedReadingsFromServer = !{JSON.stringify(skippedReadingsList)};
+            const showSkippedReadingDsr = !{JSON.stringify(showSkippedReadingDsr)};
             
 
             
@@ -213,7 +214,7 @@ block content
                 
 
                 // Render skipped readings table with warning style if data exists
-                if (skippedReadingsFromServer && skippedReadingsFromServer.length > 0) {
+                if (showSkippedReadingDsr && skippedReadingsFromServer && skippedReadingsFromServer.length > 0) {
                     const skippedTableHtml = renderTable(
                         skippedReadingsFromServer,
                         '⚠️ Skipped Readings Detected',
