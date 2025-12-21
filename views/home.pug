@@ -138,6 +138,7 @@ block content
                         - var colorIndex = 0
                         - var dayCloseColors = ['#f0f8ff', '#fff5f0', '#f0fff0', '#fff0f5', '#f5f5dc']
                         each val in closingValues
+                            - var canReopenShift = !val.cashflowId || val.cashflowStatus === 'DRAFT'
                             - var dayCloseChanged = showDayCloseGrouping === 'Y' ? (val.dayCloseDate !== currentDayClose) : false
                             - if (dayCloseChanged) { currentDayClose = val.dayCloseDate; if (val.dayCloseDate) colorIndex = (colorIndex + 1) % dayCloseColors.length; }
                             - var rowBgColor = showDayCloseGrouping === 'Y' && val.dayCloseDate ? dayCloseColors[colorIndex] : (showDayCloseGrouping && !val.dayCloseDate ? '#f5f5f5' : '')
@@ -196,7 +197,14 @@ block content
                                     td
                                         a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
                                             span.oi.oi-book
-                                    td &nbsp;
+                                    td
+                                        // Reopen button - SuperUser always has access, Admin needs config permission
+                                        - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
+                                        if canReopen && canReopenShift
+                                            button.btn.btn-warning(onClick=`reopenShift(${val.closingId})`)
+                                                span.oi.oi-action-undo
+                                        else
+                                            span &nbsp;                                            
                         if closingValues.length > 1
                             tr.table-info
                                 td.strong Total
@@ -238,6 +246,7 @@ block content
             // Mobile cards layout - ONLY visible on mobile
             .mobile-cards-container(style="display: none;")
                 each val in closingValues
+                    - var canReopenShift = !val.cashflowId || val.cashflowStatus === 'DRAFT'
                     - var statusClass = val.closingStatus === 'DRAFT' ? 'draft' : 'closed'
                     .closing-card(class=statusClass)
                         .card-header-mobile
@@ -302,9 +311,9 @@ block content
                                     button.action-btn.btn-delete(onClick=`deleteClosing(${val.closingId})`) Delete
                             else
                                 a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) View
-                                if user.Role === 'SuperUser' || user.User_Name === 'GOBI-INC'
-                                    if !val.cashflowId
-                                        button.action-btn.btn-reopen(onClick=`reopenShift(${val.closingId})`) Reopen
+                                - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
+                                if canReopen && canReopenShift
+                                    button.action-btn.btn-reopen(onClick=`reopenShift(${val.closingId})`) Reopen
         else
             div.row.bg-light No records to display.
 
