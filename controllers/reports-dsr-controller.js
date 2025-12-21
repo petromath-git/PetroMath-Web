@@ -8,6 +8,7 @@ const appCache = require("../utils/app-cache");
 const moment = require('moment');
 var locationdao = require("../dao/report-dao");
 var ReportDao = require("../dao/report-dao");
+const locationConfig = require('../utils/location-config');
 
 
 module.exports = {
@@ -18,6 +19,13 @@ module.exports = {
       const personId = req.user.Person_id;
 
       const locationDetails = await locationdao.getLocationDetails(locationCode);
+
+      // Fetch skipped reading config
+      const showSkippedReadingDsr = await locationConfig.getLocationConfigValue(
+          locationCode,
+          'SHOW_SKIPPED_READING_DSR',
+          'N' // default value if not configured
+      );
 
       
 
@@ -92,14 +100,14 @@ module.exports = {
       const productPricePromise   =  DsrReportDao.getPumpPrice(locationCode, fromDate);
       const monthlyOfftakePromise = DsrReportDao.getMonthlyOfftake(locationCode, fromDate);
       const deadlinePromise = DsrReportDao.getDeadline(locationCode, fromDate);
-      
+      const skippedReadingsPromise = DsrReportDao.getSkippedReadings(locationCode, fromDate);
       
 
 
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,digitalData,oilCollectionData,creditSalesData,
              cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
-             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData] = await Promise.all([readingsPromise, 
+             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData,skippedReadingsData] = await Promise.all([readingsPromise, 
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 digitalcollectionPromise,
@@ -117,7 +125,8 @@ module.exports = {
                                                                                                 fuelTankStockPromise,
                                                                                                 productPricePromise,
                                                                                                 monthlyOfftakePromise,
-                                                                                                deadlinePromise                                                                                                
+                                                                                                deadlinePromise,
+                                                                                                skippedReadingsPromise                                                                                                
                                                                                               ]);
 
       // Process readings data
@@ -201,6 +210,18 @@ module.exports = {
            Sale: readingData.sale - readingData.testing,
         });
       });
+
+
+      let skippedReadingsList = [];
+
+      skippedReadingsData.forEach((skipped) => {
+          skippedReadingsList.push({
+            'Nozzle': skipped.pump_code,
+            'Opening Reading': parseFloat(skipped.opening_reading).toFixed(3),
+            'Expected Opening': parseFloat(skipped.expected_opening).toFixed(3),
+            'Gap': parseFloat(skipped.reading_gap).toFixed(3),
+          });
+        });
 
 
       deadlineData.forEach((deadline) => {     
@@ -624,6 +645,8 @@ module.exports = {
         monthlyOfftakeList: monthlyOfftakeList,
         deadlineList: deadlineList,
         Creditsummarylist:Creditsummarylist,
+        showSkippedReadingDsr: showSkippedReadingDsr === 'Y',
+        skippedReadingsList: skippedReadingsList,
         creditSummaryTitle: (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth) 
         ? 'Credit Customer Balances (All Customers)' 
         : 'Credit Customer Balances (Top 3)'  // Pass title dynamically
