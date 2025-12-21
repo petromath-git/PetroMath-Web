@@ -674,8 +674,64 @@ return result;
 
         return result;
 
-    }      
-
+    },
+getSkippedReadings: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
+    const closing_id = data.map(item => item.closing_id);
+    
+    const result = await db.sequelize.query(`
+        SELECT 
+            mp.pump_code,
+            tr.opening_reading,
+            
+            -- Find the CLOSEST closing reading (by absolute difference)
+            (SELECT tr_close.closing_reading
+             FROM t_reading tr_close
+             WHERE tr_close.pump_id = tr.pump_id
+               AND tr_close.reading_id < tr.reading_id
+             ORDER BY ABS(tr_close.closing_reading - tr.opening_reading) ASC
+             LIMIT 1
+            ) AS expected_opening,
+            
+            -- The gap (can be positive or negative)
+            tr.opening_reading - (
+                SELECT tr_close.closing_reading
+                FROM t_reading tr_close
+                WHERE tr_close.pump_id = tr.pump_id
+                  AND tr_close.reading_id < tr.reading_id
+                ORDER BY ABS(tr_close.closing_reading - tr.opening_reading) ASC
+                LIMIT 1
+            ) AS reading_gap
+        
+        FROM t_reading tr
+        JOIN m_pump mp ON tr.pump_id = mp.pump_id
+        
+        WHERE tr.closing_id IN (:closing_id)
+          
+          -- Only show records where opening doesn't match any previous closing
+          AND NOT EXISTS (
+              SELECT 1 
+              FROM t_reading tr_prev
+              WHERE tr_prev.pump_id = tr.pump_id 
+                AND tr_prev.closing_reading = tr.opening_reading
+          )
+          
+          -- Exclude first readings
+          AND EXISTS (
+              SELECT 1 
+              FROM t_reading tr_any
+              WHERE tr_any.pump_id = tr.pump_id 
+                AND tr_any.reading_id < tr.reading_id
+          )
+        
+        ORDER BY mp.pump_code
+    `, {
+        replacements: { closing_id: closing_id },
+        type: Sequelize.QueryTypes.SELECT
+    });
+    
+    return result;
+},
 
 }
 
