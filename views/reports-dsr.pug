@@ -202,7 +202,7 @@ block content
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Nozzle Count','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
-                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Amount'],"col-sm-8 mx-auto");
+                document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Date','Amount'],"col-sm-8 mx-auto");
                 document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Cashier Shift Summary',[],"col-sm-8 mx-auto");
