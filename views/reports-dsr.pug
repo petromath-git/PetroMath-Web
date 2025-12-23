@@ -24,6 +24,8 @@ block content
             var deadlineListFromServer = !{JSON.stringify(deadlineList)}
             var CreditsummarylistFromServer = !{JSON.stringify(Creditsummarylist)}
             var creditSummaryTitle = !{JSON.stringify(creditSummaryTitle)};
+            const skippedReadingsFromServer = !{JSON.stringify(skippedReadingsList)};
+            const showSkippedReadingDsr = !{JSON.stringify(showSkippedReadingDsr)};
             
 
             
@@ -209,6 +211,26 @@ block content
                // document.getElementById('fuelstock-table-container').innerHTML = renderTable(fuelTankStocklistFromServer,'Fuel Tank Stock',['Opening Stock','Receipts','Nozzle Flow','Testing','Sales','Closing Stock'],"col-sm-8 mx-auto");
                 document.getElementById('product-price-table-container').innerHTML = renderTable(productPriceListFromServer, 'Product Prices', ['price'], 'col-sm-8 mx-auto');
                 document.getElementById('reading-table-container').innerHTML = renderTransposedTable(pumpReadingFromServer,'Nozzle Reading');                
+                
+
+                // Render skipped readings table with warning style if data exists
+                if (showSkippedReadingDsr && skippedReadingsFromServer && skippedReadingsFromServer.length > 0) {
+                    const skippedTableHtml = renderTable(
+                        skippedReadingsFromServer,
+                        '⚠️ Skipped Readings Detected',
+                        [],
+                        "col-sm-8 mx-auto"
+                    );
+                    
+                    // Wrap in a warning container with yellow background
+                    document.getElementById('skipped-reading-table-container').innerHTML = `
+                        <div style="background-color: #fff3cd; border: 2px solid #856404; padding: 15px; border-radius: 5px;">
+                            ${skippedTableHtml}
+                        </div>
+                    `;
+                }
+
+
                 document.getElementById('cashflow-table-container').innerHTML = renderTable(cashFlowFromServer,'CashFlow',["InFlow", "OutFlow"],"col-sm-8 mx-auto");
                 document.getElementById('denomresult-table-container').innerHTML = renderTransposedTable(denomResultFromServer,'CashFlow Result',['Cashflow Balance','Denomination Total','Excess/Shortage'],"col-sm-8 mx-auto");
                   document.getElementById('creditoutstanding-table-container').innerHTML = renderTable(CreditsummarylistFromServer,creditSummaryTitle,['Balance','Notional Interest @ 12% (Today)'],"col-sm-6 mx-auto");
@@ -310,6 +332,11 @@ block content
             div.col-md-12
                 div.row &nbsp;                
                 div(id="reading-table-container") 
+        if showSkippedReadingDsr && skippedReadingsList && skippedReadingsList.length > 0
+            div.row
+                div.col-md-12
+                    div.row &nbsp;
+                    div(id="skipped-reading-table-container")        
         div.row
             div.col-md-12
                 div.row &nbsp;                

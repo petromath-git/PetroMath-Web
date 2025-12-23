@@ -126,7 +126,8 @@ block content
                         key !== 'reconciliation_pass' &&
                         key !== 'unique_id' &&
                         key !== 'source_table' &&
-                        key !== 'source_id') {
+                        key !== 'source_id' &&
+                        key !== 'manual_recon_flag') {
                         let widthStyle = (key === 'Narration') ? "max-width:220px;" : "";
                         result += `<th class='text-center' style='border: 1px solid #dee2e6; ${widthStyle}'>${key}</th>`;
                     }
@@ -158,7 +159,7 @@ block content
                                     data-source-table='${row.source_table || ""}'
                                     data-source-id='${row.source_id || ""}'
                                     data-manual-flag='${row.manual_recon_flag || 0}'
-                                    data-tran-date='${row.Date || ""}'
+                                    data-date='${row.Date || ""}'
                                 >
                             </td>`;
 
@@ -174,7 +175,8 @@ block content
                         key !== 'reconciliation_pass' &&
                         key !== 'unique_id' &&
                         key !== 'source_table' &&
-                        key !== 'source_id') {
+                        key !== 'source_id' &&
+                        key !== 'manual_recon_flag') {
                         let dataValue = row[key];
                         const isAmount = numberColumns.includes(key);
                         const isUnreconciled = !row.reconciled;
@@ -237,7 +239,6 @@ block content
             let totalDebit = 0;
             let totalCredit = 0;
             const rows = [];
-            const tranDates = [];
 
             for (const cb of selected) {
                 const rowEl = cb.closest('tr');
@@ -254,22 +255,21 @@ block content
                     return;
                 }
 
+                // Get debit and credit values
+                const debit = parseFloat(cb.dataset.debit || 0);
+                const credit = parseFloat(cb.dataset.credit || 0);
+
                 // Calculate totals
-                totalDebit += parseFloat(cb.dataset.debit || 0);
-                totalCredit += parseFloat(cb.dataset.credit || 0);
+                totalDebit += debit;
+                totalCredit += credit;
 
-                // Collect transaction dates
-                if (cb.dataset.tranDate) {
-                    tranDates.push(cb.dataset.tranDate);
-                }
-
-                // Prepare payload
+                // Prepare payload - send Debit and Credit separately
                 rows.push({
                     source_table: cb.dataset.sourceTable,
                     source_id: cb.dataset.sourceId,
-                    amount: parseFloat(cb.dataset.debit || 0) || parseFloat(cb.dataset.credit || 0),
-                    entry_type: parseFloat(cb.dataset.debit || 0) > 0 ? 'DEBIT' : 'CREDIT',
-                    tran_date: cb.dataset.tranDate
+                    Debit: debit,
+                    Credit: credit,
+                    Date: cb.dataset.date
                 });
             }
 
@@ -297,8 +297,8 @@ block content
             // If there's a difference (but within limit), show modal for notes
             if (diff > 0) {
                 // Get earliest date from selected transactions
-                const dates = tranDates.map(d => {
-                    const parts = d.split('-');
+                const dates = rows.map(row => {
+                    const parts = row.Date.split('-');
                     return new Date(parts[2], parts[1] - 1, parts[0]);
                 });
                 const earliestDate = new Date(Math.min(...dates));
@@ -330,7 +330,7 @@ block content
                     alert("Manual Match Saved. Match ID = " + result.match_id);
                     location.reload();
                 } else {
-                    alert(result.error || "Unknown error");
+                    alert(result.error || result.message || "Unknown error");
                 }
 
             } catch (err) {
@@ -364,6 +364,7 @@ block content
             }
             
             const earliestDate = document.getElementById('earliestDate').value;
+            const vendorId = document.getElementById('company_id').value;
             
             try {
                 const response = await fetch('/digital-recon/save-difference', {
@@ -375,7 +376,8 @@ block content
                     body: JSON.stringify({
                         rows: currentSelectedRows,
                         notes: notes,
-                        earliestDate: earliestDate
+                        earliestDate: earliestDate,
+                        vendorId: vendorId 
                     })
                 });
 
@@ -396,7 +398,13 @@ block content
         }
 
         // Load Historical Differences
-        async function loadHistoricalDifferences(fromDate, toDate) {
+        
+        async function loadHistoricalDifferences(fromDate, toDate, vendorId) {  // ← Add vendorId parameter
+            if (!vendorId) {
+                console.log('No vendor selected, skipping historical differences');
+                return;
+            }
+            
             try {
                 const response = await fetch('/digital-recon/get-differences', {
                     method: 'POST',
@@ -406,7 +414,8 @@ block content
                     },
                     body: JSON.stringify({
                         fromDate: fromDate,
-                        toDate: toDate
+                        toDate: toDate,
+                        vendorId: vendorId
                     })
                 });
 
@@ -422,7 +431,6 @@ block content
             }
         }
 
-        
         // Display Historical Differences
         function displayHistoricalDifferences(differences) {
             const tbody = document.getElementById('historicalDifferencesBody');
@@ -466,6 +474,7 @@ block content
             
             document.getElementById('historicalDifferencesSection').style.display = 'block';
         }
+
         // Helper function to format date
         function formatDate(dateString) {
             const date = new Date(dateString);
@@ -702,8 +711,10 @@ block content
             // Load historical differences if dates are available
             const fromDate = document.getElementById('fromclosingDate').value;
             const toDate = document.getElementById('toclosingDate').value;
+            const vendorSelect = document.getElementById('company_id');
+            const vendorId = vendorSelect ? vendorSelect.value : null; 
             if (fromDate && toDate) {
-                loadHistoricalDifferences(fromDate, toDate);
+                loadHistoricalDifferences(fromDate, toDate, vendorId); 
             }
         });
 
