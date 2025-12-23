@@ -360,23 +360,26 @@ module.exports = {
 
      
     
-      let totalCardSummarySales = 0;
+  let totalCardSummarySales = 0;
 
-     cardSalesSummaryData.forEach((cardSummarySales) => {
+  cardSalesSummaryData.forEach((cardSummarySales) => {
+      totalCardSummarySales += parseFloat(cardSummarySales.amt);
 
-        totalCardSummarySales += parseFloat(cardSummarySales.amt);
-
-        CardSaleSummarylist.push({          
+      CardSaleSummarylist.push({
+          'Date': cardSummarySales.transaction_date,
           'Digital': cardSummarySales.name,           
-           Amount: cardSummarySales.amt
-        });
+          Amount: cardSummarySales.amt
       });
-      
-       // Push the total amount after the loop
-       CardSaleSummarylist.push({        
-        'Credit Party': 'Total',        
-        Amount: totalCardSummarySales 
-      });
+  });
+    
+  // Push the total amount after the loop
+  CardSaleSummarylist.push({
+      'Date': '-',
+      'Digital': 'Total',        
+      Amount: totalCardSummarySales 
+  });
+
+
      
       let totalCashSales = 0;   
 
