@@ -54,7 +54,7 @@ block content
                                 a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t" onclick=`calculateAll2TProducts(this)`) 2T Sales
                     if(user.isAdmin)
                         li.nav-item.col-md
-                            a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Cash Sales
+                            a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Lube Sales
                     else
                         li.nav-item.col-md.active
                             a.nav-link.active#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Lube Sales
@@ -342,7 +342,7 @@ block content
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedRow('cash-sale')") Add cash sales
+                            button.btn.btn-info(type="button", onClick="showAddedRow('cash-sale')") Add Lube sales
 
                     div.row
                         div.col &nbsp;
@@ -557,7 +557,7 @@ block content
                                     div.row
                                         // Summary: Cash sales
                                         div.col-6#v-cash-sale
-                                            h6.sub-header Cash Sales
+                                            h6.sub-header Lube Sales
                                             div.table-responsive#vis-cash-sale-table
                                                 table.table.table-sm
                                                     thead.thead-light
@@ -688,7 +688,7 @@ block content
                                 div.col &nbsp;
                             div(align="center")
                                 span
-                                    button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home_tab\')') CLOSE &raquo;
+                                    button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home\')') CLOSE &raquo;
     script.    
         var vehicleData = !{JSON.stringify(vehicleData || {})};        
         window.pumpsData = !{JSON.stringify(pumps)};
