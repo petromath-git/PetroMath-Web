@@ -1,0 +1,433 @@
+extends layout
+
+block content
+    script.
+        const MANUAL_TOLERANCE = !{manualTolerance};
+        let currentData = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const rawData = !{JSON.stringify(transactions || [])};
+            currentData = rawData;
+            
+            const container = document.getElementById('recon-table-container');
+            if (container && currentData.length > 0) {
+                container.innerHTML = renderTable(currentData, 'Bank Deposit Reconciliation', ['CashflowAmount', 'BankAmount']);
+                updateTotals(currentData);
+            }
+
+            // Initialize date inputs
+            initializeDateInputs();
+        });
+
+        function renderTable(array, title, numberColumns) {
+            if (!array || array.length === 0) {
+                return '<div class="alert alert-info text-center">No transactions found for the selected period.</div>';
+            }
+
+            let result = "<div class='table-responsive'>";
+            result += "<table class='table table-sm table-bordered table-hover' style='font-size: 0.9rem;'>";
+
+            if (array.length > 0) {
+                result += "<thead class='thead-light' style='position: sticky; top: 0; z-index: 10; background: #f8f9fa;'>";
+                result += "<tr>";
+                result += "<th class='text-center' style='width:50px; border: 1px solid #dee2e6;'>Select</th>";
+                result += "<th class='text-center' style='width:80px; border: 1px solid #dee2e6;'>Match ID</th>";
+
+                Object.keys(array[0]).forEach(key => {
+                    if (key !== 'reconciled' && 
+                        key !== 'match_id' && 
+                        key !== 'reconciliation_pass' && 
+                        key !== 'source_table' && 
+                        key !== 'source_id' &&
+                        key !== 'manual_recon_flag' &&
+                        key !== 'DateObj') {
+                        const widthStyle = key === 'Description' ? "max-width:300px;" : 
+                                         key === 'Type' ? "max-width:150px;" : 
+                                         key === 'BankAccount' ? "max-width:200px;" : "";
+                        result += `<th class='text-center' style='border: 1px solid #dee2e6; ${widthStyle}'>${key}</th>`;
+                    }
+                });
+                result += "<th class='text-center' style='width:100px; border: 1px solid #dee2e6;'>Status</th>";
+                result += "</tr></thead>";
+            }
+
+            result += "<tbody>";
+
+            for (let i = 0; i < array.length; i++) {
+                let row = array[i];
+                let rowClass = '';
+
+                result += `<tr class='${rowClass}'>`;
+
+                // Checkbox
+                result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>
+                                <input type='checkbox' 
+                                    class='row-select txn-checkbox' 
+                                    onchange='updateSelectedTotals()'
+                                    data-cashflow='${row.CashflowAmount || 0}' 
+                                    data-bank='${row.BankAmount || 0}'
+                                    data-source-table='${row.source_table || ""}'
+                                    data-source-id='${row.source_id || ""}'
+                                    data-manual-flag='${row.manual_recon_flag || 0}'
+                                >
+                            </td>`;
+
+                // Match ID with unmatch button
+                const matchId = row.match_id || '';
+                const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
+                let matchIdContent = matchId || '-';
+                if (matchId && row.manual_recon_flag === 1) {
+                    matchIdContent = `${matchId} <button class='btn btn-xs btn-outline-danger' onclick='unmatchTransaction(${matchId})' title='Unmatch'><i class='bi bi-x'></i></button>`;
+                }
+                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${matchIdContent}</td>`;
+
+                // Data columns
+                Object.keys(row).forEach(key => {
+                    if (key !== 'reconciled' &&
+                        key !== 'match_id' &&
+                        key !== 'reconciliation_pass' &&
+                        key !== 'source_table' &&
+                        key !== 'source_id' &&
+                        key !== 'manual_recon_flag' &&
+                        key !== 'DateObj') {
+                        let dataValue = row[key];
+                        const isAmount = numberColumns.includes(key);
+                        const isUnreconciled = !row.reconciled;
+                        const amountClass = isAmount && isUnreconciled ? 'unreconciled-amount' : '';
+                        const tdClass = (key === 'Description') ? 'description-cell' : '';
+
+                        if (isAmount && dataValue && !isNaN(dataValue)) {
+                            const printedValue = new Intl.NumberFormat('en-IN', {
+                                style: 'decimal',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            }).format(dataValue);
+                            result += `<td class='text-right ${amountClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${printedValue}</td>`;
+                        } else {
+                            result += `<td class='${tdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${dataValue || '-'}</td>`;
+                        }
+                    }
+                });
+
+                // Status icon
+                let statusIcon;
+                if (row.reconciled) {
+                    statusIcon = "<i class='bi bi-check-circle-fill text-success' title='Matched'></i>";
+                } else {
+                    statusIcon = "<i class='bi bi-x-circle text-muted' title='Unmatched'></i>";
+                }
+
+                result += `<td class='text-center' style='border: 1px solid #dee2e6; vertical-align: middle;'>${statusIcon}</td>`;
+                result += "</tr>";
+            }
+
+            result += "</tbody></table></div>";
+            return result;
+        }
+
+        function updateSelectedTotals() {
+            const selected = document.querySelectorAll('.row-select:checked');
+            const summary = document.getElementById('selected-summary');
+            
+            if (selected.length === 0) {
+                summary.classList.add('d-none');
+                return;
+            }
+
+            let totalCashflow = 0;
+            let totalBank = 0;
+
+            selected.forEach(cb => {
+                totalCashflow += parseFloat(cb.dataset.cashflow || 0);
+                totalBank += parseFloat(cb.dataset.bank || 0);
+            });
+
+            const diff = Math.abs(totalCashflow - totalBank);
+
+            document.getElementById('selected-count').textContent = selected.length;
+            document.getElementById('selected-cashflow').textContent = totalCashflow.toFixed(2);
+            document.getElementById('selected-bank').textContent = totalBank.toFixed(2);
+            document.getElementById('selected-diff').textContent = diff.toFixed(2);
+
+            summary.classList.remove('d-none');
+        }
+
+        function clearSelections() {
+            document.querySelectorAll('.row-select:checked').forEach(cb => cb.checked = false);
+            updateSelectedTotals();
+        }
+
+        async function submitManualMatch() {
+            const selected = document.querySelectorAll('.row-select:checked');
+
+            if (selected.length < 2) {
+                alert("Select at least two rows to manually match.");
+                return;
+            }
+
+            let totalCashflow = 0;
+            let totalBank = 0;
+            const rows = [];
+
+            for (const cb of selected) {
+                const rowEl = cb.closest('tr');
+                const matchIdCell = rowEl.children[1];
+                const matchId = matchIdCell ? matchIdCell.innerText.trim() : "";
+                const manualFlag = parseInt(cb.dataset.manualFlag || 0);
+
+                // Check if already reconciled
+                if (matchId && matchId !== "-" && manualFlag === 1) {
+                    alert("One or more selected rows are already reconciled. Please unmatch first.");
+                    return;
+                }
+
+                totalCashflow += parseFloat(cb.dataset.cashflow || 0);
+                totalBank += parseFloat(cb.dataset.bank || 0);
+
+                rows.push({
+                    source_table: cb.dataset.sourceTable,
+                    source_id: cb.dataset.sourceId,
+                    amount: parseFloat(cb.dataset.cashflow || 0) + parseFloat(cb.dataset.bank || 0)
+                });
+            }
+
+            const diff = Math.abs(totalCashflow - totalBank);
+
+            if (diff > MANUAL_TOLERANCE) {
+                alert(
+                    `Manual match rejected.\n\n` +
+                    `Total Cashflow: ${totalCashflow.toFixed(2)}\n` +
+                    `Total Bank: ${totalBank.toFixed(2)}\n` +
+                    `Difference: ${diff.toFixed(2)} exceeds tolerance (${MANUAL_TOLERANCE}).`
+                );
+                return;
+            }
+
+            try {
+                const response = await fetch('/bank-deposit-recon/manual-match', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ rows })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert("Manual Match Saved.");
+                    location.reload();
+                } else {
+                    alert("Error: " + (result.error || "Unknown error"));
+                }
+            } catch (error) {
+                console.error("Error during manual match:", error);
+                alert("Error saving manual match.");
+            }
+        }
+
+        async function unmatchTransaction(matchId) {
+            if (!confirm(`Are you sure you want to unmatch Match ID: ${matchId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/bank-deposit-recon/unmatch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ matchId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert("Successfully unmatched.");
+                    location.reload();
+                } else {
+                    alert("Error: " + (result.error || "Unknown error"));
+                }
+            } catch (error) {
+                console.error("Error during unmatch:", error);
+                alert("Error unmatching transaction.");
+            }
+        }
+
+        function updateTotals(data) {
+            let unreconciledCashflow = 0, unreconciledBank = 0;
+
+            data.forEach(tx => {
+                if (!tx.reconciled) {
+                    if (tx.CashflowAmount) unreconciledCashflow += parseFloat(tx.CashflowAmount);
+                    if (tx.BankAmount) unreconciledBank += parseFloat(tx.BankAmount);
+                }
+            });
+
+            const diff = unreconciledCashflow - unreconciledBank;
+            const absDiff = Math.abs(diff);
+
+            const formatCurrency = num => new Intl.NumberFormat('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+
+            const colorClass = diff > 0 ? 'text-danger' : (diff < 0 ? 'text-success' : 'text-muted');
+            const labelText = diff > 0 ? 'Cashflow Excess' : (diff < 0 ? 'Bank Excess' : 'Balanced');
+
+            document.getElementById('unreconciled-cashflow').textContent = formatCurrency(unreconciledCashflow);
+            document.getElementById('unreconciled-bank').textContent = formatCurrency(unreconciledBank);
+            document.getElementById('unreconciled-diff').textContent = formatCurrency(absDiff);
+            document.getElementById('diff-label').textContent = labelText;
+            document.getElementById('diff-label').className = colorClass;
+        }
+
+        function liveSearch() {
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const showUnreconciledOnly = document.getElementById('showUnreconciled').checked;
+            const typeFilter = document.getElementById('typeFilter').value;
+
+            let filteredData = currentData;
+
+            if (showUnreconciledOnly) {
+                filteredData = filteredData.filter(row => !row.reconciled);
+            }
+
+            if (typeFilter === 'cashflow') {
+                filteredData = filteredData.filter(row => row.Type === 'Cashflow Deposit');
+            } else if (typeFilter === 'bank') {
+                filteredData = filteredData.filter(row => row.Type === 'Bank Credit');
+            }
+
+            if (searchValue) {
+                filteredData = filteredData.filter(row => {
+                    return Object.values(row).some(value => {
+                        if (value === null || value === undefined) return false;
+                        return value.toString().toLowerCase().includes(searchValue);
+                    });
+                });
+            }
+
+            const container = document.getElementById('recon-table-container');
+            container.innerHTML = renderTable(filteredData, 'Bank Deposit Reconciliation', ['CashflowAmount', 'BankAmount']);
+            updateTotals(filteredData);
+            clearSelections();
+        }
+
+        function initializeDateInputs() {
+            const fromDateInput = document.getElementById('fromDate');
+            const toDateInput = document.getElementById('toDate');
+            
+            if (fromDateInput && toDateInput) {
+                const fromDate = '#{fromDate}';
+                const toDate = '#{toDate}';
+                fromDateInput.value = fromDate;
+                toDateInput.value = toDate;
+            }
+        }
+
+    style.
+        .unreconciled-amount {
+            background-color: #fff3cd;
+            font-weight: 500;
+        }
+        .description-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .summary-card {
+            position: sticky;
+            top: 60px;
+            z-index: 5;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+    .container-fluid
+        form(method='POST' action='/reports-bank-deposit-recon')
+            .card.mb-3
+                .card-body
+                    .row.align-items-end
+                        .col-md-3
+                            label(for='fromDate') From Date:
+                            input#fromDate.form-control(type='date' name='fromDate' required)
+                        
+                        .col-md-3
+                            label(for='toDate') To Date:
+                            input#toDate.form-control(type='date' name='toDate' required)
+                        
+                        .col-md-3
+                            label(for='bank_id') Bank Account:
+                            select#bank_id.form-control(name='bank_id')
+                                option(value='0') All Internal Banks
+                                if bankAccounts
+                                    each account in bankAccounts
+                                        option(value=account.bank_id selected=(account.bank_id == selectedBankId))= account.display_name
+                        
+                        .col-md-3
+                            label &nbsp;
+                            button.btn.btn-primary.btn-block(type='submit') Generate Report
+
+            .card.mb-3
+                .card-body
+                    .row
+                        .col-md-4
+                            label(for='searchInput') Search:
+                            input#searchInput.form-control(type='text' placeholder='Search transactions...' oninput='liveSearch()')
+                        
+                        .col-md-3
+                            label(for='typeFilter') Filter by Type:
+                            select#typeFilter.form-control(onchange='liveSearch()')
+                                option(value='all') All Transactions
+                                option(value='cashflow') Cashflow Deposits Only
+                                option(value='bank') Bank Credits Only
+                        
+                        .col-md-3
+                            label &nbsp;
+                            .form-check.mt-2
+                                input#showUnreconciled.form-check-input(type='checkbox' onchange='liveSearch()')
+                                label.form-check-label(for='showUnreconciled') Show Only Unreconciled
+
+    .container-fluid
+        if transactions && transactions.length > 0
+            div
+                h5.text-center.mb-1 Bank Deposit Reconciliation Report                
+                p.text-center.text-muted
+                    i.bi.bi-calendar-range.me-2
+                    = `${formattedFromDate} to ${formattedToDate}`
+
+             
+                div#recon-table-container
+                
+                #selected-summary.card.shadow-sm.border.mt-2.px-3.py-2.d-none
+                    .d-flex.justify-content-around.align-items-center.small
+                        div
+                            b Selected: 
+                            span#selected-count 0
+                        div
+                            b Cashflow: 
+                            span.text-danger ₹
+                            span#selected-cashflow 0.00
+                        div
+                            b Bank: 
+                            span.text-success ₹
+                            span#selected-bank 0.00
+                        div
+                            b Difference: 
+                            span#selected-diff 0.00
+                        button.btn.btn-sm.btn-primary(onclick='submitManualMatch()')
+                            i.bi.bi-check-all.me-1
+                            | Manual Match    
+                        button.btn.btn-sm.btn-outline-secondary(onclick='clearSelections()')
+                            i.bi.bi-x-circle.me-1
+                            | Clear
+        else
+            .alert.alert-info.text-center.mt-4(role='alert')
+                i.bi.bi-info-circle.me-2
+                | No transactions found for the selected period.
+
+    include overlay.pug
