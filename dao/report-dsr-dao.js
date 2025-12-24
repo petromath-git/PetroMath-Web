@@ -363,14 +363,21 @@ getDigitalSales: async (locationCode, reportDate) => {
     const closing_id = data.map(item => item.closing_id);
     
     const result = await db.sequelize.query(
-        `select tds.vendor_id as creditlist_id,
-                COALESCE(mcl.short_name, mcl.company_name) name,
-                round(sum(tds.amount), 2) amt
-         from t_digital_sales tds
-         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id                                           
-         where mcl.card_flag = 'Y'
-           and tds.closing_id in (:closing_id)
-         group by tds.vendor_id, COALESCE(mcl.short_name, mcl.company_name)`,
+        `SELECT 
+            DATE_FORMAT(COALESCE(tds.transaction_date, tc.closing_date), '%d/%m/%Y') as transaction_date,
+            tds.vendor_id as creditlist_id,
+            COALESCE(mcl.short_name, mcl.company_name) name,
+            ROUND(SUM(tds.amount), 2) amt
+         FROM t_digital_sales tds
+         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
+         INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
+         WHERE mcl.card_flag = 'Y'
+           AND tds.closing_id IN (:closing_id)
+         GROUP BY DATE(COALESCE(tds.transaction_date, tc.closing_date)), 
+                  tds.vendor_id, 
+                  COALESCE(mcl.short_name, mcl.company_name)
+         ORDER BY COALESCE(mcl.short_name, mcl.company_name), 
+                  COALESCE(tds.transaction_date, tc.closing_date)`,
         {
             replacements: { closing_id: closing_id}, 
             type: Sequelize.QueryTypes.SELECT
@@ -378,7 +385,8 @@ getDigitalSales: async (locationCode, reportDate) => {
     );
 
     return result;
-},
+}
+    ,
   getCashsales: async (locationCode, reportDate) => {
     const data =  await module.exports.getclosingid(locationCode,reportDate);
     const closing_id = data.map(item => item.closing_id);
