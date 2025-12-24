@@ -125,11 +125,41 @@ saveReadings: (data) => {
     const salesTxn = TxnDigitalSales.destroy({ where: { digital_sales_id: digitalSalesId } });
     return salesTxn;
     },
-    saveExpenses: (data) => {
-        const expenseTxn = TxnExpenses.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["expense_id", "amount", "notes", "updated_by", "updation_date"]});
-        return expenseTxn;
+    saveExpenses: async (data) => {
+    const newExpenses = data.filter(e => !e.texpense_id);  // ✅ Will be empty array for UPDATE calls
+    const updateExpenses = data.filter(e => e.texpense_id); // ✅ Will be empty array for INSERT calls
+    
+    const results = [];
+        
+        // INSERT new expenses
+        if (newExpenses.length > 0) {
+            const created = await TxnExpenses.bulkCreate(newExpenses, { returning: true });
+            results.push(...created);
+        }
+        
+        // UPDATE existing expenses
+        for (const expense of updateExpenses) {
+            await TxnExpenses.update(
+                {
+                    expense_id: expense.expense_id,
+                    amount: expense.amount,
+                    notes: expense.notes,
+                    updated_by: expense.updated_by,
+                    updation_date: new Date()
+                },
+                {
+                    where: { texpense_id: expense.texpense_id }
+                }
+            );
+            
+            const updated = await TxnExpenses.findByPk(expense.texpense_id);
+            results.push(updated);
+        }
+        
+        return results;
     },
+
+
     deleteExpenseById: (expenseId) => {
         const expenseTxn = TxnExpenses.destroy({ where: { texpense_id: expenseId } });
         return expenseTxn;
