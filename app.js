@@ -167,6 +167,7 @@ const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
 const passwordResetController = require('./controllers/password-reset-controller');
 const txnController = require("./controllers/txn-common-controller");
+const bankDepositReconController = require('./controllers/reports-bank-deposit-recon-controller');
 
 
 
@@ -775,6 +776,34 @@ app.post('/digital-recon/save-difference', isLoginEnsured, function (req, res, n
 
 app.post('/digital-recon/get-differences', isLoginEnsured, function (req, res, next) {
     digitalReconreportsController.getDifferences(req, res, next);
+});
+
+
+
+// ==========================================
+// BANK DEPOSIT RECONCILIATION ROUTES
+// Add these routes to app.js
+// ==========================================
+
+// GET - Display Bank Deposit Reconciliation Report page
+app.get('/reports-bank-deposit-recon', isLoginEnsured, function (req, res, next) {
+    req.body.caller = 'notpdf';
+    bankDepositReconController.getBankDepositReconReport(req, res, next);
+});
+
+// POST - Generate Bank Deposit Reconciliation Report
+app.post('/reports-bank-deposit-recon', isLoginEnsured, function (req, res, next) {
+    bankDepositReconController.getBankDepositReconReport(req, res, next);
+});
+
+// POST - Manual Match
+app.post('/bank-deposit-recon/manual-match', isLoginEnsured, function (req, res, next) {
+    bankDepositReconController.manualMatch(req, res, next);
+});
+
+// POST - Unmatch
+app.post('/bank-deposit-recon/unmatch', isLoginEnsured, function (req, res, next) {
+    bankDepositReconController.unmatch(req, res, next);
 });
 
 app.get('/reports-gst-summary', isLoginEnsured, function (req, res, next) {   
