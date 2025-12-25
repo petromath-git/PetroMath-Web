@@ -170,6 +170,21 @@ module.exports = {
                 }
             }
 
+
+            // GET THE LOCATION_ID FROM DATABASE
+        const locationQuery = `
+            SELECT location_id 
+            FROM m_location 
+            WHERE location_code = :locationCode
+        `;
+        
+        const locationResult = await db.sequelize.query(locationQuery, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        
+        const locationId = locationResult[0]?.location_id;
+
             const bankData = {
                 bank_name: req.body.bank_name,
                 bank_branch: req.body.bank_branch,
@@ -180,7 +195,7 @@ module.exports = {
                 cc_limit: req.body.cc_limit || null,
                 ledger_name: req.body.ledger_name || null,
                 account_nickname: req.body.account_nickname || null,
-                location_id: req.user.location_id,
+                location_id:locationId,
                 internal_flag: req.body.internal_flag || 'N',
                 is_oil_company: req.body.is_oil_company || 'N',
                 active_flag: 'Y',
