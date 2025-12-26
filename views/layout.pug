@@ -103,66 +103,8 @@ html
         // Convert to sorted array by group_sequence
         - var sortedGroups = Object.values(allGroups).sort((a, b) => parseInt(a.group_sequence || 999) - parseInt(b.group_sequence || 999))
 
-        // Helper function for menu icons
-        -
-           function getMenuIcon(menuName, groupName) {
-            // DAILY_OPS group icons
-            if (menuName === 'Cashier Shift') return 'bi-clock';
-            if (menuName === 'Day Close') return 'bi-sunrise';
-            if (menuName === 'Day-Close Report') return 'bi-file-earmark-text';
-            
-            // TRANSACTIONS group icons
-            if (menuName === 'Credit Receipts') return 'bi-credit-card';
-            if (menuName === 'Tank Receipts') return 'bi-receipt';
-            if (menuName === 'Tank Dip Entry') return 'bi-rulers';
-            if (menuName === 'Bank Transaction') return 'bi-bank';
-            if (menuName === 'Purchase Invoice') return 'bi-file-earmark-text';
-            if (menuName === 'Adjustment Entry') return 'bi-arrows-angle-contract';
-            
-            // REPORTS_SECTION group icons
-            if (menuName === 'Reports') return 'bi-graph-up';
-            if (menuName === 'Credit Ledger Account') return 'bi-journal-text';
-            if (menuName === 'Credit Customer Detail Report') return 'bi-person-lines-fill';
-            if (menuName === 'Digital Reconciliation Report') return 'bi-credit-card-2-front';
-            if (menuName === 'Credit Customer Balance Report') return 'bi-calculator';
-            if (menuName === 'GST Summary Report') return 'bi-receipt-cutoff';
-            if (menuName === 'Sales Summary Report') return 'bi-bar-chart';
-            if (menuName === 'Cashflow (Use for Agro Center)') return 'bi-cash-stack';
-            if (menuName === 'Tally Daybook Report') return 'bi-journal-bookmark';
-            if (menuName === 'Adjustment History') return 'bi-clock-history';
-            
-            // ADMIN group icons
-            if (menuName === 'Deadline Manager') return 'bi-calendar-check';
-            if (menuName === 'Select Location') return 'bi-geo-alt';
-            if (menuName === 'Truck Management') return 'bi-truck';
-            if (menuName === 'Truck Load') return 'bi-truck';
-            if (menuName === 'Truck Expense') return 'bi-receipt';
-            if (menuName === 'Password Reset') return 'bi-key';
-            if (menuName === 'Dev Tracker') return 'bi-kanban';
-            
-            // MASTERS group icons
-            if (menuName === 'Masters') return 'bi-gear';
-            if (menuName === 'Users') return 'bi-people';
-            if (menuName === 'Products') return 'bi-box';
-            if (menuName === 'Suppliers') return 'bi-building';
-            if (menuName === 'Customers') return 'bi-person-badge';
-            if (menuName === 'Digital') return 'bi-credit-card-2-front';
-            
-            // AUDITING group icons
-            if (menuName === 'Utilities') return 'bi-tools';
-            if (menuName === 'Auditing Utilities') return 'bi-search';
-            
-            // Default icons by group
-            if (groupName === 'DAILY_OPS') return 'bi-clock';
-            if (groupName === 'TRANSACTIONS') return 'bi-credit-card';
-            if (groupName === 'REPORTS_SECTION') return 'bi-graph-up';
-            if (groupName === 'ADMIN') return 'bi-gear';
-            if (groupName === 'MASTERS') return 'bi-gear';
-            if (groupName === 'AUDITING') return 'bi-tools';
-            
-            // Fallback icon
-            return 'bi-circle';
-          }
+        // // Icons now come from database - no helper function needed
+        
 
         // Render all groups in database sequence order
         each group in sortedGroups
@@ -173,8 +115,7 @@ html
               each menu in group.menus
                 a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
                   span.menu-item-icon
-                    - var iconClass = getMenuIcon(menu.menu_name, group.group_name)
-                    i.bi(class=iconClass)
+                    i.bi(class=menu.icon || 'bi-circle')
                   | #{menu.menu_name}
           else if group.type === 'dropdown' && group.children && group.children.length > 0
             // Dropdown menu group
@@ -186,7 +127,7 @@ html
                 each child in group.children
                   a.menu-item.submenu-item(href=child.url_path, class=(title === child.menu_name ? 'active' : ''))
                     span.menu-item-icon
-                      i.bi.bi-circle(style="font-size: 8px; margin-left: 4px;")
+                      i.bi(class=child.icon || 'bi-circle', style="font-size: 12px; margin-left: 4px;")
                     | #{child.menu_name}
 
       // Main Content Area
