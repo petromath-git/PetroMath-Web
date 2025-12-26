@@ -2,10 +2,6 @@ extends layout
 
 block content
 
-    // Christmas Santa Animation
-    .santa-container#santaWalker
-        img.santa-gif(src="/images/santa-walking.gif" alt="Walking Santa" style="mix-blend-mode: multiply;")
-
     style.
         /* Sticky header styling for home page */
         .table-responsive {
@@ -42,29 +38,6 @@ block content
         .day-close-header td {
             padding: 8px 12px !important;
             font-weight: 500;
-        }
-
-        /* Christmas Santa Animation - Using Real GIF */
-        .santa-container {
-            position: fixed;
-            top: 20px;
-            right: -200px;
-            z-index: 9999;
-            pointer-events: none;
-            animation: santaWalkLeftward 20s linear forwards;
-        }
-
-        @keyframes santaWalkLeftward {
-            0% { right: -200px; }
-            100% { right: calc(100vw + 100px); }
-        }
-
-        .santa-gif {
-            height: 150px;
-            width: auto;
-            filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.3));
-            background: transparent;
-            
         }
         
     // Collapsible Filter Section - Desktop & Mobile
@@ -367,7 +340,9 @@ block content
                             tr(id="deadlineWarning_row_"+index)
                                 td(scope="row")= val.deadlineDate
                                 td(scope="row")= val.message
+    
     script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`)
+    
     script.
         // Toggle filter collapse
         function toggleFilters() {
@@ -527,9 +502,3 @@ block content
                 }
             });
         }
-
-        // Santa auto-remove after animation
-        setTimeout(function() {
-            const santa = document.getElementById('santaWalker');
-            if (santa) santa.remove();
-        }, 20000);
