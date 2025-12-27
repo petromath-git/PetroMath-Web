@@ -29,7 +29,8 @@ module.exports = {
                 'sku_name',
                 'sku_number',
                 'hsn_code',
-                'rgb_color'
+                'rgb_color',
+                'is_tank_product'
             ],
             order: [
                 // Dynamic ordering based on location-specific pump products
@@ -167,6 +168,7 @@ findPumpProducts: async (locationCode) => {
         if (product.sku_name) updateFields.sku_name = product.sku_name;
         if (product.sku_number) updateFields.sku_number = product.sku_number;
         if (product.hsn_code) updateFields.hsn_code = product.hsn_code;
+        if (product.is_tank_product !== undefined) updateFields.is_tank_product = product.is_tank_product;
 
         return Product.update(updateFields, {
             where: {

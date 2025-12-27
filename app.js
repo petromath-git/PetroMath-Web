@@ -154,6 +154,7 @@ const cashflowReportsController = require("./controllers/reports-cashflow-contro
 const dsrReportsController = require("./controllers/reports-dsr-controller");
 const gstsummaryreportsController = require("./controllers/reports-gst-summary-controller");
 const digitalReconreportsController = require("./controllers/reports-digital-recon-controller");
+const digitalSalesCorrectionsRoutes = require('./routes/digital-sales-corrections-routes');   
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const dashBoardController = require("./controllers/dashboard-controller");
@@ -377,6 +378,7 @@ app.use('/location-config', locationConfigRoutes);
 //app.use("/account-heads", accountHeadsRoutes);
 app.use('/digital-vendors', digitalVendorsRoutes);
 app.use('/important-links', importantLinksRoutes);
+app.use('/digital-sales-corrections', digitalSalesCorrectionsRoutes);
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
@@ -777,6 +779,8 @@ app.post('/digital-recon/save-difference', isLoginEnsured, function (req, res, n
 app.post('/digital-recon/get-differences', isLoginEnsured, function (req, res, next) {
     digitalReconreportsController.getDifferences(req, res, next);
 });
+
+
 
 
 

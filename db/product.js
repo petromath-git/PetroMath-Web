@@ -74,6 +74,12 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(20),
             allowNull: true,
             defaultValue: '200,200,200'
+        },
+        is_tank_product: {
+            type: DataTypes.TINYINT(1),
+            allowNull: true,
+            defaultValue: 0,
+            field: 'is_tank_product'
         }
     }, {
         timestamps: false,
