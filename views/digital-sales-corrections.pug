@@ -1,0 +1,418 @@
+extends layout
+
+block content
+    .container-fluid.mt-4
+        .row
+            .col-12
+                .card
+                    .card-header.sticky-top.bg-white.border-bottom
+                        .d-flex.justify-content-between.align-items-center
+                            h5.card-title.mb-0
+                                i.bi.bi-credit-card.text-primary.me-2
+                                | Digital Sales Corrections
+                            .text-muted
+                                | Correct vendor assignments for digital sales
+                    
+                    .card-body
+                        // Search Filters
+                        form#searchForm.mb-4
+                            .row.g-3
+                                .col-md-3.col-sm-6
+                                    label.form-label From Date:
+                                    input#fromDate.form-control(type='date' name='fromDate' required)
+                                .col-md-3.col-sm-6
+                                    label.form-label To Date:
+                                    input#toDate.form-control(type='date' name='toDate' required)
+                                .col-md-3.col-sm-6
+                                    label.form-label Vendor:
+                                    select#vendorFilter.form-control(name='vendorFilter')
+                                        option(value='') All Vendors
+                                .col-md-3.col-sm-6
+                                    label.form-label Min Amount:
+                                    input#minAmount.form-control(type='number' name='minAmount' step='0.01' min='0' placeholder='Min')
+                                .col-md-3.col-sm-6
+                                    label.form-label Max Amount:
+                                    input#maxAmount.form-control(type='number' name='maxAmount' step='0.01' min='0' placeholder='Max')
+                                .col-md-3.col-sm-6.d-flex.align-items-end
+                                    button#searchBtn.btn.btn-primary.w-100(type='submit')
+                                        i.bi.bi-search.me-2
+                                        | Search
+                        
+                        // Results Section
+                        #resultsSection(style='display:none')
+                            .d-flex.justify-content-between.align-items-center.mb-3
+                                h6.mb-0 Search Results
+                                #resultCount.text-muted
+                            
+                            // Desktop Table View
+                            .table-responsive.d-none.d-md-block(style="max-height: 60vh; overflow-y: auto;")
+                                table#transactionsTable.table.table-hover.table-sm.mb-0
+                                    thead.thead-dark.sticky-top
+                                        tr
+                                            th(scope="col") Date
+                                            th(scope="col") DS ID
+                                            th(scope="col") Vendor
+                                            th(scope="col") Amount
+                                            th(scope="col") Notes
+                                            th(scope="col") Actions
+                                    tbody#transactionsList
+                                        // Results will be populated here
+                            
+                            // Mobile Card View
+                            #transactionsCardList.d-md-none
+                                // Mobile cards will be populated here
+                        
+                        // No Results Message
+                        #noResults.alert.alert-info(style='display:none')
+                            i.bi.bi-info-circle.me-2
+                            | No transactions found for the selected criteria.
+
+    // Vendor Edit Modal
+    #vendorEditModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-dialog-centered
+            .modal-content
+                .modal-header
+                    h5.modal-title.fw-bold
+                        i.bi.bi-credit-card.me-2
+                        | Change Vendor
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                
+                .modal-body
+                    // Transaction info card
+                    .card.mb-3.bg-light
+                        .card-body.py-2
+                            .row.g-2
+                                .col-6.col-md-4
+                                    small.text-muted DS ID:
+                                    .fw-semibold#modalDsId -
+                                .col-6.col-md-4
+                                    small.text-muted Amount:
+                                    .fw-semibold#modalAmount -
+                                .col-12.col-md-4
+                                    small.text-muted Date:
+                                    .fw-semibold#modalDate -
+                    
+                    form#vendorEditForm
+                        .row.g-3
+                            .col-12
+                                label.form-label(for='currentVendor') Current Vendor:
+                                input#currentVendor.form-control(type='text' readonly)
+                            
+                            .col-12
+                                label.form-label(for='newVendor') 
+                                    | New Vendor: 
+                                    span.text-danger *
+                                select#newVendor.form-control(required)
+                                    option(value='') Select Vendor...
+                                .form-text Choose the correct digital vendor for this transaction
+                            
+                            .col-12
+                                label.form-label(for='vendorReason') 
+                                    | Reason for Change: 
+                                    span.text-danger *
+                                textarea#vendorReason.form-control(rows='2' placeholder='Required: Explain why the vendor is being changed' required)
+                            
+                            .col-12
+                                .alert.alert-warning.py-2
+                                    .d-flex.align-items-start
+                                        i.bi.bi-exclamation-triangle.me-2.mt-1.text-warning
+                                        div
+                                            small.fw-semibold Warning
+                                            .small This change affects vendor reconciliation and financial records.
+                
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button#saveVendorBtn.btn.btn-primary(type='button' onclick='saveVendorChange()') Save Changes
+
+    script.       
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set default date range (last 30 days)
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(today.getDate() - 30);
+            
+            document.getElementById('fromDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+            document.getElementById('toDate').value = today.toISOString().split('T')[0];
+            
+            // Load vendors dropdown
+            loadVendors();
+            
+            // Search form handler
+            document.getElementById('searchForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                searchTransactions();
+            });
+        });
+
+        // Load vendors for dropdown
+        async function loadVendors() {
+            try {
+                const response = await fetch('/digital-sales-corrections/vendors');
+                const data = await response.json();
+                
+                const select = document.getElementById('vendorFilter');
+                select.innerHTML = '<option value="">All Vendors</option>';
+                
+                if (data.success && data.vendors) {
+                    data.vendors.forEach(vendor => {
+                        const option = document.createElement('option');
+                        option.value = vendor.creditlist_id;
+                        option.textContent = vendor.company_name;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading vendors:', error);
+            }
+        }
+
+        // Search transactions
+        async function searchTransactions() {
+            const fromDate = document.getElementById('fromDate').value;
+            const toDate = document.getElementById('toDate').value;
+            const vendorFilter = document.getElementById('vendorFilter')?.value || '';
+            const minAmount = document.getElementById('minAmount')?.value || '';
+            const maxAmount = document.getElementById('maxAmount')?.value || '';
+            
+            if (!fromDate || !toDate) {
+                showAlert('warning', 'Please select both from and to dates');
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const params = new URLSearchParams({
+                    fromDate: fromDate,
+                    toDate: toDate,
+                    vendorFilter: vendorFilter,
+                    minAmount: minAmount,
+                    maxAmount: maxAmount
+                });
+                
+                const response = await fetch(`/digital-sales-corrections/search?${params}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayTransactions(data.transactions);
+                    document.getElementById('resultCount').textContent = `${data.transactions.length} transactions found`;
+                } else {
+                    throw new Error(data.error || 'Failed to search transactions');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                showAlert('danger', 'Error searching transactions: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Display transactions in table and cards
+        function displayTransactions(transactions) {
+            const tbody = document.getElementById('transactionsList');
+            const cardList = document.getElementById('transactionsCardList');
+            const resultsSection = document.getElementById('resultsSection');
+            const noResults = document.getElementById('noResults');
+            
+            if (transactions.length === 0) {
+                resultsSection.style.display = 'none';
+                noResults.style.display = 'block';
+                return;
+            }
+            
+            // Clear existing content
+            tbody.innerHTML = '';
+            cardList.innerHTML = '';
+            
+            transactions.forEach(transaction => {
+                // Format date
+                const date = new Date(transaction.display_date).toLocaleDateString('en-IN');
+                
+                // Format amount
+                const amount = parseFloat(transaction.amount || 0).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                
+                // Desktop table row
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${date}</td>
+                    <td>DS-${transaction.digital_sales_id}</td>
+                    <td>${transaction.vendor_name || '-'}</td>
+                    <td class="text-end">₹${amount}</td>
+                    <td><small>${transaction.notes || '-'}</small></td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="editVendor(${transaction.digital_sales_id}, '${transaction.vendor_name}', ${transaction.vendor_id}, '${date}', '${amount}')">
+                            <i class="bi bi-credit-card"></i> Change Vendor
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+                
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'card mb-2';
+                card.innerHTML = `
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h6 class="mb-1">DS-${transaction.digital_sales_id}</h6>
+                                <small class="text-muted">${date}</small>
+                            </div>
+                            <span class="badge bg-primary">₹${amount}</span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Vendor:</small><br>
+                            <strong>${transaction.vendor_name || '-'}</strong>
+                        </div>
+                        ${transaction.notes ? `
+                        <div class="mb-2">
+                            <small class="text-muted">Notes:</small><br>
+                            <small>${transaction.notes}</small>
+                        </div>
+                        ` : ''}
+                        <button class="btn btn-outline-primary btn-sm w-100" onclick="editVendor(${transaction.digital_sales_id}, '${transaction.vendor_name}', ${transaction.vendor_id}, '${date}', '${amount}')">
+                            <i class="bi bi-credit-card"></i> Change Vendor
+                        </button>
+                    </div>
+                `;
+                cardList.appendChild(card);
+            });
+            
+            resultsSection.style.display = 'block';
+            noResults.style.display = 'none';
+        }
+
+        // Edit vendor
+        function editVendor(digitalSalesId, currentVendor, currentVendorId, displayDate, amount) {
+            // Populate modal data
+            document.getElementById('modalDsId').textContent = 'DS-' + digitalSalesId;
+            document.getElementById('modalAmount').textContent = '₹' + amount;
+            document.getElementById('modalDate').textContent = displayDate;
+            document.getElementById('currentVendor').value = currentVendor;
+            document.getElementById('vendorReason').value = '';
+            
+            // Load vendors for dropdown
+            loadVendorsForModal(currentVendorId);
+            
+            // Store digital sales ID for save
+            document.getElementById('saveVendorBtn').setAttribute('data-digital-sales-id', digitalSalesId);
+            
+            // Show modal
+            $('#vendorEditModal').modal('show');
+        }
+
+        // Load vendors for modal
+        async function loadVendorsForModal(currentVendorId) {
+            try {
+                const response = await fetch('/digital-sales-corrections/vendors');
+                const data = await response.json();
+                
+                const select = document.getElementById('newVendor');
+                select.innerHTML = '<option value="">Select Vendor...</option>';
+                
+                if (data.success && data.vendors) {
+                    data.vendors.forEach(vendor => {
+                        const option = document.createElement('option');
+                        option.value = vendor.creditlist_id;
+                        option.textContent = vendor.company_name;
+                        if (vendor.creditlist_id == currentVendorId) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading vendors for modal:', error);
+            }
+        }
+
+        // Save vendor change
+        async function saveVendorChange() {
+            const digitalSalesId = document.getElementById('saveVendorBtn').getAttribute('data-digital-sales-id');
+            const newVendorId = document.getElementById('newVendor').value;
+            const reason = document.getElementById('vendorReason').value;
+            
+            if (!newVendorId) {
+                showAlert('warning', 'Please select a vendor');
+                return;
+            }
+            
+            if (!reason.trim()) {
+                showAlert('warning', 'Please provide a reason for the change');
+                return;
+            }
+            
+            const btn = document.getElementById('saveVendorBtn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            
+            try {
+                const response = await fetch(`/digital-sales-corrections/digital-sales/${digitalSalesId}/vendor`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        newVendorId: parseInt(newVendorId),
+                        reason: reason
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Close modal
+                    $('#vendorEditModal').modal('hide');
+                    
+                    // Show success message
+                    showAlert('success', 'Vendor updated successfully');
+                    
+                    // Refresh search results
+                    searchTransactions();
+                } else {
+                    throw new Error(data.error || 'Failed to update vendor');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('danger', 'Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // Show loading state
+        function showLoading(show) {
+            const btn = document.getElementById('searchBtn');
+            if (show) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-search me-2"></i>Search';
+            }
+        }
+
+        // Show alert messages
+        function showAlert(type, message) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            const container = document.querySelector('.container-fluid');
+            container.insertAdjacentHTML('afterbegin', alertHtml);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                const alert = container.querySelector('.alert');
+                if (alert) alert.remove();
+            }, 5000);
+        }
