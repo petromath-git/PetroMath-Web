@@ -21,7 +21,8 @@ module.exports = {
         sku_number: req.body.m_product_sku_number_0,
         hsn_code: req.body.m_product_hsn_code_0,
         created_by: req.user.Person_id,
-        updated_by: req.user.Person_id
+        updated_by: req.user.Person_id,
+        is_tank_product: req.body.m_product_is_tank_product_0 ? 1 : 0
     };
     return data;
 },
