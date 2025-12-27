@@ -43,6 +43,8 @@ block content
                             th(scope="col") Ledger Name
                             th(scope="col") CGST%
                             th(scope="col") SGST%
+                            if user.Role === 'SuperUser'
+                                th(scope="col").text-center Tank Product
                             th(scope="col") Edit
                     tbody
                         each val, index in products
@@ -123,10 +125,24 @@ block content
                                         )
                                         .input-group-append
                                             span.input-group-text %
+                                if user.Role === 'SuperUser'
+                                    td(scope="row").text-center
+                                        .form-check.d-inline-block
+                                            input.form-check-input(
+                                                type="checkbox",
+                                                id=`is-tank-product-${index}`,
+                                                checked=val.is_tank_product ? true : false,
+                                                disabled
+                                            )
+                                            label.form-check-label(for=`is-tank-product-${index}`)
+                                                if val.is_tank_product
+                                                    span.badge.badge-success Tank
+                                                else
+                                                    span.badge.badge-secondary -
                                 td(scope="row")
                                     button.btn.btn-primary.btn-sm(
                                         type="button", 
-                                        onclick=`editProduct(${index}, ${val.id})`
+                                        onclick=`editProduct(${index}, ${val.id}, ${val.is_tank_product ? 1 : 0})`
                                     )
                                         i.bi.bi-pencil
 
@@ -139,10 +155,13 @@ block content
                             .card-header.d-flex.justify-content-between.align-items-center
                                 .product-name
                                     strong= val.name
+                                    if user.Role === 'SuperUser' && val.is_tank_product
+                                        |  
+                                        span.badge.badge-success.ml-2 Tank
                                 .product-actions
                                     button.btn.btn-primary.btn-sm(
                                         type="button", 
-                                        onclick=`editProductMobile(${index}, ${val.id})`
+                                        onclick=`editProductMobile(${index}, ${val.id}, ${val.is_tank_product ? 1 : 0})`
                                     )
                                         i.bi.bi-pencil
                             .card-body.p-3
@@ -239,6 +258,18 @@ block content
                                                 )
                                                 .input-group-append
                                                     span.input-group-text %
+                                    if user.Role === 'SuperUser'
+                                        .col-12
+                                            .product-detail
+                                                .form-check
+                                                    input.form-check-input(
+                                                        type="checkbox",
+                                                        id=`mobile-is-tank-product-${index}`,
+                                                        checked=val.is_tank_product ? true : false,
+                                                        disabled
+                                                    )
+                                                    label.form-check-label(for=`mobile-is-tank-product-${index}`)
+                                                        strong Tank Product
 
     // Add Product Modal
     .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
@@ -281,9 +312,20 @@ block content
                             .col-md-6.mb-3
                                 label.form-label SGST %
                                 input.form-control(type="number", name="sgst_percent", step="0.01", min="0", max="100")
+                            if user.Role === 'SuperUser'
+                                .col-md-12.mb-3
+                                    .alert.alert-warning.mb-2
+                                        i.bi.bi-exclamation-triangle-fill.me-2
+                                        strong Critical Flag
+                                    .form-check
+                                        input.form-check-input#is_tank_product(type="checkbox", name="is_tank_product", value="1")
+                                        label.form-check-label(for="is_tank_product") 
+                                            strong Mark as Tank Product
+                                            br
+                                            small.text-muted Check this only if this product is used in storage tanks
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
-                                            button.btn.btn-success(type="submit", form="addProductForm") Add Product
+                    button.btn.btn-success(type="submit", form="addProductForm") Add Product
 
         // End of main-content wrapper
     
@@ -423,12 +465,14 @@ block content
 
     // JavaScript for product management
     script.
+        const userRole = '#{user.Role}';
+        
         // Auto-uppercase function for text inputs
         function makeUppercase(input) {
             input.value = input.value.toUpperCase();
         }
         
-        function editProduct(index, productId) {
+        function editProduct(index, productId, isTankProduct) {
             // Enable editing for the specific product row
             const row = document.getElementById(`product-row-${index}`);
             const inputs = row.querySelectorAll('input[readonly]');
@@ -447,6 +491,14 @@ block content
                 }
             });
             
+            // Enable tank product checkbox for SuperUser
+            if (userRole === 'SuperUser') {
+                const tankCheckbox = document.getElementById(`is-tank-product-${index}`);
+                if (tankCheckbox) {
+                    tankCheckbox.removeAttribute('disabled');
+                }
+            }
+            
             // Change edit button to save button
             const editBtn = row.querySelector('button');
             editBtn.innerHTML = '<i class="bi bi-check"></i>';
@@ -455,7 +507,7 @@ block content
             editBtn.setAttribute('onclick', `saveProduct(${index}, ${productId})`);
         }
         
-        function editProductMobile(index, productId) {
+        function editProductMobile(index, productId, isTankProduct) {
             // Enable editing for mobile card inputs
             const card = document.getElementById(`mobile-product-card-${index}`);
             const inputs = card.querySelectorAll('input[readonly]');
@@ -474,6 +526,14 @@ block content
                 }
             });
             
+            // Enable tank product checkbox for SuperUser
+            if (userRole === 'SuperUser') {
+                const tankCheckbox = document.getElementById(`mobile-is-tank-product-${index}`);
+                if (tankCheckbox) {
+                    tankCheckbox.removeAttribute('disabled');
+                }
+            }
+            
             // Change edit button to save button
             const editBtn = card.querySelector('button');
             editBtn.innerHTML = '<i class="bi bi-check"></i>';
@@ -491,6 +551,14 @@ block content
                 m_product_sgst: document.getElementById(`mobile-sgst-${index}`).value
             };
             
+            // SuperUser can update is_tank_product flag
+            if (userRole === 'SuperUser') {
+                const isTankProductCheckbox = document.getElementById(`mobile-is-tank-product-${index}`);
+                if (isTankProductCheckbox) {
+                    updateData.m_product_is_tank_product = isTankProductCheckbox.checked ? 1 : 0;
+                }
+            }
+            
             fetch(`/products/api/${productId}`, {
                 method: 'PUT',
                 headers: {
@@ -502,20 +570,7 @@ block content
             .then(data => {
                 if (data.success) {
                     showMessage('Product updated successfully', 'success');
-                    // Reset mobile card to readonly state
-                    const card = document.getElementById(`mobile-product-card-${index}`);
-                    const inputs = card.querySelectorAll('input');
-                    inputs.forEach(input => {
-                        input.setAttribute('readonly', true);
-                        input.classList.remove('editable');
-                    });
-                    
-                    // Change save button back to edit button
-                    const saveBtn = card.querySelector('button');
-                    saveBtn.innerHTML = '<i class="bi bi-pencil"></i>';
-                    saveBtn.classList.remove('btn-success');
-                    saveBtn.classList.add('btn-primary');
-                    saveBtn.setAttribute('onclick', `editProductMobile(${index}, ${productId})`);
+                    setTimeout(() => location.reload(), 1000);
                 } else {
                     showMessage('Error updating product: ' + data.error, 'danger');
                 }
@@ -536,6 +591,14 @@ block content
                 m_product_sgst: document.getElementById(`product-sgst-${index}`).value
             };
             
+            // SuperUser can update is_tank_product flag
+            if (userRole === 'SuperUser') {
+                const isTankProductCheckbox = document.getElementById(`is-tank-product-${index}`);
+                if (isTankProductCheckbox) {
+                    updateData.m_product_is_tank_product = isTankProductCheckbox.checked ? 1 : 0;
+                }
+            }
+            
             fetch(`/products/api/${productId}`, {
                 method: 'PUT',
                 headers: {
@@ -547,19 +610,7 @@ block content
             .then(data => {
                 if (data.success) {
                     showMessage('Product updated successfully', 'success');
-                    // Reset the row to readonly state
-                    const inputs = row.querySelectorAll('input');
-                    inputs.forEach(input => {
-                        input.setAttribute('readonly', true);
-                        input.classList.remove('bg-light');
-                    });
-                    
-                    // Change save button back to edit button
-                    const saveBtn = row.querySelector('button');
-                    saveBtn.innerHTML = '<i class="bi bi-pencil"></i>';
-                    saveBtn.classList.remove('btn-success');
-                    saveBtn.classList.add('btn-primary');
-                    saveBtn.setAttribute('onclick', `editProduct(${index}, ${productId})`);
+                    setTimeout(() => location.reload(), 1000);
                 } else {
                     showMessage('Error updating product: ' + data.error, 'danger');
                 }
@@ -616,6 +667,9 @@ block content
                         jsonData[key] = value;
                     }
                 }
+                
+                // Handle checkbox explicitly
+                jsonData['is_tank_product'] = formData.get('is_tank_product') ? 1 : 0;
                 
                 fetch('/products/api', {
                     method: 'POST',
