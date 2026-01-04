@@ -220,6 +220,7 @@ const locationConfigRoutes = require('./routes/location-config-routes');
 //const accountHeadsRoutes = require("./routes/account-heads-routes");
 const digitalVendorsRoutes = require('./routes/digital-vendors-routes');
 const importantLinksRoutes = require('./routes/important-links-routes');
+const bankReconRoutes = require('./routes/bank-reconciliation-routes');
 
 
 
@@ -379,6 +380,8 @@ app.use('/location-config', locationConfigRoutes);
 app.use('/digital-vendors', digitalVendorsRoutes);
 app.use('/important-links', importantLinksRoutes);
 app.use('/digital-sales-corrections', digitalSalesCorrectionsRoutes);
+app.use('/reports-bank-recon', bankReconRoutes);
+
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
 app.use((req, res, next) => {
