@@ -158,5 +158,256 @@ module.exports = {
                 error: error
             });
         }
+    },
+
+    /**
+     * GET - Impact analysis for transaction deletion
+     */
+    getImpactAnalysis: async (req, res) => {
+        try {
+            const txnId = parseInt(req.params.txnId);
+
+            const impact = await bankReconDao.getTransactionImpact(txnId);
+
+            if (!impact) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Transaction not found'
+                });
+            }
+
+            res.json({
+                success: true,
+                impact: impact
+            });
+
+        } catch (error) {
+            console.error('Error in getImpactAnalysis:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * DELETE - Delete transaction with cascade
+     */
+    deleteTransaction: async (req, res) => {
+        try {
+            const txnId = parseInt(req.params.txnId);
+            const userName = req.user.User_Name || req.user.username || req.user.user_id;
+
+            await bankReconDao.deleteTransaction(txnId, userName);
+
+            res.json({
+                success: true,
+                message: 'Transaction deleted successfully'
+            });
+
+        } catch (error) {
+            console.error('Error in deleteTransaction:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * POST - Upload and preview bank statement
+     */
+    uploadBankStatement: async (req, res) => {
+        try {
+            const XLSX = require('xlsx');
+            const locationCode = req.user.location_code;
+            const bankId = parseInt(req.body.bank_id);
+            const userName = req.user.User_Name || req.user.username || req.user.user_id;
+
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No file uploaded'
+                });
+            }
+
+            // Get bank template
+            const template = await bankReconDao.getBankTemplate(bankId);
+            if (!template) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'No template found for this bank. Please configure template first.'
+                });
+            }
+
+            // Parse Excel file
+            const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            
+            // Convert to JSON
+            const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+            // Skip header row and parse transactions
+            const transactions = [];
+            for (let i = template.data_start_row - 1; i < data.length; i++) {
+                const row = data[i];
+                
+                // Skip empty rows
+                if (!row || row.length === 0) continue;
+
+                const txn = {
+                    txn_date: parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]),
+                    description: row[columnToIndex(template.description_column)] || '',
+                    debit_amount: parseFloat(row[columnToIndex(template.debit_column)]) || 0,
+                    credit_amount: parseFloat(row[columnToIndex(template.credit_column)]) || 0,
+                    balance_amount: parseFloat(row[columnToIndex(template.balance_column)]) || 0,
+                    statement_ref: row[columnToIndex(template.reference_column)] || null,
+                    source_file: req.file.originalname
+                };
+
+                // Skip rows with no amounts
+                if (txn.debit_amount === 0 && txn.credit_amount === 0) continue;
+
+                transactions.push(txn);
+            }
+
+            // Check for duplicates
+            const duplicates = await bankReconDao.checkDuplicates(locationCode, bankId, transactions);
+
+            res.json({
+                success: true,
+                transactions: transactions,
+                duplicates: duplicates,
+                summary: {
+                    total: transactions.length,
+                    duplicates: duplicates.length
+                }
+            });
+
+        } catch (error) {
+            console.error('Error in uploadBankStatement:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    },
+
+    /**
+     * POST - Confirm and save bank statement transactions
+     */
+    saveBankStatement: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const bankId = parseInt(req.body.bank_id);
+            const transactions = req.body.transactions;
+            const userName = req.user.User_Name || req.user.username || req.user.user_id;
+
+            if (!transactions || transactions.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No transactions to save'
+                });
+            }
+
+            const result = await bankReconDao.bulkInsertStatements(
+                locationCode, bankId, transactions, userName
+            );
+
+            res.json({
+                success: true,
+                message: `${result.inserted} transactions saved successfully`
+            });
+
+        } catch (error) {
+            console.error('Error in saveBankStatement:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
     }
 };
+
+// Helper function to convert Excel column letter to index
+function columnToIndex(column) {
+    if (typeof column === 'number') return column;
+    
+    let index = 0;
+    for (let i = 0; i < column.length; i++) {
+        index = index * 26 + (column.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+    }
+    return index - 1;
+}
+
+// Helper function to parse Excel date
+function parseExcelDate(value) {
+    if (!value) return null;
+    
+    // If it's a number (Excel serial date)
+    if (typeof value === 'number') {
+        const XLSX = require('xlsx');
+        const date = XLSX.SSF.parse_date_code(value);
+        return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+    }
+    
+    // If it's already a string, try to parse it
+    if (typeof value === 'string') {
+        // Handle DD-MMM-YYYY format (02-Apr-2025)
+        if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
+            const parts = value.split('-');
+            const monthMap = {
+                'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+            };
+            const month = monthMap[parts[1]];
+            return `${parts[2]}-${month}-${parts[0].padStart(2, '0')}`;
+        }
+        
+        // Handle MM/DD/YY format (11/13/25)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+            const parts = value.split('/');
+            const month = parts[0].padStart(2, '0');
+            const day = parts[1].padStart(2, '0');
+            const year = '20' + parts[2]; // Assume 2000s
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle MM/DD/YYYY format (11/13/2025)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+            const parts = value.split('/');
+            const month = parts[0].padStart(2, '0');
+            const day = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle DD/MM/YYYY format (13/11/2025)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(value.split('/')[0]) > 12) {
+            const parts = value.split('/');
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle YYYY-MM-DD format (already correct)
+        if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            return value;
+        }
+    }
+    
+    // If all else fails, try JavaScript Date parse
+    try {
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+    } catch (e) {
+        console.error('Date parse error:', value, e);
+    }
+    
+    return null;
+}

@@ -30,6 +30,20 @@ block content
             text-overflow: ellipsis;
             max-width: 250px;
         }
+        .card-header.bg-primary-pastel {
+            background: linear-gradient(135deg, #b3d9ff 0%, #cce5ff 100%) !important;
+            color: #004085 !important;
+        }
+        .card-header.bg-warning-pastel {
+            background: linear-gradient(135deg, #ffe6b3 0%, #fff2d9 100%) !important;
+            color: #856404 !important;
+        }
+        .btn-group .btn {
+            margin-right: 10px;
+        }
+        .btn-group .btn:last-child {
+            margin-right: 0;
+        }
         
     script.
         const currentDate = new Date().toISOString().split('T')[0];
@@ -98,6 +112,426 @@ block content
             document.getElementById('btn-show-all').classList.remove('active');
             document.getElementById('btn-show-unmatched').classList.add('active');
         }
+        
+        let syncScrollEnabled = false;
+        let isScrolling = false;
+        
+        function toggleSyncScroll() {
+            syncScrollEnabled = !syncScrollEnabled;
+            const btn = document.getElementById('btn-sync-scroll');
+            
+            if (syncScrollEnabled) {
+                btn.classList.add('active');
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-success');
+                
+                // Add scroll listeners
+                const systemScroll = document.querySelector('#system-table').closest('.table-responsive');
+                const bankScroll = document.querySelector('#bank-table').closest('.table-responsive');
+                
+                systemScroll.addEventListener('scroll', syncSystemToBankScroll);
+                bankScroll.addEventListener('scroll', syncBankToSystemScroll);
+            } else {
+                btn.classList.remove('active');
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+                
+                // Remove scroll listeners
+                const systemScroll = document.querySelector('#system-table').closest('.table-responsive');
+                const bankScroll = document.querySelector('#bank-table').closest('.table-responsive');
+                
+                systemScroll.removeEventListener('scroll', syncSystemToBankScroll);
+                bankScroll.removeEventListener('scroll', syncBankToSystemScroll);
+            }
+        }
+        
+        function syncSystemToBankScroll(e) {
+            if (isScrolling) return;
+            isScrolling = true;
+            
+            const bankScroll = document.querySelector('#bank-table').closest('.table-responsive');
+            bankScroll.scrollTop = e.target.scrollTop;
+            
+            setTimeout(() => { isScrolling = false; }, 50);
+        }
+        
+        function syncBankToSystemScroll(e) {
+            if (isScrolling) return;
+            isScrolling = true;
+            
+            const systemScroll = document.querySelector('#system-table').closest('.table-responsive');
+            systemScroll.scrollTop = e.target.scrollTop;
+            
+            setTimeout(() => { isScrolling = false; }, 50);
+        }
+        
+        // Delete functionality
+        let currentTxnId = null;
+        
+        async function showImpactAnalysis(txnId) {
+            currentTxnId = txnId;
+            
+            const modal = new bootstrap.Modal(document.getElementById('impactModal'));
+            modal.show();
+            
+            document.getElementById('impactContent').innerHTML = `
+                <div class="text-center p-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Loading impact analysis...</p>
+                </div>
+            `;
+            document.getElementById('btnConfirmDelete').disabled = true;
+            
+            try {
+                const response = await fetch(`/reports-bank-recon/impact/${txnId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayImpact(data.impact);
+                    document.getElementById('btnConfirmDelete').disabled = false;
+                } else {
+                    document.getElementById('impactContent').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-x-circle me-2"></i>
+                            Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching impact:', error);
+                document.getElementById('impactContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Failed to load impact analysis.
+                    </div>
+                `;
+            }
+        }
+        
+        function displayImpact(impact) {
+            let html = `
+                <div class="mb-3">
+                    <h6 class="text-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        This will DELETE the following:
+                    </h6>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-light">
+                        <strong>Transaction Details</strong>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Date:</strong> ${impact.transaction.trans_date}</p>
+                        <p><strong>Remarks:</strong> ${impact.transaction.remarks || '-'}</p>
+                        <p><strong>Amount:</strong> 
+                            ${impact.transaction.credit_amount > 0 ? 
+                                ` ₹${parseFloat(impact.transaction.credit_amount).toFixed(2)} (Credit)` : 
+                                `₹${parseFloat(impact.transaction.debit_amount).toFixed(2)} (Debit)`}
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            if (impact.receipts && impact.receipts.length > 0) {
+                html += `
+                    <div class="alert alert-warning">
+                        <strong><i class="bi bi-receipt me-2"></i>${impact.receipts.length} Receipt(s) will be DELETED:</strong>
+                        <ul class="mt-2 mb-0">
+                `;
+                impact.receipts.forEach(r => {
+                    html += `<li>Receipt #${r.receipt_no || r.treceipt_id} - ₹${parseFloat(r.amount).toFixed(2)}</li>`;
+                });
+                html += `</ul></div>`;
+            }
+            
+            if (impact.reconRecords && impact.reconRecords.length > 0) {
+                html += `
+                    <div class="alert alert-info">
+                        <strong><i class="bi bi-link-45deg me-2"></i>${impact.reconRecords.length} Digital Reconciliation(s) will be CLEARED:</strong>
+                        <ul class="mt-2 mb-0">
+                `;
+                impact.reconRecords.forEach(r => {
+                    html += `<li>${r.source_table} (ID: ${r.source_id})</li>`;
+                });
+                html += `</ul></div>`;
+            }
+            
+            if (!impact.receipts || impact.receipts.length === 0) {
+                html += `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        No receipts linked. Safe to delete.
+                    </div>
+                `;
+            }
+            
+            document.getElementById('impactContent').innerHTML = html;
+        }
+        
+        // Upload functionality
+        let uploadedTransactions = [];
+        
+        function showUploadModal() {
+            const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+            modal.show();
+            
+            // Reset
+            document.getElementById('uploadStep1').style.display = 'block';
+            document.getElementById('uploadStep2').style.display = 'none';
+            document.getElementById('btnConfirmUpload').style.display = 'none';
+            document.getElementById('bankStatementFile').value = '';
+            uploadedTransactions = [];
+        }
+        
+        async function uploadAndPreview() {
+            const fileInput = document.getElementById('bankStatementFile');
+            const bankId = document.getElementById('upload_bank_id').value;
+            
+            if (!fileInput.files[0]) {
+                alert('Please select a file');
+                return;
+            }
+            
+            if (!bankId) {
+                alert('Please select a bank');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('bankStatement', fileInput.files[0]);
+            formData.append('bank_id', bankId);
+            
+            // Show step 2 with loading
+            document.getElementById('uploadStep1').style.display = 'none';
+            document.getElementById('uploadStep2').style.display = 'block';
+            
+            try {
+                const response = await fetch('/reports-bank-recon/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    uploadedTransactions = data.transactions;
+                    displayPreview(data);
+                    document.getElementById('btnConfirmUpload').style.display = 'block';
+                } else {
+                    document.getElementById('previewContent').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-x-circle me-2"></i>
+                            Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                document.getElementById('previewContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Failed to process file.
+                    </div>
+                `;
+            }
+        }
+        
+        function displayPreview(data) {
+            const previewDiv = document.getElementById('previewContent');
+            
+            // Build summary
+            let summaryHtml = `
+                <div class="alert alert-info mb-3">
+                    <strong><i class="bi bi-file-earmark-spreadsheet me-2"></i>Preview: ${data.summary.total} transactions found</strong>
+                    ${data.summary.duplicates > 0 ? 
+                        `<br><i class="bi bi-exclamation-triangle me-2 text-warning"></i>${data.summary.duplicates} possible duplicate(s) detected` 
+                        : ''}
+                </div>
+            `;
+            
+            // Build table
+            let tableHtml = `
+                <div style="max-height: 500px; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6;">
+                    <table class="table table-sm table-hover table-bordered mb-0">
+                        <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 10;">
+                            <tr>
+                                <th style="min-width: 100px;">Date</th>
+                                <th style="min-width: 250px;">Description</th>
+                                <th style="min-width: 100px; text-align: right;">Credit</th>
+                                <th style="min-width: 100px; text-align: right;">Debit</th>
+                                <th style="min-width: 100px; text-align: right;">Balance</th>
+                                <th style="min-width: 80px; text-align: center;">Include</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            // Add rows
+            data.transactions.forEach((txn, index) => {
+                const isDuplicate = data.duplicates.some(dup => 
+                    dup.txn_date === txn.txn_date && 
+                    dup.description === txn.description &&
+                    parseFloat(dup.credit_amount) === parseFloat(txn.credit_amount) &&
+                    parseFloat(dup.debit_amount) === parseFloat(txn.debit_amount)
+                );
+                
+                const rowClass = isDuplicate ? 'table-warning' : '';
+                const checked = isDuplicate ? '' : 'checked';
+                const dupLabel = isDuplicate ? '<br><small class="text-warning">Dup?</small>' : '';
+                
+                tableHtml += `
+                    <tr class="${rowClass}">
+                        <td>${txn.txn_date}</td>
+                        <td><div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</div></td>
+                        <td style="text-align: right;">${txn.credit_amount > 0 ? txn.credit_amount.toFixed(2) : '-'}</td>
+                        <td style="text-align: right;">${txn.debit_amount > 0 ? txn.debit_amount.toFixed(2) : '-'}</td>
+                        <td style="text-align: right;">${txn.balance_amount ? txn.balance_amount.toFixed(2) : '-'}</td>
+                        <td style="text-align: center;">
+                            <input type="checkbox" 
+                                   class="form-check-input txn-checkbox" 
+                                   data-index="${index}" 
+                                   ${checked}>
+                            ${dupLabel}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            previewDiv.innerHTML = summaryHtml + tableHtml;
+        }
+        
+        async function confirmSave() {
+            const checkboxes = document.querySelectorAll('.txn-checkbox:checked');
+            
+            if (checkboxes.length === 0) {
+                alert('Please select at least one transaction to save');
+                return;
+            }
+            
+            // Build selected transactions array with proper indices
+            const selectedTransactions = [];
+            let debugInfo = 'SELECTED TRANSACTIONS:\n\n';
+            
+            checkboxes.forEach(cb => {
+                const index = parseInt(cb.dataset.index);
+                if (uploadedTransactions[index]) {
+                    const txn = uploadedTransactions[index];
+                    selectedTransactions.push(txn);
+                    
+                    // Build debug string
+                    debugInfo += `Index ${index}:\n`;
+                    debugInfo += `  Date: ${txn.txn_date}\n`;
+                    debugInfo += `  Description: ${txn.description.substring(0, 50)}...\n`;
+                    debugInfo += `  Credit: ${txn.credit_amount}\n`;
+                    debugInfo += `  Debit: ${txn.debit_amount}\n\n`;
+                }
+            });
+            
+            // Show confirmation with details
+            console.log(debugInfo);
+            console.log('Full transaction objects:', selectedTransactions);
+            
+            const proceed = confirm(`You are about to save ${selectedTransactions.length} transaction(s).\n\nCheck console (F12) for details.\n\nProceed?`);
+            if (!proceed) return;
+            
+            const bankId = document.getElementById('upload_bank_id').value;
+            document.getElementById('btnConfirmUpload').disabled = true;
+            document.getElementById('btnConfirmUpload').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            
+            try {
+                const response = await fetch('/reports-bank-recon/save-statement', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        bank_id: bankId,
+                        transactions: selectedTransactions
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(data.message + '. Refreshing page...');
+                    location.reload();
+                } else {
+                    alert(`Error: ${data.error}`);
+                    document.getElementById('btnConfirmUpload').disabled = false;
+                    document.getElementById('btnConfirmUpload').innerHTML = '<i class="bi bi-save me-1"></i> Confirm & Save';
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                alert('Failed to save transactions');
+                document.getElementById('btnConfirmUpload').disabled = false;
+                document.getElementById('btnConfirmUpload').innerHTML = '<i class="bi bi-save me-1"></i> Confirm & Save';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnDelete = document.getElementById('btnConfirmDelete');
+            if (btnDelete) {
+                btnDelete.addEventListener('click', async function() {
+                    if (!currentTxnId) return;
+                    
+                    this.disabled = true;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deleting...';
+                    
+                    try {
+                        const response = await fetch(`/reports-bank-recon/delete/${currentTxnId}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            alert('Transaction deleted successfully. Refreshing page...');
+                            location.reload();
+                        } else {
+                            alert(`Error: ${data.error}`);
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-trash me-1"></i> Confirm Delete';
+                        }
+                    } catch (error) {
+                        console.error('Error deleting:', error);
+                        alert('Failed to delete transaction.');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-trash me-1"></i> Confirm Delete';
+                    }
+                });
+            }
+            
+            // Ensure modal can be closed
+            const impactModal = document.getElementById('impactModal');
+            if (impactModal) {
+                impactModal.addEventListener('hidden.bs.modal', function () {
+                    currentTxnId = null;
+                    document.getElementById('btnConfirmDelete').disabled = true;
+                });
+            }
+            
+            // Handle Cancel button explicitly
+            const modalElement = document.getElementById('impactModal');
+            const cancelButtons = modalElement.querySelectorAll('[data-bs-dismiss="modal"]');
+            cancelButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) {
+                        modal.hide();
+                    }
+                });
+            });
+        });
 
     .container-fluid.p-3
         .card.mb-3.shadow-sm
@@ -131,6 +565,11 @@ block content
                             button.btn.btn-primary.w-100(type='submit')
                                 i.bi.bi-search.me-1
                                 | Load
+                        //- .col-md-2
+                        //-     label.form-label &nbsp;
+                        //-     button.btn.btn-success.w-100(type='button' onclick='showUploadModal()')
+                        //-         i.bi.bi-upload.me-1
+                        //-         | Upload Bank Statement
 
     .container-fluid.px-3
         if systemTransactions !== undefined && bankTransactions !== undefined
@@ -203,15 +642,17 @@ block content
                         button#btn-show-unmatched.btn.btn-outline-warning(type='button' onclick='showUnmatchedOnly()')
                             i.bi.bi-exclamation-triangle.me-2
                             | Show Only Unmatched
+                        button#btn-sync-scroll.btn.btn-outline-secondary(type='button' onclick='toggleSyncScroll()')
+                            i.bi.bi-arrow-down-up.me-2
+                            | Sync Scroll
 
             // Side-by-side Tables
             .row
                 .col-md-6
                     .card.shadow-sm
-                        .card-header.bg-primary.text-white
+                        .card-header.bg-primary-pastel
                             i.bi.bi-laptop.me-2
                             strong System Transactions (PetroMath)
-                            span.badge.bg-light.text-primary.ms-2= systemTransactions.length
                         .card-body.p-0
                             .table-responsive
                                 table#system-table.table.table-sm.table-hover.system-table.mb-0
@@ -224,7 +665,14 @@ block content
                                             th.text-center Receipts
                                     tbody
                                         each txn in systemTransactions
-                                            tr(class=txn.isUnmatched ? 'unmatched-row' : '')
+                                            tr(class=txn.isUnmatched ? 'unmatched-row' : '' 
+                                               style='cursor: pointer;'
+                                               onclick=`showImpactAnalysis(${txn.t_bank_id})`
+                                               data-txn-id=txn.t_bank_id
+                                               data-date=txn.trans_date
+                                               data-remarks=txn.remarks
+                                               data-credit=txn.credit_amount
+                                               data-debit=txn.debit_amount)
                                                 td= txn.trans_date
                                                 td.truncate-text(title=txn.remarks)= txn.remarks || '-'
                                                 td.text-end
@@ -248,10 +696,9 @@ block content
 
                 .col-md-6
                     .card.shadow-sm
-                        .card-header.bg-warning.text-dark
+                        .card-header.bg-warning-pastel
                             i.bi.bi-bank.me-2
                             strong Bank Statement Transactions
-                            span.badge.bg-dark.ms-2= bankTransactions.length
                         .card-body.p-0
                             .table-responsive
                                 table#bank-table.table.table-sm.table-hover.bank-table.mb-0
@@ -283,3 +730,61 @@ block content
             .alert.alert-info.text-center.mt-5(role='alert')
                 i.bi.bi-info-circle.me-2
                 | Select a bank and date range, then click "Load" to view the reconciliation report.
+
+    // Upload Bank Statement Modal
+    #uploadModal.modal.fade(tabindex='-1' aria-labelledby='uploadModalLabel' aria-hidden='true')
+        .modal-dialog.modal-xl
+            .modal-content
+                .modal-header.bg-success.text-white
+                    h5#uploadModalLabel.modal-title
+                        i.bi.bi-upload.me-2
+                        | Upload Bank Statement
+                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
+                .modal-body
+                    #uploadStep1
+                        .row
+                            .col-md-6
+                                label.form-label Select Bank:
+                                select#upload_bank_id.form-control(required)
+                                    if banks
+                                        each val in banks
+                                            option(value=`${val.bank_id}`)= `${val.bank_name} - ${val.account_nickname}`
+                            .col-md-6
+                                label.form-label Select Excel File:
+                                input#bankStatementFile.form-control(type='file' accept='.xlsx,.xls' required)
+                        .row.mt-3
+                            .col-12
+                                button.btn.btn-primary(type='button' onclick='uploadAndPreview()')
+                                    i.bi.bi-eye.me-1
+                                    | Upload & Preview
+                    
+                    #uploadStep2(style='display: none;')
+                        #previewContent
+                            .text-center.p-4
+                                .spinner-border.text-primary(role='status')
+                                p.mt-2 Processing file...
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
+                    button#btnConfirmUpload.btn.btn-success(type='button' style='display: none;' onclick='confirmSave()')
+                        i.bi.bi-save.me-1
+                        | Confirm & Save
+
+    // Impact Analysis Modal
+    #impactModal.modal.fade(tabindex='-1' aria-labelledby='impactModalLabel' aria-hidden='true')
+        .modal-dialog.modal-lg
+            .modal-content
+                .modal-header.bg-danger.text-white
+                    h5#impactModalLabel.modal-title
+                        i.bi.bi-exclamation-triangle.me-2
+                        | Delete Transaction - Impact Analysis
+                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
+                .modal-body
+                    #impactContent
+                        .text-center.p-4
+                            .spinner-border.text-primary(role='status')
+                            p.mt-2 Loading impact analysis...
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Cancel
+                    button#btnConfirmDelete.btn.btn-danger(type='button' disabled)
+                        i.bi.bi-trash.me-1
+                        | Confirm Delete
