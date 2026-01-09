@@ -77,37 +77,80 @@ module.exports = {
                 txn.balance_amount = parseFloat(txn.balance_amount) || 0;
             });
             
-            // Mark unmatched transactions (simple approach: check if amount exists on other side)
+            // Helper function to calculate date difference in days
+            const getDateDifference = (date1Str, date2Str) => {
+                // Both dates are in 'dd-mm-yyyy' format
+                const parseDate = (dateStr) => {
+                    const [day, month, year] = dateStr.split('-');
+                    return new Date(year, month - 1, day);
+                };
+                
+                const d1 = parseDate(date1Str);
+                const d2 = parseDate(date2Str);
+                const diffTime = Math.abs(d2 - d1);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays;
+            };
+            
+            // Mark unmatched transactions - Bank date is source of truth
             systemTransactions.forEach(sysTxn => {
                 const sysAmount = sysTxn.credit_amount > 0 ? sysTxn.credit_amount : sysTxn.debit_amount;
                 const sysType = sysTxn.credit_amount > 0 ? 'credit' : 'debit';
                 
-                // Check if this exact amount exists in bank on same date
-                const matchExists = bankTransactions.some(bankTxn => {
+                // First try exact date match
+                let matchInfo = bankTransactions.find(bankTxn => {
                     const bankAmount = sysType === 'credit' ? bankTxn.credit_amount : bankTxn.debit_amount;
                     const dateMatch = sysTxn.trans_date === bankTxn.txn_date;
                     const amountMatch = Math.abs(sysAmount - bankAmount) < 0.01;
                     return amountMatch && dateMatch;
                 });
                 
-                sysTxn.isUnmatched = !matchExists;
+                // If no exact match, try ±1 day tolerance (system date can be off from bank date)
+                if (!matchInfo) {
+                    matchInfo = bankTransactions.find(bankTxn => {
+                        const bankAmount = sysType === 'credit' ? bankTxn.credit_amount : bankTxn.debit_amount;
+                        const amountMatch = Math.abs(sysAmount - bankAmount) < 0.01;
+                        
+                        if (!amountMatch) return false;
+                        
+                        // Check if dates are within ±1 day
+                        const dateDiff = getDateDifference(sysTxn.trans_date, bankTxn.txn_date);
+                        return dateDiff <= 1;
+                    });
+                    
+                    if (matchInfo) {
+                        // Calculate date difference for near match
+                        sysTxn.dateOffBy = getDateDifference(sysTxn.trans_date, matchInfo.txn_date);
+                        sysTxn.isNearMatch = true;
+                        sysTxn.bankDate = matchInfo.txn_date; // Store bank date for reference
+                    }
+                }
+                
+                sysTxn.isUnmatched = !matchInfo;
                 
                 // Debug logging
                 if (sysTxn.isUnmatched) {
                     console.log(`System UNMATCHED: ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
+                } else if (sysTxn.isNearMatch) {
+                    console.log(`System NEAR MATCH (${sysTxn.dateOffBy} day off, Bank: ${sysTxn.bankDate}): ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
                 }
             });
             
+            // Bank transactions - these remain as source of truth
             bankTransactions.forEach(bankTxn => {
                 const bankAmount = bankTxn.credit_amount > 0 ? bankTxn.credit_amount : bankTxn.debit_amount;
                 const bankType = bankTxn.credit_amount > 0 ? 'credit' : 'debit';
                 
-                // Check if this exact amount exists in system on same date
+                // Check if this exact amount exists in system (same date or ±1 day)
                 const matchExists = systemTransactions.some(sysTxn => {
                     const sysAmount = bankType === 'credit' ? sysTxn.credit_amount : sysTxn.debit_amount;
-                    const dateMatch = bankTxn.txn_date === sysTxn.trans_date;
                     const amountMatch = Math.abs(bankAmount - sysAmount) < 0.01;
-                    return amountMatch && dateMatch;
+                    
+                    if (!amountMatch) return false;
+                    
+                    // Allow system date to be ±1 day from bank date
+                    const dateDiff = getDateDifference(bankTxn.txn_date, sysTxn.trans_date);
+                    return dateDiff <= 1;
                 });
                 
                 bankTxn.isUnmatched = !matchExists;
@@ -327,8 +370,89 @@ module.exports = {
                 error: error.message
             });
         }
+    },
+
+    addEntryToPetromath: async (req, res) => {
+    try {
+        const locationCode = req.user.location_code;
+        const userName = req.user.User_Name || req.user.username || req.user.user_id;
+        
+        const {
+            trans_date,
+            bank_id,
+            ledger_name,
+            credit_amount,
+            debit_amount,
+            remarks,
+            external_id,
+            external_source
+        } = req.body;
+        
+        // Validation
+        if (!trans_date || !bank_id || !ledger_name) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields'
+            });
+        }
+        
+        const credit = parseFloat(credit_amount) || 0;
+        const debit = parseFloat(debit_amount) || 0;
+        
+        if (credit === 0 && debit === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Transaction must have either credit or debit amount'
+            });
+        }
+        
+        if (credit > 0 && debit > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Transaction cannot have both credit and debit amounts'
+            });
+        }
+        
+        // Prepare transaction data
+        const transactionData = {
+            trans_date: trans_date,
+            bank_id: parseInt(bank_id),
+            ledger_name: ledger_name,
+            transaction_type: null,
+            accounting_type: null,
+            credit_amount: credit > 0 ? credit : null,
+            debit_amount: debit > 0 ? debit : null,
+            remarks: remarks || '',
+            external_id: external_id || null,
+            external_source: external_source || null,
+            created_by: userName
+        };
+        
+        // Save using the existing DAO method (from bank-statement)
+        const BankStatementDao = require('../dao/bank-statement-dao');
+        await BankStatementDao.saveTransaction(transactionData);
+        
+        res.json({
+            success: true,
+            message: 'Entry added successfully'
+        });
+        
+    } catch (error) {
+        console.error('Error in addEntryToPetromath:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
+}
 };
+
+
+
+
+
+
+
 
 // Helper function to convert Excel column letter to index
 function columnToIndex(column) {

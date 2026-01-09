@@ -125,7 +125,6 @@ block content
                 btn.classList.remove('btn-outline-secondary');
                 btn.classList.add('btn-success');
                 
-                // Add scroll listeners
                 const systemScroll = document.querySelector('#system-table').closest('.table-responsive');
                 const bankScroll = document.querySelector('#bank-table').closest('.table-responsive');
                 
@@ -136,7 +135,6 @@ block content
                 btn.classList.remove('btn-success');
                 btn.classList.add('btn-outline-secondary');
                 
-                // Remove scroll listeners
                 const systemScroll = document.querySelector('#system-table').closest('.table-responsive');
                 const bankScroll = document.querySelector('#bank-table').closest('.table-responsive');
                 
@@ -165,7 +163,6 @@ block content
             setTimeout(() => { isScrolling = false; }, 50);
         }
         
-        // Delete functionality
         let currentTxnId = null;
         
         async function showImpactAnalysis(txnId) {
@@ -269,14 +266,12 @@ block content
             document.getElementById('impactContent').innerHTML = html;
         }
         
-        // Upload functionality
         let uploadedTransactions = [];
         
         function showUploadModal() {
             const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
             modal.show();
             
-            // Reset
             document.getElementById('uploadStep1').style.display = 'block';
             document.getElementById('uploadStep2').style.display = 'none';
             document.getElementById('btnConfirmUpload').style.display = 'none';
@@ -302,7 +297,6 @@ block content
             formData.append('bankStatement', fileInput.files[0]);
             formData.append('bank_id', bankId);
             
-            // Show step 2 with loading
             document.getElementById('uploadStep1').style.display = 'none';
             document.getElementById('uploadStep2').style.display = 'block';
             
@@ -340,7 +334,6 @@ block content
         function displayPreview(data) {
             const previewDiv = document.getElementById('previewContent');
             
-            // Build summary
             let summaryHtml = `
                 <div class="alert alert-info mb-3">
                     <strong><i class="bi bi-file-earmark-spreadsheet me-2"></i>Preview: ${data.summary.total} transactions found</strong>
@@ -350,7 +343,6 @@ block content
                 </div>
             `;
             
-            // Build table
             let tableHtml = `
                 <div style="max-height: 500px; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6;">
                     <table class="table table-sm table-hover table-bordered mb-0">
@@ -367,7 +359,6 @@ block content
                         <tbody>
             `;
             
-            // Add rows
             data.transactions.forEach((txn, index) => {
                 const isDuplicate = data.duplicates.some(dup => 
                     dup.txn_date === txn.txn_date && 
@@ -415,7 +406,6 @@ block content
                 return;
             }
             
-            // Build selected transactions array with proper indices
             const selectedTransactions = [];
             let debugInfo = 'SELECTED TRANSACTIONS:\n\n';
             
@@ -425,7 +415,6 @@ block content
                     const txn = uploadedTransactions[index];
                     selectedTransactions.push(txn);
                     
-                    // Build debug string
                     debugInfo += `Index ${index}:\n`;
                     debugInfo += `  Date: ${txn.txn_date}\n`;
                     debugInfo += `  Description: ${txn.description.substring(0, 50)}...\n`;
@@ -434,7 +423,6 @@ block content
                 }
             });
             
-            // Show confirmation with details
             console.log(debugInfo);
             console.log('Full transaction objects:', selectedTransactions);
             
@@ -475,6 +463,120 @@ block content
             }
         }
         
+        async function showAddEntryModal(date, description, credit, debit) {
+            const dateParts = date.split('-');
+            const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // '2025-12-06'
+            document.getElementById('modal_trans_date').value = formattedDate;
+            document.getElementById('modal_description').value = description;
+            document.getElementById('modal_debit_amount').value = debit > 0 ? debit.toFixed(2) : '0.00';
+            document.getElementById('modal_credit_amount').value = credit > 0 ? credit.toFixed(2) : '0.00';
+            document.getElementById('modal_remarks').value = description;
+            
+            const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
+            const bankId = document.getElementById('modal_bank_id').value;
+            
+            if (bankId) {
+                await loadFilteredLedgers(bankId, entryType);
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('addEntryModal'));
+            modal.show();
+        }
+
+        async function loadFilteredLedgers(bankId, entryType) {
+            const ledgerSelect = document.getElementById('modal_ledger_name');
+            ledgerSelect.innerHTML = '<option value="">Loading...</option>';
+            ledgerSelect.disabled = true;
+            
+            try {
+                const response = await fetch(`/bank-statement/ledgers?bank_id=${bankId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
+                    
+                    data.ledgers.forEach(ledger => {
+                        const allowedType = ledger.allowed_entry_type;
+                        
+                        if (allowedType === 'BOTH' || allowedType === entryType) {
+                            const option = document.createElement('option');
+                            option.value = ledger.ledger_name;
+                            option.textContent = ledger.ledger_display_name;
+                            option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                            option.setAttribute('data-external-id', ledger.external_id || '');
+                            option.setAttribute('data-source-type', ledger.source_type || '');
+                            ledgerSelect.appendChild(option);
+                        }
+                    });
+                    
+                    ledgerSelect.disabled = false;
+                    
+                    if (ledgerSelect.options.length === 1) {
+                        ledgerSelect.innerHTML = '<option value="">No matching ledgers found</option>';
+                        alert(`No ledgers available for ${entryType} entries. Please configure ledgers in the system.`);
+                    }
+                } else {
+                    ledgerSelect.innerHTML = '<option value="">Error loading ledgers</option>';
+                    alert('Error loading ledgers');
+                }
+            } catch (error) {
+                console.error('Error loading ledgers:', error);
+                ledgerSelect.innerHTML = '<option value="">Error loading ledgers</option>';
+                alert('Failed to load ledgers');
+            }
+        }
+
+        async function saveNewEntry() {
+            const form = document.getElementById('addEntryForm');
+            
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+            
+            const ledgerSelect = document.getElementById('modal_ledger_name');
+            const selectedOption = ledgerSelect.options[ledgerSelect.selectedIndex];
+            
+            const transactionData = {
+                trans_date: document.getElementById('modal_trans_date').value,
+                bank_id: document.getElementById('modal_bank_id').value,
+                ledger_name: document.getElementById('modal_ledger_name').value,
+                credit_amount: parseFloat(document.getElementById('modal_credit_amount').value) || 0,
+                debit_amount: parseFloat(document.getElementById('modal_debit_amount').value) || 0,
+                remarks: document.getElementById('modal_remarks').value || '',
+                external_id: selectedOption.getAttribute('data-external-id'),
+                external_source: selectedOption.getAttribute('data-source-type')
+            };
+            
+            const saveBtn = document.getElementById('btnSaveEntry');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            
+            try {
+                const response = await fetch('/reports-bank-recon/add-entry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(transactionData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Entry added successfully! Refreshing page...');
+                    location.reload();
+                } else {
+                    alert(`Error: ${result.error}`);
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save Entry';
+                }
+            } catch (error) {
+                console.error('Error saving entry:', error);
+                alert('Failed to save entry');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save Entry';
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', function() {
             const btnDelete = document.getElementById('btnConfirmDelete');
             if (btnDelete) {
@@ -511,7 +613,6 @@ block content
                 });
             }
             
-            // Ensure modal can be closed
             const impactModal = document.getElementById('impactModal');
             if (impactModal) {
                 impactModal.addEventListener('hidden.bs.modal', function () {
@@ -520,7 +621,6 @@ block content
                 });
             }
             
-            // Handle Cancel button explicitly
             const modalElement = document.getElementById('impactModal');
             const cancelButtons = modalElement.querySelectorAll('[data-bs-dismiss="modal"]');
             cancelButtons.forEach(btn => {
@@ -565,11 +665,6 @@ block content
                             button.btn.btn-primary.w-100(type='submit')
                                 i.bi.bi-search.me-1
                                 | Load
-                        //- .col-md-2
-                        //-     label.form-label &nbsp;
-                        //-     button.btn.btn-success.w-100(type='button' onclick='showUploadModal()')
-                        //-         i.bi.bi-upload.me-1
-                        //-         | Upload Bank Statement
 
     .container-fluid.px-3
         if systemTransactions !== undefined && bankTransactions !== undefined
@@ -581,7 +676,6 @@ block content
                 i.bi.bi-calendar-range.me-2
                 = `${formattedFromDate} to ${formattedToDate}`
 
-            // Summary Cards
             if summaryTotals
                 .row.mb-4
                     .col-md-6
@@ -632,7 +726,6 @@ block content
                                         strong Debit
                                         h5.mb-0.text-danger ₹#{summaryTotals.bank_debit.toFixed(2)}
 
-            // Filter Buttons
             .row.mb-3
                 .col-12.text-center
                     .btn-group(role='group')
@@ -646,7 +739,6 @@ block content
                             i.bi.bi-arrow-down-up.me-2
                             | Sync Scroll
 
-            // Side-by-side Tables
             .row
                 .col-md-6
                     .card.shadow-sm
@@ -673,7 +765,16 @@ block content
                                                data-remarks=txn.remarks
                                                data-credit=txn.credit_amount
                                                data-debit=txn.debit_amount)
-                                                td= txn.trans_date
+                                                td
+                                                    = txn.trans_date
+                                                    if txn.isNearMatch
+                                                        br
+                                                        small.text-warning
+                                                            i.bi.bi-exclamation-triangle-fill(
+                                                                title=`Date mismatch: System=${txn.trans_date}, Bank=${txn.bankDate} (±${txn.dateOffBy} day)`
+                                                                style="cursor: help;"
+                                                            )
+                                                            |  ±#{txn.dateOffBy}d
                                                 td.truncate-text(title=txn.remarks)= txn.remarks || '-'
                                                 td.text-end
                                                     if txn.credit_amount > 0
@@ -708,6 +809,7 @@ block content
                                             th Description
                                             th.text-end Credit
                                             th.text-end Debit
+                                            th.text-center Action
                                     tbody
                                         each txn in bankTransactions
                                             tr(class=txn.isUnmatched ? 'unmatched-row' : '')
@@ -723,15 +825,22 @@ block content
                                                         = txn.debit_amount.toFixed(2)
                                                     else
                                                         | -
+                                                td.text-center
+                                                    if txn.isUnmatched
+                                                        button.btn.btn-sm.btn-success(
+                                                            type='button'
+                                                            onclick=`showAddEntryModal('${txn.txn_date}', '${txn.description.replace(/'/g, "\\'")}', ${txn.credit_amount}, ${txn.debit_amount})`
+                                                            title='Add entry to PetroMath'
+                                                        )
+                                                            i.bi.bi-plus-circle
                                         if bankTransactions.length === 0
                                             tr
-                                                td.text-center.text-muted(colspan='4') No transactions found
+                                                td.text-center.text-muted(colspan='5') No transactions found
         else
             .alert.alert-info.text-center.mt-5(role='alert')
                 i.bi.bi-info-circle.me-2
                 | Select a bank and date range, then click "Load" to view the reconciliation report.
 
-    // Upload Bank Statement Modal
     #uploadModal.modal.fade(tabindex='-1' aria-labelledby='uploadModalLabel' aria-hidden='true')
         .modal-dialog.modal-xl
             .modal-content
@@ -769,7 +878,6 @@ block content
                         i.bi.bi-save.me-1
                         | Confirm & Save
 
-    // Impact Analysis Modal
     #impactModal.modal.fade(tabindex='-1' aria-labelledby='impactModalLabel' aria-hidden='true')
         .modal-dialog.modal-lg
             .modal-content
@@ -788,3 +896,45 @@ block content
                     button#btnConfirmDelete.btn.btn-danger(type='button' disabled)
                         i.bi.bi-trash.me-1
                         | Confirm Delete
+
+    #addEntryModal.modal.fade(tabindex='-1' aria-labelledby='addEntryModalLabel' aria-hidden='true')
+        .modal-dialog.modal-lg
+            .modal-content
+                .modal-header.bg-success.text-white
+                    h5#addEntryModalLabel.modal-title
+                        i.bi.bi-plus-circle.me-2
+                        | Add Entry to PetroMath
+                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
+                .modal-body
+                    form#addEntryForm
+                        .row.g-3
+                            .col-md-6
+                                label.form-label Transaction Date
+                                input#modal_trans_date.form-control(type='date' required readonly)
+                            .col-md-6
+                                label.form-label Bank Account
+                                select#modal_bank_id.form-control(required disabled)
+                                    if selectedBank
+                                        option(value=selectedBank.bank_id selected)= `${selectedBank.bank_name} - ${selectedBank.account_nickname}`
+                            .col-md-12
+                                label.form-label Description (from Bank)
+                                input#modal_description.form-control(type='text' readonly)
+                            .col-md-12
+                                label.form-label Ledger
+                                    span.text-danger  *
+                                select#modal_ledger_name.form-control(required)
+                                    option(value='') Select Ledger
+                            .col-md-6
+                                label.form-label Debit Amount
+                                input#modal_debit_amount.form-control(type='number' step='0.01' min='0' readonly)
+                            .col-md-6
+                                label.form-label Credit Amount
+                                input#modal_credit_amount.form-control(type='number' step='0.01' min='0' readonly)
+                            .col-md-12
+                                label.form-label Remarks
+                                input#modal_remarks.form-control(type='text' maxlength='1000' placeholder='Optional remarks...')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Cancel
+                    button#btnSaveEntry.btn.btn-success(type='button' onclick='saveNewEntry()')
+                        i.bi.bi-save.me-1
+                        | Save Entry
