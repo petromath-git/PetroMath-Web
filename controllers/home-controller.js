@@ -438,6 +438,24 @@ const getHomeData = async (req, res, next) => {
     }
 
 
+    let devBackupInfo = null;
+    try {
+        const backupInfoQuery = `
+            SELECT 
+                backup_taken_at,
+                restored_at,
+                backup_filename
+            FROM _dev_backup_info 
+            LIMIT 1
+        `;
+        const [backupResults] = await db.sequelize.query(backupInfoQuery);
+        if (backupResults && backupResults.length > 0) {
+            devBackupInfo = backupResults[0];
+            }
+        } catch (error) {
+            // Table doesn't exist - this is production, ignore
+        }
+
     try {
         // Fetch configuration from database instead of config file
         const maxAllowedDrafts = Number(await locationConfig.getLocationConfigValue(
@@ -497,6 +515,7 @@ const getHomeData = async (req, res, next) => {
                 canCreateShiftClosing: canCreateShiftClosing,
                 showDayCloseGrouping: showDayCloseGrouping,
                 allowShiftReopen: allowShiftReopen,
+                devBackupInfo: devBackupInfo,
             });
         }).catch(error => {
             console.error('Error in getHomeData:', error);

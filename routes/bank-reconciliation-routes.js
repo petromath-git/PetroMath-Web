@@ -68,4 +68,11 @@ router.post('/save-statement',
     }
 );
 
+router.post('/add-entry',
+    isLoginEnsured,
+    (req, res, next) => {
+        bankReconController.addEntryToPetromath(req, res, next);
+    }
+);
+
 module.exports = router;
