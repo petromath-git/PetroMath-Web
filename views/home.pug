@@ -1,6 +1,19 @@
 extends layout
 
 block content
+    //- Dev Environment Banner - shows if backup info exists
+    if devBackupInfo
+        .alert.alert-warning.alert-dismissible.fade.show.mb-3(role='alert' style='border-left: 4px solid #ff9800;')
+            .d-flex.align-items-center
+                i.bi.bi-exclamation-triangle-fill.me-2(style='font-size: 1.2rem;')
+                div
+                    strong 🔧 Development Environment
+                    br
+                    small.text-muted 
+                        | Data snapshot from production: 
+                        strong= new Date(devBackupInfo.backup_taken_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            button.btn-close(type='button' data-bs-dismiss='alert' aria-label='Close')
+
 
     style.
         /* Sticky header styling for home page */
