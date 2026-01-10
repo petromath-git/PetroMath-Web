@@ -407,5 +407,206 @@ module.exports = {
             await t.rollback();
             throw error;
         }
+    },
+
+    /**
+ * Suggest ledger based on historical transactions with similar descriptions
+ */
+/**
+ * Suggest ledger using pure machine learning approach
+ * Phase 1: Check learned pattern cache (fast)
+ * Phase 2: Extract phrases and match historical data
+ * Phase 3: Learn from this suggestion for next time
+ */
+getSuggestedLedger: async (bankId, description, entryType) => {
+    const cleanDesc = description.toUpperCase().trim();
+    
+    // ============ PHASE 1: Check Learned Pattern Cache ============
+    // This is like "muscle memory" - patterns we've successfully used before
+    
+    // Extract a normalized pattern key from description
+    const extractPatternKey = (desc) => {
+        let normalized = desc
+            // Remove transaction prefixes and IDs
+            .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
+            .replace(/[A-Z0-9]{10,}/gi, '')
+            .replace(/[-\/\s]+/g, ' ')
+            .trim();
+        
+        // Take first 3-4 meaningful words as pattern key
+        const words = normalized.split(' ').filter(w => 
+            w.length >= 3 && !/^\d+$/.test(w)
+        ).slice(0, 4);
+        
+        return words.join(' ').substring(0, 200);
+    };
+    
+    const patternKey = extractPatternKey(cleanDesc);
+    
+    if (patternKey) {
+        // Quick cache lookup
+        const cacheQuery = `
+            SELECT 
+                ledger_name,
+                usage_count,
+                last_used
+            FROM t_bank_ledger_suggestion_cache
+            WHERE bank_id = :bankId
+                AND pattern_key = :patternKey
+                AND (entry_type = :entryType OR entry_type = 'BOTH')
+                AND last_used >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+            ORDER BY usage_count DESC, last_used DESC
+            LIMIT 1
+        `;
+        
+        const cacheResult = await db.sequelize.query(cacheQuery, {
+            replacements: { bankId, patternKey, entryType },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        
+        if (cacheResult && cacheResult[0]) {
+            console.log(`[CACHE HIT] Pattern: "${patternKey}" → ${cacheResult[0].ledger_name}`);
+            return cacheResult[0];
+        }
     }
+    
+    // ============ PHASE 2: Historical Pattern Matching ============
+    // Learn from raw transaction history
+    
+    // Clean and extract phrases
+    let cleaned = cleanDesc
+        .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
+        .replace(/-(YESB|SBIN|ICIC|HDFC|AXIS|PUNB|IDIB|IOBA|BARB|CBIN|CNRB|CORP|UBIN|VIJB)[A-Z0-9]*[-\/]/gi, '-')
+        .replace(/[A-Z0-9]{10,}/gi, ' ');
+    
+    const words = cleaned.split(/[-\/\s]+/).filter(word => 
+        word.length >= 2 && 
+        !/^\d+$/.test(word) && 
+        !/^[A-Z]{1}$/.test(word)
+    );
+    
+    // Build phrases
+    const phrases = [];
+    for (let i = 0; i < words.length; i++) {
+        if (words[i] && words[i].length >= 2) {
+            if (words[i].length >= 3) {
+                phrases.push(words[i]);
+            }
+            if (words[i + 1]) {
+                phrases.push(`${words[i]} ${words[i + 1]}`);
+                if (words[i + 2]) {
+                    phrases.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+                }
+            }
+        }
+    }
+    
+    if (phrases.length === 0) {
+        return null; // Can't extract anything meaningful
+    }
+    
+    // Build dynamic query from extracted phrases
+    const phraseConditions = phrases.map((_, idx) => 
+        `UPPER(remarks) LIKE :phrase${idx}`
+    ).join(' OR ');
+    
+    const phraseReplacements = { bankId, entryType };
+    phrases.forEach((phrase, idx) => {
+        phraseReplacements[`phrase${idx}`] = `%${phrase}%`;
+    });
+    
+    const historicalQuery = `
+        SELECT 
+            ledger_name,
+            COUNT(*) as usage_count,
+            MAX(trans_date) as last_used,
+            MAX(LENGTH(:longestPhrase)) as match_length
+        FROM t_bank_transaction
+        WHERE bank_id = :bankId
+            AND ledger_name IS NOT NULL
+            AND (${phraseConditions})
+            AND (
+                CASE 
+                    WHEN :entryType = 'CREDIT' THEN credit_amount > 0
+                    WHEN :entryType = 'DEBIT' THEN debit_amount > 0
+                END
+            )
+            AND trans_date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+        GROUP BY ledger_name
+        ORDER BY match_length DESC, usage_count DESC, last_used DESC
+        LIMIT 1
+    `;
+    
+    phraseReplacements.longestPhrase = phrases.sort((a, b) => b.length - a.length)[0];
+    
+    const historicalResult = await db.sequelize.query(historicalQuery, {
+        replacements: phraseReplacements,
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    if (historicalResult && historicalResult[0]) {
+        console.log(`[HISTORICAL MATCH] Phrases: ${phrases.slice(0, 3).join(', ')} → ${historicalResult[0].ledger_name}`);
+        return historicalResult[0];
+    }
+    
+    return null;
+},
+
+/**
+ * Learn from successful suggestion - called after user saves entry
+ * This teaches the system for next time
+ */
+learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
+    const cleanDesc = description.toUpperCase().trim();
+    
+    // Extract pattern key (same logic as getSuggestedLedger)
+    const extractPatternKey = (desc) => {
+        let normalized = desc
+            .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
+            .replace(/[A-Z0-9]{10,}/gi, '')
+            .replace(/[-\/\s]+/g, ' ')
+            .trim();
+        
+        const words = normalized.split(' ').filter(w => 
+            w.length >= 3 && !/^\d+$/.test(w)
+        ).slice(0, 4);
+        
+        return words.join(' ').substring(0, 200);
+    };
+    
+    const patternKey = extractPatternKey(cleanDesc);
+    
+    if (!patternKey) {
+        return; // Can't learn from this pattern
+    }
+    
+    try {
+        // Insert or update the cache
+        const learnQuery = `
+            INSERT INTO t_bank_ledger_suggestion_cache 
+                (bank_id, pattern_key, ledger_name, entry_type, usage_count, last_used)
+            VALUES 
+                (:bankId, :patternKey, :ledgerName, :entryType, 1, NOW())
+            ON DUPLICATE KEY UPDATE
+                usage_count = usage_count + 1,
+                last_used = NOW(),
+                ledger_name = :ledgerName
+        `;
+        
+        await db.sequelize.query(learnQuery, {
+            replacements: { 
+                bankId, 
+                patternKey, 
+                ledgerName, 
+                entryType 
+            },
+            type: db.Sequelize.QueryTypes.INSERT
+        });
+        
+        console.log(`[LEARNED] Pattern: "${patternKey}" → ${ledgerName} (${entryType})`);
+    } catch (error) {
+        console.error('Error learning pattern:', error);
+        // Don't fail the main operation if learning fails
+    }
+}
 };

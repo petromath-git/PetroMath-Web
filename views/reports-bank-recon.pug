@@ -464,52 +464,69 @@ block content
         }
         
         async function showAddEntryModal(date, description, credit, debit) {
+            // Convert date from dd-mm-yyyy to yyyy-mm-dd for input type="date"
             const dateParts = date.split('-');
-            const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // '2025-12-06'
+            const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // yyyy-mm-dd
+            
+            // Populate modal fields
             document.getElementById('modal_trans_date').value = formattedDate;
             document.getElementById('modal_description').value = description;
             document.getElementById('modal_debit_amount').value = debit > 0 ? debit.toFixed(2) : '0.00';
             document.getElementById('modal_credit_amount').value = credit > 0 ? credit.toFixed(2) : '0.00';
             document.getElementById('modal_remarks').value = description;
             
+            // Determine entry type based on credit/debit
             const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
-            const bankId = document.getElementById('modal_bank_id').value;
             
+            // Load filtered ledgers with suggestion
+            const bankId = document.getElementById('modal_bank_id').value;
             if (bankId) {
-                await loadFilteredLedgers(bankId, entryType);
+                await loadFilteredLedgers(bankId, entryType, description);
             }
             
+            // Show modal
             const modal = new bootstrap.Modal(document.getElementById('addEntryModal'));
             modal.show();
         }
 
-        async function loadFilteredLedgers(bankId, entryType) {
+        async function loadFilteredLedgers(bankId, entryType, description) {
             const ledgerSelect = document.getElementById('modal_ledger_name');
             ledgerSelect.innerHTML = '<option value="">Loading...</option>';
             ledgerSelect.disabled = true;
             
             try {
-                const response = await fetch(`/bank-statement/ledgers?bank_id=${bankId}`);
+                // Call the new endpoint with suggestion support
+                const response = await fetch(`/reports-bank-recon/ledgers-suggest?bank_id=${bankId}&entry_type=${entryType}&description=${encodeURIComponent(description)}`);
                 const data = await response.json();
                 
                 if (data.success) {
                     ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                     
+                    // Add ledgers to dropdown
                     data.ledgers.forEach(ledger => {
-                        const allowedType = ledger.allowed_entry_type;
+                        const option = document.createElement('option');
+                        option.value = ledger.ledger_name;
+                        option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                        option.setAttribute('data-external-id', ledger.external_id || '');
+                        option.setAttribute('data-source-type', ledger.source_type || '');
                         
-                        if (allowedType === 'BOTH' || allowedType === entryType) {
-                            const option = document.createElement('option');
-                            option.value = ledger.ledger_name;
+                        // Mark suggested ledger with indicator
+                        if (data.suggestedLedger && ledger.ledger_name === data.suggestedLedger) {
+                            option.textContent = `⭐ ${ledger.ledger_display_name} (Suggested)`;
+                            option.selected = true; // Auto-select the suggested ledger
+                        } else {
                             option.textContent = ledger.ledger_display_name;
-                            option.setAttribute('data-entry-type', ledger.allowed_entry_type);
-                            option.setAttribute('data-external-id', ledger.external_id || '');
-                            option.setAttribute('data-source-type', ledger.source_type || '');
-                            ledgerSelect.appendChild(option);
                         }
+                        
+                        ledgerSelect.appendChild(option);
                     });
                     
                     ledgerSelect.disabled = false;
+                    
+                    // Show info message if suggestion was made
+                    if (data.suggestedLedger) {
+                        console.log(`Suggested ledger: ${data.suggestedLedger} based on similar historical transactions`);
+                    }
                     
                     if (ledgerSelect.options.length === 1) {
                         ledgerSelect.innerHTML = '<option value="">No matching ledgers found</option>';

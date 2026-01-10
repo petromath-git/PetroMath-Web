@@ -372,87 +372,154 @@ module.exports = {
         }
     },
 
+    /**
+     * POST - Add new entry to PetroMath from bank statement
+     */
     addEntryToPetromath: async (req, res) => {
-    try {
-        const locationCode = req.user.location_code;
-        const userName = req.user.User_Name || req.user.username || req.user.user_id;
-        
-        const {
-            trans_date,
-            bank_id,
-            ledger_name,
-            credit_amount,
-            debit_amount,
-            remarks,
-            external_id,
-            external_source
-        } = req.body;
-        
-        // Validation
-        if (!trans_date || !bank_id || !ledger_name) {
-            return res.status(400).json({
+        try {
+            const locationCode = req.user.location_code;
+            const userName = req.user.User_Name || req.user.username || req.user.user_id;
+            
+            const {
+                trans_date,
+                bank_id,
+                ledger_name,
+                credit_amount,
+                debit_amount,
+                remarks,
+                external_id,
+                external_source
+            } = req.body;
+            
+            // Validation
+            if (!trans_date || !bank_id || !ledger_name) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Missing required fields'
+                });
+            }
+            
+            const credit = parseFloat(credit_amount) || 0;
+            const debit = parseFloat(debit_amount) || 0;
+            
+            if (credit === 0 && debit === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Transaction must have either credit or debit amount'
+                });
+            }
+            
+            if (credit > 0 && debit > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Transaction cannot have both credit and debit amounts'
+                });
+            }
+            
+            // Prepare transaction data
+            const transactionData = {
+                trans_date: trans_date,
+                bank_id: parseInt(bank_id),
+                ledger_name: ledger_name,
+                transaction_type: null,
+                accounting_type: null,
+                credit_amount: credit > 0 ? credit : null,
+                debit_amount: debit > 0 ? debit : null,
+                remarks: remarks || '',
+                external_id: external_id || null,
+                external_source: external_source || null,
+                created_by: userName
+            };
+            
+            // Save using the existing DAO method
+            const BankStatementDao = require('../dao/bank-statement-dao');
+            await BankStatementDao.saveTransaction(transactionData);
+            
+            // ========== LEARNING STEP ==========
+            // Teach the system this pattern for next time
+            try {
+                const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
+                await bankReconDao.learnFromSuggestion(
+                    parseInt(bank_id),
+                    remarks || '',
+                    ledger_name,
+                    entryType
+                );
+            } catch (learningError) {
+                // Don't fail the save if learning fails
+                console.error('Learning error (non-critical):', learningError);
+            }
+            // ===================================
+            
+            res.json({
+                success: true,
+                message: 'Entry added successfully'
+            });
+            
+        } catch (error) {
+            console.error('Error in addEntryToPetromath:', error);
+            res.status(500).json({
                 success: false,
-                error: 'Missing required fields'
+                error: error.message
             });
         }
-        
-        const credit = parseFloat(credit_amount) || 0;
-        const debit = parseFloat(debit_amount) || 0;
-        
-        if (credit === 0 && debit === 0) {
-            return res.status(400).json({
+    },
+
+    /**
+     * GET - Get allowed ledgers with suggestion for add entry modal
+     */
+    getLedgersWithSuggestion: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const bankId = parseInt(req.query.bank_id);
+            const description = req.query.description || '';
+            const entryType = req.query.entry_type || 'BOTH'; // CREDIT, DEBIT, or BOTH
+            
+            if (!bankId) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Bank ID is required' 
+                });
+            }
+            
+            // Get all allowed ledgers
+            const BankStatementDao = require('../dao/bank-statement-dao');
+            const allLedgers = await BankStatementDao.getAllowedLedgers(bankId, locationCode);
+            
+            // Filter ledgers by entry type
+            const filteredLedgers = allLedgers.filter(ledger => {
+                if (entryType === 'BOTH') return true;
+                return ledger.allowed_entry_type === 'BOTH' || ledger.allowed_entry_type === entryType;
+            });
+            
+            // Get suggested ledger based on description
+            let suggestedLedgerName = null;
+            if (description) {
+                const suggestion = await bankReconDao.getSuggestedLedger(bankId, description, entryType);
+                if (suggestion) {
+                    // Verify the suggested ledger is in the filtered list
+                    const isAllowed = filteredLedgers.some(l => l.ledger_name === suggestion.ledger_name);
+                    if (isAllowed) {
+                        suggestedLedgerName = suggestion.ledger_name;
+                    }
+                }
+            }
+            
+            res.json({
+                success: true,
+                ledgers: filteredLedgers,
+                suggestedLedger: suggestedLedgerName
+            });
+            
+        } catch (error) {
+            console.error('Error in getLedgersWithSuggestion:', error);
+            res.status(500).json({
                 success: false,
-                error: 'Transaction must have either credit or debit amount'
+                error: error.message
             });
         }
-        
-        if (credit > 0 && debit > 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Transaction cannot have both credit and debit amounts'
-            });
-        }
-        
-        // Prepare transaction data
-        const transactionData = {
-            trans_date: trans_date,
-            bank_id: parseInt(bank_id),
-            ledger_name: ledger_name,
-            transaction_type: null,
-            accounting_type: null,
-            credit_amount: credit > 0 ? credit : null,
-            debit_amount: debit > 0 ? debit : null,
-            remarks: remarks || '',
-            external_id: external_id || null,
-            external_source: external_source || null,
-            created_by: userName
-        };
-        
-        // Save using the existing DAO method (from bank-statement)
-        const BankStatementDao = require('../dao/bank-statement-dao');
-        await BankStatementDao.saveTransaction(transactionData);
-        
-        res.json({
-            success: true,
-            message: 'Entry added successfully'
-        });
-        
-    } catch (error) {
-        console.error('Error in addEntryToPetromath:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
     }
-}
 };
-
-
-
-
-
-
-
 
 // Helper function to convert Excel column letter to index
 function columnToIndex(column) {
