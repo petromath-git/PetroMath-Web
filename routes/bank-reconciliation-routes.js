@@ -75,4 +75,12 @@ router.post('/add-entry',
     }
 );
 
+// GET route - Get ledgers with suggestion for add entry modal
+router.get('/ledgers-suggest',
+    isLoginEnsured,
+    (req, res, next) => {
+        bankReconController.getLedgersWithSuggestion(req, res, next);
+    }
+);
+
 module.exports = router;
