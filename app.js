@@ -221,7 +221,8 @@ const locationConfigRoutes = require('./routes/location-config-routes');
 const digitalVendorsRoutes = require('./routes/digital-vendors-routes');
 const importantLinksRoutes = require('./routes/important-links-routes');
 const bankReconRoutes = require('./routes/bank-reconciliation-routes');
-
+const campaignRoutes = require('./routes/campaign-routes');
+const campaignPublicRoutes = require('./routes/campaign-public-routes');
 
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
@@ -381,6 +382,8 @@ app.use('/digital-vendors', digitalVendorsRoutes);
 app.use('/important-links', importantLinksRoutes);
 app.use('/digital-sales-corrections', digitalSalesCorrectionsRoutes);
 app.use('/reports-bank-recon', bankReconRoutes);
+app.use('/campaigns', campaignRoutes);
+app.use('/campaign', campaignPublicRoutes);
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);

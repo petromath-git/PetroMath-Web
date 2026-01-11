@@ -1,0 +1,308 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+        .row
+            .col-12
+                //- Campaign Info Card
+                .card.mb-3
+                    .card-header
+                        .d-flex.justify-content-between.align-items-center
+                            div
+                                h4.mb-0= campaign.name
+                                small.text-muted
+                                    | Campaign Code: #{campaign.campaign_code} | 
+                                    | Location: #{campaign.location_name} | 
+                                    | Duration: #{moment(campaign.start_date).format('DD/MM/YYYY')} to #{moment(campaign.end_date).format('DD/MM/YYYY')}
+                            a.btn.btn-secondary(href='/campaigns')
+                                i.fas.fa-arrow-left
+                                |  Back to Campaigns
+                
+                //- Existing Questions List
+                .card.mb-3
+                    .card-header
+                        h5.mb-0
+                            i.fas.fa-list
+                            |  Existing Questions (#{questions.length})
+                    .card-body
+                        if questions && questions.length > 0
+                            .table-responsive
+                                table.table.table-bordered.table-hover
+                                    thead.thead-light
+                                        tr
+                                            th Date
+                                            th Question
+                                            th Options
+                                            th Correct
+                                            th Responses
+                                            th Actions
+                                    tbody
+                                        each question in questions
+                                            tr
+                                                td.text-nowrap= question.question_date_formatted
+                                                td
+                                                    div= question.question_text
+                                                    if question.question_image_url
+                                                        small.text-muted
+                                                            i.fas.fa-image
+                                                            |  Image attached
+                                                td
+                                                    small
+                                                        div A: #{question.option_a}
+                                                        div B: #{question.option_b}
+                                                        div C: #{question.option_c}
+                                                        div D: #{question.option_d}
+                                                td.text-center
+                                                    span.badge.badge-success= question.correct_answer
+                                                td.text-center
+                                                    | #{question.response_count}
+                                                    if question.response_count > 0
+                                                        br
+                                                        small.text-success (#{question.correct_count} correct)
+                                                td.text-center
+                                                    if question.response_count == 0
+                                                        button.btn.btn-sm.btn-danger.btn-delete(data-question-id=question.id)
+                                                            i.fas.fa-trash
+                                                    else
+                                                        button.btn.btn-sm.btn-secondary(disabled title='Cannot delete - has responses')
+                                                            i.fas.fa-lock
+                        else
+                            .alert.alert-info
+                                i.fas.fa-info-circle
+                                |  No questions added yet. Add your first question below.
+                
+                //- Add New Question Form
+                .card
+                    .card-header.bg-primary.text-white
+                        h5.mb-0
+                            i.fas.fa-plus-circle
+                            |  Add New Question
+                    .card-body
+                        form#questionForm
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='question_date') Question Date *
+                                        input#question_date.form-control(type='date' name='question_date' required min=campaign.start_date max=campaign.end_date)
+                                        small.form-text.text-muted Must be within campaign duration
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='question_image_url') Question Image URL (optional)
+                                        input#question_image_url.form-control(type='url' name='question_image_url' placeholder='https://example.com/image.jpg')
+                                        small.form-text.text-muted For visual/pattern questions
+                            
+                            .row
+                                .col-md-12
+                                    .form-group
+                                        label(for='question_text') Question Text *
+                                        textarea#question_text.form-control(name='question_text' rows='3' required maxlength='1000' placeholder='Enter your question here...')
+                            
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='option_a') Option A *
+                                        input#option_a.form-control(type='text' name='option_a' required maxlength='255')
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='option_b') Option B *
+                                        input#option_b.form-control(type='text' name='option_b' required maxlength='255')
+                            
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='option_c') Option C *
+                                        input#option_c.form-control(type='text' name='option_c' required maxlength='255')
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='option_d') Option D *
+                                        input#option_d.form-control(type='text' name='option_d' required maxlength='255')
+                            
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='correct_answer') Correct Answer *
+                                        select#correct_answer.form-control(name='correct_answer' required)
+                                            option(value='') -- Select Correct Answer --
+                                            option(value='A') A
+                                            option(value='B') B
+                                            option(value='C') C
+                                            option(value='D') D
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='explanation') Explanation (optional)
+                                        input#explanation.form-control(type='text' name='explanation' maxlength='500' placeholder='Why is this the correct answer?')
+                            
+                            .row
+                                .col-md-12
+                                    button#btnPreview.btn.btn-info.mr-2(type='button')
+                                        i.fas.fa-eye
+                                        |  Preview Question
+                                    button#btnSubmit.btn.btn-success(type='submit')
+                                        i.fas.fa-save
+                                        |  Save Question
+                                    |  
+                                    button.btn.btn-secondary(type='reset') Clear Form
+                
+                //- Preview Modal
+                #previewModal.modal.fade(tabindex='-1' role='dialog')
+                    .modal-dialog.modal-lg(role='document')
+                        .modal-content
+                            .modal-header.bg-info.text-white
+                                h5.modal-title
+                                    i.fas.fa-eye
+                                    |  Question Preview
+                                button.close.text-white(type='button' data-dismiss='modal')
+                                    span &times;
+                            .modal-body
+                                #previewContent
+                                    //- Preview will be inserted here
+                            .modal-footer
+                                button.btn.btn-secondary(type='button' data-dismiss='modal') Close
+
+    script.
+        $(document).ready(function() {
+            const campaignId = #{campaign.id};
+            
+            // Preview functionality
+            $('#btnPreview').on('click', function() {
+                const questionText = $('#question_text').val();
+                const imageUrl = $('#question_image_url').val();
+                const optionA = $('#option_a').val();
+                const optionB = $('#option_b').val();
+                const optionC = $('#option_c').val();
+                const optionD = $('#option_d').val();
+                const correctAnswer = $('#correct_answer').val();
+                
+                if (!questionText) {
+                    alert('Please enter a question first');
+                    return;
+                }
+                
+                let previewHtml = '<div class="card">';
+                previewHtml += '<div class="card-body">';
+                
+                // Question image
+                if (imageUrl) {
+                    previewHtml += '<div class="text-center mb-3">';
+                    previewHtml += '<img src="' + imageUrl + '" class="img-fluid" style="max-height: 300px;" onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'200\'%3E%3Crect width=\'200\' height=\'200\' fill=\'%23ddd\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%23999\'%3EImage not found%3C/text%3E%3C/svg%3E\'">';
+                    previewHtml += '</div>';
+                }
+                
+                // Question text
+                previewHtml += '<h5 class="mb-3">' + questionText + '</h5>';
+                
+                // Options
+                previewHtml += '<div class="list-group">';
+                if (optionA) {
+                    previewHtml += '<label class="list-group-item">';
+                    previewHtml += '<input type="radio" name="preview_answer" disabled> ';
+                    previewHtml += '<strong>A.</strong> ' + optionA;
+                    if (correctAnswer === 'A') previewHtml += ' <span class="badge badge-success ml-2">Correct</span>';
+                    previewHtml += '</label>';
+                }
+                if (optionB) {
+                    previewHtml += '<label class="list-group-item">';
+                    previewHtml += '<input type="radio" name="preview_answer" disabled> ';
+                    previewHtml += '<strong>B.</strong> ' + optionB;
+                    if (correctAnswer === 'B') previewHtml += ' <span class="badge badge-success ml-2">Correct</span>';
+                    previewHtml += '</label>';
+                }
+                if (optionC) {
+                    previewHtml += '<label class="list-group-item">';
+                    previewHtml += '<input type="radio" name="preview_answer" disabled> ';
+                    previewHtml += '<strong>C.</strong> ' + optionC;
+                    if (correctAnswer === 'C') previewHtml += ' <span class="badge badge-success ml-2">Correct</span>';
+                    previewHtml += '</label>';
+                }
+                if (optionD) {
+                    previewHtml += '<label class="list-group-item">';
+                    previewHtml += '<input type="radio" name="preview_answer" disabled> ';
+                    previewHtml += '<strong>D.</strong> ' + optionD;
+                    if (correctAnswer === 'D') previewHtml += ' <span class="badge badge-success ml-2">Correct</span>';
+                    previewHtml += '</label>';
+                }
+                previewHtml += '</div>';
+                
+                previewHtml += '</div></div>';
+                
+                $('#previewContent').html(previewHtml);
+                $('#previewModal').modal('show');
+            });
+            
+            // Form submission
+            $('#questionForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                $('#btnSubmit').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
+                
+                const formData = {
+                    question_date: $('#question_date').val(),
+                    question_text: $('#question_text').val(),
+                    question_image_url: $('#question_image_url').val(),
+                    option_a: $('#option_a').val(),
+                    option_b: $('#option_b').val(),
+                    option_c: $('#option_c').val(),
+                    option_d: $('#option_d').val(),
+                    correct_answer: $('#correct_answer').val(),
+                    explanation: $('#explanation').val()
+                };
+                
+                $.ajax({
+                    url: '/campaigns/' + campaignId + '/questions',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Question added successfully!');
+                            location.reload();
+                        } else {
+                            alert('Error: ' + (response.error || 'Failed to add question'));
+                            $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Save Question');
+                        }
+                    },
+                    error: function(xhr) {
+                        let errorMsg = 'Failed to add question';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        alert('Error: ' + errorMsg);
+                        $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Save Question');
+                    }
+                });
+            });
+            
+            // Delete question
+            $('.btn-delete').on('click', function() {
+                const questionId = $(this).data('question-id');
+                
+                if (!confirm('Are you sure you want to delete this question?')) {
+                    return;
+                }
+                
+                $.ajax({
+                    url: '/campaigns/' + campaignId + '/questions/' + questionId,
+                    method: 'DELETE',
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Question deleted successfully!');
+                            location.reload();
+                        } else {
+                            alert('Error: ' + (response.error || 'Failed to delete question'));
+                        }
+                    },
+                    error: function(xhr) {
+                        let errorMsg = 'Failed to delete question';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        alert('Error: ' + errorMsg);
+                    }
+                });
+            });
+            
+        });
