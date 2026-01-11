@@ -2,23 +2,38 @@ const db = require("../db/db-connection");
 const Sequelize = db.Sequelize;
 
 module.exports = {
-    /**
-     * Get list of internal banks for the location
-     */
-    getInternalBanks: async (locationCode) => {
-        const result = await db.sequelize.query(
-            `SELECT bank_id, bank_name, account_number, account_nickname
-             FROM m_bank
-             WHERE location_code = :locationCode
-               AND internal_flag = 'Y'
-             ORDER BY bank_name, account_nickname`,
-            {
-                replacements: { locationCode },
-                type: Sequelize.QueryTypes.SELECT
-            }
-        );
-        return result;
-    },
+    
+/**
+ * Get list of banks for reconciliation (internal OR oil company)
+ */
+getBanksForReconciliation: async (locationCode) => {
+    const result = await db.sequelize.query(
+        `SELECT 
+            bank_id, 
+            bank_name, 
+            account_number, 
+            account_nickname,
+            internal_flag,
+            is_oil_company
+         FROM m_bank
+         WHERE location_code = :locationCode
+           AND active_flag = 'Y'
+           AND (internal_flag = 'Y' OR is_oil_company = 'Y')
+         ORDER BY 
+            CASE 
+                WHEN internal_flag = 'Y' THEN 0
+                ELSE 1
+            END,
+            bank_name, 
+            account_nickname`,
+        {
+            replacements: { locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
+    return result;
+},
+
 
     /**
      * Get system transactions (from t_bank_transaction)
@@ -30,6 +45,7 @@ module.exports = {
                 DATE_FORMAT(bt.trans_date, '%d-%m-%Y') as trans_date,
                 bt.trans_date as sort_date,
                 bt.remarks,
+                bt.ledger_name,
                 bt.debit_amount,
                 bt.credit_amount,
                 (SELECT COUNT(*) FROM t_receipts WHERE source_txn_id = bt.t_bank_id) as receipt_count,

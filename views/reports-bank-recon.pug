@@ -768,6 +768,7 @@ block content
                                     thead.sticky-top
                                         tr
                                             th Date
+                                            th Ledger
                                             th Remarks
                                             th.text-end Credit
                                             th.text-end Debit
@@ -792,6 +793,11 @@ block content
                                                                 style="cursor: help;"
                                                             )
                                                             |  ±#{txn.dateOffBy}d
+                                                td.truncate-text(title=txn.ledger_name || 'N/A')
+                                                    if txn.ledger_name
+                                                        span.badge.bg-info.text-white(style='font-size: 0.7rem;')= txn.ledger_name
+                                                    else
+                                                        span.text-muted -
                                                 td.truncate-text(title=txn.remarks)= txn.remarks || '-'
                                                 td.text-end
                                                     if txn.credit_amount > 0
@@ -810,7 +816,7 @@ block content
                                                         | -
                                         if systemTransactions.length === 0
                                             tr
-                                                td.text-center.text-muted(colspan='5') No transactions found
+                                                td.text-center.text-muted(colspan='6') No transactions found
 
                 .col-md-6
                     .card.shadow-sm
