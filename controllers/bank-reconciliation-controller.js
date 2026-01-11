@@ -11,7 +11,7 @@ module.exports = {
             const locationCode = req.user.location_code;
             
             // Get internal banks for this location
-            const banks = await bankReconDao.getInternalBanks(locationCode);
+            const banks = await bankReconDao.getBanksForReconciliation(locationCode);
 
             res.render('reports-bank-recon', {
                 title: 'Bank Reconciliation Report',
@@ -51,7 +51,7 @@ module.exports = {
             const bankId = parseInt(req.body.bank_id);
             
             // Get banks list
-            const banks = await bankReconDao.getInternalBanks(locationCode);
+            const banks = await bankReconDao.getBanksForReconciliation(locationCode);
             
             // Get selected bank details
             const selectedBank = banks.find(b => b.bank_id === bankId);
@@ -92,22 +92,31 @@ module.exports = {
                 return diffDays;
             };
             
-            // Mark unmatched transactions - Bank date is source of truth
+            // Track which bank transactions have been matched (prevent reuse)
+            const matchedBankIds = new Set();
+            
+            // PHASE 1: Match system transactions to bank (1-to-1 unique matching)
             systemTransactions.forEach(sysTxn => {
                 const sysAmount = sysTxn.credit_amount > 0 ? sysTxn.credit_amount : sysTxn.debit_amount;
                 const sysType = sysTxn.credit_amount > 0 ? 'credit' : 'debit';
                 
                 // First try exact date match
                 let matchInfo = bankTransactions.find(bankTxn => {
+                    // Skip if this bank transaction is already matched
+                    if (matchedBankIds.has(bankTxn.actual_stmt_id)) return false;
+                    
                     const bankAmount = sysType === 'credit' ? bankTxn.credit_amount : bankTxn.debit_amount;
                     const dateMatch = sysTxn.trans_date === bankTxn.txn_date;
                     const amountMatch = Math.abs(sysAmount - bankAmount) < 0.01;
                     return amountMatch && dateMatch;
                 });
                 
-                // If no exact match, try ±1 day tolerance (system date can be off from bank date)
+                // If no exact match, try ±1 day tolerance
                 if (!matchInfo) {
                     matchInfo = bankTransactions.find(bankTxn => {
+                        // Skip if this bank transaction is already matched
+                        if (matchedBankIds.has(bankTxn.actual_stmt_id)) return false;
+                        
                         const bankAmount = sysType === 'credit' ? bankTxn.credit_amount : bankTxn.debit_amount;
                         const amountMatch = Math.abs(sysAmount - bankAmount) < 0.01;
                         
@@ -119,47 +128,45 @@ module.exports = {
                     });
                     
                     if (matchInfo) {
-                        // Calculate date difference for near match
+                        // Mark as near match
                         sysTxn.dateOffBy = getDateDifference(sysTxn.trans_date, matchInfo.txn_date);
                         sysTxn.isNearMatch = true;
-                        sysTxn.bankDate = matchInfo.txn_date; // Store bank date for reference
+                        sysTxn.bankDate = matchInfo.txn_date;
                     }
                 }
                 
-                sysTxn.isUnmatched = !matchInfo;
-                
-                // Debug logging
-                if (sysTxn.isUnmatched) {
+                if (matchInfo) {
+                    // Mark this bank transaction as matched (prevent reuse)
+                    matchedBankIds.add(matchInfo.actual_stmt_id);
+                    sysTxn.isUnmatched = false;
+                    sysTxn.matchedBankId = matchInfo.actual_stmt_id;
+                    
+                    // Debug logging
+                    if (sysTxn.isNearMatch) {
+                        console.log(`System NEAR MATCH (${sysTxn.dateOffBy} day off, Bank: ${sysTxn.bankDate}): ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
+                    }
+                } else {
+                    sysTxn.isUnmatched = true;
                     console.log(`System UNMATCHED: ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
-                } else if (sysTxn.isNearMatch) {
-                    console.log(`System NEAR MATCH (${sysTxn.dateOffBy} day off, Bank: ${sysTxn.bankDate}): ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
                 }
             });
             
-            // Bank transactions - these remain as source of truth
+            // PHASE 2: Mark unmatched bank transactions
             bankTransactions.forEach(bankTxn => {
-                const bankAmount = bankTxn.credit_amount > 0 ? bankTxn.credit_amount : bankTxn.debit_amount;
-                const bankType = bankTxn.credit_amount > 0 ? 'credit' : 'debit';
-                
-                // Check if this exact amount exists in system (same date or ±1 day)
-                const matchExists = systemTransactions.some(sysTxn => {
-                    const sysAmount = bankType === 'credit' ? sysTxn.credit_amount : sysTxn.debit_amount;
-                    const amountMatch = Math.abs(bankAmount - sysAmount) < 0.01;
-                    
-                    if (!amountMatch) return false;
-                    
-                    // Allow system date to be ±1 day from bank date
-                    const dateDiff = getDateDifference(bankTxn.txn_date, sysTxn.trans_date);
-                    return dateDiff <= 1;
-                });
-                
-                bankTxn.isUnmatched = !matchExists;
-                
-                // Debug logging
-                if (bankTxn.isUnmatched) {
+                // If this bank transaction was matched in Phase 1, mark it as matched
+                if (matchedBankIds.has(bankTxn.actual_stmt_id)) {
+                    bankTxn.isUnmatched = false;
+                } else {
+                    bankTxn.isUnmatched = true;
+                    const bankAmount = bankTxn.credit_amount > 0 ? bankTxn.credit_amount : bankTxn.debit_amount;
                     console.log(`Bank UNMATCHED: ${bankTxn.txn_date} - ${bankTxn.description} - ${bankAmount}`);
                 }
             });
+            
+            // Matching summary
+            console.log(`=== Matching Summary ===`);
+            console.log(`Total System: ${systemTransactions.length}, Matched: ${systemTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${systemTransactions.filter(t => t.isUnmatched).length}`);
+            console.log(`Total Bank: ${bankTransactions.length}, Matched: ${bankTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${bankTransactions.filter(t => t.isUnmatched).length}`);
             
             // Get summary totals
             const summaryTotals = await bankReconDao.getSummaryTotals(
