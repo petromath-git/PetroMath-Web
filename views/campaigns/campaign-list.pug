@@ -1,0 +1,284 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+        .row
+            .col-12
+                .card
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        h4.mb-0 Campaign Management
+                        a.btn.btn-primary(href='/campaigns/new')
+                            i.fas.fa-plus
+                            |  New Campaign
+                    
+                    .card-body
+                        //- Filters
+                        form#filterForm.mb-3
+                            .row
+                                .col-md-3
+                                    label(for='filterLocation') Location
+                                    select#filterLocation.form-control(name='location')
+                                        option(value='') All Locations
+                                        //- Will populate via AJAX or server-side
+                                
+                                .col-md-3
+                                    label(for='filterStatus') Status
+                                    select#filterStatus.form-control(name='status')
+                                        option(value='') All Status
+                                        option(value='draft') Draft
+                                        option(value='active') Active
+                                        option(value='completed') Completed
+                                        option(value='cancelled') Cancelled
+                                
+                                .col-md-2.d-flex.align-items-end
+                                    button#btnFilter.btn.btn-info.btn-block(type='button')
+                                        i.fas.fa-filter
+                                        |  Filter
+                                    
+                                .col-md-2.d-flex.align-items-end
+                                    button#btnReset.btn.btn-secondary.btn-block(type='button')
+                                        i.fas.fa-redo
+                                        |  Reset
+                        
+                        //- Campaigns Table
+                        .table-responsive
+                            table#campaignsTable.table.table-striped.table-bordered.table-hover
+                                thead.thead-dark
+                                    tr
+                                        th Campaign Code
+                                        th Campaign Name
+                                        th Location
+                                        th Duration
+                                        th Status
+                                        th Questions
+                                        th Responses
+                                        th Created
+                                        th Actions
+                                tbody
+                                    if campaigns && campaigns.length > 0
+                                        each campaign in campaigns
+                                            tr(data-location=campaign.location_code data-status=campaign.status)
+                                                td= campaign.campaign_code
+                                                td= campaign.name
+                                                td= campaign.location_name
+                                                td
+                                                    small= campaign.start_date_formatted
+                                                    |  to 
+                                                    small= campaign.end_date_formatted
+                                                td
+                                                    span.badge(class=campaign.status_class)= campaign.status_text
+                                                td.text-center= campaign.question_count
+                                                td.text-center= campaign.response_count
+                                                td
+                                                    small= campaign.created_at_formatted
+                                                    if campaign.created_by_name
+                                                        br
+                                                        small.text-muted= campaign.created_by_name
+                                                td.text-center
+                                                    a.btn.btn-sm.btn-info.mb-1(href=`/campaigns/${campaign.id}/questions` title='Manage Questions')
+                                                        i.fas.fa-edit
+                                                    |  
+                                                    button.btn.btn-sm.btn-warning.btn-print-qr(data-campaign-code=campaign.campaign_code data-campaign-name=campaign.name title='Print QR Code')
+                                                        i.fas.fa-qrcode
+                                    else
+                                        tr
+                                            td.text-center(colspan='9') No campaigns found
+        
+        //- QR Code Modal
+        #qrModal.modal.fade(tabindex='-1' role='dialog')
+            .modal-dialog.modal-dialog-centered(role='document')
+                .modal-content
+                    .modal-header
+                        h5.modal-title
+                            i.fas.fa-qrcode
+                            |  Campaign QR Code
+                        button.close(type='button' data-dismiss='modal')
+                            span &times;
+                    .modal-body.text-center
+                        h5#qrCampaignName.mb-3
+                        div#qrCodeContainer
+                        p.mt-3.text-muted
+                            small Scan this QR code to participate in the campaign
+                        p.mb-0
+                            strong#qrUrl
+                    .modal-footer
+                        button#btnDownloadQR.btn.btn-primary
+                            i.fas.fa-download
+                            |  Download QR
+                        button#btnPrintQR.btn.btn-success
+                            i.fas.fa-print
+                            |  Print
+                        button.btn.btn-secondary(type='button' data-dismiss='modal') Close
+
+    //- QR Code Library
+    script(src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js')
+    
+    script.
+        $(document).ready(function() {
+            
+            let currentQRCode = null;
+            let currentCampaignCode = null;
+            
+            // Filter functionality
+            $('#btnFilter').on('click', function() {
+                const selectedLocation = $('#filterLocation').val();
+                const selectedStatus = $('#filterStatus').val();
+                
+                $('#campaignsTable tbody tr').each(function() {
+                    const row = $(this);
+                    const rowLocation = row.data('location');
+                    const rowStatus = row.data('status');
+                    
+                    let showRow = true;
+                    
+                    if (selectedLocation && rowLocation != selectedLocation) {
+                        showRow = false;
+                    }
+                    
+                    if (selectedStatus && rowStatus != selectedStatus) {
+                        showRow = false;
+                    }
+                    
+                    if (showRow) {
+                        row.show();
+                    } else {
+                        row.hide();
+                    }
+                });
+            });
+            
+            // Reset filters
+            $('#btnReset').on('click', function() {
+                $('#filterForm')[0].reset();
+                $('#campaignsTable tbody tr').show();
+            });
+            
+            // Print QR Code button
+            $('.btn-print-qr').on('click', function() {
+                const campaignCode = $(this).data('campaign-code');
+                const campaignName = $(this).data('campaign-name');
+                
+                currentCampaignCode = campaignCode;
+                
+                // Get the base URL
+                const baseUrl = window.location.origin;
+                const campaignUrl = baseUrl + '/campaign/' + campaignCode;
+                
+                // Clear previous QR code
+                $('#qrCodeContainer').empty();
+                
+                // Set campaign name and URL
+                $('#qrCampaignName').text(campaignName);
+                $('#qrUrl').text(campaignUrl);
+                
+                // Generate QR Code
+                currentQRCode = new QRCode(document.getElementById('qrCodeContainer'), {
+                    text: campaignUrl,
+                    width: 256,
+                    height: 256,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                
+                // Show modal
+                $('#qrModal').modal('show');
+            });
+            
+            // Download QR Code
+            $('#btnDownloadQR').on('click', function() {
+                const canvas = $('#qrCodeContainer canvas')[0];
+                if (canvas) {
+                    const url = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = 'campaign-' + currentCampaignCode + '-qr.png';
+                    link.href = url;
+                    link.click();
+                }
+            });
+            
+            // Print QR Code
+            $('#btnPrintQR').on('click', function() {
+                const campaignName = $('#qrCampaignName').text();
+                const campaignUrl = $('#qrUrl').text();
+                const canvas = $('#qrCodeContainer canvas')[0];
+                
+                if (canvas) {
+                    const qrImageUrl = canvas.toDataURL('image/png');
+                    
+                    // Create print window
+                    const printWindow = window.open('', '_blank');
+                    printWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Print QR Code - ${campaignName}</title>
+                            <style>
+                                @page {
+                                    size: A4;
+                                    margin: 1cm;
+                                }
+                                body {
+                                    font-family: Arial, sans-serif;
+                                    text-align: center;
+                                    padding: 20px;
+                                }
+                                h1 {
+                                    color: #F4C430;
+                                    margin-bottom: 20px;
+                                }
+                                .qr-container {
+                                    margin: 30px auto;
+                                    padding: 20px;
+                                    border: 3px solid #F4C430;
+                                    display: inline-block;
+                                    background: white;
+                                }
+                                img {
+                                    display: block;
+                                    margin: 0 auto;
+                                }
+                                .instructions {
+                                    margin-top: 30px;
+                                    font-size: 18px;
+                                    color: #333;
+                                }
+                                .url {
+                                    margin-top: 20px;
+                                    font-size: 14px;
+                                    color: #666;
+                                    word-break: break-all;
+                                }
+                                @media print {
+                                    body {
+                                        background: white;
+                                    }
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <h1>${campaignName}</h1>
+                            <div class="qr-container">
+                                <img src="${qrImageUrl}" width="256" height="256" />
+                            </div>
+                            <div class="instructions">
+                                <strong>Scan this QR code to participate!</strong>
+                            </div>
+                            <div class="url">
+                                ${campaignUrl}
+                            </div>
+                        </body>
+                        </html>
+                    `);
+                    printWindow.document.close();
+                    
+                    // Wait for image to load, then print
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        printWindow.close();
+                    }, 500);
+                }
+            });
+            
+        });

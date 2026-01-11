@@ -1,0 +1,605 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        meta(name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+        title= title
+        link(rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css')
+        style.
+            * {
+                -webkit-tap-highlight-color: transparent;
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                background: #000000;
+                min-height: 100vh;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            }
+            .campaign-container {
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+            .campaign-header {
+                background: #F4C430;
+                color: #000000;
+                padding: 20px 15px;
+                text-align: center;
+                box-shadow: 0 4px 10px rgba(244, 196, 48, 0.3);
+            }
+            .campaign-header h1 {
+                font-size: 24px;
+                font-weight: 700;
+                margin: 0 0 5px 0;
+            }
+            .campaign-header .location {
+                font-size: 14px;
+                font-weight: 500;
+                margin: 5px 0;
+            }
+            .campaign-header .prize {
+                font-size: 13px;
+                background: #000000;
+                color: #F4C430;
+                padding: 8px 15px;
+                border-radius: 20px;
+                display: inline-block;
+                margin-top: 10px;
+                font-weight: 600;
+            }
+            .question-container {
+                flex: 1;
+                background: #FFFFFF;
+                padding: 20px 15px;
+                overflow-y: auto;
+            }
+            .question-image {
+                width: 100%;
+                height: auto;
+                border-radius: 12px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .question-text {
+                font-size: 20px;
+                font-weight: 700;
+                color: #000000;
+                margin-bottom: 20px;
+                line-height: 1.5;
+                padding: 20px;
+                background: #F5F5F5;
+                border-radius: 12px;
+                border-left: 4px solid #F4C430;
+            }
+            .options-section {
+                margin-bottom: 30px;
+            }
+            .options-label {
+                font-size: 16px;
+                font-weight: 700;
+                color: #000000;
+                margin-bottom: 15px;
+                display: block;
+            }
+            .option-item {
+                display: block;
+                position: relative;
+                margin-bottom: 12px;
+            }
+            .option-item input[type="radio"] {
+                position: absolute;
+                opacity: 0;
+            }
+            .option-item label {
+                display: block;
+                padding: 15px 15px 15px 50px;
+                background: #FFFFFF;
+                border: 2px solid #E0E0E0;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.3s;
+                font-size: 16px;
+                line-height: 1.4;
+                margin: 0;
+                position: relative;
+            }
+            .option-item label:before {
+                content: '';
+                position: absolute;
+                left: 15px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 24px;
+                height: 24px;
+                border: 2px solid #E0E0E0;
+                border-radius: 50%;
+                background: #FFFFFF;
+                transition: all 0.3s;
+            }
+            .option-item label:after {
+                content: '';
+                position: absolute;
+                left: 21px;
+                top: 50%;
+                transform: translateY(-50%) scale(0);
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #000000;
+                transition: all 0.3s;
+            }
+            .option-item input[type="radio"]:checked + label {
+                border-color: #F4C430;
+                background: #FFFEF0;
+            }
+            .option-item input[type="radio"]:checked + label:before {
+                border-color: #F4C430;
+            }
+            .option-item input[type="radio"]:checked + label:after {
+                transform: translateY(-50%) scale(1);
+            }
+            .option-item label strong {
+                color: #F4C430;
+                margin-right: 8px;
+                font-size: 18px;
+            }
+            .divider {
+                border-top: 2px solid #F4C430;
+                margin: 30px 0;
+            }
+            .form-section {
+                margin-bottom: 20px;
+            }
+            .form-label {
+                font-size: 14px;
+                font-weight: 600;
+                color: #000000;
+                margin-bottom: 8px;
+                display: block;
+            }
+            .form-control {
+                font-size: 16px;
+                padding: 12px 15px;
+                border: 2px solid #E0E0E0;
+                border-radius: 10px;
+                width: 100%;
+                transition: all 0.3s;
+            }
+            .form-control:focus {
+                border-color: #F4C430;
+                box-shadow: 0 0 0 3px rgba(244, 196, 48, 0.2);
+                outline: none;
+            }
+            .form-text {
+                font-size: 12px;
+                color: #666;
+                margin-top: 5px;
+            }
+            .submit-btn {
+                width: 100%;
+                padding: 16px;
+                font-size: 18px;
+                font-weight: 700;
+                background: #F4C430;
+                color: #000000;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.3s;
+                box-shadow: 0 4px 15px rgba(244, 196, 48, 0.4);
+                margin-top: 10px;
+            }
+            .submit-btn:active {
+                transform: scale(0.98);
+            }
+            .submit-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .stats-card {
+                background: #000000;
+                color: #FFFFFF;
+                padding: 15px;
+                border-radius: 12px;
+                margin-top: 25px;
+                border: 2px solid #F4C430;
+            }
+            .stats-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: #F4C430;
+                margin-bottom: 10px;
+                text-align: center;
+            }
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                text-align: center;
+            }
+            .stat-item {
+                background: #1A1A1A;
+                padding: 10px;
+                border-radius: 8px;
+            }
+            .stat-value {
+                font-size: 24px;
+                font-weight: 700;
+                display: block;
+                color: #F4C430;
+            }
+            .stat-label {
+                font-size: 11px;
+                color: #FFFFFF;
+                display: block;
+                margin-top: 2px;
+            }
+            .result-modal {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.95);
+                display: none;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                padding: 20px;
+            }
+            .result-content {
+                background: #FFFFFF;
+                padding: 30px 20px;
+                border-radius: 20px;
+                text-align: center;
+                max-width: 400px;
+                width: 100%;
+                animation: slideUp 0.3s ease-out;
+                border: 3px solid #F4C430;
+                position: relative;
+                z-index: 10000;
+            }
+            @keyframes slideUp {
+                from {
+                    transform: translateY(100px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+            }
+            .result-icon {
+                font-size: 80px;
+                margin-bottom: 15px;
+            }
+            .correct-icon {
+                color: #F4C430;
+                animation: bounce 0.6s ease-in-out;
+            }
+            @keyframes bounce {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+            }
+            .wrong-icon {
+                color: #DC3545;
+            }
+            .result-title {
+                font-size: 24px;
+                font-weight: 700;
+                color: #000000;
+                margin-bottom: 10px;
+            }
+            .result-message {
+                font-size: 16px;
+                color: #495057;
+                margin-bottom: 15px;
+                line-height: 1.5;
+            }
+            .result-explanation {
+                background: #FFFEF0;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 15px 0;
+                font-size: 14px;
+                line-height: 1.5;
+                border-left: 4px solid #F4C430;
+            }
+            .result-stats {
+                background: #000000;
+                color: #FFFFFF;
+                padding: 12px;
+                border-radius: 10px;
+                margin: 15px 0;
+                font-size: 13px;
+            }
+            .close-btn {
+                width: 100%;
+                padding: 14px;
+                font-size: 16px;
+                font-weight: 600;
+                background: #000000;
+                color: #F4C430;
+                border: 2px solid #F4C430;
+                border-radius: 10px;
+                margin-top: 10px;
+                cursor: pointer;
+            }
+            .close-btn:active {
+                transform: scale(0.98);
+            }
+            
+            /* Confetti Animation */
+            .confetti {
+                position: fixed;
+                width: 10px;
+                height: 10px;
+                top: -10px;
+                z-index: 9998;
+                animation: fall 3s linear forwards;
+            }
+            @keyframes fall {
+                to {
+                    transform: translateY(100vh) rotate(360deg);
+                    opacity: 0;
+                }
+            }
+    
+    body
+        .campaign-container
+            //- Header
+            .campaign-header
+                h1= campaign.name
+                p.location
+                    i.fas.fa-map-marker-alt
+                    |  #{campaign.location_name}
+                if campaign.prize_description
+                    .prize
+                        i.fas.fa-gift
+                        |  #{campaign.prize_description}
+            
+            //- Question
+            .question-container
+                //- Question Image
+                if question.question_image_url
+                    img.question-image(src=question.question_image_url alt='Question Image' onerror="this.style.display='none'")
+                
+                //- Question Text
+                .question-text= question.question_text
+                
+                //- Form
+                form#answerForm
+                    //- Options (RIGHT AFTER QUESTION)
+                    .options-section
+                        label.options-label
+                            i.fas.fa-check-circle
+                            |  Choose Your Answer
+                        
+                        .option-item
+                            input#optionA(type='radio' name='answer' value='A' required)
+                            label(for='optionA')
+                                strong A.
+                                |  #{question.option_a}
+                        
+                        .option-item
+                            input#optionB(type='radio' name='answer' value='B' required)
+                            label(for='optionB')
+                                strong B.
+                                |  #{question.option_b}
+                        
+                        .option-item
+                            input#optionC(type='radio' name='answer' value='C' required)
+                            label(for='optionC')
+                                strong C.
+                                |  #{question.option_c}
+                        
+                        .option-item
+                            input#optionD(type='radio' name='answer' value='D' required)
+                            label(for='optionD')
+                                strong D.
+                                |  #{question.option_d}
+                    
+                    //- Divider
+                    .divider
+                    
+                    //- Name & Phone (BEFORE SUBMIT)
+                    .form-section
+                        label.form-label(for='name')
+                            i.fas.fa-user
+                            |  Your Name
+                        input#name.form-control(
+                            type='text' 
+                            name='name' 
+                            required 
+                            maxlength='100' 
+                            placeholder='Enter your full name'
+                            autocomplete='name'
+                        )
+                    
+                    .form-section
+                        label.form-label(for='phone')
+                            i.fas.fa-mobile-alt
+                            |  Mobile Number
+                        input#phone.form-control(
+                            type='tel' 
+                            name='phone' 
+                            required 
+                            pattern='[0-9]{10}' 
+                            maxlength='10' 
+                            placeholder='10-digit number'
+                            inputmode='numeric'
+                            autocomplete='tel'
+                        )
+                        small.form-text Without +91 or 0
+                    
+                    //- Submit
+                    button#btnSubmit.submit-btn(type='submit')
+                        i.fas.fa-paper-plane
+                        |  Submit Answer
+                
+                //- Stats
+                .stats-card
+                    .stats-title
+                        i.fas.fa-chart-bar
+                        |  TODAY'S PARTICIPATION
+                    .stats-grid
+                        .stat-item
+                            span.stat-value= stats.total_responses
+                            span.stat-label Total
+                        .stat-item
+                            span.stat-value= stats.correct_responses
+                            span.stat-label Correct
+                        .stat-item
+                            span.stat-value= stats.wrong_responses
+                            span.stat-label Wrong
+        
+        //- Result Modal
+        #resultModal.result-modal
+            .result-content
+                #resultContent
+                    //- Content injected via JS
+        
+        //- Scripts
+        script(src='https://code.jquery.com/jquery-3.5.1.min.js')
+        script.
+            $(document).ready(function() {
+                
+                // Prevent zoom on input focus (iOS)
+                $('input').on('focus', function() {
+                    $('meta[name=viewport]').attr('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                });
+                
+                // Phone number validation
+                $('#phone').on('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '').substring(0, 10);
+                });
+                
+                // Confetti animation function
+                function createConfetti() {
+                    const colors = ['#F4C430', '#FFD700', '#FFA500', '#FF6347', '#FF1493', '#00CED1', '#32CD32'];
+                    const confettiCount = 100;
+                    
+                    for (let i = 0; i < confettiCount; i++) {
+                        setTimeout(() => {
+                            const confetti = $('<div class="confetti"></div>');
+                            const color = colors[Math.floor(Math.random() * colors.length)];
+                            const left = Math.random() * 100;
+                            const animationDuration = 2 + Math.random() * 2;
+                            const size = 5 + Math.random() * 10;
+                            
+                            confetti.css({
+                                left: left + '%',
+                                backgroundColor: color,
+                                width: size + 'px',
+                                height: size + 'px',
+                                animationDuration: animationDuration + 's',
+                                animationDelay: '0s'
+                            });
+                            
+                            $('body').append(confetti);
+                            
+                            setTimeout(() => {
+                                confetti.remove();
+                            }, animationDuration * 1000);
+                        }, i * 20);
+                    }
+                }
+                
+                // Form submission
+                $('#answerForm').on('submit', function(e) {
+                    e.preventDefault();
+                    
+                    // Validate
+                    if (!$('input[name="answer"]:checked').val()) {
+                        alert('Please select an answer');
+                        return;
+                    }
+                    
+                    // Disable submit
+                    $('#btnSubmit').prop('disabled', true)
+                        .html('<i class="fas fa-spinner fa-spin"></i> Submitting...');
+                    
+                    // Get form data
+                    const formData = {
+                        name: $('#name').val().trim(),
+                        phone: $('#phone').val().trim(),
+                        answer: $('input[name="answer"]:checked').val()
+                    };
+                    
+                    // Submit
+                    $.ajax({
+                        url: '/campaign/#{campaign.campaign_code}/submit',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(formData),
+                        success: function(response) {
+                            if (response.success) {
+                                // Trigger confetti if correct answer
+                                if (response.is_correct) {
+                                    createConfetti();
+                                }
+                                // Show result modal after small delay to see confetti
+                                setTimeout(() => {
+                                    showResult(response);
+                                }, 500);
+                            } else {
+                                alert(response.error || 'Failed to submit answer');
+                                resetSubmitButton();
+                            }
+                        },
+                        error: function(xhr) {
+                            let errorMsg = 'Failed to submit answer';
+                            if (xhr.responseJSON && xhr.responseJSON.error) {
+                                errorMsg = xhr.responseJSON.error;
+                            }
+                            alert(errorMsg);
+                            resetSubmitButton();
+                        }
+                    });
+                });
+                
+                function resetSubmitButton() {
+                    $('#btnSubmit').prop('disabled', false)
+                        .html('<i class="fas fa-paper-plane"></i> Submit Answer');
+                }
+                
+                function showResult(response) {
+                    let html = '';
+                    
+                    if (response.is_correct) {
+                        html += '<i class="fas fa-check-circle result-icon correct-icon"></i>';
+                        html += '<div class="result-title" style="color:#F4C430;">🎉 Correct! 🎉</div>';
+                        html += '<div class="result-message">Congratulations! You\'re entered in today\'s lucky draw.</div>';
+                    } else {
+                        html += '<i class="fas fa-times-circle result-icon wrong-icon"></i>';
+                        html += '<div class="result-title" style="color:#DC3545;">Wrong Answer</div>';
+                        html += '<div class="result-message">The correct answer is <strong>' + response.correct_answer + '</strong></div>';
+                        html += '<div class="result-message">Thank you for participating! Try again tomorrow.</div>';
+                    }
+                    
+                    if (response.explanation) {
+                        html += '<div class="result-explanation">';
+                        html += '<strong>💡 Explanation:</strong><br>' + response.explanation;
+                        html += '</div>';
+                    }
+                    
+                    html += '<div class="result-stats">';
+                    html += '<div style="font-size:12px;color:#F4C430;margin-bottom:5px;">Updated Stats</div>';
+                    html += '<strong style="color:#F4C430;">' + response.stats.total_responses + '</strong> total • ';
+                    html += '<strong style="color:#F4C430;">' + response.stats.correct_responses + '</strong> correct';
+                    html += '</div>';
+                    
+                    html += '<button class="close-btn" onclick="closeModal()">Close</button>';
+                    
+                    $('#resultContent').html(html);
+                    $('#resultModal').css('display', 'flex');
+                }
+                
+                window.closeModal = function() {
+                    $('#resultModal').hide();
+                    location.reload();
+                };
+                
+            });
