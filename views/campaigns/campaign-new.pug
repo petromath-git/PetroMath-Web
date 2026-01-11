@@ -1,0 +1,131 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+        .row
+            .col-12
+                .card
+                    .card-header
+                        .d-flex.justify-content-between.align-items-center
+                            h4.mb-0 Create New Campaign
+                            a.btn.btn-secondary(href='/campaigns')
+                                i.fas.fa-arrow-left
+                                |  Back to List
+                    
+                    .card-body
+                        form#campaignForm
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='location_id') Location *
+                                        select#location_id.form-control(name='location_id' required)
+                                            option(value='') -- Select Location --
+                                            each location in locations
+                                                option(value=location.location_id)= location.location_name
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='name') Campaign Name *
+                                        input#name.form-control(type='text' name='name' required maxlength='255' placeholder='e.g., Diwali Quiz 2025')
+                            
+                            .row
+                                .col-md-6
+                                    .form-group
+                                        label(for='start_date') Start Date *
+                                        input#start_date.form-control(type='date' name='start_date' required)
+                                
+                                .col-md-6
+                                    .form-group
+                                        label(for='end_date') End Date *
+                                        input#end_date.form-control(type='date' name='end_date' required)
+                            
+                            .row
+                                .col-md-12
+                                    .form-group
+                                        label(for='description') Description
+                                        textarea#description.form-control(name='description' rows='3' placeholder='Brief description of the campaign')
+                            
+                            .row
+                                .col-md-12
+                                    .form-group
+                                        label(for='prize_description') Prize Description
+                                        input#prize_description.form-control(type='text' name='prize_description' maxlength='255' placeholder='e.g., Free oil change, Rs. 500 voucher')
+                            
+                            //- Hidden status field (always draft on creation)
+                            input(type='hidden' name='status' value='draft')
+                            
+                            .row
+                                .col-md-12
+                                    hr
+                                    button#btnSubmit.btn.btn-primary(type='submit')
+                                        i.fas.fa-save
+                                        |  Create Campaign
+                                    |  
+                                    a.btn.btn-secondary(href='/campaigns') Cancel
+
+    script.
+        $(document).ready(function() {
+            
+            // Set minimum date to today for start_date
+            const today = new Date().toISOString().split('T')[0];
+            $('#start_date').attr('min', today);
+            
+            // When start_date changes, update end_date minimum
+            $('#start_date').on('change', function() {
+                const startDate = $(this).val();
+                if (startDate) {
+                    // Set end_date minimum to start_date + 1 day
+                    const minEndDate = new Date(startDate);
+                    minEndDate.setDate(minEndDate.getDate() + 1);
+                    $('#end_date').attr('min', minEndDate.toISOString().split('T')[0]);
+                }
+            });
+            
+            // Form submission
+            $('#campaignForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                // Disable submit button
+                $('#btnSubmit').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Creating...');
+                
+                // Get form data
+                const formData = {
+                    location_id: $('#location_id').val(),
+                    name: $('#name').val(),
+                    description: $('#description').val(),
+                    start_date: $('#start_date').val(),
+                    end_date: $('#end_date').val(),
+                    prize_description: $('#prize_description').val(),
+                    status: 'draft'
+                };
+                
+                // Submit via AJAX
+                $.ajax({
+                    url: '/campaigns',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(response) {
+                        if (response.success) {
+                            // Show success message
+                            alert('Campaign created successfully! Campaign Code: ' + response.campaignCode);
+                            
+                            // Redirect to add questions page
+                            window.location.href = '/campaigns/' + response.campaignId + '/questions';
+                        } else {
+                            alert('Error: ' + (response.error || 'Failed to create campaign'));
+                            $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Create Campaign');
+                        }
+                    },
+                    error: function(xhr) {
+                        let errorMsg = 'Failed to create campaign';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        alert('Error: ' + errorMsg);
+                        $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Create Campaign');
+                    }
+                });
+            });
+            
+        });
