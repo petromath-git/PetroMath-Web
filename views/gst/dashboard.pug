@@ -22,33 +22,26 @@ block content
 
         //- Quick Stats
         .row.mb-4
-            .col-md-3
+            .col-md-4
                 .card.border-primary
                     .card-body.text-center
                         h6.text-muted Current Period
                         h3.mb-0.text-primary= formattedPeriod
                         small.text-muted= currentPeriod
             
-            .col-md-3
+            .col-md-4
                 .card.border-info
                     .card-body.text-center
                         h6.text-muted Total Returns
                         h3.mb-0.text-info= recentReturns.length
                         small.text-muted Generated
             
-            .col-md-3
+            .col-md-4
                 .card.border-success
                     .card-body.text-center
                         h6.text-muted GSTIN
                         h3.mb-0.text-success(style='font-size: 1.2rem;')= gstConfig ? gstConfig.gstin : 'Not Set'
-                        small.text-muted Location: MUE
-            
-            .col-md-3
-                .card.border-warning
-                    .card-body.text-center
-                        h6.text-muted Status
-                        h3.mb-0.text-warning Manual Filing
-                        small.text-muted No API Integration
+                        small.text-muted Location: #{user.location_code}
 
         //- Main Actions
         .row.mb-4
