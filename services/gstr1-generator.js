@@ -247,6 +247,7 @@ function formatHSNData(hsnData) {
             qty: parseFloat(row.total_quantity || 0).toFixed(2),
             val: parseFloat(row.total_taxable_value || 0).toFixed(2),
             txval: parseFloat(row.total_taxable_value || 0).toFixed(2),
+            rt: parseFloat(row.tax_rate || 0), 
             iamt: parseFloat(row.total_igst || 0).toFixed(2),
             camt: parseFloat(row.total_cgst || 0).toFixed(2),
             samt: parseFloat(row.total_sgst || 0).toFixed(2),
