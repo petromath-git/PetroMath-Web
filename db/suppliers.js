@@ -20,6 +20,11 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: false,
             field: 'supplier_short_name'
         },
+        gstin: {
+            type: DataTypes.STRING(15),
+            allowNull: true,
+            comment: 'Supplier GSTIN for GST ITC claims'
+        },
         location_id: {
             type: DataTypes.INTEGER,
             allowNull: true,

@@ -1,0 +1,76 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-4
+        //- Header
+        .row.mb-4
+            .col-12
+                nav(aria-label='breadcrumb')
+                    ol.breadcrumb
+                        li.breadcrumb-item
+                            a(href='/gst') GST Returns
+                        li.breadcrumb-item.active(aria-current='page')= `Generate ${returnType}`
+                
+                h4.mb-1
+                    i.bi.bi-plus-circle.me-2
+                    | Generate #{returnType}
+                p.text-muted.mb-0= returnType === 'GSTR1' ? 'Monthly return of outward supplies' : 'Monthly summary return and tax payment'
+
+        //- Configuration Info
+        .row.mb-4
+            .col-md-6
+                .card.border-info
+                    .card-body
+                        h6 Configuration
+                        p.mb-1
+                            strong GSTIN: 
+                            span.ms-2= gstConfig.gstin
+                        p.mb-1
+                            strong Location: 
+                            span.ms-2 MUE
+                        p.mb-0
+                            strong Environment: 
+                            span.badge.bg-success.ms-2= gstConfig.environment
+            
+            .col-md-6
+                .card.border-primary
+                    .card-body
+                        h6 Return Period
+                        form(method='POST' action='/gst/preview')
+                            input(type='hidden' name='return_type' value=returnType)
+                            .form-group.mb-2
+                                label.form-label Period (MMYYYY):
+                                input#returnPeriod.form-control(
+                                    type='text'
+                                    name='return_period'
+                                    value=currentPeriod
+                                    placeholder='122024'
+                                    maxlength='6'
+                                    required
+                                )
+                            small.text-muted Current: #{formattedPeriod}
+                            
+                            button.btn.btn-primary.mt-2(type='submit')
+                                i.bi.bi-eye.me-2
+                                | Preview Data
+
+        //- Actions
+        .row.mb-4
+            .col-12
+                .card
+                    .card-header.bg-primary.text-white
+                        h6.mb-0
+                            i.bi.bi-gear.me-2
+                            | Download Return
+                    .card-body
+                        form(method='POST' action='/gst/download')
+                            input(type='hidden' name='return_type' value=returnType)
+                            input(type='hidden' name='return_period' id='downloadPeriod' value=currentPeriod)
+                            
+                            p.text-muted Preview the data first, then download the JSON file
+                            
+                            button.btn.btn-success(type='submit')
+                                i.bi.bi-download.me-2
+                                | Download JSON
+                            
+                            a.btn.btn-outline-secondary.ms-2(href='/gst') Cancel
