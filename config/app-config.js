@@ -165,6 +165,27 @@ module.exports = {
   TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
   PERSON_LOCATION_TABLE: "m_person_location",
 
+// GST Configuration
+GST_CONFIG_TABLE: "m_gst_config",
+GST_RETURN_DATA_TABLE: "t_gst_return_data",
+GST_FILING_LOG_TABLE: "t_gst_filing_log",
+
+// GST API Settings
+GST_API: {
+    PROVIDER: 'MASTERINDIA',
+    SANDBOX_URL: 'https://sandboxapi.masterindia.co',
+    PRODUCTION_URL: 'https://api.masterindia.co',
+    TIMEOUT: 30000, // 30 seconds
+    RETRY_ATTEMPTS: 3
+},
+
+// GST Return Types
+GST_RETURN_TYPES: ['GSTR1', 'GSTR3B', 'GSTR2A', 'GSTR2B'],
+
+// GST Return Status
+GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
+
+
   // config related to sales
   APP_CONFIGS: {
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,

@@ -75,6 +75,9 @@ db.stock_adjustment = require("./stock-adjustment")(sequelize, Sequelize);
 db.personLocation = require("./person-location")(sequelize, Sequelize);
 db.important_links = require("./important-links")(sequelize, Sequelize);
 db.important_link_roles = require("./important-link-roles")(sequelize, Sequelize);
+db.gst_config = require("./gst-config")(sequelize, Sequelize);
+db.gst_return_data = require("./gst-return-data")(sequelize, Sequelize);
+db.gst_filing_log = require("./gst-filing-log")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -277,4 +280,19 @@ db.important_links.hasMany(db.important_link_roles, {foreignKey: 'link_id'});
 db.important_link_roles.belongsTo(db.important_links, {foreignKey: 'link_id'});
 db.important_links.belongsTo(db.location, {foreignKey: 'location_id'});
 
+
+// GST relationships
+db.location.hasMany(db.gst_config, {foreignKey: 'location_code', sourceKey: 'location_code'});
+db.gst_config.belongsTo(db.location, {foreignKey: 'location_code', targetKey: 'location_code'});
+
+db.location.hasMany(db.gst_return_data, {foreignKey: 'location_code', sourceKey: 'location_code'});
+db.gst_return_data.belongsTo(db.location, {foreignKey: 'location_code', targetKey: 'location_code'});
+
+db.gst_return_data.hasMany(db.gst_filing_log, {foreignKey: 'return_data_id'});
+db.gst_filing_log.belongsTo(db.gst_return_data, {foreignKey: 'return_data_id'});
+
+db.location.hasMany(db.gst_filing_log, {foreignKey: 'location_code', sourceKey: 'location_code'});
+db.gst_filing_log.belongsTo(db.location, {foreignKey: 'location_code', targetKey: 'location_code'});
+
 module.exports = db;
+

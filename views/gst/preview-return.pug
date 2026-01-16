@@ -1,0 +1,271 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-4
+        .row.mb-4
+            .col-12
+                nav(aria-label='breadcrumb')
+                    ol.breadcrumb
+                        li.breadcrumb-item
+                            a(href='/gst') GST Returns
+                        li.breadcrumb-item
+                            a(href=`/gst/generate/${returnType}`) Generate #{returnType}
+                        li.breadcrumb-item.active Preview
+                
+                h4= `${returnType} Preview - ${returnPeriod}`
+        
+        //- Validation Results
+        .row.mb-3
+            .col-12
+                .card
+                    .card-header.bg-info.text-white
+                        i.bi.bi-check-circle.me-2
+                        | Validation Results
+                    .card-body
+                        if validation.valid
+                            p.text-success.mb-0
+                                i.bi.bi-check-circle.me-2
+                                | All validations passed ✓
+                        else
+                            if validation.errors && validation.errors.length > 0
+                                .alert.alert-danger
+                                    strong Errors:
+                                    ul.mb-0
+                                        each error in validation.errors
+                                            li= error
+                        
+                        if validation.warnings && validation.warnings.length > 0
+                            .alert.alert-warning.mt-2.mb-0
+                                strong Warnings:
+                                ul.mb-0
+                                    each warning in validation.warnings
+                                        li= warning
+        
+        //- Summary Statistics
+        if returnType === 'GSTR1'
+            .row.mb-3
+                .col-12
+                    .card.border-primary
+                        .card-header.bg-primary.text-white
+                            i.bi.bi-bar-chart.me-2
+                            | GSTR-1 Summary Report
+                        .card-body
+                            //- Quick Stats Row
+                            .row.mb-4
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 Total Sales
+                                            h4.text-primary.mb-0= `₹${(summary.total_taxable_value || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 B2B Invoices
+                                            h4.text-success.mb-0= summary.total_b2b_invoices || 0
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 B2C Invoices
+                                            h4.text-info.mb-0= (summary.total_b2cl_invoices || 0) + (summary.total_b2cs_entries || 0)
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 GST Collected
+                                            h4.text-danger.mb-0= `₹${((summary.total_tax || 0)).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                            
+                            hr
+                            
+                            //- HSN Summary Table
+                            h6.mb-3
+                                i.bi.bi-table.me-2
+                                | HSN-wise Breakdown
+                            .table-responsive
+                                table.table.table-sm.table-hover
+                                    thead.table-light
+                                        tr
+                                            th HSN Code
+                                            th Product
+                                            th Quantity
+                                            th Taxable Value
+                                            th GST Rate
+                                            th CGST
+                                            th SGST
+                                            th Total GST
+                                    tbody
+                                        - let nilRatedTotal = 0
+                                        - let taxable28Total = 0
+                                        - let taxable18Total = 0
+                                        - let totalGST = 0
+                                        - let gst28Total = 0
+                                        - let gst18Total = 0
+
+                                        if returnJson.hsn && returnJson.hsn.data
+                                            each item in returnJson.hsn.data
+                                                - let itemGST = parseFloat(item.camt || 0) + parseFloat(item.samt || 0) + parseFloat(item.iamt || 0)
+                                                - totalGST += itemGST
+                                                - let txval = parseFloat(item.txval || 0)
+                                                
+                                                // Calculate GST rate from the actual GST amount
+                                                - let gstRate = 0
+                                                - if (txval > 0 && itemGST > 0) {
+                                                -   gstRate = Math.round((itemGST / txval) * 100)
+                                                - }
+                                                
+                                                // Categorize by GST rate
+                                                - if (gstRate === 0) {
+                                                -   nilRatedTotal += txval
+                                                - } else if (gstRate >= 27 && gstRate <= 29) {
+                                                -   taxable28Total += txval
+                                                -   gst28Total += itemGST
+                                                - } else if (gstRate >= 17 && gstRate <= 19) {
+                                                -   taxable18Total += txval
+                                                -   gst18Total += itemGST
+                                                - }
+                                                
+                                                tr(class=gstRate === 0 ? 'table-secondary' : (gstRate >= 27 && gstRate <= 29) ? 'table-warning' : (gstRate >= 17 && gstRate <= 19) ? 'table-info' : '')
+                                                    td= item.hsn_sc
+                                                    td= item.desc
+                                                    td.text-end= parseFloat(item.qty).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                                    td.text-end= `₹${parseFloat(item.txval).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                                    td.text-center
+                                                        if gstRate === 0
+                                                            span.badge.bg-secondary 0%
+                                                        else if gstRate >= 27 && gstRate <= 29
+                                                            span.badge.bg-warning.text-dark 28%
+                                                        else if gstRate >= 17 && gstRate <= 19
+                                                            span.badge.bg-info 18%
+                                                        else
+                                                            span.badge.bg-primary= `${gstRate}%`
+                                                    td.text-end= `₹${parseFloat(item.camt || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                                    td.text-end= `₹${parseFloat(item.samt || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                                    td.text-end
+                                                        strong= `₹${itemGST.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                    tfoot.table-light
+                                        tr
+                                            th(colspan='3') Total
+                                            th.text-end= `₹${(nilRatedTotal + taxable28Total + taxable18Total).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                            th
+                                            th(colspan='2')
+                                            th.text-end
+                                                strong= `₹${totalGST.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                            
+                            hr
+                            
+                            //- Category Breakdown
+                            .row
+                                .col-md-4
+                                    .card.border-secondary
+                                        .card-body
+                                            h6.text-muted
+                                                i.bi.bi-circle-fill.text-secondary.me-2
+                                                | Nil-Rated (0% GST)
+                                            h5.mb-0= `₹${nilRatedTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                            small.text-muted Fuel (Petrol/Diesel)
+                                
+                                .col-md-4
+                                    .card.border-warning
+                                        .card-body
+                                            h6.text-muted
+                                                i.bi.bi-circle-fill.text-warning.me-2
+                                                | Taxable @ 28%
+                                            h5.mb-0= `₹${taxable28Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                            small.text-muted Lubricants
+                                
+                                .col-md-4
+                                    .card.border-info
+                                        .card-body
+                                            h6.text-muted
+                                                i.bi.bi-circle-fill.text-info.me-2
+                                                | Taxable @ 18%
+                                            h5.mb-0= `₹${taxable18Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                            small.text-muted AdBlue/Others
+        
+        //- GSTR-3B Summary
+        if returnType === 'GSTR3B'
+            .row.mb-3
+                .col-12
+                    .card.border-success
+                        .card-header.bg-success.text-white
+                            i.bi.bi-calculator.me-2
+                            | GSTR-3B Summary Report
+                        .card-body
+                            .row.mb-3
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 Output Tax
+                                            h4.text-danger.mb-0= `₹${(summary.total_tax || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 Input Tax Credit
+                                            h4.text-success.mb-0= `₹${(summary.total_itc || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 Net Tax Payable
+                                            h4.text-primary.mb-0= `₹${(summary.net_tax_payable || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                
+                                .col-md-3
+                                    .card.text-center.border-0.bg-light
+                                        .card-body
+                                            h6.text-muted.mb-2 Total Taxable Value
+                                            h4.text-info.mb-0= `₹${(summary.total_taxable_value || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+        
+        //- Summary Cards (Original)
+        .row.mb-3
+            .col-12
+                .card
+                    .card-header.bg-secondary.text-white
+                        i.bi.bi-list-check.me-2
+                        | Detailed Summary
+                    .card-body
+                        .row
+                            each value, key in summary
+                                .col-md-3.mb-2
+                                    strong= key.replace(/_/g, ' ').toUpperCase() + ':'
+                                    br
+                                    span= typeof value === 'number' ? value.toLocaleString('en-IN') : value
+        
+        //- JSON Preview
+        .row.mb-3
+            .col-12
+                .card
+                    .card-header.d-flex.justify-content-between
+                        span
+                            i.bi.bi-code-square.me-2
+                            | Complete JSON (for GST Portal Upload)
+                        button.btn.btn-sm.btn-outline-secondary(onclick='copyJson()')
+                            i.bi.bi-clipboard.me-1
+                            | Copy JSON
+                    .card-body
+                        pre#jsonData.bg-light.p-3.border.rounded(style='max-height: 500px; overflow-y: auto; font-size: 0.85rem;')= JSON.stringify(returnJson, null, 2)
+        
+        //- Actions
+        .row
+            .col-12
+                .text-center
+                    form.d-inline(method='POST' action='/gst/download')
+                        input(type='hidden' name='return_type' value=returnType)
+                        input(type='hidden' name='return_period' value=returnPeriod)
+                        button.btn.btn-success.btn-lg(type='submit')
+                            i.bi.bi-download.me-2
+                            | Download JSON File
+                    
+                    a.btn.btn-outline-secondary.btn-lg.ms-3(href='/gst') Back to Dashboard
+
+        //- Inline script
+        script.
+            function copyJson() {
+                const jsonText = document.getElementById('jsonData').textContent;
+                navigator.clipboard.writeText(jsonText).then(function() {
+                    alert('JSON copied to clipboard!');
+                }).catch(function(err) {
+                    alert('Failed to copy');
+                });
+            }
