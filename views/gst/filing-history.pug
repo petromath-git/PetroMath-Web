@@ -1,0 +1,107 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-4
+        //- Header
+        .row.mb-4
+            .col-12
+                nav(aria-label='breadcrumb')
+                    ol.breadcrumb
+                        li.breadcrumb-item
+                            a(href='/gst') GST Returns
+                        li.breadcrumb-item.active(aria-current='page') Configuration
+                
+                h4.mb-1
+                    i.bi.bi-gear.me-2
+                    | GST Configuration
+                p.text-muted.mb-0 Setup GSTIN and return filing preferences
+
+        //- Configuration Form
+        .row
+            .col-md-8
+                .card
+                    .card-header.bg-primary.text-white
+                        h6.mb-0 GST Settings
+                    
+                    .card-body
+                        form(method='POST' action='/gst/config')
+                            .form-group.mb-3
+                                label.form-label GSTIN
+                                    span.text-danger *
+                                input.form-control(
+                                    type='text'
+                                    name='gstin'
+                                    value=gstConfig ? gstConfig.gstin : ''
+                                    placeholder='29AABCT1332L000'
+                                    required
+                                    maxlength='15'
+                                    pattern='[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}'
+                                )
+                                small.form-text.text-muted 15-character GSTIN (e.g., 29AABCT1332L000)
+                            
+                            .form-group.mb-3
+                                label.form-label Location Code
+                                input.form-control(
+                                    type='text'
+                                    value='MUE'
+                                    disabled
+                                )
+                                small.form-text.text-muted Your location code (cannot be changed)
+                            
+                            .form-group.mb-3
+                                label.form-label Filing Mode
+                                input.form-control(
+                                    type='text'
+                                    value='Manual (Download & Upload to GST Portal)'
+                                    disabled
+                                )
+                                small.form-text.text-muted Returns are generated as JSON files for manual upload
+                            
+                            .form-group.mb-3
+                                label.form-label Environment
+                                input.form-control(
+                                    type='text'
+                                    value='PRODUCTION'
+                                    disabled
+                                )
+                            
+                            hr
+                            
+                            .d-flex.justify-content-between
+                                a.btn.btn-outline-secondary(href='/gst') Cancel
+                                button.btn.btn-primary(type='submit')
+                                    i.bi.bi-save.me-2
+                                    | Save Configuration
+            
+            .col-md-4
+                .card.border-info
+                    .card-header.bg-info.text-white
+                        h6.mb-0
+                            i.bi.bi-info-circle.me-2
+                            | Information
+                    .card-body
+                        h6 GSTIN Format
+                        p.small.text-muted 
+                            | GSTIN must be 15 characters:
+                            br
+                            | • 2 digits: State code
+                            br
+                            | • 10 characters: PAN
+                            br
+                            | • 1 character: Entity number
+                            br
+                            | • 1 character: 'Z'
+                            br
+                            | • 1 character: Check digit
+                        
+                        hr
+                        
+                        h6 Manual Filing
+                        p.small.text-muted
+                            | This system generates JSON files that you can download and upload to the GST Portal manually. No API integration is used.
+                        
+                        hr
+                        
+                        h6 Need Help?
+                        p.small.text-muted
+                            | For assistance with GST configuration, contact your system administrator.
