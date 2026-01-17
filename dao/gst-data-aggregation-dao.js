@@ -542,75 +542,78 @@ getPurchaseData: async (locationCode, fromDate, toDate) => {
      * Get summary data for GSTR-3B Table 3.1
      * Outward taxable supplies
      */
-    getGSTR3BSalesSummary: async (locationCode, fromDate, toDate) => {
-        const query = `
+getGSTR3BSalesSummary: async (locationCode, fromDate, toDate) => {
+    const query = `
+        SELECT 
+            'Outward Taxable Supplies' as description,
+            SUM(taxable_value) as taxable_value,
+            SUM(cgst_amount) as cgst_amount,
+            SUM(sgst_amount) as sgst_amount,
+            SUM(igst_amount) as igst_amount,
+            SUM(cess_amount) as cess_amount
+        FROM (
+            -- Credit sales
             SELECT 
-                'Outward Taxable Supplies' as description,
-                SUM(taxable_value) as taxable_value,
-                SUM(cgst_amount) as cgst_amount,
-                SUM(sgst_amount) as sgst_amount,
-                SUM(igst_amount) as igst_amount,
-                SUM(cess_amount) as cess_amount
-            FROM (
-                -- Credit sales
-                SELECT 
-                    SUM(COALESCE(tc.base_amount, tc.amount)) as taxable_value,
-                    
-                    CASE 
-                        WHEN COALESCE(tc.cgst_amount, 0) > 0 THEN SUM(tc.cgst_amount)
-                        ELSE SUM(COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.cgst_percent, 0) / 100)
-                    END as cgst_amount,
-                    
-                    CASE 
-                        WHEN COALESCE(tc.sgst_amount, 0) > 0 THEN SUM(tc.sgst_amount)
-                        ELSE SUM(COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.sgst_percent, 0) / 100)
-                    END as sgst_amount,
-                    
-                    0 as igst_amount,
-                    0 as cess_amount
-                FROM t_credits tc
-                JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
-                JOIN m_product mp ON tc.product_id = mp.product_id
-                WHERE tcl.location_code = :locationCode
-                    AND tcl.closing_status = 'CLOSED'
-                    AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
-                GROUP BY tc.cgst_amount, tc.sgst_amount
-                
-                UNION ALL
-                
-                -- Cash sales
-                SELECT 
-                    SUM(COALESCE(tcs.base_amount, tcs.amount)) as taxable_value,
-                    
-                    CASE 
-                        WHEN COALESCE(tcs.cgst_amount, 0) > 0 THEN SUM(tcs.cgst_amount)
-                        ELSE SUM(COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.cgst_percent, 0) / 100)
-                    END as cgst_amount,
-                    
-                    CASE 
-                        WHEN COALESCE(tcs.sgst_amount, 0) > 0 THEN SUM(tcs.sgst_amount)
-                        ELSE SUM(COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.sgst_percent, 0) / 100)
-                    END as sgst_amount,
-                    
-                    0 as igst_amount,
-                    0 as cess_amount
-                FROM t_cashsales tcs
-                JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
-                JOIN m_product mp ON tcs.product_id = mp.product_id
-                WHERE tcl.location_code = :locationCode
-                    AND tcl.closing_status = 'CLOSED'
-                    AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
-                GROUP BY tcs.cgst_amount, tcs.sgst_amount
-            ) all_sales
-        `;
+                SUM(COALESCE(tc.base_amount, tc.amount)) as taxable_value,
+                SUM(COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.cgst_percent, 0) / 100) as cgst_amount,
+                SUM(COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.sgst_percent, 0) / 100) as sgst_amount,
+                0 as igst_amount,
+                0 as cess_amount
+            FROM t_credits tc
+            JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+            JOIN m_product mp ON tc.product_id = mp.product_id
+            WHERE tcl.location_code = :locationCode
+                AND tcl.closing_status = 'CLOSED'
+                AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                AND (COALESCE(mp.cgst_percent, 0) > 0 OR COALESCE(mp.sgst_percent, 0) > 0)  
+            
+            UNION ALL
+            
+            -- Cash sales
+            SELECT 
+                SUM(COALESCE(tcs.base_amount, tcs.amount)) as taxable_value,
+                SUM(COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.cgst_percent, 0) / 100) as cgst_amount,
+                SUM(COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.sgst_percent, 0) / 100) as sgst_amount,
+                0 as igst_amount,
+                0 as cess_amount
+            FROM t_cashsales tcs
+            JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
+            JOIN m_product mp ON tcs.product_id = mp.product_id
+            WHERE tcl.location_code = :locationCode
+                AND tcl.closing_status = 'CLOSED'
+                AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                AND (COALESCE(mp.cgst_percent, 0) > 0 OR COALESCE(mp.sgst_percent, 0) > 0)  
+            
+            UNION ALL
+            
+            -- 2T Oil sales (no change needed here)
+            SELECT 
+                SUM((t2t.given_qty - t2t.returned_qty) * t2t.price) as taxable_value,
+                SUM((t2t.given_qty - t2t.returned_qty) * t2t.price * COALESCE(mp.cgst_percent, 0) / 100) as cgst_amount,
+                SUM((t2t.given_qty - t2t.returned_qty) * t2t.price * COALESCE(mp.sgst_percent, 0) / 100) as sgst_amount,
+                0 as igst_amount,
+                0 as cess_amount
+            FROM t_2toil t2t
+            JOIN t_closing tcl ON t2t.closing_id = tcl.closing_id
+            JOIN m_product mp ON t2t.product_id = mp.product_id
+            WHERE tcl.location_code = :locationCode
+                AND tcl.closing_status = 'CLOSED'
+                AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                AND mp.product_name NOT IN (
+                    SELECT DISTINCT product_code 
+                    FROM m_pump 
+                    WHERE location_code = :locationCode
+                )
+        ) all_sales
+    `;
 
-        const result = await db.sequelize.query(query, {
-            replacements: { locationCode, fromDate, toDate },
-            type: Sequelize.QueryTypes.SELECT
-        });
+    const result = await db.sequelize.query(query, {
+        replacements: { locationCode, fromDate, toDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
 
-        return result[0] || null;
-    },
+    return result[0] || null;
+},
 
     /**
      * Get ITC (Input Tax Credit) summary for GSTR-3B Table 4
@@ -644,5 +647,216 @@ getPurchaseData: async (locationCode, fromDate, toDate) => {
         });
 
         return result[0] || null;
-    }
+    },
+    /**
+ * Get detailed breakdown of sales for GSTR-3B preview
+ * Returns itemized list of credit, cash, and 2T oil sales
+ */
+getGSTR3BSalesBreakdown: async (locationCode, fromDate, toDate) => {
+    const creditSalesQuery = `
+        SELECT 
+            tc.bill_no,
+            DATE_FORMAT(tcl.closing_date, '%d-%b-%Y') as invoice_date,
+            COALESCE(mcl.Company_Name, 'Cash Customer') as customer_name,
+            mp.product_name,
+            tc.qty as quantity,
+            COALESCE(tc.base_amount, tc.amount) as taxable_value,
+            COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0) as gst_rate,
+            COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.cgst_percent, 0) / 100 as cgst,
+            COALESCE(tc.base_amount, tc.amount) * COALESCE(mp.sgst_percent, 0) / 100 as sgst
+        FROM t_credits tc
+        JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+        LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+        JOIN m_product mp ON tc.product_id = mp.product_id
+        WHERE tcl.location_code = :locationCode
+            AND tcl.closing_status = 'CLOSED'
+            AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+            AND (COALESCE(mp.cgst_percent, 0) > 0 OR COALESCE(mp.sgst_percent, 0) > 0)
+        ORDER BY tcl.closing_date, tc.bill_no
+    `;
+
+    const cashSalesQuery = `
+        SELECT 
+            tcs.bill_no,
+            DATE_FORMAT(tcl.closing_date, '%d-%b-%Y') as invoice_date,
+            mp.product_name,
+            tcs.qty as quantity,
+            COALESCE(tcs.base_amount, tcs.amount) as taxable_value,
+            COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0) as gst_rate,
+            COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.cgst_percent, 0) / 100 as cgst,
+            COALESCE(tcs.base_amount, tcs.amount) * COALESCE(mp.sgst_percent, 0) / 100 as sgst
+        FROM t_cashsales tcs
+        JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
+        JOIN m_product mp ON tcs.product_id = mp.product_id
+        WHERE tcl.location_code = :locationCode
+            AND tcl.closing_status = 'CLOSED'
+            AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+            AND (COALESCE(mp.cgst_percent, 0) > 0 OR COALESCE(mp.sgst_percent, 0) > 0)
+        ORDER BY tcl.closing_date, tcs.bill_no
+    `;
+
+    const twoTOilSalesQuery = `
+        SELECT 
+            DATE_FORMAT(tcl.closing_date, '%d-%b-%Y') as invoice_date,
+            mp.product_name,
+            (t2t.given_qty - t2t.returned_qty) as quantity,
+            t2t.price as rate,
+            (t2t.given_qty - t2t.returned_qty) * t2t.price as taxable_value,
+            COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0) as gst_rate,
+            (t2t.given_qty - t2t.returned_qty) * t2t.price * COALESCE(mp.cgst_percent, 0) / 100 as cgst,
+            (t2t.given_qty - t2t.returned_qty) * t2t.price * COALESCE(mp.sgst_percent, 0) / 100 as sgst
+        FROM t_2toil t2t
+        JOIN t_closing tcl ON t2t.closing_id = tcl.closing_id
+        JOIN m_product mp ON t2t.product_id = mp.product_id
+        WHERE tcl.location_code = :locationCode
+            AND tcl.closing_status = 'CLOSED'
+            AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+            AND mp.product_name NOT IN (
+                SELECT DISTINCT product_code 
+                FROM m_pump 
+                WHERE location_code = :locationCode
+            )
+        ORDER BY tcl.closing_date
+    `;
+
+    const [creditSales, cashSales, twoTOilSales] = await Promise.all([
+        db.sequelize.query(creditSalesQuery, {
+            replacements: { locationCode, fromDate, toDate },
+            type: Sequelize.QueryTypes.SELECT
+        }),
+        db.sequelize.query(cashSalesQuery, {
+            replacements: { locationCode, fromDate, toDate },
+            type: Sequelize.QueryTypes.SELECT
+        }),
+        db.sequelize.query(twoTOilSalesQuery, {
+            replacements: { locationCode, fromDate, toDate },
+            type: Sequelize.QueryTypes.SELECT
+        })
+    ]);
+
+    return {
+        creditSales,
+        cashSales,
+        twoTOilSales
+    };
+},
+
+/**
+ * Get detailed breakdown of purchases for GSTR-3B preview
+ * Returns itemized list of purchase invoices with ITC
+ */
+getGSTR3BPurchaseBreakdown: async (locationCode, fromDate, toDate) => {
+    const query = `
+        SELECT 
+            lih.invoice_number,
+            DATE_FORMAT(lih.invoice_date, '%d-%b-%Y') as invoice_date,
+            ms.supplier_name,
+            mp.hsn_code,
+            mp.product_name,
+            lil.qty as quantity,
+            lil.amount as taxable_value,
+            COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0) as gst_rate,
+            lil.amount * COALESCE(mp.cgst_percent, 0) / 100 as cgst,
+            lil.amount * COALESCE(mp.sgst_percent, 0) / 100 as sgst
+        FROM t_lubes_inv_hdr lih
+        JOIN t_lubes_inv_lines lil ON lih.lubes_hdr_id = lil.lubes_hdr_id
+        JOIN m_supplier ms ON lih.supplier_id = ms.supplier_id
+        JOIN m_product mp ON lil.product_id = mp.product_id
+        WHERE lih.location_code = :locationCode
+            AND lih.closing_status = 'CLOSED'
+            AND DATE(lih.invoice_date) BETWEEN :fromDate AND :toDate
+        ORDER BY lih.invoice_date, lih.invoice_number
+    `;
+
+    const result = await db.sequelize.query(query, {
+        replacements: { locationCode, fromDate, toDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
+
+    return result;
+},
+/**
+ * Get nil-rated (0% GST) sales summary for GSTR-3B Table 5
+ * Returns total value of fuel and other 0% GST sales
+ */
+getNilRatedSalesSummary: async (locationCode, fromDate, toDate) => {
+    const query = `
+        SELECT 
+            SUM(taxable_value) as total_nil_rated_sales
+        FROM (
+            -- Fuel sales from pump readings (0% GST)
+            SELECT
+                SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) as taxable_value
+            FROM t_closing tc
+            JOIN t_reading tr ON tc.closing_id = tr.closing_id
+            JOIN m_pump mpump ON tr.pump_id = mpump.pump_id 
+                AND DATE(tc.closing_date) BETWEEN mpump.effective_start_date AND mpump.effective_end_date
+            JOIN m_product mprod ON mpump.product_code = mprod.product_name
+                AND mprod.location_code = tc.location_code
+            WHERE tc.closing_status = 'CLOSED'
+                AND tc.location_code = :locationCode
+                AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
+                AND (COALESCE(mprod.cgst_percent, 0) = 0 AND COALESCE(mprod.sgst_percent, 0) = 0)
+            
+            UNION ALL
+            
+            -- Credit sales with 0% GST (if any)
+            SELECT 
+                SUM(COALESCE(tc.base_amount, tc.amount)) as taxable_value
+            FROM t_credits tc
+            JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+            JOIN m_product mp ON tc.product_id = mp.product_id
+            WHERE tcl.location_code = :locationCode
+                AND tcl.closing_status = 'CLOSED'
+                AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                AND (COALESCE(mp.cgst_percent, 0) = 0 AND COALESCE(mp.sgst_percent, 0) = 0)
+            
+            UNION ALL
+            
+            -- Cash sales with 0% GST (if any)
+            SELECT 
+                SUM(COALESCE(tcs.base_amount, tcs.amount)) as taxable_value
+            FROM t_cashsales tcs
+            JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
+            JOIN m_product mp ON tcs.product_id = mp.product_id
+            WHERE tcl.location_code = :locationCode
+                AND tcl.closing_status = 'CLOSED'
+                AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                AND (COALESCE(mp.cgst_percent, 0) = 0 AND COALESCE(mp.sgst_percent, 0) = 0)
+        ) all_nil_rated
+    `;
+
+    const result = await db.sequelize.query(query, {
+        replacements: { locationCode, fromDate, toDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
+
+    return parseFloat(result[0]?.total_nil_rated_sales || 0);
+},
+
+/**
+ * Get nil-rated (0% GST) purchases summary for GSTR-3B Table 5
+ * Returns total value of fuel and other 0% GST purchases
+ */
+getNilRatedPurchasesSummary: async (locationCode, fromDate, toDate) => {
+    const query = `
+        SELECT 
+            SUM(lil.amount) as total_nil_rated_purchases
+        FROM t_lubes_inv_hdr lih
+        JOIN t_lubes_inv_lines lil ON lih.lubes_hdr_id = lil.lubes_hdr_id
+        JOIN m_product mp ON lil.product_id = mp.product_id
+        WHERE lih.location_code = :locationCode
+            AND lih.closing_status = 'CLOSED'
+            AND DATE(lih.invoice_date) BETWEEN :fromDate AND :toDate
+            AND (COALESCE(mp.cgst_percent, 0) = 0 AND COALESCE(mp.sgst_percent, 0) = 0)
+    `;
+
+    const result = await db.sequelize.query(query, {
+        replacements: { locationCode, fromDate, toDate },
+        type: Sequelize.QueryTypes.SELECT
+    });
+
+    return parseFloat(result[0]?.total_nil_rated_purchases || 0);
+},
+
 };

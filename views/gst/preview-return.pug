@@ -109,11 +109,8 @@ block content
                                                 - let itemGST = parseFloat(item.camt || 0) + parseFloat(item.samt || 0) + parseFloat(item.iamt || 0)
                                                 - totalGST += itemGST
                                                 - let txval = parseFloat(item.txval || 0)
-                                                
-                                                //- USE tax_rate from backend data (from m_product.cgst_percent + m_product.sgst_percent)
                                                 - let gstRate = parseFloat(item.rt || 0)
                                                 
-                                                //- Categorize by GST rate using range matching for rounding tolerance
                                                 - if (gstRate === 0) {
                                                 -   nilRatedTotal += txval
                                                 - } else if (gstRate >= 27 && gstRate <= 29) {
@@ -158,7 +155,7 @@ block content
                             
                             hr
                             
-                            //- Category Breakdown - Dynamic cards based on actual data
+                            //- Category Breakdown
                             .row
                                 if nilRatedTotal > 0
                                     .col-md-4.mb-3
@@ -209,7 +206,8 @@ block content
                             i.bi.bi-calculator.me-2
                             | GSTR-3B Summary Report
                         .card-body
-                            .row.mb-3
+                            //- Summary Cards
+                            .row.mb-4
                                 .col-md-3
                                     .card.text-center.border-0.bg-light
                                         .card-body
@@ -233,6 +231,220 @@ block content
                                         .card-body
                                             h6.text-muted.mb-2 Total Taxable Value
                                             h4.text-info.mb-0= `₹${(summary.total_taxable_value || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                            
+                            //- Nil-Rated/Exempt Supplies Summary
+                            if summary.nil_rated_sales || summary.nil_rated_purchases
+                                .row.mb-3
+                                    .col-12
+                                        .alert.alert-light.border.mb-0
+                                            .d-flex.align-items-center.mb-2
+                                                i.bi.bi-info-circle.text-info.fs-5.me-2
+                                                strong Nil-Rated/Exempt Supplies (0% GST)
+                                                small.text-muted.ms-2 These values are included in Table 5 of GSTR-3B JSON
+                                            .row.mt-2
+                                                .col-md-6
+                                                    .d-flex.justify-content-between.align-items-center.p-2.bg-white.rounded
+                                                        span
+                                                            i.bi.bi-arrow-up-right.text-secondary.me-2
+                                                            strong Outward Supplies (Sales):
+                                                        span.text-primary
+                                                            strong= `₹${parseFloat(summary.nil_rated_sales || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                    small.text-muted.ms-4 Mainly fuel (Petrol/Diesel)
+                                                .col-md-6
+                                                    .d-flex.justify-content-between.align-items-center.p-2.bg-white.rounded
+                                                        span
+                                                            i.bi.bi-arrow-down-left.text-secondary.me-2
+                                                            strong Inward Supplies (Purchases):
+                                                        span.text-success
+                                                            strong= `₹${parseFloat(summary.nil_rated_purchases || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                    small.text-muted.ms-4 Mainly fuel purchases
+                            
+                            hr
+                            
+                            //- OUTPUT TAX BREAKDOWN
+                            .row.mb-4
+                                .col-12
+                                    h6.mb-3
+                                        i.bi.bi-arrow-up-circle.text-danger.me-2
+                                        | Output Tax Breakdown (Sales)
+                                    
+                                    //- Merge cash and 2T oil sales
+                                    - let allCashSales = []
+                                    - if (salesBreakdown) {
+                                    -     if (salesBreakdown.cashSales) allCashSales = allCashSales.concat(salesBreakdown.cashSales)
+                                    -     if (salesBreakdown.twoTOilSales) allCashSales = allCashSales.concat(salesBreakdown.twoTOilSales)
+                                    - }
+                                    
+                                    //- Credit Sales
+                                    .card.mb-3.border-secondary
+                                        .card-header.bg-light(style='cursor: pointer;' onclick='toggleSection("creditSalesDetails")')
+                                            .d-flex.justify-content-between.align-items-center
+                                                div
+                                                    strong.me-3
+                                                        i.bi.bi-credit-card.me-2
+                                                        | Credit Sales
+                                                    if salesBreakdown && salesBreakdown.creditSales && salesBreakdown.creditSales.length > 0
+                                                        - let creditTotal = salesBreakdown.creditSales.reduce((sum, s) => sum + parseFloat(s.cgst || 0) + parseFloat(s.sgst || 0), 0)
+                                                        span.badge.bg-secondary.me-2 #{salesBreakdown.creditSales.length} invoices
+                                                        span.badge.bg-danger GST: ₹#{creditTotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                                    else
+                                                        span.badge.bg-secondary No GST items
+                                                i.bi.bi-plus-circle.fs-5.text-primary#creditSalesIcon
+                                        #creditSalesDetails.collapse
+                                            .card-body
+                                                if salesBreakdown && salesBreakdown.creditSales && salesBreakdown.creditSales.length > 0
+                                                    .table-responsive
+                                                        table.table.table-sm.table-hover.mb-0
+                                                            thead.table-light
+                                                                tr
+                                                                    th Bill No
+                                                                    th Date
+                                                                    th Customer
+                                                                    th Product
+                                                                    th Qty
+                                                                    th Taxable Value
+                                                                    th GST%
+                                                                    th CGST
+                                                                    th SGST
+                                                                    th Total GST
+                                                            tbody
+                                                                each sale in salesBreakdown.creditSales
+                                                                    tr
+                                                                        td= sale.bill_no
+                                                                        td= sale.invoice_date
+                                                                        td.small= sale.customer_name || 'N/A'
+                                                                        td.small= sale.product_name
+                                                                        td.text-end= parseFloat(sale.quantity).toFixed(2)
+                                                                        td.text-end= `₹${parseFloat(sale.taxable_value).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-center
+                                                                            span.badge.bg-info= `${parseFloat(sale.gst_rate).toFixed(0)}%`
+                                                                        td.text-end= `₹${parseFloat(sale.cgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end= `₹${parseFloat(sale.sgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end
+                                                                            strong= `₹${(parseFloat(sale.cgst) + parseFloat(sale.sgst)).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                else
+                                                    p.text-center.text-muted.mb-0.py-3 All credit sales are fuel (0% GST)
+                                    
+                                    //- Cash Sales (MERGED)
+                                    .card.mb-3.border-info
+                                        .card-header.bg-light(style='cursor: pointer;' onclick='toggleSection("cashSalesDetails")')
+                                            .d-flex.justify-content-between.align-items-center
+                                                div
+                                                    strong.me-3
+                                                        i.bi.bi-cash-coin.me-2
+                                                        | Cash Sales (includes 2T Oil)
+                                                    if allCashSales.length > 0
+                                                        - let cashTotal = allCashSales.reduce((sum, s) => sum + parseFloat(s.cgst || 0) + parseFloat(s.sgst || 0), 0)
+                                                        span.badge.bg-info.me-2 #{allCashSales.length} transactions
+                                                        span.badge.bg-danger GST: ₹#{cashTotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                                    else
+                                                        span.badge.bg-secondary No GST items
+                                                i.bi.bi-plus-circle.fs-5.text-primary#cashSalesIcon
+                                        #cashSalesDetails.collapse
+                                            .card-body
+                                                if allCashSales.length > 0
+                                                    .table-responsive
+                                                        table.table.table-sm.table-hover.mb-0
+                                                            thead.table-light
+                                                                tr
+                                                                    th Bill No
+                                                                    th Date
+                                                                    th Product
+                                                                    th Qty
+                                                                    th Rate
+                                                                    th Taxable Value
+                                                                    th GST%
+                                                                    th CGST
+                                                                    th SGST
+                                                                    th Total GST
+                                                            tbody
+                                                                each sale in allCashSales
+                                                                    tr
+                                                                        td= sale.bill_no || '-'
+                                                                        td= sale.invoice_date
+                                                                        td.small= sale.product_name
+                                                                        td.text-end= parseFloat(sale.quantity).toFixed(2)
+                                                                        td.text-end= sale.rate ? `₹${parseFloat(sale.rate).toFixed(2)}` : '-'
+                                                                        td.text-end= `₹${parseFloat(sale.taxable_value).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-center
+                                                                            span.badge.bg-info= `${parseFloat(sale.gst_rate).toFixed(0)}%`
+                                                                        td.text-end= `₹${parseFloat(sale.cgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end= `₹${parseFloat(sale.sgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end
+                                                                            strong= `₹${(parseFloat(sale.cgst) + parseFloat(sale.sgst)).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                else
+                                                    p.text-center.text-muted.mb-0.py-3 No cash sales with GST
+                            
+                            hr
+                            
+                            //- INPUT TAX CREDIT
+                            .row
+                                .col-12
+                                    h6.mb-3
+                                        i.bi.bi-arrow-down-circle.text-success.me-2
+                                        | Input Tax Credit Breakdown (Purchases)
+                                    
+                                    .card.mb-3.border-success
+                                        .card-header.bg-light(style='cursor: pointer;' onclick='toggleSection("purchaseDetails")')
+                                            .d-flex.justify-content-between.align-items-center
+                                                div
+                                                    strong.me-3
+                                                        i.bi.bi-cart-check.me-2.text-success
+                                                        | Purchase Invoices
+                                                    if purchaseBreakdown && purchaseBreakdown.length > 0
+                                                        - let purchaseTotal = purchaseBreakdown.reduce((sum, p) => sum + parseFloat(p.cgst || 0) + parseFloat(p.sgst || 0), 0)
+                                                        span.badge.bg-success.me-2 #{purchaseBreakdown.length} invoices
+                                                        span.badge.bg-info ITC: ₹#{purchaseTotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                                    else
+                                                        span.badge.bg-secondary No purchases
+                                                i.bi.bi-plus-circle.fs-5.text-primary#purchaseIcon
+                                        #purchaseDetails.collapse
+                                            .card-body
+                                                if purchaseBreakdown && purchaseBreakdown.length > 0
+                                                    .table-responsive
+                                                        table.table.table-sm.table-hover.mb-0
+                                                            thead.table-light
+                                                                tr
+                                                                    th Invoice No
+                                                                    th Date
+                                                                    th Supplier
+                                                                    th Product
+                                                                    th Qty
+                                                                    th Taxable Value
+                                                                    th GST%
+                                                                    th CGST
+                                                                    th SGST
+                                                                    th Total ITC
+                                                            tbody
+                                                                each purchase in purchaseBreakdown
+                                                                    tr
+                                                                        td= purchase.invoice_number
+                                                                        td= purchase.invoice_date
+                                                                        td.small= purchase.supplier_name
+                                                                        td.small= purchase.product_name
+                                                                        td.text-end= parseFloat(purchase.quantity).toFixed(2)
+                                                                        td.text-end= `₹${parseFloat(purchase.taxable_value).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-center
+                                                                            span.badge.bg-success= `${parseFloat(purchase.gst_rate).toFixed(0)}%`
+                                                                        td.text-end= `₹${parseFloat(purchase.cgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end= `₹${parseFloat(purchase.sgst).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                        td.text-end
+                                                                            strong= `₹${(parseFloat(purchase.cgst) + parseFloat(purchase.sgst)).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                            tfoot.table-light
+                                                                tr
+                                                                    td(colspan='5')
+                                                                        strong Total
+                                                                    td.text-end
+                                                                        strong= `₹${purchaseBreakdown.reduce((sum, p) => sum + parseFloat(p.taxable_value), 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                    td
+                                                                    td.text-end
+                                                                        strong= `₹${purchaseBreakdown.reduce((sum, p) => sum + parseFloat(p.cgst), 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                    td.text-end
+                                                                        strong= `₹${purchaseBreakdown.reduce((sum, p) => sum + parseFloat(p.sgst), 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                                    td.text-end
+                                                                        strong= `₹${purchaseBreakdown.reduce((sum, p) => sum + parseFloat(p.cgst) + parseFloat(p.sgst), 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}`
+                                                else
+                                                    p.text-center.text-muted.mb-0.py-3 No purchase invoices
         
         //- Summary Cards (Original)
         .row.mb-3
@@ -276,7 +488,7 @@ block content
                     
                     a.btn.btn-outline-secondary.btn-lg.ms-3(href='/gst') Back to Dashboard
 
-        //- Inline script
+        //- JavaScript
         script.
             function copyJson() {
                 const jsonText = document.getElementById('jsonData').textContent;
@@ -285,4 +497,26 @@ block content
                 }).catch(function(err) {
                     alert('Failed to copy');
                 });
+            }
+            
+            function toggleSection(sectionId) {
+                const section = document.getElementById(sectionId);
+                const iconId = sectionId.replace('Details', 'Icon');
+                const icon = document.getElementById(iconId);
+                
+                if (section.classList.contains('show')) {
+                    section.classList.remove('show');
+                    section.classList.add('collapse');
+                    if (icon) {
+                        icon.classList.remove('bi-dash-circle');
+                        icon.classList.add('bi-plus-circle');
+                    }
+                } else {
+                    section.classList.remove('collapse');
+                    section.classList.add('show');
+                    if (icon) {
+                        icon.classList.remove('bi-plus-circle');
+                        icon.classList.add('bi-dash-circle');
+                    }
+                }
             }
