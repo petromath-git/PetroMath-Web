@@ -80,6 +80,10 @@ module.exports = {
    /**
  * Preview Return Data (Form POST)
  */
+/**
+ * Preview Return Data (Form POST)
+ * UPDATED: Added detailed breakdown for GSTR-3B
+ */
 previewReturn: async (req, res) => {
     try {
         const locationCode = req.user.location_code;
@@ -94,7 +98,13 @@ previewReturn: async (req, res) => {
             return res.redirect('/gst/config');
         }
         
+        // Get period dates
+        const periodDates = gstUtils.getPeriodDates(returnPeriod);
+        const { from_date, to_date } = periodDates;
+        
         let result;
+        let salesBreakdown = null;
+        let purchaseBreakdown = null;
         
         if (returnType === 'GSTR1') {
             // Validate first
@@ -120,18 +130,24 @@ previewReturn: async (req, res) => {
             );
             
             result.validation = validation;
+            
+            // Fetch detailed breakdown for preview
+            salesBreakdown = await GstDataAggregationDao.getGSTR3BSalesBreakdown(locationCode, from_date, to_date);
+            purchaseBreakdown = await GstDataAggregationDao.getGSTR3BPurchaseBreakdown(locationCode, from_date, to_date);
         }
         
-        // Render preview page
+        // Render preview
         res.render('gst/preview-return', {
-            title: `Preview ${returnType}`,
+            title: `${returnType} Preview`,
             user: req.user,
             returnType: returnType,
             returnPeriod: returnPeriod,
-            gstConfig: gstConfig,
-            validation: result.validation,
+            formattedPeriod: gstUtils.formatReturnPeriod(returnPeriod),
+            returnJson: result.data,
             summary: result.summary,
-            returnJson: result.data
+            validation: result.validation,
+            salesBreakdown: salesBreakdown,      // NEW: Pass sales breakdown
+            purchaseBreakdown: purchaseBreakdown  // NEW: Pass purchase breakdown
         });
         
     } catch (error) {
