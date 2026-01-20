@@ -360,70 +360,154 @@ getBanksForReconciliation: async (locationCode) => {
      * Check for duplicate transactions
      */
     checkDuplicates: async (locationCode, bankId, transactions) => {
-        // Build a query to check for existing transactions
-        const dateAmountPairs = transactions.map(t => 
-            `(txn_date = '${t.txn_date}' AND 
-              ((credit_amount = ${t.credit_amount || 0} AND debit_amount = ${t.debit_amount || 0}) OR
-               description = '${t.description.replace(/'/g, "''")}'))`
-        ).join(' OR ');
+    // Build a query to check for existing transactions
+    const dateAmountPairs = transactions.map(t => 
+        `(txn_date = '${t.txn_date}' AND 
+          credit_amount = ${t.credit_amount || 0} AND 
+          debit_amount = ${t.debit_amount || 0} AND
+          description = '${t.description.replace(/'/g, "''")}')`
+    ).join(' OR ');
 
-        if (!dateAmountPairs) return [];
+    if (!dateAmountPairs) return [];
 
-        const result = await db.sequelize.query(
-            `SELECT txn_date, description, credit_amount, debit_amount
-             FROM t_bank_statement_actual
-             WHERE location_code = :locationCode
-               AND bank_id = :bankId
-               AND (${dateAmountPairs})`,
-            {
-                replacements: { locationCode, bankId },
-                type: db.Sequelize.QueryTypes.SELECT
-            }
-        );
-        return result;
-    },
+    const result = await db.sequelize.query(
+        `SELECT txn_date, description, credit_amount, debit_amount
+         FROM t_bank_statement_actual
+         WHERE location_code = :locationCode
+           AND bank_id = :bankId
+           AND (${dateAmountPairs})`,
+        {
+            replacements: { locationCode, bankId },
+            type: db.Sequelize.QueryTypes.SELECT
+        }
+    );
+    return result;
+},
+
+/**
+ * Insert upload history record
+ */
+insertUploadHistory: async (historyData) => {
+    const result = await db.sequelize.query(
+        `INSERT INTO t_bank_statement_upload_history
+         (location_code, bank_id, source_file, uploaded_by, 
+          total_transactions, duplicates_found, transactions_imported,
+          first_txn_date, last_txn_date, status, remarks)
+         VALUES (:location_code, :bank_id, :source_file, :uploaded_by,
+                 :total_transactions, :duplicates_found, :transactions_imported,
+                 :first_txn_date, :last_txn_date, :status, :remarks)`,
+        {
+            replacements: {
+                location_code: historyData.location_code,
+                bank_id: historyData.bank_id,
+                source_file: historyData.source_file,
+                uploaded_by: historyData.uploaded_by,
+                total_transactions: historyData.total_transactions,
+                duplicates_found: historyData.duplicates_found || 0,
+                transactions_imported: historyData.transactions_imported,
+                first_txn_date: historyData.first_txn_date || null,
+                last_txn_date: historyData.last_txn_date || null,
+                status: historyData.status || 'COMPLETED',
+                remarks: historyData.remarks || null
+            },
+            type: db.Sequelize.QueryTypes.INSERT
+        }
+    );
+    return result;
+},
+
+/**
+ * Get upload history for a location (optionally filtered by bank)
+ */
+getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
+    const whereClause = bankId 
+        ? 'WHERE h.location_code = :locationCode AND h.bank_id = :bankId'
+        : 'WHERE h.location_code = :locationCode';
+    
+    const result = await db.sequelize.query(
+        `SELECT 
+            h.upload_id,
+            h.source_file,
+            DATE_FORMAT(h.upload_date, '%d-%m-%Y %H:%i') as upload_date,
+            h.uploaded_by,
+            h.total_transactions,
+            h.duplicates_found,
+            h.transactions_imported,
+            DATE_FORMAT(h.first_txn_date, '%d-%m-%Y') as first_txn_date,
+            DATE_FORMAT(h.last_txn_date, '%d-%m-%Y') as last_txn_date,
+            h.status,
+            h.remarks,
+            b.bank_name,
+            b.account_nickname
+         FROM t_bank_statement_upload_history h
+         JOIN m_bank b ON h.bank_id = b.bank_id
+         ${whereClause}
+         ORDER BY h.upload_date DESC
+         LIMIT :limit`,
+        {
+            replacements: { 
+                locationCode, 
+                bankId: bankId || null,
+                limit 
+            },
+            type: db.Sequelize.QueryTypes.SELECT
+        }
+    );
+    return result;
+},
 
     /**
      * Bulk insert bank statement transactions
      */
     bulkInsertStatements: async (locationCode, bankId, transactions, userName) => {
-        const t = await db.sequelize.transaction();
+    const t = await db.sequelize.transaction();
+    let inserted = 0;
 
-        try {
-            for (const txn of transactions) {
-                await db.sequelize.query(
-                    `INSERT INTO t_bank_statement_actual
-                     (location_code, bank_id, txn_date, description, debit_amount, credit_amount, 
-                      balance_amount, statement_ref, source_file, created_by, creation_date)
-                     VALUES (:locationCode, :bankId, :txnDate, :description, :debit, :credit,
-                             :balance, :ref, :sourceFile, :createdBy, NOW())`,
-                    {
-                        replacements: {
-                            locationCode: locationCode,
-                            bankId: bankId,
-                            txnDate: txn.txn_date,
-                            description: txn.description,
-                            debit: txn.debit_amount || 0,
-                            credit: txn.credit_amount || 0,
-                            balance: txn.balance_amount || 0,
-                            ref: txn.statement_ref || null,
-                            sourceFile: txn.source_file || null,
-                            createdBy: userName
-                        },
-                        type: db.Sequelize.QueryTypes.INSERT,
-                        transaction: t
-                    }
-                );
-            }
-
-            await t.commit();
-            return { success: true, inserted: transactions.length };
-
-        } catch (error) {
-            await t.rollback();
-            throw error;
+    try {
+        for (const txn of transactions) {
+            await db.sequelize.query(
+                `INSERT INTO t_bank_statement_actual
+                 (location_code, bank_id, txn_date, description, debit_amount, credit_amount, 
+                  balance_amount, statement_ref, source_file, created_by, creation_date)
+                 VALUES (:locationCode, :bankId, :txnDate, :description, :debit, :credit,
+                         :balance, :ref, :sourceFile, :createdBy, NOW())`,
+                {
+                    replacements: {
+                        locationCode: locationCode,
+                        bankId: bankId,
+                        txnDate: txn.txn_date,
+                        description: txn.description,
+                        debit: txn.debit_amount || 0,
+                        credit: txn.credit_amount || 0,
+                        balance: txn.balance_amount || 0,
+                        ref: txn.statement_ref || null,
+                        sourceFile: txn.source_file,
+                        createdBy: userName
+                    },
+                    type: db.Sequelize.QueryTypes.INSERT,
+                    transaction: t
+                }
+            );
+            inserted++;
         }
-    },
+
+        await t.commit();
+        return { success: true, inserted: inserted };
+
+    } catch (error) {
+        await t.rollback();
+        throw error;
+    }
+},
+
+
+
+
+
+
+
+
+
 
     /**
  * Suggest ledger based on historical transactions with similar descriptions

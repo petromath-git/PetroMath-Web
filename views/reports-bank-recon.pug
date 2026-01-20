@@ -44,6 +44,12 @@ block content
         .btn-group .btn:last-child {
             margin-right: 0;
         }
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+        .nav-tabs .nav-link.active {
+            font-weight: 600;
+        }
         
     script.
         const currentDate = new Date().toISOString().split('T')[0];
@@ -266,18 +272,8 @@ block content
             document.getElementById('impactContent').innerHTML = html;
         }
         
+        // UPLOAD TAB FUNCTIONS
         let uploadedTransactions = [];
-        
-        function showUploadModal() {
-            const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
-            modal.show();
-            
-            document.getElementById('uploadStep1').style.display = 'block';
-            document.getElementById('uploadStep2').style.display = 'none';
-            document.getElementById('btnConfirmUpload').style.display = 'none';
-            document.getElementById('bankStatementFile').value = '';
-            uploadedTransactions = [];
-        }
         
         async function uploadAndPreview() {
             const fileInput = document.getElementById('bankStatementFile');
@@ -297,8 +293,15 @@ block content
             formData.append('bankStatement', fileInput.files[0]);
             formData.append('bank_id', bankId);
             
+            // Show loading state
             document.getElementById('uploadStep1').style.display = 'none';
             document.getElementById('uploadStep2').style.display = 'block';
+            document.getElementById('previewContent').innerHTML = `
+                <div class="text-center p-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Processing file...</p>
+                </div>
+            `;
             
             try {
                 const response = await fetch('/reports-bank-recon/upload', {
@@ -314,7 +317,7 @@ block content
                     document.getElementById('btnConfirmUpload').style.display = 'block';
                 } else {
                     document.getElementById('previewContent').innerHTML = `
-                        <div class="alert alert-danger">
+                        <div class="alert alert-danger m-3">
                             <i class="bi bi-x-circle me-2"></i>
                             Error: ${data.error}
                         </div>
@@ -323,7 +326,7 @@ block content
             } catch (error) {
                 console.error('Upload error:', error);
                 document.getElementById('previewContent').innerHTML = `
-                    <div class="alert alert-danger">
+                    <div class="alert alert-danger m-3">
                         <i class="bi bi-x-circle me-2"></i>
                         Failed to process file.
                     </div>
@@ -335,37 +338,35 @@ block content
             const previewDiv = document.getElementById('previewContent');
             
             let summaryHtml = `
-                <div class="alert alert-info mb-3">
+                <div class="alert alert-info m-3 mb-0">
                     <strong><i class="bi bi-file-earmark-spreadsheet me-2"></i>Preview: ${data.summary.total} transactions found</strong>
                     ${data.summary.duplicates > 0 ? 
-                        `<br><i class="bi bi-exclamation-triangle me-2 text-warning"></i>${data.summary.duplicates} possible duplicate(s) detected` 
+                        `<br><i class="bi bi-exclamation-triangle me-2 text-warning"></i>${data.summary.duplicates} duplicate(s) detected (will be skipped)` 
+                        : ''}
+                    ${data.summary.excluded_today > 0 ?
+                        `<br><i class="bi bi-info-circle me-2 text-info"></i>${data.summary.excluded_today} transaction(s) from today excluded (only imports up to ${data.summary.yesterday_date})` 
                         : ''}
                 </div>
             `;
             
             let tableHtml = `
-                <div style="max-height: 500px; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6;">
+                <div class="table-responsive" style="max-height: 60vh;">
                     <table class="table table-sm table-hover table-bordered mb-0">
                         <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 10;">
                             <tr>
-                                <th style="min-width: 100px;">Date</th>
+                                <th style="width: 100px;">Date</th>
                                 <th style="min-width: 250px;">Description</th>
-                                <th style="min-width: 100px; text-align: right;">Credit</th>
-                                <th style="min-width: 100px; text-align: right;">Debit</th>
-                                <th style="min-width: 100px; text-align: right;">Balance</th>
-                                <th style="min-width: 80px; text-align: center;">Include</th>
+                                <th style="width: 120px; text-align: right;">Credit</th>
+                                <th style="width: 120px; text-align: right;">Debit</th>
+                                <th style="width: 120px; text-align: right;">Balance</th>
+                                <th style="width: 80px; text-align: center;">Include</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
             
             data.transactions.forEach((txn, index) => {
-                const isDuplicate = data.duplicates.some(dup => 
-                    dup.txn_date === txn.txn_date && 
-                    dup.description === txn.description &&
-                    parseFloat(dup.credit_amount) === parseFloat(txn.credit_amount) &&
-                    parseFloat(dup.debit_amount) === parseFloat(txn.debit_amount)
-                );
+                 const isDuplicate = txn.is_duplicate;
                 
                 const rowClass = isDuplicate ? 'table-warning' : '';
                 const checked = isDuplicate ? '' : 'checked';
@@ -374,16 +375,19 @@ block content
                 tableHtml += `
                     <tr class="${rowClass}">
                         <td>${txn.txn_date}</td>
-                        <td><div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</div></td>
+                        <td><div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</div></td>
                         <td style="text-align: right;">${txn.credit_amount > 0 ? txn.credit_amount.toFixed(2) : '-'}</td>
                         <td style="text-align: right;">${txn.debit_amount > 0 ? txn.debit_amount.toFixed(2) : '-'}</td>
                         <td style="text-align: right;">${txn.balance_amount ? txn.balance_amount.toFixed(2) : '-'}</td>
                         <td style="text-align: center;">
-                            <input type="checkbox" 
-                                   class="form-check-input txn-checkbox" 
-                                   data-index="${index}" 
-                                   ${checked}>
-                            ${dupLabel}
+                            ${isDuplicate ? 
+                                `<span class="text-muted">-</span>
+                                <br><span class="badge badge-warning">Already Uploaded</span>` : 
+                                `<input type="checkbox" 
+                                    class="form-check-input txn-checkbox" 
+                                    data-index="${index}" 
+                                    checked>`
+                            }                                  
                         </td>
                     </tr>
                 `;
@@ -396,6 +400,21 @@ block content
             `;
             
             previewDiv.innerHTML = summaryHtml + tableHtml;
+
+            const nonDuplicateCount = data.summary.total - data.summary.duplicates;
+            if (nonDuplicateCount > 0) {
+                document.getElementById('btnConfirmUploadRow').style.display = 'block';
+            } else {
+                document.getElementById('btnConfirmUploadRow').style.display = 'none';
+            }
+        }
+        
+        function resetUploadForm() {
+            document.getElementById('uploadStep1').style.display = 'block';
+            document.getElementById('uploadStep2').style.display = 'none';
+            document.getElementById('btnConfirmUpload').style.display = 'none';
+            document.getElementById('bankStatementFile').value = '';
+            uploadedTransactions = [];
         }
         
         async function confirmSave() {
@@ -407,26 +426,14 @@ block content
             }
             
             const selectedTransactions = [];
-            let debugInfo = 'SELECTED TRANSACTIONS:\n\n';
-            
             checkboxes.forEach(cb => {
                 const index = parseInt(cb.dataset.index);
                 if (uploadedTransactions[index]) {
-                    const txn = uploadedTransactions[index];
-                    selectedTransactions.push(txn);
-                    
-                    debugInfo += `Index ${index}:\n`;
-                    debugInfo += `  Date: ${txn.txn_date}\n`;
-                    debugInfo += `  Description: ${txn.description.substring(0, 50)}...\n`;
-                    debugInfo += `  Credit: ${txn.credit_amount}\n`;
-                    debugInfo += `  Debit: ${txn.debit_amount}\n\n`;
+                    selectedTransactions.push(uploadedTransactions[index]);
                 }
             });
             
-            console.log(debugInfo);
-            console.log('Full transaction objects:', selectedTransactions);
-            
-            const proceed = confirm(`You are about to save ${selectedTransactions.length} transaction(s).\n\nCheck console (F12) for details.\n\nProceed?`);
+            const proceed = confirm(`You are about to save ${selectedTransactions.length} transaction(s). Proceed?`);
             if (!proceed) return;
             
             const bankId = document.getElementById('upload_bank_id').value;
@@ -448,7 +455,7 @@ block content
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(data.message + '. Refreshing page...');
+                    alert(data.message + '. Page will reload.');
                     location.reload();
                 } else {
                     alert(`Error: ${data.error}`);
@@ -464,69 +471,50 @@ block content
         }
         
         async function showAddEntryModal(date, description, credit, debit) {
-            // Convert date from dd-mm-yyyy to yyyy-mm-dd for input type="date"
-            const dateParts = date.split('-');
-            const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`; // yyyy-mm-dd
-            
-            // Populate modal fields
-            document.getElementById('modal_trans_date').value = formattedDate;
+            document.getElementById('modal_trans_date').value = date;
             document.getElementById('modal_description').value = description;
             document.getElementById('modal_debit_amount').value = debit > 0 ? debit.toFixed(2) : '0.00';
             document.getElementById('modal_credit_amount').value = credit > 0 ? credit.toFixed(2) : '0.00';
             document.getElementById('modal_remarks').value = description;
             
-            // Determine entry type based on credit/debit
             const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
-            
-            // Load filtered ledgers with suggestion
             const bankId = document.getElementById('modal_bank_id').value;
+            
             if (bankId) {
-                await loadFilteredLedgers(bankId, entryType, description);
+                await loadFilteredLedgers(bankId, entryType);
             }
             
-            // Show modal
             const modal = new bootstrap.Modal(document.getElementById('addEntryModal'));
             modal.show();
         }
 
-        async function loadFilteredLedgers(bankId, entryType, description) {
+        async function loadFilteredLedgers(bankId, entryType) {
             const ledgerSelect = document.getElementById('modal_ledger_name');
             ledgerSelect.innerHTML = '<option value="">Loading...</option>';
             ledgerSelect.disabled = true;
             
             try {
-                // Call the new endpoint with suggestion support
-                const response = await fetch(`/reports-bank-recon/ledgers-suggest?bank_id=${bankId}&entry_type=${entryType}&description=${encodeURIComponent(description)}`);
+                const response = await fetch(`/bank-statement/ledgers?bank_id=${bankId}`);
                 const data = await response.json();
                 
                 if (data.success) {
                     ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                     
-                    // Add ledgers to dropdown
                     data.ledgers.forEach(ledger => {
-                        const option = document.createElement('option');
-                        option.value = ledger.ledger_name;
-                        option.setAttribute('data-entry-type', ledger.allowed_entry_type);
-                        option.setAttribute('data-external-id', ledger.external_id || '');
-                        option.setAttribute('data-source-type', ledger.source_type || '');
+                        const allowedType = ledger.allowed_entry_type;
                         
-                        // Mark suggested ledger with indicator
-                        if (data.suggestedLedger && ledger.ledger_name === data.suggestedLedger) {
-                            option.textContent = `⭐ ${ledger.ledger_display_name} (Suggested)`;
-                            option.selected = true; // Auto-select the suggested ledger
-                        } else {
+                        if (allowedType === 'BOTH' || allowedType === entryType) {
+                            const option = document.createElement('option');
+                            option.value = ledger.ledger_name;
                             option.textContent = ledger.ledger_display_name;
+                            option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                            option.setAttribute('data-external-id', ledger.external_id || '');
+                            option.setAttribute('data-source-type', ledger.source_type || '');
+                            ledgerSelect.appendChild(option);
                         }
-                        
-                        ledgerSelect.appendChild(option);
                     });
                     
                     ledgerSelect.disabled = false;
-                    
-                    // Show info message if suggestion was made
-                    if (data.suggestedLedger) {
-                        console.log(`Suggested ledger: ${data.suggestedLedger} based on similar historical transactions`);
-                    }
                     
                     if (ledgerSelect.options.length === 1) {
                         ledgerSelect.innerHTML = '<option value="">No matching ledgers found</option>';
@@ -593,6 +581,92 @@ block content
                 saveBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save Entry';
             }
         }
+
+        // UPLOAD HISTORY FUNCTIONS
+        async function loadUploadHistory() {
+            const bankId = document.getElementById('upload_bank_id').value;
+            if (!bankId) {
+                document.getElementById('uploadHistoryTable').innerHTML = `
+                    <div class="alert alert-info text-center m-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Select a bank account to view upload history
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/reports-bank-recon/upload-history?bank_id=${bankId}&limit=20`);
+                const data = await response.json();
+                
+                if (data.success && data.history.length > 0) {
+                    displayUploadHistory(data.history);
+                } else {
+                    document.getElementById('uploadHistoryTable').innerHTML = `
+                        <div class="alert alert-info text-center m-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            No upload history found for this bank account.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading upload history:', error);
+                document.getElementById('uploadHistoryTable').innerHTML = `
+                    <div class="alert alert-danger text-center m-3">
+                        <i class="bi bi-x-circle me-2"></i>
+                        Error loading upload history
+                    </div>
+                `;
+            }
+        }
+
+        function displayUploadHistory(history) {
+            let html = `
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm table-hover table-bordered mb-0">
+                        <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 5;">
+                            <tr>
+                                <th>Upload Date</th>
+                                <th>File Name</th>
+                                <th>First Date</th>
+                                <th>Last Date</th>
+                                <th class="text-center">Total</th>
+                                <th class="text-center">Imported</th>
+                                <th class="text-center">Duplicates</th>
+                                <th>Uploaded By</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            history.forEach(h => {
+                const statusBadge = h.status === 'COMPLETED' ? 'badge-success' : 
+                                h.status === 'FAILED' ? 'badge-danger' : 'badge-warning';
+                                
+                html += `
+                    <tr>
+                        <td style="white-space: nowrap;">${h.upload_date}</td>
+                        <td><small>${h.source_file}</small></td>
+                        <td style="white-space: nowrap;">${h.first_txn_date || '-'}</td>
+                        <td style="white-space: nowrap;">${h.last_txn_date || '-'}</td>
+                        <td class="text-center">${h.total_transactions}</td>
+                        <td class="text-center"><strong class="text-success">${h.transactions_imported}</strong></td>
+                        <td class="text-center">${h.duplicates_found > 0 ? `<span class="text-warning">${h.duplicates_found}</span>` : '-'}</td>
+                        <td><small>${h.uploaded_by}</small></td>
+                        <td class="text-center"><span class="badge ${statusBadge}">${h.status}</span></td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('uploadHistoryTable').innerHTML = html;
+        }
         
         document.addEventListener('DOMContentLoaded', function() {
             const btnDelete = document.getElementById('btnConfirmDelete');
@@ -637,270 +711,285 @@ block content
                     document.getElementById('btnConfirmDelete').disabled = true;
                 });
             }
-            
-            const modalElement = document.getElementById('impactModal');
-            const cancelButtons = modalElement.querySelectorAll('[data-bs-dismiss="modal"]');
-            cancelButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const modal = bootstrap.Modal.getInstance(modalElement);
-                    if (modal) {
-                        modal.hide();
-                    }
+
+            const uploadBankSelect = document.getElementById('upload_bank_id');
+            if (uploadBankSelect) {
+                uploadBankSelect.addEventListener('change', function() {
+                    loadUploadHistory();
                 });
-            });
+                // Load on page load if bank is already selected
+                if (uploadBankSelect.value) {
+                    loadUploadHistory();
+                }
+            }
         });
 
     .container-fluid.p-3
-        .card.mb-3.shadow-sm
-            .card-body
-                form#bankReconForm(method='POST' action='/reports-bank-recon')
-                    input(type='hidden' name='caller' value='notpdf')
-                    .row.g-3.align-items-end
-                        .col-md-2
-                            label.form-label Date Range:
-                            select#dateRange.form-control(onchange='updateDateRangev1()')
-                                option(value='this_month') This Month
-                                option(value='last_month') Last Month
-                                option(value='custom' selected) Custom
-                        .col-md-2
-                            label.form-label From Date:
-                            input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
-                        .col-md-2
-                            label.form-label To Date:
-                            input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
-                        .col-md-3
-                            label.form-label Bank Account:
-                            select#bank_id.form-control(name='bank_id' required)
-                                if banks
-                                    each val in banks
-                                        option(value=`${val.bank_id}`, selected=bank_id == val.bank_id ? true : undefined)= `${val.bank_name} - ${val.account_nickname}`
-                        .col-md-2
-                            label.form-label Search:
-                            input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
-                        .col-md-1
-                            label.form-label &nbsp;
-                            button.btn.btn-primary.w-100(type='submit')
-                                i.bi.bi-search.me-1
-                                | Load
+        // Tab Navigation
+        ul.nav.nav-tabs.mb-3(role='tablist')
+            li.nav-item(role='presentation')
+                a#upload-tab.nav-link.active(data-toggle='tab' href='#upload-panel' role='tab') 
+                    i.bi.bi-upload.me-2
+                    | Upload Bank Statement
+            li.nav-item(role='presentation')
+                a#reconciliation-tab.nav-link(data-toggle='tab' href='#reconciliation-panel' role='tab')
+                    i.bi.bi-clipboard-check.me-2
+                    | Reconciliation Report
+        
+        // Tab Content
+        .tab-content
+            // ===== TAB 1: UPLOAD BANK STATEMENT =====
+            #upload-panel.tab-pane.fade.show.active(role='tabpanel')
+                .card.shadow-sm
+                    .card-header.bg-success.text-white
+                        h5.mb-0
+                            i.bi.bi-upload.me-2
+                            | Upload Bank Statement
+                    .card-body
+                        #uploadStep1
+                            .row.g-3
+                                .col-md-6
+                                    label.form-label 
+                                        | Select Bank:
+                                        span.text-danger  *
+                                    select#upload_bank_id.form-control(required)
+                                        option(value='') Select Bank Account
+                                        if banks
+                                            each val in banks
+                                                option(value=`${val.bank_id}`)= `${val.bank_name} - ${val.account_nickname}`
+                                .col-md-6
+                                    label.form-label 
+                                        | Select Excel File:
+                                        span.text-danger  *
+                                    input#bankStatementFile.form-control(type='file' accept='.xlsx,.xls' required)
+                                .col-12
+                                    .alert.alert-info.mb-0
+                                        i.bi.bi-info-circle.me-2
+                                        | Upload your bank statement in Excel format (.xlsx or .xls). The system will automatically detect and preview transactions.
+                            .row.mt-3
+                                .col-12
+                                    button.btn.btn-primary.btn-lg(type='button' onclick='uploadAndPreview()')
+                                        i.bi.bi-eye.me-2
+                                        | Upload & Preview
+                        
+                        #uploadStep2(style='display: none;')
+                            .d-flex.justify-content-between.align-items-center.mb-3
+                                h6.mb-0 Transaction Preview
+                                button.btn.btn-secondary.btn-sm(type='button' onclick='resetUploadForm()')
+                                    i.bi.bi-arrow-left.me-1
+                                    | Back to Upload
+                            #previewContent
+                            .row.mt-3(style='display: none;' id='btnConfirmUploadRow')
+                                .col-12.text-center
+                                    button#btnConfirmUpload.btn.btn-success.btn-lg(type='button' onclick='confirmSave()')
+                                        i.bi.bi-save.me-2
+                                        | Confirm & Save Selected Transactions
+                // Upload History Section
+                .card.shadow-sm.mt-4
+                    .card-header.bg-info.text-white
+                        h6.mb-0
+                            i.bi.bi-clock-history.me-2
+                            | Upload History
+                    .card-body.p-0
+                        #uploadHistoryTable
+                            .alert.alert-info.text-center.m-3
+                                i.bi.bi-info-circle.me-2
+                                | Select a bank account to view upload history            
+            // ===== TAB 2: RECONCILIATION REPORT =====
+            #reconciliation-panel.tab-pane.fade(role='tabpanel')
+                .card.mb-3.shadow-sm
+                    .card-body
+                        form#bankReconForm(method='POST' action='/reports-bank-recon')
+                            input(type='hidden' name='caller' value='notpdf')
+                            .row.g-3.align-items-end
+                                .col-md-2
+                                    label.form-label Date Range:
+                                    select#dateRange.form-control(onchange='updateDateRangev1()')
+                                        option(value='this_month') This Month
+                                        option(value='last_month') Last Month
+                                        option(value='custom' selected) Custom
+                                .col-md-2
+                                    label.form-label From Date:
+                                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                                .col-md-2
+                                    label.form-label To Date:
+                                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                                .col-md-3
+                                    label.form-label Bank Account:
+                                    select#bank_id.form-control(name='bank_id' required)
+                                        if banks
+                                            each val in banks
+                                                option(value=`${val.bank_id}`, selected=bank_id == val.bank_id ? true : undefined)= `${val.bank_name} - ${val.account_nickname}`
+                                .col-md-2
+                                    label.form-label Search:
+                                    input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
+                                .col-md-1
+                                    label.form-label &nbsp;
+                                    button.btn.btn-primary.w-100(type='submit')
+                                        i.bi.bi-search.me-1
+                                        | Load
 
-    .container-fluid.px-3
-        if systemTransactions !== undefined && bankTransactions !== undefined
-            - var bankName = selectedBank ? `${selectedBank.bank_name} - ${selectedBank.account_nickname}` : 'Bank'
-            
-            h4.text-center.mb-1 Bank Reconciliation Report
-            h5.text-center.text-primary= bankName
-            p.text-center.text-muted
-                i.bi.bi-calendar-range.me-2
-                = `${formattedFromDate} to ${formattedToDate}`
-
-            if summaryTotals
-                .row.mb-4
-                    .col-md-6
-                        .card.border-primary.shadow-sm
-                            .card-body
-                                h6.mb-3.text-primary
-                                    i.bi.bi-laptop.me-2
-                                    | System (PetroMath)
-                                .row.text-center
-                                    .col-4
-                                        strong Transactions
-                                        h5.mb-0= summaryTotals.system_count
-                                        - var txnDiff = summaryTotals.system_count - summaryTotals.bank_count
-                                        if txnDiff > 0
-                                            small.text-danger +#{txnDiff} excess
-                                        else if txnDiff < 0
-                                            small.text-warning #{txnDiff} missing
-                                    .col-4
-                                        strong Credit
-                                        h5.mb-0.text-success ₹#{summaryTotals.system_credit.toFixed(2)}
-                                        - var creditDiff = summaryTotals.system_credit - summaryTotals.bank_credit
-                                        if creditDiff > 0
-                                            small.text-danger +#{creditDiff.toFixed(2)}
-                                        else if creditDiff < 0
-                                            small.text-warning #{creditDiff.toFixed(2)}
-                                    .col-4
-                                        strong Debit
-                                        h5.mb-0.text-danger ₹#{summaryTotals.system_debit.toFixed(2)}
-                                        - var debitDiff = summaryTotals.system_debit - summaryTotals.bank_debit
-                                        if debitDiff > 0
-                                            small.text-danger +#{debitDiff.toFixed(2)}
-                                        else if debitDiff < 0
-                                            small.text-warning #{debitDiff.toFixed(2)}
-                    .col-md-6
-                        .card.border-warning.shadow-sm
-                            .card-body
-                                h6.mb-3.text-warning
-                                    i.bi.bi-bank.me-2
-                                    | Bank Statement
-                                .row.text-center
-                                    .col-4
-                                        strong Transactions
-                                        h5.mb-0= summaryTotals.bank_count
-                                    .col-4
-                                        strong Credit
-                                        h5.mb-0.text-success ₹#{summaryTotals.bank_credit.toFixed(2)}
-                                    .col-4
-                                        strong Debit
-                                        h5.mb-0.text-danger ₹#{summaryTotals.bank_debit.toFixed(2)}
-
-            .row.mb-3
-                .col-12.text-center
-                    .btn-group(role='group')
-                        button#btn-show-all.btn.btn-outline-primary.active(type='button' onclick='showAllTransactions()')
-                            i.bi.bi-list-ul.me-2
-                            | Show All Transactions
-                        button#btn-show-unmatched.btn.btn-outline-warning(type='button' onclick='showUnmatchedOnly()')
-                            i.bi.bi-exclamation-triangle.me-2
-                            | Show Only Unmatched
-                        button#btn-sync-scroll.btn.btn-outline-secondary(type='button' onclick='toggleSyncScroll()')
-                            i.bi.bi-arrow-down-up.me-2
-                            | Sync Scroll
-
-            .row
-                .col-md-6
-                    .card.shadow-sm
-                        .card-header.bg-primary-pastel
-                            i.bi.bi-laptop.me-2
-                            strong System Transactions (PetroMath)
-                        .card-body.p-0
-                            .table-responsive
-                                table#system-table.table.table-sm.table-hover.system-table.mb-0
-                                    thead.sticky-top
-                                        tr
-                                            th Date
-                                            th Ledger
-                                            th Remarks
-                                            th.text-end Credit
-                                            th.text-end Debit
-                                            th.text-center Receipts
-                                    tbody
-                                        each txn in systemTransactions
-                                            tr(class=txn.isUnmatched ? 'unmatched-row' : '' 
-                                               style='cursor: pointer;'
-                                               onclick=`showImpactAnalysis(${txn.t_bank_id})`
-                                               data-txn-id=txn.t_bank_id
-                                               data-date=txn.trans_date
-                                               data-remarks=txn.remarks
-                                               data-credit=txn.credit_amount
-                                               data-debit=txn.debit_amount)
-                                                td
-                                                    = txn.trans_date
-                                                    if txn.isNearMatch
-                                                        br
-                                                        small.text-warning
-                                                            i.bi.bi-exclamation-triangle-fill(
-                                                                title=`Date mismatch: System=${txn.trans_date}, Bank=${txn.bankDate} (±${txn.dateOffBy} day)`
-                                                                style="cursor: help;"
-                                                            )
-                                                            |  ±#{txn.dateOffBy}d
-                                                td.truncate-text(title=txn.ledger_name || 'N/A')
-                                                    if txn.ledger_name
-                                                        span.badge.bg-info.text-white(style='font-size: 0.7rem;')= txn.ledger_name
-                                                    else
-                                                        span.text-muted -
-                                                td.truncate-text(title=txn.remarks)= txn.remarks || '-'
-                                                td.text-end
-                                                    if txn.credit_amount > 0
-                                                        = txn.credit_amount.toFixed(2)
-                                                    else
-                                                        | -
-                                                td.text-end
-                                                    if txn.debit_amount > 0
-                                                        = txn.debit_amount.toFixed(2)
-                                                    else
-                                                        | -
-                                                td.text-center
-                                                    if txn.receipt_count > 0
-                                                        span.badge.bg-info= txn.receipt_count
-                                                    else
-                                                        | -
-                                        if systemTransactions.length === 0
-                                            tr
-                                                td.text-center.text-muted(colspan='6') No transactions found
-
-                .col-md-6
-                    .card.shadow-sm
-                        .card-header.bg-warning-pastel
-                            i.bi.bi-bank.me-2
-                            strong Bank Statement Transactions
-                        .card-body.p-0
-                            .table-responsive
-                                table#bank-table.table.table-sm.table-hover.bank-table.mb-0
-                                    thead.sticky-top
-                                        tr
-                                            th Date
-                                            th Description
-                                            th.text-end Credit
-                                            th.text-end Debit
-                                            th.text-center Action
-                                    tbody
-                                        each txn in bankTransactions
-                                            tr(class=txn.isUnmatched ? 'unmatched-row' : '')
-                                                td= txn.txn_date
-                                                td.truncate-text(title=txn.description)= txn.description || '-'
-                                                td.text-end
-                                                    if txn.credit_amount > 0
-                                                        = txn.credit_amount.toFixed(2)
-                                                    else
-                                                        | -
-                                                td.text-end
-                                                    if txn.debit_amount > 0
-                                                        = txn.debit_amount.toFixed(2)
-                                                    else
-                                                        | -
-                                                td.text-center
-                                                    if txn.isUnmatched
-                                                        button.btn.btn-sm.btn-success(
-                                                            type='button'
-                                                            onclick=`showAddEntryModal('${txn.txn_date}', '${txn.description.replace(/'/g, "\\'")}', ${txn.credit_amount}, ${txn.debit_amount})`
-                                                            title='Add entry to PetroMath'
-                                                        )
-                                                            i.bi.bi-plus-circle
-                                        if bankTransactions.length === 0
-                                            tr
-                                                td.text-center.text-muted(colspan='5') No transactions found
-        else
-            .alert.alert-info.text-center.mt-5(role='alert')
-                i.bi.bi-info-circle.me-2
-                | Select a bank and date range, then click "Load" to view the reconciliation report.
-
-    #uploadModal.modal.fade(tabindex='-1' aria-labelledby='uploadModalLabel' aria-hidden='true')
-        .modal-dialog.modal-xl
-            .modal-content
-                .modal-header.bg-success.text-white
-                    h5#uploadModalLabel.modal-title
-                        i.bi.bi-upload.me-2
-                        | Upload Bank Statement
-                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
-                .modal-body
-                    #uploadStep1
-                        .row
-                            .col-md-6
-                                label.form-label Select Bank:
-                                select#upload_bank_id.form-control(required)
-                                    if banks
-                                        each val in banks
-                                            option(value=`${val.bank_id}`)= `${val.bank_name} - ${val.account_nickname}`
-                            .col-md-6
-                                label.form-label Select Excel File:
-                                input#bankStatementFile.form-control(type='file' accept='.xlsx,.xls' required)
-                        .row.mt-3
-                            .col-12
-                                button.btn.btn-primary(type='button' onclick='uploadAndPreview()')
-                                    i.bi.bi-eye.me-1
-                                    | Upload & Preview
+                if systemTransactions !== undefined && bankTransactions !== undefined
+                    - var bankName = selectedBank ? `${selectedBank.bank_name} - ${selectedBank.account_nickname}` : 'Bank'
                     
-                    #uploadStep2(style='display: none;')
-                        #previewContent
-                            .text-center.p-4
-                                .spinner-border.text-primary(role='status')
-                                p.mt-2 Processing file...
-                .modal-footer
-                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
-                    button#btnConfirmUpload.btn.btn-success(type='button' style='display: none;' onclick='confirmSave()')
-                        i.bi.bi-save.me-1
-                        | Confirm & Save
+                    h4.text-center.mb-1 Bank Reconciliation Report
+                    h5.text-center.text-primary= bankName
+                    p.text-center.text-muted
+                        i.bi.bi-calendar-range.me-2
+                        = `${formattedFromDate} to ${formattedToDate}`
 
+                    if summaryTotals
+                        .row.mb-4
+                            .col-md-6
+                                .card.border-primary.shadow-sm
+                                    .card-body
+                                        h6.mb-3.text-primary
+                                            i.bi.bi-laptop.me-2
+                                            | System (PetroMath)
+                                        .row.text-center
+                                            .col-4
+                                                strong Transactions
+                                                h5.mb-0= summaryTotals.system_count
+                                                - var txnDiff = summaryTotals.system_count - summaryTotals.bank_count
+                                                if txnDiff > 0
+                                                    small.text-danger +#{txnDiff} excess
+                                                else if txnDiff < 0
+                                                    small.text-warning #{txnDiff} missing
+                                            .col-4
+                                                strong Credit
+                                                h5.mb-0.text-success ₹#{summaryTotals.system_credit.toFixed(2)}
+                                                - var creditDiff = summaryTotals.system_credit - summaryTotals.bank_credit
+                                                if creditDiff > 0
+                                                    small.text-danger +#{creditDiff.toFixed(2)}
+                                                else if creditDiff < 0
+                                                    small.text-warning #{creditDiff.toFixed(2)}
+                                            .col-4
+                                                strong Debit
+                                                h5.mb-0.text-danger ₹#{summaryTotals.system_debit.toFixed(2)}
+                                                - var debitDiff = summaryTotals.system_debit - summaryTotals.bank_debit
+                                                if debitDiff > 0
+                                                    small.text-danger +#{debitDiff.toFixed(2)}
+                                                else if debitDiff < 0
+                                                    small.text-warning #{debitDiff.toFixed(2)}
+                            .col-md-6
+                                .card.border-warning.shadow-sm
+                                    .card-body
+                                        h6.mb-3.text-warning
+                                            i.bi.bi-bank.me-2
+                                            | Bank Statement
+                                        .row.text-center
+                                            .col-4
+                                                strong Transactions
+                                                h5.mb-0= summaryTotals.bank_count
+                                            .col-4
+                                                strong Credit
+                                                h5.mb-0.text-success ₹#{summaryTotals.bank_credit.toFixed(2)}
+                                            .col-4
+                                                strong Debit
+                                                h5.mb-0.text-danger ₹#{summaryTotals.bank_debit.toFixed(2)}
+
+                    .row.mb-3
+                        .col-12.text-center
+                            .btn-group(role='group')
+                                button#btn-show-all.btn.btn-outline-primary.active(type='button' onclick='showAllTransactions()')
+                                    i.bi.bi-list-ul.me-2
+                                    | Show All Transactions
+                                button#btn-show-unmatched.btn.btn-outline-warning(type='button' onclick='showUnmatchedOnly()')
+                                    i.bi.bi-exclamation-triangle.me-2
+                                    | Show Only Unmatched
+                                button#btn-sync-scroll.btn.btn-outline-secondary(type='button' onclick='toggleSyncScroll()')
+                                    i.bi.bi-arrow-down-up.me-2
+                                    | Sync Scroll
+
+                    .row
+                        .col-md-6
+                            .card.shadow-sm
+                                .card-header.bg-primary-pastel
+                                    i.bi.bi-laptop.me-2
+                                    strong System Transactions (PetroMath)
+                                .card-body.p-0
+                                    .table-responsive
+                                        table#system-table.table.table-sm.table-hover.system-table.mb-0
+                                            thead.sticky-top
+                                                tr
+                                                    th Date
+                                                    th Remarks
+                                                    th.text-end Credit
+                                                    th.text-end Debit
+                                                    th.text-center Receipts
+                                            tbody
+                                                each txn in systemTransactions
+                                                    tr(class=txn.isUnmatched ? 'unmatched-row' : '' 
+                                                       style='cursor: pointer;'
+                                                       onclick=`showImpactAnalysis(${txn.t_bank_id})`)
+                                                        td= txn.trans_date
+                                                        td.truncate-text(title=txn.remarks)= txn.remarks || '-'
+                                                        td.text-end
+                                                            if txn.credit_amount > 0
+                                                                = txn.credit_amount.toFixed(2)
+                                                            else
+                                                                | -
+                                                        td.text-end
+                                                            if txn.debit_amount > 0
+                                                                = txn.debit_amount.toFixed(2)
+                                                            else
+                                                                | -
+                                                        td.text-center
+                                                            if txn.receipt_count > 0
+                                                                span.badge.bg-info= txn.receipt_count
+                                                            else
+                                                                | -
+                                                if systemTransactions.length === 0
+                                                    tr
+                                                        td.text-center.text-muted(colspan='5') No transactions found
+
+                        .col-md-6
+                            .card.shadow-sm
+                                .card-header.bg-warning-pastel
+                                    i.bi.bi-bank.me-2
+                                    strong Bank Statement Transactions
+                                .card-body.p-0
+                                    .table-responsive
+                                        table#bank-table.table.table-sm.table-hover.bank-table.mb-0
+                                            thead.sticky-top
+                                                tr
+                                                    th Date
+                                                    th Description
+                                                    th.text-end Credit
+                                                    th.text-end Debit
+                                                    th.text-center Action
+                                            tbody
+                                                each txn in bankTransactions
+                                                    tr(class=txn.isUnmatched ? 'unmatched-row' : '')
+                                                        td= txn.txn_date
+                                                        td.truncate-text(title=txn.description)= txn.description || '-'
+                                                        td.text-end
+                                                            if txn.credit_amount > 0
+                                                                = txn.credit_amount.toFixed(2)
+                                                            else
+                                                                | -
+                                                        td.text-end
+                                                            if txn.debit_amount > 0
+                                                                = txn.debit_amount.toFixed(2)
+                                                            else
+                                                                | -
+                                                        td.text-center
+                                                            if txn.isUnmatched
+                                                                button.btn.btn-sm.btn-success(
+                                                                    type='button'
+                                                                    onclick=`showAddEntryModal('${txn.txn_date}', '${txn.description.replace(/'/g, "\\'")}', ${txn.credit_amount}, ${txn.debit_amount})`
+                                                                    title='Add entry to PetroMath'
+                                                                )
+                                                                    i.bi.bi-plus-circle
+                                                if bankTransactions.length === 0
+                                                    tr
+                                                        td.text-center.text-muted(colspan='5') No transactions found
+                else
+                    .alert.alert-info.text-center.mt-5(role='alert')
+                        i.bi.bi-info-circle.me-2
+                        | Select a bank and date range, then click "Load" to view the reconciliation report.
+
+    // MODALS
     #impactModal.modal.fade(tabindex='-1' aria-labelledby='impactModalLabel' aria-hidden='true')
         .modal-dialog.modal-lg
             .modal-content

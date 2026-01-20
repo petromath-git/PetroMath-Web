@@ -83,4 +83,18 @@ router.get('/ledgers-suggest',
     }
 );
 
+router.post('/bulk-add-entries',
+    isLoginEnsured,
+    (req, res, next) => {
+        bankReconController.bulkAddEntries(req, res, next);
+    }
+);
+
+router.get('/upload-history',
+    isLoginEnsured,
+    (req, res, next) => {
+        bankReconController.getUploadHistory(req, res, next);
+    }
+);
+
 module.exports = router;
