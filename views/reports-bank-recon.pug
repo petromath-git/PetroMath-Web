@@ -471,22 +471,44 @@ block content
         }
         
         async function showAddEntryModal(date, description, credit, debit) {
-            document.getElementById('modal_trans_date').value = date;
-            document.getElementById('modal_description').value = description;
-            document.getElementById('modal_debit_amount').value = debit > 0 ? debit.toFixed(2) : '0.00';
-            document.getElementById('modal_credit_amount').value = credit > 0 ? credit.toFixed(2) : '0.00';
-            document.getElementById('modal_remarks').value = description;
-            
-            const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
-            const bankId = document.getElementById('modal_bank_id').value;
-            
-            if (bankId) {
-                await loadFilteredLedgers(bankId, entryType);
+                // Convert date from DD-MM-YYYY to YYYY-MM-DD for HTML date input
+                const convertedDate = convertDateFormat(date);
+                
+                document.getElementById('modal_trans_date').value = convertedDate;
+                document.getElementById('modal_description').value = description;
+                document.getElementById('modal_debit_amount').value = debit > 0 ? debit.toFixed(2) : '0.00';
+                document.getElementById('modal_credit_amount').value = credit > 0 ? credit.toFixed(2) : '0.00';
+                document.getElementById('modal_remarks').value = description;
+                
+                const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
+                const bankId = document.getElementById('modal_bank_id').value;
+                
+                if (bankId) {
+                    await loadFilteredLedgers(bankId, entryType);
+                }
+                
+                const modal = new bootstrap.Modal(document.getElementById('addEntryModal'));
+                modal.show();
             }
-            
-            const modal = new bootstrap.Modal(document.getElementById('addEntryModal'));
-            modal.show();
-        }
+
+            // ADD this helper function right AFTER showAddEntryModal:
+
+            function convertDateFormat(dateStr) {
+                // Convert DD-MM-YYYY to YYYY-MM-DD
+                // Input: "02-01-2026" Output: "2026-01-02"
+                
+                if (!dateStr) return '';
+                
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    const day = parts[0];
+                    const month = parts[1];
+                    const year = parts[2];
+                    return `${year}-${month}-${day}`;
+                }
+                
+                return dateStr;
+            }
 
         async function loadFilteredLedgers(bankId, entryType) {
             const ledgerSelect = document.getElementById('modal_ledger_name');
@@ -568,6 +590,8 @@ block content
                 
                 if (result.success) {
                     alert('Entry added successfully! Refreshing page...');
+                    // Remember to return to reconciliation tab after refresh
+                    sessionStorage.setItem('activeTab', 'reconciliation');
                     location.reload();
                 } else {
                     alert(`Error: ${result.error}`);
@@ -667,8 +691,37 @@ block content
             
             document.getElementById('uploadHistoryTable').innerHTML = html;
         }
+
+        function rememberReconTab() {
+            sessionStorage.setItem('activeTab', 'reconciliation');
+        }
         
         document.addEventListener('DOMContentLoaded', function() {
+            // TAB PERSISTENCE - Check if we should return to reconciliation tab after refresh
+            const returnToRecon = sessionStorage.getItem('activeTab');
+            
+            if (returnToRecon === 'reconciliation') {
+                // Switch to reconciliation tab
+                const reconTab = document.getElementById('reconciliation-tab');
+                const uploadTab = document.getElementById('upload-tab');
+                const reconPanel = document.getElementById('reconciliation-panel');
+                const uploadPanel = document.getElementById('upload-panel');
+                
+                if (reconTab && uploadTab && reconPanel && uploadPanel) {
+                    // Remove active from upload
+                    uploadTab.classList.remove('active');
+                    uploadPanel.classList.remove('show', 'active');
+                    
+                    // Add active to reconciliation
+                    reconTab.classList.add('active');
+                    reconPanel.classList.add('show', 'active');
+                }
+                
+                // Clear the storage
+                sessionStorage.removeItem('activeTab');
+            }
+            
+            // EXISTING CODE - Delete button handler
             const btnDelete = document.getElementById('btnConfirmDelete');
             if (btnDelete) {
                 btnDelete.addEventListener('click', async function() {
@@ -689,6 +742,8 @@ block content
                         
                         if (data.success) {
                             alert('Transaction deleted successfully. Refreshing page...');
+                            // ADDED: Remember to return to reconciliation tab
+                            sessionStorage.setItem('activeTab', 'reconciliation');
                             location.reload();
                         } else {
                             alert(`Error: ${data.error}`);
@@ -704,6 +759,7 @@ block content
                 });
             }
             
+            // EXISTING CODE - Impact modal handler
             const impactModal = document.getElementById('impactModal');
             if (impactModal) {
                 impactModal.addEventListener('hidden.bs.modal', function () {
@@ -712,6 +768,7 @@ block content
                 });
             }
 
+            // EXISTING CODE - Upload bank select handler
             const uploadBankSelect = document.getElementById('upload_bank_id');
             if (uploadBankSelect) {
                 uploadBankSelect.addEventListener('change', function() {
@@ -825,7 +882,7 @@ block content
                                     input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
                                 .col-md-1
                                     label.form-label &nbsp;
-                                    button.btn.btn-primary.w-100(type='submit')
+                                    button.btn.btn-primary.w-100(type='submit' onclick='rememberReconTab()')
                                         i.bi.bi-search.me-1
                                         | Load
 
