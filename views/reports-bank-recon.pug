@@ -2,77 +2,105 @@ extends layout
 
 block content
     style.
-        .system-table th {
-            background-color: #e3f2fd !important;
-        }
-        .bank-table th {
-            background-color: #fff3e0 !important;
-        }
-        .table-responsive {
-            max-height: 65vh;
-            overflow-y: auto;
-        }
-        .sticky-top {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        .unmatched-row {
-            background-color: #fff3cd !important;
-            border-left: 3px solid #ffc107 !important;
-        }
-        .unmatched-row:hover {
-            background-color: #ffe69c !important;
-        }
-        .truncate-text {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 250px;
-        }
-        .card-header.bg-primary-pastel {
-            background: linear-gradient(135deg, #b3d9ff 0%, #cce5ff 100%) !important;
-            color: #004085 !important;
-        }
-        .card-header.bg-warning-pastel {
-            background: linear-gradient(135deg, #ffe6b3 0%, #fff2d9 100%) !important;
-            color: #856404 !important;
-        }
-        .btn-group .btn {
-            margin-right: 10px;
-        }
-        .btn-group .btn:last-child {
-            margin-right: 0;
-        }
-        .nav-tabs .nav-link {
-            color: #495057;
-        }
-        .nav-tabs .nav-link.active {
-            font-weight: 600;
-        }
-        
+        style.
+            .system-table th {
+                background-color: #e3f2fd !important;
+            }
+            .bank-table th {
+                background-color: #fff3e0 !important;
+            }
+            .table-responsive {
+                max-height: 65vh;
+                overflow-y: auto;
+            }
+            .sticky-top {
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+            .unmatched-row {
+                background-color: #fff3cd !important;
+                border-left: 3px solid #ffc107 !important;
+            }
+            .unmatched-row:hover {
+                background-color: #ffe69c !important;
+            }
+            .truncate-text {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 250px;
+            }
+            .card-header.bg-primary-pastel {
+                background: linear-gradient(135deg, #b3d9ff 0%, #cce5ff 100%) !important;
+                color: #004085 !important;
+            }
+            .card-header.bg-warning-pastel {
+                background: linear-gradient(135deg, #ffe6b3 0%, #fff2d9 100%) !important;
+                color: #856404 !important;
+            }
+            .btn-group .btn {
+                margin-right: 10px;
+            }
+            .btn-group .btn:last-child {
+                margin-right: 0;
+            }
+            
+            /* Enhanced tab styling */
+            .nav-tabs {
+                border-bottom: 2px solid #dee2e6;
+            }
+            .nav-tabs .nav-link {
+                color: #495057;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-bottom-color: transparent;
+                transition: all 0.2s ease;
+                margin-right: 4px;
+                border-radius: 0.25rem 0.25rem 0 0;
+            }
+            .nav-tabs .nav-link:hover {
+                color: #007bff;
+                background-color: #e9ecef;
+                border-color: #dee2e6 #dee2e6 transparent;
+            }
+            .nav-tabs .nav-link.active {
+                color: #fff !important;
+                background-color: #007bff !important;
+                border-color: #007bff #007bff transparent !important;
+                font-weight: 600;
+            }
+            
     script.
         const currentDate = new Date().toISOString().split('T')[0];
 
         function updateDateRangev1() {
-            const rangeSelect = document.getElementById('dateRange');
-            const selectedRange = rangeSelect.value;
-            const today = new Date();
-            let fromDate, toDate;
+                const rangeSelect = document.getElementById('dateRange');
+                const selectedRange = rangeSelect.value;
+                const today = new Date();
+                let fromDate, toDate;
 
-            if (selectedRange === 'this_month') {
-                fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                toDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-            } else if (selectedRange === 'last_month') {
-                fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                toDate = new Date(today.getFullYear(), today.getMonth(), 0);
-            } else {
-                return;
+                if (selectedRange === 'this_month') {
+                    fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                    toDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                } else if (selectedRange === 'last_month') {
+                    fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    toDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                } else {
+                    return;
+                }
+
+                // Format dates in local timezone to avoid timezone shift
+                const formatLocalDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                document.getElementById('fromclosingDate').value = formatLocalDate(fromDate);
+                document.getElementById('toclosingDate').value = formatLocalDate(toDate);
             }
-
-            document.getElementById('fromclosingDate').value = fromDate.toISOString().split('T')[0];
-            document.getElementById('toclosingDate').value = toDate.toISOString().split('T')[0];
-        }
 
         function liveSearch() {
             const searchInput = document.getElementById('searchInput');
