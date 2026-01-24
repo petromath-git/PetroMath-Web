@@ -764,79 +764,106 @@ getUploadHistory: async (req, res) => {
 };
 
 
-function parseExcelDate(excelDate) {
-    if (!excelDate) return null;
+// Helper function to convert Excel column letter to index
+function columnToIndex(column) {
+    if (typeof column === 'number') return column;
     
-    // If already in YYYY-MM-DD format
-    if (typeof excelDate === 'string' && excelDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return excelDate;
+    let index = 0;
+    for (let i = 0; i < column.length; i++) {
+        index = index * 26 + (column.charCodeAt(i) - 'A'.charCodeAt(0) + 1);
+    }
+    return index - 1;
+}
+
+// Helper function to parse Excel date
+function parseExcelDate(value) {
+    if (!value) return null;
+    
+    // If it's a number (Excel serial date)
+    if (typeof value === 'number') {
+        const XLSX = require('xlsx');
+        const date = XLSX.SSF.parse_date_code(value);
+        return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
     }
     
-    // If Excel serial number (numeric)
-    if (typeof excelDate === 'number') {
-        const date = new Date((excelDate - 25569) * 86400 * 1000);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-    
-    // If string date format
-    if (typeof excelDate === 'string') {
-        // Handle format: 2025-Apr-02
-        if (excelDate.match(/^\d{4}-[A-Za-z]{3}-\d{2}$/)) {
-            const parts = excelDate.split('-');
-            const year = parts[0];
-            const monthStr = parts[1];
-            const day = parts[2];
-            
+    // If it's already a string, try to parse it
+    if (typeof value === 'string') {
+        // Handle DD-MMM-YYYY format (02-Apr-2025)
+        if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
+            const parts = value.split('-');
             const monthMap = {
                 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
                 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
             };
-            
-            const month = monthMap[monthStr];
-            if (month) {
-                return `${year}-${month}-${day}`;
-            }
+            const month = monthMap[parts[1]];
+            return `${parts[2]}-${month}-${parts[0].padStart(2, '0')}`;
         }
         
-        // Handle DD-MM-YYYY or DD/MM/YYYY format
-        if (excelDate.match(/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/)) {
-            const parts = excelDate.split(/[-/]/);
+        // Handle DD.MM.YY format (01.12.25) - IOCL SAP format
+        if (value.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
+            const parts = value.split('.');
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = '20' + parts[2]; // Assume 2000s
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle DD.MM.YYYY format (01.12.2025) - IOCL SAP format with full year
+        if (value.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+            const parts = value.split('.');
             const day = parts[0].padStart(2, '0');
             const month = parts[1].padStart(2, '0');
             const year = parts[2];
             return `${year}-${month}-${day}`;
         }
         
-        // Handle YYYY-MM-DD format with different separators
-        if (excelDate.match(/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/)) {
-            const parts = excelDate.split(/[-/]/);
-            const year = parts[0];
-            const month = parts[1].padStart(2, '0');
-            const day = parts[2].padStart(2, '0');
+        // Handle MM/DD/YY format (11/13/25)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+            const parts = value.split('/');
+            const month = parts[0].padStart(2, '0');
+            const day = parts[1].padStart(2, '0');
+            const year = '20' + parts[2]; // Assume 2000s
             return `${year}-${month}-${day}`;
         }
         
-        // Try parsing as a standard date string
-        try {
-            const date = new Date(excelDate);
-            if (!isNaN(date.getTime())) {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            }
-        } catch (e) {
-            console.error('Error parsing date:', excelDate, e);
+        // Handle MM/DD/YYYY format (11/13/2025)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+            const parts = value.split('/');
+            const month = parts[0].padStart(2, '0');
+            const day = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle DD/MM/YYYY format (13/11/2025)
+        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(value.split('/')[0]) > 12) {
+            const parts = value.split('/');
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Handle YYYY-MM-DD format (already correct)
+        if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            return value;
         }
     }
     
-    console.error('Unable to parse date:', excelDate);
+    // If all else fails, try JavaScript Date parse
+    try {
+        const d = new Date(value);
+        if (!isNaN(d.getTime())) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+    } catch (e) {
+        console.error('Date parse error:', value, e);
+    }
+    
     return null;
 }
+
 
 function columnToIndex(column) {
     if (!column) return -1;
