@@ -224,7 +224,7 @@ const bankReconRoutes = require('./routes/bank-reconciliation-routes');
 const campaignRoutes = require('./routes/campaign-routes');
 const campaignPublicRoutes = require('./routes/campaign-public-routes');
 const gstRoutes = require('./routes/gst-routes');
-
+const transactionUploadRoutes = require('./routes/transaction-upload-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -386,6 +386,8 @@ app.use('/reports-bank-recon', bankReconRoutes);
 app.use('/campaigns', campaignRoutes);
 app.use('/campaign', campaignPublicRoutes);
 app.use('/gst', gstRoutes);
+app.use('/transaction-upload', transactionUploadRoutes);
+
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
