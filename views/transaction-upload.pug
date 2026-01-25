@@ -1,0 +1,522 @@
+extends layout
+
+block content
+    style.
+        .wizard-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .wizard-steps::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #dee2e6;
+            z-index: 0;
+        }
+        .wizard-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #dee2e6;
+            color: #6c757d;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        .wizard-step.active .step-circle {
+            background: #007bff;
+            color: white;
+        }
+        .wizard-step.completed .step-circle {
+            background: #28a745;
+            color: white;
+        }
+        .step-label {
+            display: block;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .wizard-step.active .step-label {
+            color: #007bff;
+            font-weight: 500;
+        }
+        .wizard-step.completed .step-label {
+            color: #28a745;
+        }
+        .step-content {
+            display: none;
+        }
+        .step-content.active {
+            display: block;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .wizard-steps {
+                flex-direction: column;
+                align-items: center;
+            }
+            .wizard-steps::before {
+                display: none;
+            }
+            .wizard-step {
+                margin-bottom: 15px;
+            }
+            .table-responsive {
+                font-size: 12px;
+            }
+        }
+
+    .container-fluid.p-3
+        .card.shadow-sm
+            .card-header.bg-primary.text-white
+                h5.mb-0
+                    i.bi.bi-cloud-upload.me-2
+                    | Upload Transactions
+            .card-body
+                // Wizard Steps Navigation
+                .wizard-steps
+                    .wizard-step.active#wizard-step-1
+                        .step-circle 1
+                        span.step-label Select Bank & Upload File
+                    .wizard-step#wizard-step-2
+                        .step-circle 2
+                        span.step-label Review & Assign Ledgers
+                    .wizard-step#wizard-step-3
+                        .step-circle 3
+                        span.step-label Confirm & Save
+
+                // Step 1: Upload File
+                .step-content.active#step-1-content
+                    .row.justify-content-center
+                        .col-md-8
+                            .alert.alert-info
+                                i.bi.bi-info-circle.me-2
+                                | Upload your bank statement in Excel format. The system will automatically parse transactions based on the bank's template.
+                            
+                            .mb-3
+                                label.form-label 
+                                    | Select Bank Account:
+                                    span.text-danger  *
+                                select#bank_id.form-control.form-control-lg(required)
+                                    option(value='') Select Bank Account
+                                    if banks
+                                        each bank in banks
+                                            option(value=bank.bank_id)= `${bank.bank_name} - ${bank.account_nickname}`
+                            
+                            .mb-3
+                                label.form-label 
+                                    | Select Excel File:
+                                    span.text-danger  *
+                                input#transactionFile.form-control.form-control-lg(type='file' accept='.xlsx,.xls' required)
+                                small.form-text.text-muted Supported formats: .xlsx, .xls (Max 5MB, up to 1000 transactions)
+                            
+                            .text-center.mt-4
+                                button#btnUpload.btn.btn-primary.btn-lg(type='button' disabled)
+                                    i.bi.bi-arrow-right.me-2
+                                    | Next: Preview Transactions
+
+                // Step 2: Review & Assign Ledgers
+                .step-content#step-2-content
+                    #step2-summary.alert.alert-success.mb-3(style='display: none;')
+                    
+                    #step2-transactions
+                        .text-center.p-5
+                            .spinner-border.text-primary(role='status')
+                            p.mt-3 Loading transactions...
+                    
+                    .row.mt-3#step2-actions(style='display: none;')
+                        .col-6
+                            button#btnBackToStep1.btn.btn-secondary.btn-lg.w-100(type='button')
+                                i.bi.bi-arrow-left.me-2
+                                | Back
+                        .col-6
+                            button#btnProceedToStep3.btn.btn-success.btn-lg.w-100(type='button' disabled)
+                                | Next: Confirm & Save
+                                i.bi.bi-arrow-right.ms-2
+
+                // Step 3: Confirm & Save
+                .step-content#step-3-content
+                    .alert.alert-warning
+                        i.bi.bi-exclamation-triangle.me-2
+                        strong Ready to Save:
+                        |  Please review the summary below before saving.
+                    
+                    #step3-summary
+                    
+                    .row.mt-4
+                        .col-6
+                            button#btnBackToStep2.btn.btn-secondary.btn-lg.w-100(type='button')
+                                i.bi.bi-arrow-left.me-2
+                                | Back to Review
+                        .col-6
+                            button#btnFinalSave.btn.btn-success.btn-lg.w-100(type='button')
+                                i.bi.bi-save.me-2
+                                | Save All Transactions
+
+    script.
+        let uploadedTransactions = [];
+        let currentStep = 1;
+        
+        // Enable upload button when both bank and file selected
+        document.getElementById('bank_id').addEventListener('change', checkUploadReady);
+        document.getElementById('transactionFile').addEventListener('change', checkUploadReady);
+        
+        function checkUploadReady() {
+            const bankId = document.getElementById('bank_id').value;
+            const file = document.getElementById('transactionFile').files[0];
+            document.getElementById('btnUpload').disabled = !(bankId && file);
+        }
+        
+        // Step 1: Upload and Preview
+        document.getElementById('btnUpload').addEventListener('click', async function() {
+            const bankId = document.getElementById('bank_id').value;
+            const file = document.getElementById('transactionFile').files[0];
+            
+            if (!bankId || !file) {
+                alert('Please select bank and file');
+                return;
+            }
+            
+            const originalButtonHtml = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+            
+            const formData = new FormData();
+            formData.append('bank_id', bankId);
+            formData.append('transactionFile', file);
+            
+            try {
+                const response = await fetch('/transaction-upload/preview', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    uploadedTransactions = data.transactions;
+                    displayStep2(data);
+                    goToStep(2);
+                } else {
+                    alert(`Error: ${data.error}`);
+                    this.disabled = false;
+                    this.innerHTML = originalButtonHtml;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Failed to upload file');
+                this.disabled = false;
+                this.innerHTML = originalButtonHtml;
+            }
+        });
+        
+        function displayStep2(data) {
+            // Summary with duplicate count
+            const duplicateCount = data.summary.duplicates || 0;
+            const summaryHtml = `
+                <i class="bi bi-check-circle me-2"></i>
+                <strong>${data.summary.total} transactions</strong> loaded successfully.
+                ${duplicateCount > 0 ? `<br><i class="bi bi-exclamation-triangle text-warning me-2"></i><strong>${duplicateCount} duplicates</strong> detected and will be skipped.` : ''}
+                ${data.summary.excluded_today > 0 ? `<br><i class="bi bi-info-circle me-2"></i>${data.summary.excluded_today} today's transactions excluded.` : ''}
+            `;
+            document.getElementById('step2-summary').innerHTML = summaryHtml;
+            document.getElementById('step2-summary').style.display = 'block';
+            
+            // Transactions table
+            let tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th class="text-right">Debit</th>
+                                <th class="text-right">Credit</th>
+                                <th style="min-width: 200px;">Ledger <span class="text-danger">*</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            uploadedTransactions.forEach((txn, index) => {
+                const entryType = txn.credit_amount > 0 ? 'CREDIT' : 'DEBIT';
+                const isDuplicate = txn.is_duplicate || false;
+                
+                const rowClass = isDuplicate ? 'table-warning' : '';
+                
+                tableHtml += `
+                    <tr class="${rowClass}">
+                        <td>${formatDate(txn.txn_date)}</td>
+                        <td>
+                            <small>${escapeHtml(txn.description)}</small>
+                            ${isDuplicate ? '<br><span class="badge bg-warning text-dark">Duplicate - Already Exists</span>' : ''}
+                        </td>
+                        <td class="text-right">${txn.debit_amount > 0 ? txn.debit_amount.toFixed(2) : '-'}</td>
+                        <td class="text-right">${txn.credit_amount > 0 ? txn.credit_amount.toFixed(2) : '-'}</td>
+                        <td>
+                            ${isDuplicate ? 
+                                '<span class="text-muted">Already in system - will be skipped</span>' :
+                                `<select class="form-control form-control-sm ledger-select" 
+                                        data-index="${index}" 
+                                        data-description="${escapeHtml(txn.description)}"
+                                        data-entry-type="${entryType}"
+                                        required>
+                                    <option value="">Loading ledgers...</option>
+                                </select>`
+                            }
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('step2-transactions').innerHTML = tableHtml;
+            document.getElementById('step2-actions').style.display = 'flex';
+            
+            // Load ledgers for NON-DUPLICATE rows only
+            loadAllLedgers();
+        }
+
+        // Helper function for escaping HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        async function loadAllLedgers() {
+            const bankId = document.getElementById('bank_id').value;
+            const selects = document.querySelectorAll('.ledger-select');
+            
+            // SKIP if no ledger selects (all duplicates)
+            if (selects.length === 0) {
+                const nonDupCount = uploadedTransactions.filter(t => !t.is_duplicate).length;
+                if (nonDupCount === 0) {
+                    alert('All transactions are duplicates. Nothing to upload.');
+                    document.getElementById('btnProceedToStep3').disabled = true;
+                }
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/transaction-upload/ledgers-suggest?bank_id=${bankId}&entry_type=BOTH`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    alert('Error loading ledgers');
+                    return;
+                }
+                
+                const allLedgers = data.ledgers;
+                
+                for (let select of selects) {
+                    const index = select.dataset.index;
+                    const description = select.dataset.description;
+                    const entryType = select.dataset.entryType;
+                    
+                    const filteredLedgers = allLedgers.filter(ledger => {
+                        if (entryType === 'BOTH') return true;
+                        return ledger.allowed_entry_type === 'BOTH' || ledger.allowed_entry_type === entryType;
+                    });
+                    
+                    select.innerHTML = '<option value="">Select Ledger</option>';
+                    filteredLedgers.forEach(ledger => {
+                        const option = document.createElement('option');
+                        option.value = ledger.ledger_name;
+                        option.textContent = ledger.ledger_display_name;
+                        select.appendChild(option);
+                    });
+                    
+                    getSuggestionForRow(select, index, bankId, description, entryType, filteredLedgers);
+                    
+                    select.addEventListener('change', function() {
+                        uploadedTransactions[index].ledger_name = this.value;
+                        checkAllLedgersSelected();
+                    });
+                }
+                
+                checkAllLedgersSelected();
+                
+            } catch (error) {
+                console.error('Error loading ledgers:', error);
+                alert('Failed to load ledgers');
+            }
+        }
+
+        // New helper function for async suggestions
+        async function getSuggestionForRow(select, index, bankId, description, entryType, filteredLedgers) {
+            try {
+                const response = await fetch(`/transaction-upload/ledgers-suggest?bank_id=${bankId}&description=${encodeURIComponent(description)}&entry_type=${entryType}`);
+                const data = await response.json();
+                
+                if (data.success && data.suggestedLedger) {
+                    const option = Array.from(select.options).find(opt => opt.value === data.suggestedLedger);
+                    if (option) {
+                        option.selected = true;
+                        uploadedTransactions[index].ledger_name = data.suggestedLedger;
+                        checkAllLedgersSelected();
+                    }
+                }
+            } catch (error) {
+                console.error(`Error getting suggestion for row ${index}:`, error);
+            }
+        }
+        
+        function checkAllLedgersSelected() {
+            // Only check non-duplicate transactions
+            const nonDuplicates = uploadedTransactions.filter(t => !t.is_duplicate);
+            const allSelected = nonDuplicates.every(txn => txn.ledger_name);
+            document.getElementById('btnProceedToStep3').disabled = !allSelected;
+        }
+        
+        // Step 2 Actions - FIXED BACK BUTTON
+        document.getElementById('btnBackToStep1').addEventListener('click', function() {
+            // Reset upload button
+            const uploadBtn = document.getElementById('btnUpload');
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="bi bi-arrow-right me-2"></i>Next: Preview Transactions';
+            
+            // Clear file input
+            const fileInput = document.getElementById('transactionFile');
+            fileInput.value = '';
+            
+            // Re-check if button should be enabled
+            checkUploadReady();
+            
+            // Clear data
+            uploadedTransactions = [];
+            
+            goToStep(1);
+        });
+        
+        document.getElementById('btnProceedToStep3').addEventListener('click', function() {
+            displayStep3();
+            goToStep(3);
+        });
+        
+        function displayStep3() {
+            const nonDuplicates = uploadedTransactions.filter(t => !t.is_duplicate && t.ledger_name);
+            const duplicateCount = uploadedTransactions.filter(t => t.is_duplicate).length;
+            
+            let summaryHtml = `
+                <div class="card">
+                    <div class="card-body">
+                        <h5>Summary:</h5>
+                        <ul>
+                            <li><strong>New Transactions to Save:</strong> ${nonDuplicates.length}</li>
+                            ${duplicateCount > 0 ? `<li><strong>Duplicates to Skip:</strong> ${duplicateCount}</li>` : ''}
+                            <li><strong>Bank Account:</strong> ${document.getElementById('bank_id').options[document.getElementById('bank_id').selectedIndex].text}</li>
+                        </ul>
+                        <p class="text-success mb-0">
+                            <i class="bi bi-check-circle me-2"></i>
+                            ${nonDuplicates.length} transaction(s) ready to be saved.
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('step3-summary').innerHTML = summaryHtml;
+        }
+        
+        // Step 3 Actions
+        document.getElementById('btnBackToStep2').addEventListener('click', () => goToStep(2));
+        
+        document.getElementById('btnFinalSave').addEventListener('click', async function() {
+            // Filter out duplicates before saving
+            const nonDuplicates = uploadedTransactions.filter(t => !t.is_duplicate);
+            
+            if (nonDuplicates.length === 0) {
+                alert('All transactions are duplicates. Nothing to save.');
+                return;
+            }
+            
+            const duplicateCount = uploadedTransactions.length - nonDuplicates.length;
+            const confirmMsg = duplicateCount > 0 
+                ? `Save ${nonDuplicates.length} new transactions? (${duplicateCount} duplicates will be skipped)`
+                : `Save ${nonDuplicates.length} transactions?`;
+            
+            if (!confirm(confirmMsg)) return;
+            
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            
+            const bankId = document.getElementById('bank_id').value;
+            
+            try {
+                const response = await fetch('/transaction-upload/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bank_id: bankId,
+                        transactions: nonDuplicates
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`Success! ${data.count} transactions saved.`);
+                    location.reload();
+                } else {
+                    alert(`Error: ${data.error}`);
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-save me-2"></i>Save All Transactions';
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                alert('Failed to save transactions');
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-save me-2"></i>Save All Transactions';
+            }
+        });
+        
+        // Wizard Navigation
+        function goToStep(stepNumber) {
+            // Update step indicators
+            for (let i = 1; i <= 3; i++) {
+                const stepEl = document.getElementById(`wizard-step-${i}`);
+                const contentEl = document.getElementById(`step-${i}-content`);
+                
+                stepEl.classList.remove('active', 'completed');
+                contentEl.classList.remove('active');
+                
+                if (i < stepNumber) {
+                    stepEl.classList.add('completed');
+                } else if (i === stepNumber) {
+                    stepEl.classList.add('active');
+                    contentEl.classList.add('active');
+                }
+            }
+            
+            currentStep = stepNumber;
+            window.scrollTo(0, 0);
+        }
+        
+        // Helper function
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}-${month}-${year}`;
+        }
