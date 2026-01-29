@@ -1,5 +1,6 @@
 const bankReconDao = require("../dao/bank-reconciliation-dao");
 const moment = require('moment');
+const locationConfigDao = require('../dao/location-config-dao');
 const dateFormat = require('dateformat');
 
 module.exports = {
@@ -579,9 +580,17 @@ uploadBankStatement: async (req, res) => {
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+        const excludeTodaySetting = await locationConfigDao.getSetting(
+            locationCode, 
+            'bank_statement_exclude_today'
+        );
+        const excludeToday = excludeTodaySetting === 'true';
+
         // Skip header row and parse transactions
         const transactions = [];
         const excludedTodayCount = [];
+
+
         
         for (let i = template.data_start_row - 1; i < data.length; i++) {
             const row = data[i];
@@ -592,7 +601,7 @@ uploadBankStatement: async (req, res) => {
             const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
             
             // Skip transactions from today or future
-            if (txnDate > yesterdayStr) {
+            if (excludeToday && txnDate >= todayStr) {
                 excludedTodayCount.push(txnDate);
                 continue;
             }

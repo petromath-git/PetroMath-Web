@@ -109,7 +109,9 @@ module.exports = {
     getUploadPage: async (req, res, next) => {
         try {
             const locationCode = req.user.location_code;
-            const banks = await BankStatementDao.getBankAccounts(locationCode);
+           // const banks = await BankStatementDao.getBankAccounts(locationCode);
+            const banks = await bankReconDao.getBanksForReconciliation(locationCode);
+            
             
             res.render('transaction-upload', {
                 title: 'Upload Transactions',
