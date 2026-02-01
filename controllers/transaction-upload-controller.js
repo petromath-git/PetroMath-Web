@@ -298,17 +298,41 @@ module.exports = {
                     const credit = parseFloat(txn.credit_amount) || 0;
                     const debit = parseFloat(txn.debit_amount) || 0;
 
+                   // Lookup external_id and external_source from allowed ledgers
+                    let externalId = null;
+                    let externalSource = null;
+
+                    if (txn.ledger_name && bankId) {
+                        try {
+                            const ledgerDetails = await BankStatementDao.getLedgerDetails(
+                                bankId, 
+                                txn.ledger_name, 
+                                locationCode
+                            );
+                            
+                            if (ledgerDetails) {
+                                externalId = ledgerDetails.external_id;
+                                externalSource = ledgerDetails.source_type;
+                                console.log(`Mapped ledger ${txn.ledger_name} → external_id: ${externalId}, source: ${externalSource}`);
+                            } else {
+                                console.warn(`No ledger details found for ${txn.ledger_name}, bank ${bankId}`);
+                            }
+                        } catch (ledgerError) {
+                            console.error('Error looking up ledger details:', ledgerError);
+                        }
+                    }
+
                     const transactionData = {
-                        trans_date: txn.txn_date,
-                        bank_id: bankId,
+                        trans_date: txn.trans_date,
+                        bank_id: parseInt(bankId),
                         ledger_name: txn.ledger_name,
                         transaction_type: null,
                         accounting_type: null,
                         credit_amount: credit > 0 ? credit : null,
                         debit_amount: debit > 0 ? debit : null,
                         remarks: txn.remarks || txn.description || '',
-                        external_id: null,
-                        external_source: 'upload',
+                        external_id: externalId,  // ✓ Now properly populated
+                        external_source: externalSource || 'upload',  // ✓ Use source_type or fallback to 'upload'
                         created_by: userName
                     };
 
