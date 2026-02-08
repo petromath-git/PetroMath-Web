@@ -606,12 +606,17 @@ uploadBankStatement: async (req, res) => {
                 continue;
             }
 
+            // Get raw values
+            const debitRaw = row[columnToIndex(template.debit_column)] || '';
+            const creditRaw = row[columnToIndex(template.credit_column)] || '';
+            const balanceRaw = row[columnToIndex(template.balance_column)] || '';
+
             const txn = {
                 txn_date: txnDate,
                 description: row[columnToIndex(template.description_column)] || '',
-                debit_amount: parseFloat(row[columnToIndex(template.debit_column)]) || 0,
-                credit_amount: parseFloat(row[columnToIndex(template.credit_column)]) || 0,
-                balance_amount: parseFloat(row[columnToIndex(template.balance_column)]) || 0,
+                debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
+                credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
+                balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
                 source_file: req.file.originalname
             };
@@ -797,6 +802,27 @@ function parseExcelDate(value) {
     
     // If it's already a string, try to parse it
     if (typeof value === 'string') {
+
+           // ===== NEW: Handle SBI format "1 Jan 2026" or "01 Jan 2026" =====
+        if (value.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
+            const parts = value.trim().split(/\s+/);
+            if (parts.length === 3) {
+                const monthMap = {
+                    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                    'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                    'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+                };
+                const day = parts[0].padStart(2, '0');
+                const month = monthMap[parts[1]];
+                const year = parts[2];
+                
+                if (month) {
+                    return `${year}-${month}-${day}`;
+                }
+            }
+        }
+        // ===== END NEW CODE =====
+
         // Handle DD-MMM-YYYY format (02-Apr-2025)
         if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
             const parts = value.split('-');
