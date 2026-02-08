@@ -26,6 +26,28 @@ function parseExcelDate(value) {
     
     // If it's already a string, try to parse it
     if (typeof value === 'string') {
+
+           // ===== NEW: Handle SBI format "1 Jan 2026" or "01 Jan 2026" =====
+        if (value.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
+            const parts = value.trim().split(/\s+/);
+            if (parts.length === 3) {
+                const monthMap = {
+                    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                    'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                    'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+                };
+                const day = parts[0].padStart(2, '0');
+                const month = monthMap[parts[1]];
+                const year = parts[2];
+                
+                if (month) {
+                    return `${year}-${month}-${day}`;
+                }
+            }
+        }
+        // ===== END NEW CODE =====
+
+
         // Handle DD-MMM-YYYY format (02-Apr-2025)
         if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
             const parts = value.split('-');
@@ -173,12 +195,17 @@ module.exports = {
                     continue;
                 }
 
+                // Get raw values and remove commas for Indian number format
+                const debitRaw = row[columnToIndex(template.debit_column)] || '';
+                const creditRaw = row[columnToIndex(template.credit_column)] || '';
+                const balanceRaw = row[columnToIndex(template.balance_column)] || '';
+
                 const txn = {
                     txn_date: txnDate,
                     description: row[columnToIndex(template.description_column)] || '',
-                    debit_amount: parseFloat(row[columnToIndex(template.debit_column)]) || 0,
-                    credit_amount: parseFloat(row[columnToIndex(template.credit_column)]) || 0,
-                    balance_amount: parseFloat(row[columnToIndex(template.balance_column)]) || 0,
+                    debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
+                    credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
+                    balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
                     statement_ref: row[columnToIndex(template.reference_column)] || null,
                     source_file: req.file.originalname,
                     ledger_name: null,
@@ -298,17 +325,41 @@ module.exports = {
                     const credit = parseFloat(txn.credit_amount) || 0;
                     const debit = parseFloat(txn.debit_amount) || 0;
 
+                   // Lookup external_id and external_source from allowed ledgers
+                    let externalId = null;
+                    let externalSource = null;
+
+                    if (txn.ledger_name && bankId) {
+                        try {
+                            const ledgerDetails = await BankStatementDao.getLedgerDetails(
+                                bankId, 
+                                txn.ledger_name, 
+                                locationCode
+                            );
+                            
+                            if (ledgerDetails) {
+                                externalId = ledgerDetails.external_id;
+                                externalSource = ledgerDetails.source_type;
+                                console.log(`Mapped ledger ${txn.ledger_name} → external_id: ${externalId}, source: ${externalSource}`);
+                            } else {
+                                console.warn(`No ledger details found for ${txn.ledger_name}, bank ${bankId}`);
+                            }
+                        } catch (ledgerError) {
+                            console.error('Error looking up ledger details:', ledgerError);
+                        }
+                    }
+
                     const transactionData = {
-                        trans_date: txn.txn_date,
-                        bank_id: bankId,
+                        trans_date: txn.trans_date,
+                        bank_id: parseInt(bankId),
                         ledger_name: txn.ledger_name,
                         transaction_type: null,
                         accounting_type: null,
                         credit_amount: credit > 0 ? credit : null,
                         debit_amount: debit > 0 ? debit : null,
                         remarks: txn.remarks || txn.description || '',
-                        external_id: null,
-                        external_source: 'upload',
+                        external_id: externalId,  // ✓ Now properly populated
+                        external_source: externalSource || 'upload',  // ✓ Use source_type or fallback to 'upload'
                         created_by: userName
                     };
 
