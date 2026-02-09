@@ -691,6 +691,8 @@ block content
                                     button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home\')') CLOSE &raquo;
     script.    
         var vehicleData = !{JSON.stringify(vehicleData || {})};        
+        const digitalSalesBackdateDays = #{digitalSalesBackdateDays};
+        const digitalSalesFutureDays = #{digitalSalesFutureDays};
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
         window.allowSecondaryPump = !{allowSecondaryPump};
