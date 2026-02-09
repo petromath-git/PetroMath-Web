@@ -148,130 +148,239 @@ module.exports = {
     },
 
     /**
-     * POST - Upload and preview transactions (Step 2)
-     */
-    previewTransactions: async (req, res) => {
-        try {
-            const XLSX = require('xlsx');
-            const locationCode = req.user.location_code;
-            const bankId = parseInt(req.body.bank_id);
+ * POST - Upload and preview transactions (Step 2)
+ * UPDATED: Added overlap validation to prevent missing transactions
+ */
+previewTransactions: async (req, res) => {
+    try {
+        const XLSX = require('xlsx');
+        const locationCode = req.user.location_code;
+        const bankId = parseInt(req.body.bank_id);
+        const locationConfigDao = require('../dao/location-config-dao');
 
-            if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'No file uploaded'
-                });
-            }
-
-            const template = await bankReconDao.getBankTemplate(bankId);
-            if (!template) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'No template found for this bank. Please configure in Bank Reconciliation first.'
-                });
-            }
-
-            const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
-
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-            const transactions = [];
-            const excludedTodayCount = [];
-            
-            for (let i = template.data_start_row - 1; i < data.length; i++) {
-                const row = data[i];
-                if (!row || row.length === 0) continue;
-
-                const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
-                
-                if (txnDate > yesterdayStr) {
-                    excludedTodayCount.push(txnDate);
-                    continue;
-                }
-
-                // Get raw values and remove commas for Indian number format
-                const debitRaw = row[columnToIndex(template.debit_column)] || '';
-                const creditRaw = row[columnToIndex(template.credit_column)] || '';
-                const balanceRaw = row[columnToIndex(template.balance_column)] || '';
-
-                const txn = {
-                    txn_date: txnDate,
-                    description: row[columnToIndex(template.description_column)] || '',
-                    debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
-                    credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
-                    balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
-                    statement_ref: row[columnToIndex(template.reference_column)] || null,
-                    source_file: req.file.originalname,
-                    ledger_name: null,
-                    remarks: row[columnToIndex(template.description_column)] || ''
-                };
-
-                if (txn.debit_amount === 0 && txn.credit_amount === 0) continue;
-
-                transactions.push(txn);
-            }
-
-            if (transactions.length === 0) {
-                return res.json({
-                    success: false,
-                    error: 'No valid transactions found in the uploaded file.'
-                });
-            }
-
-            // Check transaction limit
-            if (transactions.length > 1000) {
-                return res.json({
-                    success: false,
-                    error: `Too many transactions (${transactions.length}). Maximum 1,000 transactions per upload. Please split your file into smaller batches.`
-                });
-            }
-
-            // Check for duplicates using bank recon logic
-            const duplicates = await checkTransactionDuplicates(bankId, transactions);
-
-            // Mark transactions as duplicates
-            const transactionsWithDupFlag = transactions.map(txn => {
-                const uploadAmount = txn.credit_amount > 0 ? txn.credit_amount : txn.debit_amount;
-                const uploadType = txn.credit_amount > 0 ? 'credit' : 'debit';
-                
-                const isDup = duplicates.some(dup => 
-                    dup.uploaded_date === txn.txn_date && 
-                    Math.abs(dup.amount - uploadAmount) < 0.01 &&
-                    dup.type === uploadType
-                );
-                
-                return {
-                    ...txn,
-                    is_duplicate: isDup
-                };
-            });
-
-            res.json({
-                success: true,
-                transactions: transactionsWithDupFlag,
-                duplicates: duplicates,
-                summary: {
-                    total: transactions.length,
-                    duplicates: duplicates.length,
-                    excluded_today: excludedTodayCount.length,
-                    yesterday_date: yesterdayStr
-                }
-            });
-
-        } catch (error) {
-            console.error('Error in previewTransactions:', error);
-            res.status(500).json({
+        if (!req.file) {
+            return res.status(400).json({
                 success: false,
-                error: error.message
+                error: 'No file uploaded'
             });
         }
-    },
+
+        const template = await bankReconDao.getBankTemplate(bankId);
+        if (!template) {
+            return res.status(404).json({
+                success: false,
+                error: 'No template found for this bank. Please configure in Bank Reconciliation first.'
+            });
+        }
+
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+        // ========== STEP 1: Parse all dates first to find earliest date ==========
+        const tempDates = [];
+        for (let i = template.data_start_row - 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || row.length === 0) continue;
+            
+            const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
+            if (txnDate) {
+                tempDates.push(txnDate);
+            }
+        }
+        
+        if (tempDates.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No valid transactions found in uploaded file'
+            });
+        }
+        
+        const earliestUploadDate = tempDates.sort()[0]; // YYYY-MM-DD format
+        const latestUploadDate = tempDates[tempDates.length - 1];
+
+        // ========== STEP 2: Overlap Validation ==========
+        
+        // Get configuration
+        const overlapMode = await locationConfigDao.getSetting(
+            locationCode, 
+            'BANK_STATEMENT_OVERLAP_MODE'
+        ) || 'off';
+        
+        const overlapDays = parseInt(
+            await locationConfigDao.getSetting(
+                locationCode, 
+                'BANK_STATEMENT_OVERLAP_DAYS'
+            ) || '1'
+        );
+        
+        // Get last uploaded date for this bank
+        const lastUploadedDate = await bankReconDao.getLastTransactionDate(locationCode, bankId);
+        
+        // Validation logic
+        if (lastUploadedDate && overlapMode !== 'off') {
+            const lastDate = new Date(lastUploadedDate);
+            const uploadDate = new Date(earliestUploadDate);
+            
+            // Calculate expected overlap date (last date - overlap days + 1)
+            const expectedOverlapDate = new Date(lastDate);
+            expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
+            
+            const hasOverlap = uploadDate <= lastDate;
+            const meetsOverlapRequirement = uploadDate <= expectedOverlapDate;
+            
+            console.log('=== Overlap Validation (Transaction Upload) ===');
+            console.log('Last uploaded date:', lastUploadedDate);
+            console.log('Earliest upload date:', earliestUploadDate);
+            console.log('Required overlap days:', overlapDays);
+            console.log('Expected overlap date:', expectedOverlapDate.toISOString().split('T')[0]);
+            console.log('Has overlap:', hasOverlap);
+            console.log('Meets requirement:', meetsOverlapRequirement);
+            
+            if (!meetsOverlapRequirement) {
+                const gapDays = Math.ceil((uploadDate - lastDate) / (1000 * 60 * 60 * 24));
+                
+                const message = `Gap detected! Your last upload ended on ${lastUploadedDate}. ` +
+                    `This upload starts on ${earliestUploadDate} (${gapDays} day gap). ` +
+                    `To prevent missing transactions, uploads must overlap by at least ${overlapDays} day(s). ` +
+                    `Please upload a statement that includes ${expectedOverlapDate.toISOString().split('T')[0]} or earlier.`;
+                
+                if (overlapMode === 'strict') {
+                    return res.status(400).json({
+                        success: false,
+                        error: message,
+                        errorType: 'OVERLAP_REQUIRED',
+                        details: {
+                            lastUploadedDate: lastUploadedDate,
+                            earliestUploadDate: earliestUploadDate,
+                            gapDays: gapDays,
+                            requiredOverlapDays: overlapDays,
+                            suggestedStartDate: expectedOverlapDate.toISOString().split('T')[0]
+                        }
+                    });
+                } else if (overlapMode === 'warning') {
+                    // Continue but add warning to response
+                    console.warn('OVERLAP WARNING:', message);
+                }
+            }
+        }
+
+        // ========== STEP 3: Exclude today's transactions (if configured) ==========
+
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        const excludeTodaySetting = await locationConfigDao.getSetting(
+            locationCode, 
+            'bank_statement_exclude_today'
+        );
+        const excludeToday = excludeTodaySetting === 'true';
+
+        // ========== STEP 4: Parse transactions ==========
+
+        const transactions = [];
+        const excludedTodayCount = [];
+        
+        for (let i = template.data_start_row - 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || row.length === 0) continue;
+
+            const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
+            
+            if (excludeToday && txnDate > yesterdayStr) {
+                excludedTodayCount.push(txnDate);
+                continue;
+            }
+
+            // Get raw values and remove commas for Indian number format
+            const debitRaw = row[columnToIndex(template.debit_column)] || '';
+            const creditRaw = row[columnToIndex(template.credit_column)] || '';
+            const balanceRaw = row[columnToIndex(template.balance_column)] || '';
+
+            const txn = {
+                txn_date: txnDate,
+                description: row[columnToIndex(template.description_column)] || '',
+                debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
+                credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
+                balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
+                statement_ref: row[columnToIndex(template.reference_column)] || null,
+                source_file: req.file.originalname,
+                ledger_name: null,
+                remarks: row[columnToIndex(template.description_column)] || ''
+            };
+
+            if (txn.debit_amount === 0 && txn.credit_amount === 0) continue;
+
+            transactions.push(txn);
+        }
+
+        if (transactions.length === 0) {
+            return res.json({
+                success: false,
+                error: 'No valid transactions found in the uploaded file.'
+            });
+        }
+
+        // Check transaction limit
+        if (transactions.length > 1000) {
+            return res.json({
+                success: false,
+                error: `Too many transactions (${transactions.length}). Maximum 1,000 transactions per upload. Please split your file into smaller batches.`
+            });
+        }
+
+        // ========== STEP 5: Check for duplicates ==========
+        
+        const duplicates = await checkTransactionDuplicates(bankId, transactions);
+
+        // Mark transactions as duplicates
+        const transactionsWithDupFlag = transactions.map(txn => {
+            const uploadAmount = txn.credit_amount > 0 ? txn.credit_amount : txn.debit_amount;
+            const uploadType = txn.credit_amount > 0 ? 'credit' : 'debit';
+            
+            const isDup = duplicates.some(dup => 
+                dup.uploaded_date === txn.txn_date && 
+                Math.abs(dup.amount - uploadAmount) < 0.01 &&
+                dup.type === uploadType
+            );
+            
+            return {
+                ...txn,
+                is_duplicate: isDup
+            };
+        });
+
+        // ========== STEP 6: Return response ==========
+
+        res.json({
+            success: true,
+            transactions: transactionsWithDupFlag,
+            duplicates: duplicates,
+            summary: {
+                total: transactions.length,
+                duplicates: duplicates.length,
+                excluded_today: excludedTodayCount.length,
+                yesterday_date: yesterdayStr,
+                last_uploaded_date: lastUploadedDate,
+                earliest_upload_date: earliestUploadDate,
+                latest_upload_date: latestUploadDate,
+                overlap_mode: overlapMode,
+                has_gap: lastUploadedDate && earliestUploadDate > lastUploadedDate
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in previewTransactions:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+},
 
 
 
@@ -350,7 +459,7 @@ module.exports = {
                     }
 
                     const transactionData = {
-                        trans_date: txn.trans_date,
+                        trans_date: txn.txn_date,
                         bank_id: parseInt(bankId),
                         ledger_name: txn.ledger_name,
                         transaction_type: null,

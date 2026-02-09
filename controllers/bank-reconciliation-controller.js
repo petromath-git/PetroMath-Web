@@ -574,11 +574,98 @@ uploadBankStatement: async (req, res) => {
         // Convert to JSON
         const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
 
-        // Get yesterday's date (exclude today's transactions)
+        // ========== STEP 1: Parse all dates first to find earliest date ==========
+        const tempDates = [];
+        for (let i = template.data_start_row - 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || row.length === 0) continue;
+            
+            const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
+            if (txnDate) {
+                tempDates.push(txnDate);
+            }
+        }
+        
+        if (tempDates.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No valid transactions found in uploaded file'
+            });
+        }
+        
+        const earliestUploadDate = tempDates.sort()[0]; // YYYY-MM-DD format
+        const latestUploadDate = tempDates[tempDates.length - 1];
+
+        // ========== STEP 2: Overlap Validation ==========
+        
+        // Get configuration
+        const overlapMode = await locationConfigDao.getSetting(
+            locationCode, 
+            'BANK_STATEMENT_OVERLAP_MODE'
+        ) || 'off';
+        
+        const overlapDays = parseInt(
+            await locationConfigDao.getSetting(
+                locationCode, 
+                'BANK_STATEMENT_OVERLAP_DAYS'
+            ) || '1'
+        );
+        
+        // Get last uploaded date for this bank
+        const lastUploadedDate = await bankReconDao.getLastTransactionDate(locationCode, bankId);
+        
+        // Validation logic
+        if (lastUploadedDate && overlapMode !== 'off') {
+            const lastDate = new Date(lastUploadedDate);
+            const uploadDate = new Date(earliestUploadDate);
+            
+            // Calculate expected overlap date (last date - overlap days + 1)
+            const expectedOverlapDate = new Date(lastDate);
+            expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
+            
+            const hasOverlap = uploadDate <= lastDate;
+            const meetsOverlapRequirement = uploadDate <= expectedOverlapDate;
+            
+            console.log('=== Overlap Validation ===');
+            console.log('Last uploaded date:', lastUploadedDate);
+            console.log('Earliest upload date:', earliestUploadDate);
+            console.log('Required overlap days:', overlapDays);
+            console.log('Expected overlap date:', expectedOverlapDate.toISOString().split('T')[0]);
+            console.log('Has overlap:', hasOverlap);
+            console.log('Meets requirement:', meetsOverlapRequirement);
+            
+            if (!meetsOverlapRequirement) {
+                const gapDays = Math.ceil((uploadDate - lastDate) / (1000 * 60 * 60 * 24));
+                
+                const message = `Gap detected! Your last upload ended on ${lastUploadedDate}. ` +
+                    `This upload starts on ${earliestUploadDate} (${gapDays} day gap). ` +
+                    `To prevent missing transactions, uploads must overlap by at least ${overlapDays} day(s). ` +
+                    `Please upload a statement that includes ${expectedOverlapDate.toISOString().split('T')[0]} or earlier.`;
+                
+                if (overlapMode === 'strict') {
+                    return res.status(400).json({
+                        success: false,
+                        error: message,
+                        errorType: 'OVERLAP_REQUIRED',
+                        details: {
+                            lastUploadedDate: lastUploadedDate,
+                            earliestUploadDate: earliestUploadDate,
+                            gapDays: gapDays,
+                            requiredOverlapDays: overlapDays,
+                            suggestedStartDate: expectedOverlapDate.toISOString().split('T')[0]
+                        }
+                    });
+                } else if (overlapMode === 'warning') {
+                    // Continue but add warning to response
+                    console.warn('OVERLAP WARNING:', message);
+                }
+            }
+        }
+
+        // ========== STEP 3: Exclude today's transactions (if configured) ==========
+        
         const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const todayStr = today.toISOString().split('T')[0];
 
         const excludeTodaySetting = await locationConfigDao.getSetting(
             locationCode, 
@@ -586,11 +673,10 @@ uploadBankStatement: async (req, res) => {
         );
         const excludeToday = excludeTodaySetting === 'true';
 
-        // Skip header row and parse transactions
+        // ========== STEP 4: Parse transactions ==========
+        
         const transactions = [];
         const excludedTodayCount = [];
-
-
         
         for (let i = template.data_start_row - 1; i < data.length; i++) {
             const row = data[i];
@@ -606,7 +692,7 @@ uploadBankStatement: async (req, res) => {
                 continue;
             }
 
-            // Get raw values
+            // Get raw values and remove commas for Indian number format
             const debitRaw = row[columnToIndex(template.debit_column)] || '';
             const creditRaw = row[columnToIndex(template.credit_column)] || '';
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
@@ -627,7 +713,8 @@ uploadBankStatement: async (req, res) => {
             transactions.push(txn);
         }
 
-        // Check for duplicates
+        // ========== STEP 5: Check for duplicates ==========
+        
         const duplicates = await bankReconDao.checkDuplicates(locationCode, bankId, transactions);
 
         // Mark transactions as duplicates (for UI)
@@ -644,6 +731,8 @@ uploadBankStatement: async (req, res) => {
             };
         });
 
+        // ========== STEP 6: Return response ==========
+        
         res.json({
             success: true,
             transactions: transactionsWithDupFlag,
@@ -652,7 +741,11 @@ uploadBankStatement: async (req, res) => {
                 total: transactions.length,
                 duplicates: duplicates.length,
                 excluded_today: excludedTodayCount.length,
-                yesterday_date: yesterdayStr
+                last_uploaded_date: lastUploadedDate,
+                earliest_upload_date: earliestUploadDate,
+                latest_upload_date: latestUploadDate,
+                overlap_mode: overlapMode,
+                has_gap: lastUploadedDate && earliestUploadDate > lastUploadedDate
             }
         });
 
