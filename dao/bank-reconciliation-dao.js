@@ -423,7 +423,30 @@ getBanksForReconciliation: async (locationCode) => {
 
 
 
-
+/**
+ * Get the last (most recent) transaction date for a bank
+ * Used for overlap validation to prevent missing transactions
+ */
+getLastTransactionDate: async (locationCode, bankId) => {
+    const query = `
+        SELECT MAX(trans_date) as last_date
+        FROM t_bank_transaction
+        WHERE bank_id = :bankId
+    `;
+    
+    const result = await db.sequelize.query(query, {
+        replacements: { bankId },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    // Return date in YYYY-MM-DD format or null if no transactions exist
+    if (result[0]?.last_date) {
+        const date = new Date(result[0].last_date);
+        return date.toISOString().split('T')[0];
+    }
+    
+    return null;
+},
 
 
 
