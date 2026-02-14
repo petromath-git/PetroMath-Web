@@ -829,6 +829,11 @@ app.post('/reports-gst-summary', isLoginEnsured, function (req, res, next) {
     gstsummaryreportsController.getgstsummaryReport(req, res, next);
 });
 
+// Excel export for GST Summary
+app.post('/reports-gst-summary/excel', isLoginEnsured, function (req, res, next) {
+    gstsummaryreportsController.exportGstSummaryExcel(req, res, next);
+});
+
 app.get('/reports-sales-summary', isLoginEnsured, function (req, res, next) {   
     req.body.caller = 'notpdf';
     reportsController.getSalesSummaryReport(req, res, next);
