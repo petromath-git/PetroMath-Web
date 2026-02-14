@@ -2,6 +2,7 @@ const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const BankStatementDao = require("../dao/bank-statement-dao");
+const locationConfigDao = require('../dao/location-config-dao');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -10,6 +11,13 @@ module.exports = {
             let fromDate = req.query.tbankfromDate || dateFormat(new Date(), "yyyy-mm-dd");
             let toDate = req.query.tbanktoDate || dateFormat(new Date(), "yyyy-mm-dd");
             let bankId = req.query.bank_id || 0;
+
+            // Get configuration for manual transactions (default: true if not configured)
+            const allowManualSetting = await locationConfigDao.getSetting(
+                locationCode,
+                'ALLOW_MANUAL_BANK_TRANSACTIONS'
+            );
+            const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
 
             const [accountList, locationData, transactionList, transactionTypes, accountingTypes, ledgerList] = await Promise.all([
                 BankStatementDao.getBankAccounts(locationCode),
@@ -24,6 +32,7 @@ module.exports = {
                 user: req.user,
                 title: 'Bank Statement',
                 config: config.APP_CONFIGS,
+                allowManualBankTransactions: allowManual,
                 fromDate: fromDate,
                 toDate: toDate,
                 bankId: bankId,

@@ -556,47 +556,57 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
     /**
      * Bulk insert bank statement transactions
      */
- bulkInsertStatements: async (locationCode, bankId, transactions, userName) => {
-    const t = await db.sequelize.transaction();
-    let inserted = 0;
 
-    try {
-        for (const txn of transactions) {
-            await db.sequelize.query(
-                `INSERT INTO t_bank_statement_actual
-                 (location_code, bank_id, txn_date, description, debit_amount, credit_amount, 
-                  balance_amount, statement_ref, source_file, created_by, creation_date)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-                {
-                    replacements: [
-                        locationCode,
-                        bankId,
-                        txn.txn_date,
-                        txn.description,
-                        txn.debit_amount || 0,
-                        txn.credit_amount || 0,
-                        txn.balance_amount || 0,
-                        txn.statement_ref || null,
-                        txn.source_file,
-                        userName
-                    ],
-                    type: db.Sequelize.QueryTypes.INSERT,
-                    transaction: t
-                }
-            );
-            inserted++;
-        }
-
-        await t.commit();
-        console.log(`Successfully inserted ${inserted} transactions`);
-        return { success: true, inserted: inserted };
-
-    } catch (error) {
-        await t.rollback();
-        console.error('Error bulk inserting statements:', error);
-        throw error;
-    }
-},
+        bulkInsertStatements: async (locationCode, bankId, transactions, createdBy) => {
+            const insertQuery = `
+                INSERT INTO t_bank_statement_actual 
+                (bank_id, txn_date, description, debit_amount, credit_amount, 
+                balance_amount, statement_ref, created_by, creation_date)
+                VALUES ?
+            `;
+            
+            const values = transactions.map(txn => [
+                bankId,
+                txn.txn_date,
+                txn.description || '',
+                txn.debit_amount || null,
+                txn.credit_amount || null,
+                txn.balance_amount || null,
+                txn.statement_ref || null,
+                createdBy,
+                new Date()
+            ]);
+            
+            await db.sequelize.query(insertQuery, {
+                replacements: [values],
+                type: db.Sequelize.QueryTypes.INSERT
+            });
+            
+            // Also insert into t_bank_transaction with running_balance
+            const txnInsertQuery = `
+                INSERT INTO t_bank_transaction 
+                (trans_date, bank_id, credit_amount, debit_amount, remarks, 
+                running_balance, created_by)
+                VALUES ?
+            `;
+            
+            const txnValues = transactions.map(txn => [
+                txn.txn_date,
+                bankId,
+                txn.credit_amount || null,
+                txn.debit_amount || null,
+                txn.description || '',
+                txn.running_balance || null,  // NEW
+                createdBy
+            ]);
+            
+            await db.sequelize.query(txnInsertQuery, {
+                replacements: [txnValues],
+                type: db.Sequelize.QueryTypes.INSERT
+            });
+            
+            return { inserted: transactions.length };
+        },
     /**
  * Suggest ledger based on historical transactions with similar descriptions
  */
@@ -796,5 +806,48 @@ learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
         console.error('Error learning pattern:', error);
         // Don't fail the main operation if learning fails
     }
-}
+},
+
+/**
+ * Check if a specific transaction exists in the database
+ * ENHANCED: Also checks running balance if available
+ */
+checkTransactionExists: async (bankId, transDate, creditAmount, debitAmount, runningBalance = null) => {
+    let query = `
+        SELECT 
+            t_bank_id,
+            running_balance
+        FROM t_bank_transaction
+        WHERE bank_id = :bankId
+          AND trans_date = :transDate
+          AND ABS(COALESCE(credit_amount, 0) - :creditAmount) < 0.01
+          AND ABS(COALESCE(debit_amount, 0) - :debitAmount) < 0.01
+    `;
+    
+    // If running balance is provided, add it as additional check
+    if (runningBalance !== null) {
+        query += ` AND (
+            running_balance IS NULL 
+            OR ABS(COALESCE(running_balance, 0) - :runningBalance) < 0.01
+        )`;
+    }
+    
+    query += ` LIMIT 1`;
+    
+    const result = await db.sequelize.query(query, {
+        replacements: { 
+            bankId, 
+            transDate, 
+            creditAmount: creditAmount || 0, 
+            debitAmount: debitAmount || 0,
+            runningBalance: runningBalance || 0
+        },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    return {
+        exists: result.length > 0,
+        hasRunningBalance: result.length > 0 && result[0].running_balance !== null
+    };
+},
 };
