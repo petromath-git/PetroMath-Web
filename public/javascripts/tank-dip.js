@@ -1,53 +1,64 @@
 $(document).ready(function() {
-     // Get current date and time in IST
-     const today = new Date().toLocaleString('en-US', { 
-        timeZone: 'Asia/Kolkata' 
-    });
-    const istDate = new Date(today);
-    
-    const currentDate = istDate.toISOString().split('T')[0];
-    const currentTime = istDate.toTimeString().slice(0,5);
-
-    // Set min and max to current date (only allowing today)
-    $('#dip_date').attr('min', currentDate);
-    $('#dip_date').attr('max', currentDate);
-    $('#dip_date').val(currentDate);
-    
-
-    // Validation for date and time
-    $('#dip_date, #dip_time').on('change', function() {
-        const selectedDate = $('#dip_date').val();
-        const selectedTime = $('#dip_time').val();
-        const now = moment();
+    // Get current date and time in IST
+        const today = new Date().toLocaleString('en-US', { 
+            timeZone: 'Asia/Kolkata' 
+        });
+        const istDate = new Date(today);
         
-        // Force the date to be today
-        if (selectedDate !== currentDate) {
-            alert('Only current date is allowed');
-            $('#dip_date').val(currentDate);
-            return;
-        }
+        const currentDate = istDate.toISOString().split('T')[0];
+        const currentTime = istDate.toTimeString().slice(0,5);
 
-          // Prevent future time
-          if (selectedTime > now.format('HH:mm')) {
-            alert('Future time is not allowed');
+        // Get allowPastDate from the page (passed from server)
+        const allowPastDate = window.allowPastDate || false;
+
+        // Set date constraints based on config
+        if (!allowPastDate) {
+            $('#dip_date').attr('min', currentDate);
+        }
+        $('#dip_date').attr('max', currentDate);
+        $('#dip_date').val(currentDate);
+        
+        // Validation for date and time
+        $('#dip_date, #dip_time').on('change', function() {
+            const selectedDate = $('#dip_date').val();
+            const selectedTime = $('#dip_time').val();
+            const now = moment();
+            
+            // Validate date only if past dates not allowed
+            if (!allowPastDate && selectedDate !== currentDate) {
+                alert('Only current date is allowed');
+                $('#dip_date').val(currentDate);
+                return;
+            }
+            
+            // Prevent future dates (always)
+            if (selectedDate > currentDate) {
+                alert('Future dates are not allowed');
+                $('#dip_date').val(currentDate);
+                return;
+            }
+
+            // Prevent future time only for today's date
+            if (selectedDate === currentDate && selectedTime > now.format('HH:mm')) {
+                alert('Future time is not allowed');
                 $('#dip_time').val(currentTime);
             }
         });
-   
+    
 
-    // Tank selection handler
-    $('#tank_id').change(function() {
-        const tankId = $(this).val();
-        updateTankInfo(tankId);
-    });
+        // Tank selection handler
+        $('#tank_id').change(function() {
+            const tankId = $(this).val();
+            updateTankInfo(tankId);
+        });
 
-    // Delete dip handler
-    $(document).on('click', '.delete-dip', function() {
-        if (confirm('Are you sure you want to delete this dip reading?')) {
-            const dipId = $(this).data('dip-id');
-            deleteDipReading(dipId);
-        }
-    });
+        // Delete dip handler
+        $(document).on('click', '.delete-dip', function() {
+            if (confirm('Are you sure you want to delete this dip reading?')) {
+                const dipId = $(this).data('dip-id');
+                deleteDipReading(dipId);
+            }
+        });
 
     // Form validation
     $('#tankDipForm').submit(function(e) {
