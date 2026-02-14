@@ -8,7 +8,10 @@ block content
             var purchaseTransactionFromServer = !{JSON.stringify(purchaseTransactionlist)}
             var purchaseSummaryFromServer = !{JSON.stringify(purchaseSummaryList)}
             var salesSummaryFromServer = !{JSON.stringify(salesSummaryList)}
-            var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}      
+            var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}
+            var nonFuelSalesByGSTFromServer = !{JSON.stringify(nonFuelSalesByGSTList)}
+            var nonFuelPurchaseByGSTFromServer = !{JSON.stringify(nonFuelPurchaseByGSTList)}
+            var groupedNonFuelPurchaseInvoicesFromServer = !{JSON.stringify(groupedNonFuelPurchaseInvoices)}
 
             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
 
@@ -86,29 +89,95 @@ block content
    
 
             document.addEventListener('DOMContentLoaded', function() {             
-               
-            
-                    let resultHtml = ""; // Variable to store the generated HTML
-
-                    // Loop through each Product account group
-                    Object.keys(purchaseTransactionFromServer).forEach(Product => {
-                        const transactions = purchaseTransactionFromServer[Product];
-
-                        // Use the existing renderTable function
-                        resultHtml += renderTable(
-                            transactions, 
-                            `${Product}`, // Title for each account
-                            ["Amount"] ,// Columns to format as number
-                            "col-sm-8 mx-auto"
-                        );
-                    });
-
                 
-                document.getElementById('PurchaseInvoice-table-container').innerHTML = resultHtml
-                document.getElementById('PurchaseSummary-table-container').innerHTML = renderTable(purchaseSummaryFromServer,'Fuel Purchase',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
-                document.getElementById('SalesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
-                document.getElementById('NonFuel-SalesSummary-table-container').innerHTML = renderTable(nonFuelSalesSummaryFromServer,'Non Fuel Sales',['Volume (Ltrs)','Amount'],"col-sm-8 mx-auto");
+                // 1. Fuel Sales Summary
+                document.getElementById('FuelSales-table-container').innerHTML = renderTable(
+                    salesSummaryFromServer,
+                    'Fuel Sales',
+                    ['Volume (Ltrs)', 'Amount'],
+                    "col-sm-8 mx-auto"
+                );
+                
+                // 2. Non Fuel Sales Summary (Consolidated by GST %)
+                document.getElementById('NonFuelSalesByGST-table-container').innerHTML = renderTable(
+                    nonFuelSalesByGSTFromServer,
+                    'Non Fuel Sales (Consolidated by GST %)',
+                    ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
+                    "col-sm-8 mx-auto"
+                );
+                
+                // 3. Fuel Purchase Summary (consolidated)
+                document.getElementById('FuelPurchase-table-container').innerHTML = renderTable(
+                    purchaseSummaryFromServer,
+                    'Fuel Purchase',
+                    ['Volume (Ltrs)', 'Amount'],
+                    "col-sm-8 mx-auto"
+                );
+                
+                // 4. Non Fuel Purchase Summary (Consolidated by GST %)
+                document.getElementById('NonFuelPurchaseByGST-table-container').innerHTML = renderTable(
+                    nonFuelPurchaseByGSTFromServer,
+                    'Non Fuel Purchase (Consolidated by GST %)',
+                    ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
+                    "col-sm-8 mx-auto"
+                );
+                
+                // 5. Fuel Purchase Invoice Details (grouped by product)
+                let fuelInvoiceHtml = "";
+                Object.keys(purchaseTransactionFromServer).forEach(Product => {
+                    const transactions = purchaseTransactionFromServer[Product];
+                    fuelInvoiceHtml += renderTable(
+                        transactions, 
+                        `${Product}`,
+                        ["Amount"],
+                        "col-sm-8 mx-auto"
+                    );
+                });
+                document.getElementById('FuelPurchaseInvoice-table-container').innerHTML = fuelInvoiceHtml;
+                
+                // 6. Oil/Lubricants Purchase Invoice Details (grouped by GST %)
+                let oilInvoiceHtml = "";
+                Object.keys(groupedNonFuelPurchaseInvoicesFromServer).forEach(gstCategory => {
+                    const invoices = groupedNonFuelPurchaseInvoicesFromServer[gstCategory];
+                    oilInvoiceHtml += renderTable(
+                        invoices, 
+                        `GST @ ${gstCategory}`,
+                        ["Quantity", "Amount"],
+                        "col-sm-10 mx-auto"
+                    );
+                });
+                document.getElementById('OilPurchaseInvoice-table-container').innerHTML = oilInvoiceHtml;
             });
+
+            function exportExcel() {
+                // Get form data
+                const fromDate = document.getElementById('fromclosingDate').value;
+                const toDate = document.getElementById('toclosingDate').value;
+                const locationCode = document.getElementById('locationCode') ? 
+                                    document.getElementById('locationCode').value : 
+                                    '#{locationCode}';
+                
+                // Create form and submit
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports-gst-summary/excel';
+                
+                const addField = (name, value) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                };
+                
+                addField('fromClosingDate', fromDate);
+                addField('toClosingDate', toDate);
+                addField('locationCode', locationCode);
+                
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
 
         table.center
             tr
@@ -136,8 +205,25 @@ block content
                             option(value='') Select Location
                             each location in personLocations
                                 option(value=location.LocationCodes selected=(location.LocationCodes === locationCode))= location.LocationCodes                        
+                td &nbsp;                
                 td &nbsp;
-                include report-print-download.pug
+                td 
+                    input(type="hidden" name="caller" value="notpdf")             
+                td
+                td
+                    button.btn.btn-primary.mr-2(type='submit',id='goButton') Go
+                td                    
+                    button.btn.btn-success.mr-2(type='button',onClick='generatePDF(window.location.href,"N")') 
+                        i.bi.bi-cloud-download
+                        |  Download PDF
+                td
+                    button.btn.btn-success.mr-2(type='button',onClick='exportExcel()') 
+                        i.bi.bi-file-excel
+                        |  Export Excel
+                td                    
+                    button.btn.btn-info(type='button', onClick='generatePDF(window.location.href,"Y")')
+                        i.bi.bi-printer
+                        |  Print
     div 
         div.row &nbsp;
         h5.text-center.text-muted= locationName
@@ -145,23 +231,41 @@ block content
         h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}` 
         h4.font-weight-bold.text-success.text-center                           
     if(purchaseTransactionlist)                
-        div.row        
+        div.row
+            //- 1. Fuel Sales Summary
             div.col-md-12
-                div.row &nbsp;                                             
-                div(id="PurchaseSummary-table-container")        
+                div.row &nbsp;
+                div(id="FuelSales-table-container")
+            
+            //- 2. Non Fuel Sales Summary (Consolidated by GST %)
             div.col-md-12
-                div.row &nbsp;               
-                div(id="SalesSummary-table-container")
+                div.row &nbsp;
+                div(id="NonFuelSalesByGST-table-container")
+            
+            //- 3. Fuel Purchase Summary (consolidated)
             div.col-md-12
-                div.row &nbsp;               
-                div(id="NonFuel-SalesSummary-table-container") 
+                div.row &nbsp;
+                div(id="FuelPurchase-table-container")
+            
+            //- 4. Non Fuel Purchase Summary (Consolidated by GST %)
             div.col-md-12
-                h4.text-center Purchase Invoice Details
-                div.row &nbsp;               
-                div(id="PurchaseInvoice-table-container")                   
+                div.row &nbsp;
+                div(id="NonFuelPurchaseByGST-table-container")
+            
+            //- 5. Purchase Invoice Details - Fuel (grouped by product)
+            div.col-md-12
+                h4.text-center Fuel Purchase Invoice Details
+                div.row &nbsp;
+                div(id="FuelPurchaseInvoice-table-container")
+            
+            //- 6. Purchase Invoice Details - Oil/Lubes (grouped by GST %)
+            div.col-md-12
+                h4.text-center Oil/Lubricants Purchase Invoice Details
+                div.row &nbsp;
+                div(id="OilPurchaseInvoice-table-container")
     else
         div.row &nbsp;
         div.row.bg-light No Transactions.
 
     // Include the overlay
-    include overlay.pug                         
+    include overlay.pug
