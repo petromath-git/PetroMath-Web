@@ -2,6 +2,7 @@ const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const OilCompanyDao = require("../dao/oil-company-statement-dao");
+const locationConfigDao = require('../dao/location-config-dao');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -10,6 +11,13 @@ module.exports = {
             let fromDate = req.query.fromDate || dateFormat(new Date(), "yyyy-mm-dd");
             let toDate = req.query.toDate || dateFormat(new Date(), "yyyy-mm-dd");
             let bankId = req.query.bank_id || 0;
+
+             // Get configuration for manual transactions (default: true if not configured)
+        const allowManualSetting = await locationConfigDao.getSetting(
+            locationCode,
+            'ALLOW_MANUAL_BANK_TRANSACTIONS'
+        );
+        const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
 
             const [accountList, locationData, transactionList] = await Promise.all([
                 OilCompanyDao.getOilCompanyAccounts(locationCode),
@@ -27,6 +35,7 @@ module.exports = {
                 user: req.user,
                 title: 'SAP Statement',
                 config: config.APP_CONFIGS,
+                allowManualBankTransactions: allowManual,
                 fromDate: fromDate,
                 toDate: toDate,
                 bankId: bankId,

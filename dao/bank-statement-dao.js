@@ -120,18 +120,20 @@ module.exports = {
 
  
 
-    saveTransaction: async (transactionData) => {
+  saveTransaction: async (transactionData) => {
     const query = `
         INSERT INTO t_bank_transaction (
             trans_date, bank_id, ledger_name,
-            credit_amount, debit_amount, remarks, 
-            transaction_type, accounting_type, 
-            external_id, external_source, created_by
+            credit_amount, debit_amount, remarks,
+            external_id, external_source, 
+            running_balance,
+            created_by
         ) VALUES (
             :trans_date, :bank_id, :ledger_name,
             :credit_amount, :debit_amount, :remarks,
-            :transaction_type, :accounting_type,
-            :external_id, :external_source, :created_by
+            :external_id, :external_source,
+            :running_balance,
+            :created_by
         )
     `;
     

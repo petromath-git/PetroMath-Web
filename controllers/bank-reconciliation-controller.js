@@ -593,33 +593,29 @@ uploadBankStatement: async (req, res) => {
             });
         }
         
-        const earliestUploadDate = tempDates.sort()[0]; // YYYY-MM-DD format
+        const earliestUploadDate = tempDates.sort()[0];
         const latestUploadDate = tempDates[tempDates.length - 1];
 
         // ========== STEP 2: Overlap Validation ==========
         
-        // Get configuration
         const overlapMode = await locationConfigDao.getSetting(
             locationCode, 
-            'BANK_STATEMENT_OVERLAP_MODE'
+            'bank_statement_overlap_mode'
         ) || 'off';
         
         const overlapDays = parseInt(
             await locationConfigDao.getSetting(
                 locationCode, 
-                'BANK_STATEMENT_OVERLAP_DAYS'
+                'bank_statement_overlap_days'
             ) || '1'
         );
         
-        // Get last uploaded date for this bank
         const lastUploadedDate = await bankReconDao.getLastTransactionDate(locationCode, bankId);
         
-        // Validation logic
         if (lastUploadedDate && overlapMode !== 'off') {
             const lastDate = new Date(lastUploadedDate);
             const uploadDate = new Date(earliestUploadDate);
             
-            // Calculate expected overlap date (last date - overlap days + 1)
             const expectedOverlapDate = new Date(lastDate);
             expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
             
@@ -637,10 +633,10 @@ uploadBankStatement: async (req, res) => {
             if (!meetsOverlapRequirement) {
                 const gapDays = Math.ceil((uploadDate - lastDate) / (1000 * 60 * 60 * 24));
                 
-                const message = `Gap detected! Your last upload ended on ${lastUploadedDate}. ` +
-                    `This upload starts on ${earliestUploadDate} (${gapDays} day gap). ` +
+                const message = `Gap detected! Your last upload ended on ${formatDateForDisplay(lastUploadedDate)}. ` +
+                    `This upload starts on ${formatDateForDisplay(earliestUploadDate)} (${gapDays} day gap). ` +
                     `To prevent missing transactions, uploads must overlap by at least ${overlapDays} day(s). ` +
-                    `Please upload a statement that includes ${expectedOverlapDate.toISOString().split('T')[0]} or earlier.`;
+                    `Please upload a statement that includes ${formatDateForDisplay(expectedOverlapDate.toISOString().split('T')[0])} or earlier.`;
                 
                 if (overlapMode === 'strict') {
                     return res.status(400).json({
@@ -648,15 +644,14 @@ uploadBankStatement: async (req, res) => {
                         error: message,
                         errorType: 'OVERLAP_REQUIRED',
                         details: {
-                            lastUploadedDate: lastUploadedDate,
-                            earliestUploadDate: earliestUploadDate,
+                            lastUploadedDate: formatDateForDisplay(lastUploadedDate),
+                            earliestUploadDate: formatDateForDisplay(earliestUploadDate),
                             gapDays: gapDays,
                             requiredOverlapDays: overlapDays,
-                            suggestedStartDate: expectedOverlapDate.toISOString().split('T')[0]
+                            suggestedStartDate: formatDateForDisplay(expectedOverlapDate.toISOString().split('T')[0])
                         }
                     });
                 } else if (overlapMode === 'warning') {
-                    // Continue but add warning to response
                     console.warn('OVERLAP WARNING:', message);
                 }
             }
@@ -681,18 +676,15 @@ uploadBankStatement: async (req, res) => {
         for (let i = template.data_start_row - 1; i < data.length; i++) {
             const row = data[i];
             
-            // Skip empty rows
             if (!row || row.length === 0) continue;
 
             const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
             
-            // Skip transactions from today or future
             if (excludeToday && txnDate >= todayStr) {
                 excludedTodayCount.push(txnDate);
                 continue;
             }
 
-            // Get raw values and remove commas for Indian number format
             const debitRaw = row[columnToIndex(template.debit_column)] || '';
             const creditRaw = row[columnToIndex(template.credit_column)] || '';
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
@@ -703,21 +695,46 @@ uploadBankStatement: async (req, res) => {
                 debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
                 credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
                 balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
+                running_balance: parseFloat(String(balanceRaw).replace(/,/g, '')) || null, 
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
                 source_file: req.file.originalname
             };
 
-            // Skip rows with no amounts
             if (txn.debit_amount === 0 && txn.credit_amount === 0) continue;
 
             transactions.push(txn);
         }
 
-        // ========== STEP 5: Check for duplicates ==========
+        // ========== STEP 5: Account Validation (Prevent Wrong Account Upload) ==========
+
+        const accountValidation = await validateAccountByTransactionMatch(
+            bankId,
+            transactions,  // ✅ Now transactions exists!
+            lastUploadedDate
+        );
+
+        if (!accountValidation.isValid) {
+            return res.status(400).json({
+                success: false,
+                error: accountValidation.message || 'Account validation failed',
+                errorType: 'ACCOUNT_MISMATCH',
+                details: {
+                    overlapDate: formatDateForDisplay(accountValidation.overlapDate),
+                    overlapTransactions: accountValidation.overlapCount,
+                    matchesFound: 0,
+                    suggestion: 'Please verify you have selected the correct bank account'
+                }
+            });
+        }
+
+        if (accountValidation.warning) {
+            console.warn('ACCOUNT VALIDATION WARNING:', accountValidation.warning);
+        }
+
+        // ========== STEP 6: Check for duplicates ==========
         
         const duplicates = await bankReconDao.checkDuplicates(locationCode, bankId, transactions);
 
-        // Mark transactions as duplicates (for UI)
         const transactionsWithDupFlag = transactions.map(txn => {
             const isDup = duplicates.some(dup => 
                 dup.txn_date === txn.txn_date && 
@@ -731,7 +748,7 @@ uploadBankStatement: async (req, res) => {
             };
         });
 
-        // ========== STEP 6: Return response ==========
+        // ========== STEP 7: Return response ==========
         
         res.json({
             success: true,
@@ -757,6 +774,8 @@ uploadBankStatement: async (req, res) => {
         });
     }
 },
+
+
 
 /**
  * POST - Save uploaded bank statement transactions
@@ -868,6 +887,10 @@ getUploadHistory: async (req, res) => {
         });
     }
 },
+
+
+
+
 };
 
 
@@ -993,6 +1016,15 @@ function parseExcelDate(value) {
 }
 
 
+function formatDateForDisplay(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+}
+
 function columnToIndex(column) {
     if (!column) return -1;
     const col = column.toUpperCase();
@@ -1004,6 +1036,112 @@ function columnToIndex(column) {
 }
 
 
+
+/**
+ * Validate that uploaded file is for the correct bank account
+ * by checking if overlap transactions match existing data
+ * ENHANCED: Also checks running balance when available
+ */
+async function validateAccountByTransactionMatch(bankId, uploadedTransactions, lastUploadedDate) {
+    // Skip validation if first upload (no previous data)
+    if (!lastUploadedDate) {
+        console.log('Account validation: First upload - skipping validation');
+        return { 
+            isValid: true, 
+            reason: 'first_upload' 
+        };
+    }
+    
+    // Get transactions from the overlap date(s)
+    const lastDate = new Date(lastUploadedDate);
+    const dayBefore = new Date(lastDate);
+    dayBefore.setDate(lastDate.getDate() - 1);
+    const dayBeforeStr = dayBefore.toISOString().split('T')[0];
+    
+    const overlapTxns = uploadedTransactions.filter(txn => 
+        txn.txn_date === lastUploadedDate || 
+        txn.txn_date === dayBeforeStr
+    );
+    
+    if (overlapTxns.length === 0) {
+        console.log('Account validation: No transactions in overlap period');
+        return { 
+            isValid: true, 
+            reason: 'no_overlap_transactions',
+            warning: 'Could not validate account - no overlap transactions'
+        };
+    }
+    
+    console.log(`Account validation: Checking ${overlapTxns.length} overlap transactions`);
+    
+    // Check each transaction individually (NOT totals)
+    let matchCount = 0;
+    let balanceMatchCount = 0;
+    let hasBalanceInUpload = false;
+    
+    for (const uploadTxn of overlapTxns) {
+        // Check if upload has balance
+        const uploadBalance = uploadTxn.balance_amount || null;
+        if (uploadBalance !== null && uploadBalance !== 0) {
+            hasBalanceInUpload = true;
+        }
+        
+        // Check transaction with optional balance
+        const checkResult = await bankReconDao.checkTransactionExists(
+            bankId,
+            uploadTxn.txn_date,
+            uploadTxn.credit_amount,
+            uploadTxn.debit_amount,
+            uploadBalance
+        );
+        
+        if (checkResult.exists) {
+            matchCount++;
+            
+            if (checkResult.hasRunningBalance && uploadBalance !== null) {
+                balanceMatchCount++;
+                console.log(`✓ EXACT Match (with balance): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}, Balance: ${uploadBalance}`);
+            } else {
+                console.log(`✓ Match (amount only): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}`);
+            }
+            
+            // Found at least one match - this is enough!
+            break;
+        }
+    }
+    
+    // Validation failed if no matches found
+    if (matchCount === 0) {
+        console.log(`✗ Account validation FAILED: No matching transactions found`);
+        return { 
+            isValid: false, 
+            reason: 'no_matching_transactions',
+            overlapDate: lastUploadedDate,
+            overlapCount: overlapTxns.length,
+            message: `No matching transactions found from ${formatDateForDisplay(lastUploadedDate)}. This file appears to be for a different bank account.`
+        };
+    }
+    
+    // Validation passed
+    const validationResult = {
+        isValid: true, 
+        reason: 'matched',
+        matchCount: matchCount,
+        totalOverlap: overlapTxns.length,
+        balanceValidated: balanceMatchCount > 0,
+        hasBalanceInUpload: hasBalanceInUpload
+    };
+    
+    if (balanceMatchCount > 0) {
+        console.log(`✓ Account validation PASSED with BALANCE verification: ${matchCount} transaction(s) matched, ${balanceMatchCount} with balance`);
+    } else if (hasBalanceInUpload) {
+        console.log(`✓ Account validation PASSED (no running balance in DB for comparison)`);
+    } else {
+        console.log(`✓ Account validation PASSED (amount match only, no balance in upload)`);
+    }
+    
+    return validationResult;
+}
 
 
 
