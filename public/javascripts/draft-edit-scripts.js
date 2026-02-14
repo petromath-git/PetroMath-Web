@@ -425,3 +425,68 @@ function changeClosedValue(prefix,rownum){
         document.getElementById(prefix+ rownum).value="N"
     }
 }
+
+
+/**
+ * Sets min/max date restrictions on digital sales transaction date fields
+ * based on closing date and config values
+ */
+function setDigitalSalesDateRestrictions() {
+    const closingDateField = document.getElementById('cashierDate');
+    if (!closingDateField || !closingDateField.value) {
+        console.warn('Closing date not found');
+        return;
+    }
+
+    const closingDate = new Date(closingDateField.value);
+    
+    // Get config values from page (passed from backend)
+    const backdateDays = typeof digitalSalesBackdateDays !== 'undefined' ? digitalSalesBackdateDays : 2;
+    const futureDays = typeof digitalSalesFutureDays !== 'undefined' ? digitalSalesFutureDays : 0;
+    
+    // Calculate min date (closing date - backdate days)
+    const minDate = new Date(closingDate);
+    minDate.setDate(minDate.getDate() - backdateDays);
+    
+    // Calculate max date (closing date + future days)
+    const maxDate = new Date(closingDate);
+    maxDate.setDate(maxDate.getDate() + futureDays);
+    
+    // Format dates as YYYY-MM-DD for input fields
+    const minDateStr = minDate.toISOString().split('T')[0];
+    const maxDateStr = maxDate.toISOString().split('T')[0];
+    
+    // Apply to all digital transaction date fields
+    const txnDateFields = document.querySelectorAll('.digital-txn-date');
+    txnDateFields.forEach(field => {
+        field.setAttribute('min', minDateStr);
+        field.setAttribute('max', maxDateStr);
+    });
+    
+    console.log(`Digital sales date restrictions set: min=${minDateStr}, max=${maxDateStr}`);
+}
+
+/**
+ * Initialize digital sales date restrictions on page load
+ */
+function initDigitalSalesDateRestrictions() {
+    // Set restrictions on initial load
+    setDigitalSalesDateRestrictions();
+    
+    // Update restrictions when closing date changes
+    const closingDateField = document.getElementById('cashierDate');
+    if (closingDateField) {
+        closingDateField.addEventListener('change', function() {
+            setDigitalSalesDateRestrictions();
+        });
+    }
+}
+
+
+// Initialize digital sales date restrictions when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDigitalSalesDateRestrictions);
+} else {
+    // DOM is already loaded
+    initDigitalSalesDateRestrictions();
+}

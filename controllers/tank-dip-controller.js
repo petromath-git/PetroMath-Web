@@ -5,11 +5,32 @@ const dbMapping = require("../db/ui-db-field-mapping");
 const dateFormat = require("dateformat");
 const db = require("../db/db-connection");
 const TankDipDao = require("../dao/tank-dip-dao");
+const LocationConfigDao = require("../dao/location-config-dao"); 
 
 exports.getTankDipEntry = async function (req, res, next) {
     try {
         const locationCode = req.user.location_code;
         const today = dateFormat(new Date(), "yyyy-mm-dd");
+
+         // Get configuration for allowing past dates
+        const allowPastDateSetting = await LocationConfigDao.getSetting(
+            locationCode, 
+            'ALLOW_PAST_DATE_TANK_DIP'
+        );
+
+         // ADD THESE DEBUG LINES
+        console.log('=== TANK DIP DEBUG ===');
+        console.log('Location Code:', locationCode);
+        console.log('Setting from DB:', allowPastDateSetting);
+        console.log('Setting type:', typeof allowPastDateSetting);
+        
+        const allowPastDate = allowPastDateSetting === 'Y';
+        
+        console.log('allowPastDate:', allowPastDate);
+        console.log('======================');
+        // END DEBUG
+        
+
         
         // Get active tanks
         const tanks = await TankDao.findActiveTanks(locationCode);
@@ -78,7 +99,9 @@ exports.getTankDipEntry = async function (req, res, next) {
             pumpTankMappings: pumpTankMappings,
             existingDips: dipsWithReadings,
             lastReadings: lastReadings,
-            searchDate: today
+            searchDate: today,
+            allowPastDate: allowPastDate,
+            currentDate: today  
         });
     } catch (error) {
         console.error('Error fetching tank dip data:', error);
