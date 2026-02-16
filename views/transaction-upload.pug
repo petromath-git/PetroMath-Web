@@ -116,8 +116,15 @@ block content
                                     option(value='') Select Bank Account
                                     if banks
                                         each bank in banks
-                                            option(value=bank.bank_id)= `${bank.bank_name} - ${bank.account_nickname}`
-                            
+                                            option(
+                                                value=bank.bank_id
+                                                data-last-upload=bank.last_upload_date || ''
+                                            )= `${bank.bank_name} - ${bank.account_nickname}`
+                                
+                                //- Only show info if overlap validation is enabled
+                                if overlapMode !== 'off'
+                                    #lastUploadInfo.alert.mt-2(style='display: none;')
+                                        #lastUploadText                     
                             .mb-3
                                 label.form-label 
                                     | Select Excel File:
@@ -171,7 +178,87 @@ block content
     script.
         let uploadedTransactions = [];
         let currentStep = 1;
-        
+        const overlapMode = '#{overlapMode}';
+        const overlapDays = #{overlapDays};
+        const showOverlapInfo = overlapMode !== 'off';
+
+            document.addEventListener('DOMContentLoaded', function() {
+                const bankSelect = document.getElementById('bank_id');
+                const lastUploadInfo = document.getElementById('lastUploadInfo');
+                const lastUploadText = document.getElementById('lastUploadText');
+                const fileInput = document.getElementById('transactionFile');
+                const uploadBtn = document.getElementById('btnUpload');
+                
+                // Only show last upload info if overlap validation is enabled
+                if (showOverlapInfo && lastUploadInfo) {
+                    bankSelect.addEventListener('change', function() {
+                        const selectedOption = this.options[this.selectedIndex];
+                        const lastUploadDate = selectedOption.getAttribute('data-last-upload');
+                        
+                        if (lastUploadDate) {
+                            // Has previous upload - show overlap requirement
+                            const parts = lastUploadDate.split('-');
+                            const displayDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                            
+                            // Calculate suggested start date based on overlap days
+                            const lastDate = new Date(lastUploadDate);
+                            const suggestedDate = new Date(lastDate);
+                            suggestedDate.setDate(lastDate.getDate() - (overlapDays - 1));
+                            const suggestedParts = suggestedDate.toISOString().split('T')[0].split('-');
+                            const suggestedDisplay = `${suggestedParts[2]}-${suggestedParts[1]}-${suggestedParts[0]}`;
+                            
+                                                        
+                            lastUploadText.innerHTML = `
+                                <div class="d-flex align-items-start">                                    
+                                    <div>
+                                        <strong>Last upload ended on: ${displayDate}</strong>
+                                        <br>
+                                        <span class="text-muted">
+                                            Your statement must ${overlapMode === 'strict' ? 'include' : 'ideally include'} 
+                                            transactions from <strong class="text-primary">${suggestedDisplay}</strong> or earlier
+                                            to ensure ${overlapDays}-day overlap.
+                                        </span>                                        
+                                    </div>
+                                </div>
+                            `;
+                            lastUploadInfo.style.display = 'block';
+                            lastUploadInfo.className = overlapMode === 'strict' ? 
+                                'alert alert-danger mt-2' : 
+                                'alert alert-warning mt-2';
+                        } else {
+                            // First upload - show different message
+                            lastUploadText.innerHTML = `
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-info-circle text-info me-2 mt-1"></i>
+                                    <div>
+                                        <strong>First Upload for This Account</strong>
+                                        <br>
+                                        <span class="text-muted">
+                                            No previous uploads found. You can upload statements from any date range.
+                                        </span>
+                                        <br>
+                                        <small class="text-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            After this upload, future uploads will require ${overlapDays}-day overlap.
+                                        </small>
+                                    </div>
+                                </div>
+                            `;
+                            lastUploadInfo.style.display = 'block';
+                            lastUploadInfo.className = 'alert alert-info mt-2';
+                        }
+                    });
+                }
+                
+                // Enable upload button when file is selected
+                fileInput.addEventListener('change', function() {
+                    if (this.files.length > 0 && bankSelect.value) {
+                        uploadBtn.disabled = false;
+                    }
+                });
+            });
+
+
         // Enable upload button when both bank and file selected
         document.getElementById('bank_id').addEventListener('change', checkUploadReady);
         document.getElementById('transactionFile').addEventListener('change', checkUploadReady);

@@ -101,6 +101,7 @@ module.exports = {
                 remarks: req.body[`remarks_${index}`] || '',
                 external_id: externalId,
                 external_source: externalSource,
+                running_balance: null,
                 created_by: req.user.Person_id || req.user.username
             };
 

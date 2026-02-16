@@ -248,24 +248,53 @@ module.exports = {
     /**
      * GET - Render the Transaction Upload page (Step 1)
      */
-    getUploadPage: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-           // const banks = await BankStatementDao.getBankAccounts(locationCode);
-            const banks = await bankReconDao.getBanksForReconciliation(locationCode);
-            
-            
-            res.render('transaction-upload', {
-                title: 'Upload Transactions',
-                user: req.user,
-                banks: banks
-            });
-            
-        } catch (error) {
-            console.error('Error in getUploadPage:', error);
-            next(error);
+   getUploadPage: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const locationConfigDao = require('../dao/location-config-dao');
+        
+        // Get overlap configuration
+        const overlapMode = await locationConfigDao.getSetting(
+            locationCode,
+            'BANK_STATEMENT_OVERLAP_MODE'
+        ) || 'off';
+        
+        const overlapDays = parseInt(
+            await locationConfigDao.getSetting(
+                locationCode,
+                'BANK_STATEMENT_OVERLAP_DAYS  '
+            ) || '1'
+        );
+        
+        const banks = await bankReconDao.getBanksForReconciliation(locationCode);
+        
+        // Get last upload dates for all banks (only if overlap is enabled)
+        let banksWithLastUpload = banks;
+        if (overlapMode !== 'off') {
+            banksWithLastUpload = await Promise.all(
+                banks.map(async (bank) => {
+                    const lastDate = await bankReconDao.getLastTransactionDate(locationCode, bank.bank_id);
+                    return {
+                        ...bank,
+                        last_upload_date: lastDate
+                    };
+                })
+            );
         }
-    },
+        
+        res.render('transaction-upload', {
+            title: 'Upload Transactions',
+            user: req.user,
+            banks: banksWithLastUpload,
+            overlapMode: overlapMode,
+            overlapDays: overlapDays
+        });
+        
+    } catch (error) {
+        console.error('Error in getUploadPage:', error);
+        next(error);
+    }
+},
 
     /**
  * POST - Upload and preview transactions (Step 2)
@@ -608,6 +637,7 @@ previewTransactions: async (req, res) => {
                         remarks: txn.remarks || txn.description || '',
                         external_id: externalId,  // ✓ Now properly populated
                         external_source: externalSource || 'upload',  // ✓ Use source_type or fallback to 'upload'
+                        running_balance: txn.running_balance || null,
                         created_by: userName
                     };
 

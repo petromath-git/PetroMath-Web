@@ -279,6 +279,7 @@ bulkAddEntries: async (req, res) => {
                     remarks: entry.remarks || '',
                     external_id: null,
                     external_source: entry.external_source || 'bulk_add',
+                    running_balance: entry.running_balance ? parseFloat(entry.running_balance) : null,
                     created_by: userName
                 };
                 
@@ -407,7 +408,8 @@ bulkAddEntries: async (req, res) => {
                 debit_amount,
                 remarks,
                 external_id,
-                external_source
+                external_source,
+                running_balance
             } = req.body;
             
             // Validation
@@ -447,6 +449,7 @@ bulkAddEntries: async (req, res) => {
                 remarks: remarks || '',
                 external_id: external_id || null,
                 external_source: external_source || null,
+                running_balance: running_balance ? parseFloat(running_balance) : null,
                 created_by: userName
             };
             
