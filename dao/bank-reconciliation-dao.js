@@ -560,19 +560,21 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
         bulkInsertStatements: async (locationCode, bankId, transactions, createdBy) => {
             const insertQuery = `
                 INSERT INTO t_bank_statement_actual 
-                (bank_id, txn_date, description, debit_amount, credit_amount, 
-                balance_amount, statement_ref, created_by, creation_date)
+                (location_code,bank_id, txn_date, description, debit_amount, credit_amount, 
+                balance_amount, statement_ref,source_file, created_by, creation_date)
                 VALUES ?
             `;
             
             const values = transactions.map(txn => [
+                locationCode,
                 bankId,
                 txn.txn_date,
                 txn.description || '',
-                txn.debit_amount || null,
-                txn.credit_amount || null,
+                parseFloat(txn.debit_amount) || 0,   // ← 0 instead of null
+                parseFloat(txn.credit_amount) || 0,   // ← 0 instead of null
                 txn.balance_amount || null,
                 txn.statement_ref || null,
+                txn.source_file || null,
                 createdBy,
                 new Date()
             ]);
@@ -582,28 +584,6 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
                 type: db.Sequelize.QueryTypes.INSERT
             });
             
-            // Also insert into t_bank_transaction with running_balance
-            const txnInsertQuery = `
-                INSERT INTO t_bank_transaction 
-                (trans_date, bank_id, credit_amount, debit_amount, remarks, 
-                running_balance, created_by)
-                VALUES ?
-            `;
-            
-            const txnValues = transactions.map(txn => [
-                txn.txn_date,
-                bankId,
-                txn.credit_amount || null,
-                txn.debit_amount || null,
-                txn.description || '',
-                txn.running_balance || null,  // NEW
-                createdBy
-            ]);
-            
-            await db.sequelize.query(txnInsertQuery, {
-                replacements: [txnValues],
-                type: db.Sequelize.QueryTypes.INSERT
-            });
             
             return { inserted: transactions.length };
         },
@@ -806,6 +786,65 @@ learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
         console.error('Error learning pattern:', error);
         // Don't fail the main operation if learning fails
     }
+},
+
+checkStatementTransactionExists: async (bankId, locationCode, txnDate, creditAmount, debitAmount, balanceAmount) => {
+    const query = `
+        SELECT 
+            actual_stmt_id,
+            CASE WHEN balance_amount IS NOT NULL AND balance_amount != 0 THEN 1 ELSE 0 END as hasBalance
+        FROM t_bank_statement_actual
+        WHERE bank_id = :bankId
+          AND location_code = :locationCode
+          AND txn_date = :txnDate
+          AND COALESCE(credit_amount, 0) = :creditAmount
+          AND COALESCE(debit_amount, 0) = :debitAmount
+          ${balanceAmount ? 'AND balance_amount = :balanceAmount' : ''}
+        LIMIT 1
+    `;
+    
+    const replacements = {
+        bankId,
+        locationCode,
+        txnDate,
+        creditAmount: parseFloat(creditAmount) || 0,
+        debitAmount: parseFloat(debitAmount) || 0
+    };
+    
+    if (balanceAmount) {
+        replacements.balanceAmount = parseFloat(balanceAmount);
+    }
+    
+    const result = await db.sequelize.query(query, {
+        replacements,
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    return {
+        exists: result.length > 0,
+        hasBalance: result.length > 0 && result[0].hasBalance === 1
+    };
+},
+
+getLastStatementDate: async (locationCode, bankId) => {
+    const query = `
+        SELECT MAX(txn_date) as last_date
+        FROM t_bank_statement_actual
+        WHERE bank_id = :bankId
+          AND location_code = :locationCode
+    `;
+    
+    const result = await db.sequelize.query(query, {
+        replacements: { bankId, locationCode },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    
+    if (result[0]?.last_date) {
+        const date = new Date(result[0].last_date);
+        return date.toISOString().split('T')[0];
+    }
+    
+    return null;
 },
 
 /**
