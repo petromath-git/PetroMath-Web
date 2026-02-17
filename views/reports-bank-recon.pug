@@ -196,7 +196,57 @@ block content
             
             setTimeout(() => { isScrolling = false; }, 50);
         }
-        
+
+
+        function showLastUploadInfo(selectElement) {
+            const lastUploadInfo = document.getElementById('lastUploadInfo');
+            const lastUploadText = document.getElementById('lastUploadText');
+            
+            if (!lastUploadInfo || !lastUploadText) return;
+            
+            if (!selectElement.value) {
+                lastUploadInfo.style.display = 'none';
+                return;
+            }
+            
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+            const lastUploadDate = selectedOption.getAttribute('data-last-upload');
+            
+            if (lastUploadDate) {
+                // Convert YYYY-MM-DD to DD-MM-YYYY for display
+                const parts = lastUploadDate.split('-');
+                const displayDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                
+                lastUploadText.innerHTML = `
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-exclamation-triangle text-warning me-2 mt-1"></i>
+                        <div>
+                            <strong>Last upload ended on: ${displayDate}</strong><br>
+                            <span class="text-muted">
+                                To avoid gaps, your new statement should start from 
+                                <strong class="text-primary">${displayDate}</strong> or earlier.
+                            </span>
+                        </div>
+                    </div>
+                `;
+                lastUploadInfo.className = 'alert alert-warning mt-2';
+            } else {
+                lastUploadText.innerHTML = `
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-info-circle text-info me-2 mt-1"></i>
+                        <div>
+                            <strong>First Upload for This Account</strong><br>
+                            <span class="text-muted">
+                                No previous uploads found. You can upload statements from any date range.
+                            </span>
+                        </div>
+                    </div>
+                `;
+                lastUploadInfo.className = 'alert alert-info mt-2';
+            }
+            
+            lastUploadInfo.style.display = 'block';
+        }
         let currentTxnId = null;
         
         async function showImpactAnalysis(txnId) {
@@ -801,10 +851,12 @@ block content
             if (uploadBankSelect) {
                 uploadBankSelect.addEventListener('change', function() {
                     loadUploadHistory();
+                    showLastUploadInfo(this);
                 });
                 // Load on page load if bank is already selected
                 if (uploadBankSelect.value) {
                     loadUploadHistory();
+                    showLastUploadInfo(this);
                 }
             }
         });
@@ -841,7 +893,14 @@ block content
                                         option(value='') Select Bank Account
                                         if banks
                                             each val in banks
-                                                option(value=`${val.bank_id}`)= `${val.bank_name} - ${val.account_nickname}`
+                                                option(
+                                                    value=`${val.bank_id}`
+                                                    data-last-upload=val.last_upload_date || ''
+                                                )= `${val.bank_name} - ${val.account_nickname}`
+
+                                    //- Info box - shown when bank is selected
+                                    #lastUploadInfo.alert.mt-2(style='display: none;')
+                                        #lastUploadText
                                 .col-md-6
                                     label.form-label 
                                         | Select Excel File:
