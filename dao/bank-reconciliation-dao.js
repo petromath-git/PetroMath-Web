@@ -587,22 +587,49 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
             
             return { inserted: transactions.length };
         },
-    /**
- * Suggest ledger based on historical transactions with similar descriptions
- */
+   
+
 /**
- * Suggest ledger using pure machine learning approach
- * Phase 1: Check learned pattern cache (fast)
- * Phase 2: Extract phrases and match historical data
- * Phase 3: Learn from this suggestion for next time
+ * Suggest ledger using adaptive pattern-based learning.
+ *
+ * The engine combines cached learning, phrase analysis, and structural
+ * pattern recognition to intelligently suggest ledgers without hardcoding rules.
+ *
+ * Phase 1: Pattern Cache Lookup (Fast Path)
+ *   - Generate a normalized pattern key from description.
+ *   - If found in suggestion cache (recent & frequently used), return immediately.
+ *
+ * Phase 1A: Structural Pattern Fallback
+ *   - If no meaningful textual pattern is extracted (e.g., numeric-only descriptions),
+ *     generate a structural pattern by normalizing numeric sequences.
+ *   - Enables learning of structured formats like reference IDs.
+ *
+ * Phase 2: Historical Phrase Matching
+ *   - Extract meaningful words and phrases.
+ *   - Match against historical transactions for the same bank and entry type.
+ *   - Rank by phrase strength, usage frequency, and recency.
+ *
+ * Phase 2A: Structural Phrase Fallback
+ *   - If no textual phrases are available, attempt structural matching.
+ *
+ * Phase 3: Continuous Learning
+ *   - Once a user confirms a ledger, the pattern is cached.
+ *   - Future similar descriptions are auto-mapped via cache.
+ *
+ * This design allows the system to:
+ *   - Learn from user behavior
+ *   - Generalize numeric structured patterns
+ *   - Avoid hardcoded rules
+ *   - Preserve backward compatibility with existing cache data
  */
+
+
 getSuggestedLedger: async (bankId, description, entryType) => {
+
     const cleanDesc = description.toUpperCase().trim();
-    
+
     // ============ PHASE 1: Check Learned Pattern Cache ============
-    // This is like "muscle memory" - patterns we've successfully used before
-    
-    // Extract a normalized pattern key from description
+
     const extractPatternKey = (desc) => {
         let normalized = desc
             // Remove transaction prefixes and IDs
@@ -610,19 +637,39 @@ getSuggestedLedger: async (bankId, description, entryType) => {
             .replace(/[A-Z0-9]{10,}/gi, '')
             .replace(/[-\/\s]+/g, ' ')
             .trim();
-        
+
         // Take first 3-4 meaningful words as pattern key
-        const words = normalized.split(' ').filter(w => 
+        const words = normalized.split(' ').filter(w =>
             w.length >= 3 && !/^\d+$/.test(w)
         ).slice(0, 4);
-        
+
         return words.join(' ').substring(0, 200);
     };
-    
-    const patternKey = extractPatternKey(cleanDesc);
-    
+
+    let patternKey = extractPatternKey(cleanDesc);
+
+    // ================= SAFE STRUCTURAL FALLBACK =================
+    // If no meaningful words extracted (numeric-only descriptions),
+    // generate structural pattern instead of returning empty.
+    if (!patternKey || patternKey.length === 0) {
+
+        const structuralKey = cleanDesc
+            // Replace long numbers with length-based token
+            .replace(/\d{10,}/g, (match) => `NUM${match.length}`)
+            // Replace remaining numbers
+            .replace(/\d+/g, 'NUM')
+            // Normalize separators
+            .replace(/[-\/\s]+/g, ' ')
+            .trim();
+
+        if (structuralKey.length > 0) {
+            patternKey = structuralKey.substring(0, 200);
+            console.log(`[STRUCTURAL KEY GENERATED] ${cleanDesc} → ${patternKey}`);
+        }
+    }
+
     if (patternKey) {
-        // Quick cache lookup
+
         const cacheQuery = `
             SELECT 
                 ledger_name,
@@ -636,34 +683,31 @@ getSuggestedLedger: async (bankId, description, entryType) => {
             ORDER BY usage_count DESC, last_used DESC
             LIMIT 1
         `;
-        
+
         const cacheResult = await db.sequelize.query(cacheQuery, {
             replacements: { bankId, patternKey, entryType },
             type: db.Sequelize.QueryTypes.SELECT
         });
-        
+
         if (cacheResult && cacheResult[0]) {
             console.log(`[CACHE HIT] Pattern: "${patternKey}" → ${cacheResult[0].ledger_name}`);
             return cacheResult[0];
         }
     }
-    
+
     // ============ PHASE 2: Historical Pattern Matching ============
-    // Learn from raw transaction history
-    
-    // Clean and extract phrases
+
     let cleaned = cleanDesc
         .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
         .replace(/-(YESB|SBIN|ICIC|HDFC|AXIS|PUNB|IDIB|IOBA|BARB|CBIN|CNRB|CORP|UBIN|VIJB)[A-Z0-9]*[-\/]/gi, '-')
         .replace(/[A-Z0-9]{10,}/gi, ' ');
-    
-    const words = cleaned.split(/[-\/\s]+/).filter(word => 
-        word.length >= 2 && 
-        !/^\d+$/.test(word) && 
+
+    const words = cleaned.split(/[-\/\s]+/).filter(word =>
+        word.length >= 2 &&
+        !/^\d+$/.test(word) &&
         !/^[A-Z]{1}$/.test(word)
     );
-    
-    // Build phrases
+
     const phrases = [];
     for (let i = 0; i < words.length; i++) {
         if (words[i] && words[i].length >= 2) {
@@ -678,27 +722,44 @@ getSuggestedLedger: async (bankId, description, entryType) => {
             }
         }
     }
-    
+
+    // ================= STRUCTURAL PHRASE FALLBACK =================
+    // If still nothing extracted, try structural numeric phrases
     if (phrases.length === 0) {
-        return null; // Can't extract anything meaningful
+
+        const structuralPhrase = cleanDesc
+            .replace(/\d{10,}/g, (match) => `NUM${match.length}`)
+            .replace(/\d+/g, 'NUM')
+            .replace(/[-\/\s]+/g, ' ')
+            .trim();
+
+        if (structuralPhrase.length > 0) {
+            phrases.push(structuralPhrase);
+        }
     }
-    
-    // Build dynamic query from extracted phrases
-    const phraseConditions = phrases.map((_, idx) => 
+
+    if (phrases.length === 0) {
+        return null;
+    }
+
+    const phraseConditions = phrases.map((_, idx) =>
         `UPPER(remarks) LIKE :phrase${idx}`
     ).join(' OR ');
-    
+
     const phraseReplacements = { bankId, entryType };
     phrases.forEach((phrase, idx) => {
         phraseReplacements[`phrase${idx}`] = `%${phrase}%`;
     });
-    
+
+    const longestPhrase = phrases.sort((a, b) => b.length - a.length)[0];
+    phraseReplacements.longestPhrase = longestPhrase;
+
     const historicalQuery = `
         SELECT 
             ledger_name,
             COUNT(*) as usage_count,
             MAX(trans_date) as last_used,
-            MAX(LENGTH(:longestPhrase)) as match_length
+            LENGTH(:longestPhrase) as match_length
         FROM t_bank_transaction
         WHERE bank_id = :bankId
             AND ledger_name IS NOT NULL
@@ -714,52 +775,96 @@ getSuggestedLedger: async (bankId, description, entryType) => {
         ORDER BY match_length DESC, usage_count DESC, last_used DESC
         LIMIT 1
     `;
-    
-    phraseReplacements.longestPhrase = phrases.sort((a, b) => b.length - a.length)[0];
-    
+
     const historicalResult = await db.sequelize.query(historicalQuery, {
         replacements: phraseReplacements,
         type: db.Sequelize.QueryTypes.SELECT
     });
-    
+
     if (historicalResult && historicalResult[0]) {
-        console.log(`[HISTORICAL MATCH] Phrases: ${phrases.slice(0, 3).join(', ')} → ${historicalResult[0].ledger_name}`);
+        console.log(`[HISTORICAL MATCH] → ${historicalResult[0].ledger_name}`);
         return historicalResult[0];
     }
-    
+
     return null;
 },
 
 /**
- * Learn from successful suggestion - called after user saves entry
- * This teaches the system for next time
+ * Learn from confirmed ledger selection (Adaptive Pattern Learning)
+ *
+ * Called after the user saves a transaction.
+ * This method teaches the system how to auto-classify similar
+ * descriptions in the future.
+ *
+ * Step 1: Generate a normalized pattern key from the description.
+ *   - Removes transaction prefixes and long IDs.
+ *   - Extracts meaningful words (text-based learning).
+ *
+ * Step 2: Structural Pattern Fallback (Numeric-Aware Learning).
+ *   - If no meaningful words are found (e.g., numeric-only references),
+ *     generate a structural pattern by normalizing numeric sequences
+ *     (e.g., 4000530798-0000309 → NUM10-NUM7).
+ *   - Enables learning of structured reference formats without hardcoding.
+ *
+ * Step 3: Upsert into cache table.
+ *   - Inserts new pattern if not present.
+ *   - Increments usage_count if pattern already exists.
+ *   - Updates last_used timestamp.
+ *
+ * This design allows the system to:
+ *   - Learn from user corrections
+ *   - Support both text-based and numeric structured descriptions
+ *   - Avoid hardcoded ledger mappings
+ *   - Maintain backward compatibility with existing cache data
+ *
+ * NOTE:
+ * Pattern extraction logic must remain consistent with
+ * getSuggestedLedger() to ensure cache hits work correctly.
  */
+
+
+
 learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
+
     const cleanDesc = description.toUpperCase().trim();
-    
-    // Extract pattern key (same logic as getSuggestedLedger)
+
     const extractPatternKey = (desc) => {
         let normalized = desc
             .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
             .replace(/[A-Z0-9]{10,}/gi, '')
             .replace(/[-\/\s]+/g, ' ')
             .trim();
-        
-        const words = normalized.split(' ').filter(w => 
+
+        const words = normalized.split(' ').filter(w =>
             w.length >= 3 && !/^\d+$/.test(w)
         ).slice(0, 4);
-        
+
         return words.join(' ').substring(0, 200);
     };
-    
-    const patternKey = extractPatternKey(cleanDesc);
-    
-    if (!patternKey) {
-        return; // Can't learn from this pattern
+
+    let patternKey = extractPatternKey(cleanDesc);
+
+    // ================= SAFE STRUCTURAL FALLBACK =================
+    if (!patternKey || patternKey.length === 0) {
+
+        const structuralKey = cleanDesc
+            .replace(/\d{10,}/g, (match) => `NUM${match.length}`)
+            .replace(/\d+/g, 'NUM')
+            .replace(/[-\/\s]+/g, ' ')
+            .trim();
+
+        if (structuralKey.length > 0) {
+            patternKey = structuralKey.substring(0, 200);
+            console.log(`[STRUCTURAL LEARNING] ${cleanDesc} → ${patternKey}`);
+        }
     }
-    
+
+    if (!patternKey) {
+        return; // Still nothing meaningful
+    }
+
     try {
-        // Insert or update the cache
+
         const learnQuery = `
             INSERT INTO t_bank_ledger_suggestion_cache 
                 (bank_id, pattern_key, ledger_name, entry_type, usage_count, last_used)
@@ -770,39 +875,90 @@ learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
                 last_used = NOW(),
                 ledger_name = :ledgerName
         `;
-        
+
         await db.sequelize.query(learnQuery, {
-            replacements: { 
-                bankId, 
-                patternKey, 
-                ledgerName, 
-                entryType 
+            replacements: {
+                bankId,
+                patternKey,
+                ledgerName,
+                entryType
             },
             type: db.Sequelize.QueryTypes.INSERT
         });
-        
+
         console.log(`[LEARNED] Pattern: "${patternKey}" → ${ledgerName} (${entryType})`);
+
     } catch (error) {
         console.error('Error learning pattern:', error);
-        // Don't fail the main operation if learning fails
+        // Do not block main transaction save
     }
 },
 
-checkStatementTransactionExists: async (bankId, locationCode, txnDate, creditAmount, debitAmount, balanceAmount) => {
+
+
+
+// checkStatementTransactionExists: async (bankId, locationCode, txnDate, creditAmount, debitAmount, balanceAmount) => {
+//     const query = `
+//         SELECT 
+//             actual_stmt_id,
+//             CASE WHEN balance_amount IS NOT NULL AND balance_amount != 0 THEN 1 ELSE 0 END as hasBalance
+//         FROM t_bank_statement_actual
+//         WHERE bank_id = :bankId
+//           AND location_code = :locationCode
+//           AND txn_date = :txnDate
+//           AND COALESCE(credit_amount, 0) = :creditAmount
+//           AND COALESCE(debit_amount, 0) = :debitAmount
+//           ${balanceAmount ? 'AND balance_amount = :balanceAmount' : ''}
+//         LIMIT 1
+//     `;
+    
+//     const replacements = {
+//         bankId,
+//         locationCode,
+//         txnDate,
+//         creditAmount: parseFloat(creditAmount) || 0,
+//         debitAmount: parseFloat(debitAmount) || 0
+//     };
+    
+//     if (balanceAmount) {
+//         replacements.balanceAmount = parseFloat(balanceAmount);
+//     }
+    
+//     const result = await db.sequelize.query(query, {
+//         replacements,
+//         type: db.Sequelize.QueryTypes.SELECT
+//     });
+    
+//     return {
+//         exists: result.length > 0,
+//         hasBalance: result.length > 0 && result[0].hasBalance === 1
+//     };
+// },
+
+//removed balance check as SAP inserts statement above.
+// code with balance check above is commented and can be reused later.
+checkStatementTransactionExists: async (
+    bankId,
+    locationCode,
+    txnDate,
+    creditAmount,
+    debitAmount,
+    balanceAmount   // kept for compatibility, not used for matching
+) => {
+
     const query = `
         SELECT 
             actual_stmt_id,
-            CASE WHEN balance_amount IS NOT NULL AND balance_amount != 0 THEN 1 ELSE 0 END as hasBalance
+            balance_amount
         FROM t_bank_statement_actual
         WHERE bank_id = :bankId
           AND location_code = :locationCode
           AND txn_date = :txnDate
-          AND COALESCE(credit_amount, 0) = :creditAmount
-          AND COALESCE(debit_amount, 0) = :debitAmount
-          ${balanceAmount ? 'AND balance_amount = :balanceAmount' : ''}
+          AND ABS(COALESCE(credit_amount, 0) - :creditAmount) < 0.01
+          AND ABS(COALESCE(debit_amount, 0) - :debitAmount) < 0.01
         LIMIT 1
     `;
-    
+
     const replacements = {
         bankId,
         locationCode,
@@ -810,21 +966,18 @@ checkStatementTransactionExists: async (bankId, locationCode, txnDate, creditAmo
         creditAmount: parseFloat(creditAmount) || 0,
         debitAmount: parseFloat(debitAmount) || 0
     };
-    
-    if (balanceAmount) {
-        replacements.balanceAmount = parseFloat(balanceAmount);
-    }
-    
+
     const result = await db.sequelize.query(query, {
         replacements,
         type: db.Sequelize.QueryTypes.SELECT
     });
-    
+
     return {
         exists: result.length > 0,
-        hasBalance: result.length > 0 && result[0].hasBalance === 1
+        hasBalance: result.length > 0 && result[0].balance_amount !== null
     };
 },
+
 
 getLastStatementDate: async (locationCode, bankId) => {
     const query = `
@@ -864,12 +1017,12 @@ checkTransactionExists: async (bankId, transDate, creditAmount, debitAmount, run
     `;
     
     // If running balance is provided, add it as additional check
-    if (runningBalance !== null) {
-        query += ` AND (
-            running_balance IS NULL 
-            OR ABS(COALESCE(running_balance, 0) - :runningBalance) < 0.01
-        )`;
-    }
+    // if (runningBalance !== null) {
+    //     query += ` AND (
+    //         running_balance IS NULL 
+    //         OR ABS(COALESCE(running_balance, 0) - :runningBalance) < 0.01
+    //     )`;
+    // }
     
     query += ` LIMIT 1`;
     
