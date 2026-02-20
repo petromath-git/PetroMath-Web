@@ -600,7 +600,10 @@ uploadBankStatement: async (req, res) => {
             const row = data[i];
             if (!row || row.length === 0) continue;
             
-            const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
+            const txnDate = parseExcelDate(
+                    row[columnToIndex(template.value_date_column || template.date_column)],
+                    template.date_format  // ← Pass the format from template
+                );
             if (txnDate) {
                 tempDates.push(txnDate);
             }
@@ -692,7 +695,10 @@ uploadBankStatement: async (req, res) => {
             
             if (!row || row.length === 0) continue;
 
-            const txnDate = parseExcelDate(row[columnToIndex(template.value_date_column || template.date_column)]);
+            const txnDate = parseExcelDate(
+                    row[columnToIndex(template.value_date_column || template.date_column)],
+                    template.date_format  // ← Pass the format from template
+                );
             
             if (excludeToday && txnDate >= todayStr) {
                 excludedTodayCount.push(txnDate);
@@ -703,11 +709,24 @@ uploadBankStatement: async (req, res) => {
             const creditRaw = row[columnToIndex(template.credit_column)] || '';
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
 
+            const debitAmount = parseFloat(String(debitRaw).replace(/,/g, '')) || 0;
+            const creditAmount = parseFloat(String(creditRaw).replace(/,/g, '')) || 0;
+
+              // ===== SKIP TOTAL/SUMMARY ROWS =====
+            // Rows with BOTH debit and credit are typically total/summary rows
+            if (debitAmount > 0 && creditAmount > 0) {
+                console.log(`Skipping summary/total row at index ${i}: Debit=${debitAmount}, Credit=${creditAmount}`);
+                continue;
+            }
+
+            // Skip rows with no amounts
+            if (debitAmount === 0 && creditAmount === 0) continue;
+
             const txn = {
                 txn_date: txnDate,
                 description: row[columnToIndex(template.description_column)] || '',
-                debit_amount: parseFloat(String(debitRaw).replace(/,/g, '')) || 0,
-                credit_amount: parseFloat(String(creditRaw).replace(/,/g, '')) || 0,
+                debit_amount: debitAmount,
+                credit_amount: creditAmount,
                 balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
                 running_balance: parseFloat(String(balanceRaw).replace(/,/g, '')) || null, 
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
@@ -929,103 +948,238 @@ function columnToIndex(column) {
 }
 
 // Helper function to parse Excel date
-function parseExcelDate(value) {
+// function parseExcelDate(value) {
+//     if (!value) return null;
+    
+//     // If it's a number (Excel serial date)
+//     if (typeof value === 'number') {
+//         const XLSX = require('xlsx');
+//         const date = XLSX.SSF.parse_date_code(value);
+//         return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+//     }
+    
+//     // If it's already a string, try to parse it
+//     if (typeof value === 'string') {
+
+//            // ===== NEW: Handle SBI format "1 Jan 2026" or "01 Jan 2026" =====
+//         if (value.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
+//             const parts = value.trim().split(/\s+/);
+//             if (parts.length === 3) {
+//                 const monthMap = {
+//                     'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+//                     'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+//                     'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+//                 };
+//                 const day = parts[0].padStart(2, '0');
+//                 const month = monthMap[parts[1]];
+//                 const year = parts[2];
+                
+//                 if (month) {
+//                     return `${year}-${month}-${day}`;
+//                 }
+//             }
+//         }
+//         // ===== END NEW CODE =====
+
+//         // Handle DD-MMM-YYYY format (02-Apr-2025)
+//         if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
+//             const parts = value.split('-');
+//             const monthMap = {
+//                 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+//                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+//                 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+//             };
+//             const month = monthMap[parts[1]];
+//             return `${parts[2]}-${month}-${parts[0].padStart(2, '0')}`;
+//         }
+        
+//         // Handle DD.MM.YY format (01.12.25) - IOCL SAP format
+//         if (value.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
+//             const parts = value.split('.');
+//             const day = parts[0].padStart(2, '0');
+//             const month = parts[1].padStart(2, '0');
+//             const year = '20' + parts[2]; // Assume 2000s
+//             return `${year}-${month}-${day}`;
+//         }
+        
+//         // Handle DD.MM.YYYY format (01.12.2025) - IOCL SAP format with full year
+//         if (value.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+//             const parts = value.split('.');
+//             const day = parts[0].padStart(2, '0');
+//             const month = parts[1].padStart(2, '0');
+//             const year = parts[2];
+//             return `${year}-${month}-${day}`;
+//         }
+        
+//         // Handle MM/DD/YY format (11/13/25)
+//         if (value.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+//             const parts = value.split('/');
+//             const month = parts[0].padStart(2, '0');
+//             const day = parts[1].padStart(2, '0');
+//             const year = '20' + parts[2]; // Assume 2000s
+//             return `${year}-${month}-${day}`;
+//         }
+        
+//         // Handle MM/DD/YYYY format (11/13/2025)
+//         if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+//             const parts = value.split('/');
+//             const month = parts[0].padStart(2, '0');
+//             const day = parts[1].padStart(2, '0');
+//             const year = parts[2];
+//             return `${year}-${month}-${day}`;
+//         }
+        
+//         // Handle DD/MM/YYYY format (13/11/2025)
+//         if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(value.split('/')[0]) > 12) {
+//             const parts = value.split('/');
+//             const day = parts[0].padStart(2, '0');
+//             const month = parts[1].padStart(2, '0');
+//             const year = parts[2];
+//             return `${year}-${month}-${day}`;
+//         }
+        
+//         // Handle YYYY-MM-DD format (already correct)
+//         if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+//             return value;
+//         }
+//     }
+    
+//     // If all else fails, try JavaScript Date parse
+//     try {
+//         const d = new Date(value);
+//         if (!isNaN(d.getTime())) {
+//             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+//         }
+//     } catch (e) {
+//         console.error('Date parse error:', value, e);
+//     }
+    
+//     return null;
+// }
+
+function parseExcelDate(value, dateFormat = 'AUTO') {
     if (!value) return null;
     
-    // If it's a number (Excel serial date)
+    // Excel serial number
     if (typeof value === 'number') {
         const XLSX = require('xlsx');
         const date = XLSX.SSF.parse_date_code(value);
         return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
     }
     
-    // If it's already a string, try to parse it
-    if (typeof value === 'string') {
-
-           // ===== NEW: Handle SBI format "1 Jan 2026" or "01 Jan 2026" =====
-        if (value.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
-            const parts = value.trim().split(/\s+/);
-            if (parts.length === 3) {
-                const monthMap = {
-                    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                    'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                    'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-                };
-                const day = parts[0].padStart(2, '0');
-                const month = monthMap[parts[1]];
-                const year = parts[2];
-                
-                if (month) {
-                    return `${year}-${month}-${day}`;
+    if (typeof value !== 'string') return null;
+    
+    const v = value.trim();
+    
+    // Month name mapping
+    const monthMap = {
+        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+        'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+    };
+    
+    // Try specific format if provided
+    if (dateFormat && dateFormat !== 'AUTO') {
+        switch(dateFormat) {
+            case 'DD.MM.YY':
+                // 06.02.26 → 2026-02-06
+                if (v.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
+                    const [day, month, year] = v.split('.');
+                    return `20${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                 }
-            }
-        }
-        // ===== END NEW CODE =====
-
-        // Handle DD-MMM-YYYY format (02-Apr-2025)
-        if (value.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
-            const parts = value.split('-');
-            const monthMap = {
-                'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-            };
-            const month = monthMap[parts[1]];
-            return `${parts[2]}-${month}-${parts[0].padStart(2, '0')}`;
-        }
-        
-        // Handle DD.MM.YY format (01.12.25) - IOCL SAP format
-        if (value.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
-            const parts = value.split('.');
-            const day = parts[0].padStart(2, '0');
-            const month = parts[1].padStart(2, '0');
-            const year = '20' + parts[2]; // Assume 2000s
-            return `${year}-${month}-${day}`;
-        }
-        
-        // Handle DD.MM.YYYY format (01.12.2025) - IOCL SAP format with full year
-        if (value.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
-            const parts = value.split('.');
-            const day = parts[0].padStart(2, '0');
-            const month = parts[1].padStart(2, '0');
-            const year = parts[2];
-            return `${year}-${month}-${day}`;
-        }
-        
-        // Handle MM/DD/YY format (11/13/25)
-        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
-            const parts = value.split('/');
-            const month = parts[0].padStart(2, '0');
-            const day = parts[1].padStart(2, '0');
-            const year = '20' + parts[2]; // Assume 2000s
-            return `${year}-${month}-${day}`;
-        }
-        
-        // Handle MM/DD/YYYY format (11/13/2025)
-        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
-            const parts = value.split('/');
-            const month = parts[0].padStart(2, '0');
-            const day = parts[1].padStart(2, '0');
-            const year = parts[2];
-            return `${year}-${month}-${day}`;
-        }
-        
-        // Handle DD/MM/YYYY format (13/11/2025)
-        if (value.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(value.split('/')[0]) > 12) {
-            const parts = value.split('/');
-            const day = parts[0].padStart(2, '0');
-            const month = parts[1].padStart(2, '0');
-            const year = parts[2];
-            return `${year}-${month}-${day}`;
-        }
-        
-        // Handle YYYY-MM-DD format (already correct)
-        if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            return value;
+                break;
+                
+            case 'DD.MM.YYYY':
+                // 06.02.2026 → 2026-02-06
+                if (v.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+                    const [day, month, year] = v.split('.');
+                    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
+                break;
+                
+            case 'DD-MMM-YYYY':
+                // 11-Feb-2026 → 2026-02-11
+                if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
+                    const [day, monthName, year] = v.split('-');
+                    const month = monthMap[monthName];
+                    if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+                }
+                break;
+                
+            case 'DD MMM YYYY':
+                // 1 Jan 2026 → 2026-01-01
+                if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
+                    const [day, monthName, year] = v.split(/\s+/);
+                    const month = monthMap[monthName];
+                    if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+                }
+                break;
+                
+            case 'DD/MM/YYYY':
+                // 01/02/2026 → 2026-02-01
+                if (v.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                    const [day, month, year] = v.split('/');
+                    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
+                break;
+                
+            case 'MM/DD/YYYY':
+                // 02/01/2026 → 2026-02-01
+                if (v.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                    const [month, day, year] = v.split('/');
+                    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
+                break;
         }
     }
     
-    // If all else fails, try JavaScript Date parse
+    // Fallback to auto-detection
+    
+    // DD.MM.YY (IOCL)
+    if (v.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
+        const [day, month, year] = v.split('.');
+        return `20${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    // DD.MM.YYYY
+    if (v.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+        const [day, month, year] = v.split('.');
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    // DD-MMM-YYYY (IOB)
+    if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
+        const [day, monthName, year] = v.split('-');
+        const month = monthMap[monthName];
+        if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+    }
+    
+    // DD MMM YYYY (SBI)
+    if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
+        const [day, monthName, year] = v.split(/\s+/);
+        const month = monthMap[monthName];
+        if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+    }
+    
+    // DD/MM/YYYY vs MM/DD/YYYY (ambiguous)
+    if (v.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const [first, second, year] = v.split('/');
+        if (parseInt(first) > 12) {
+            return `${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}`;
+        }
+        if (parseInt(second) > 12) {
+            return `${year}-${first.padStart(2, '0')}-${second.padStart(2, '0')}`;
+        }
+        // Default to DD/MM/YYYY for Indian banks
+        return `${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}`;
+    }
+    
+    // YYYY-MM-DD
+    if (v.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return v;
+    }
+    
+    // Last resort
     try {
         const d = new Date(value);
         if (!isNaN(d.getTime())) {

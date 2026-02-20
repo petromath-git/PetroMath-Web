@@ -80,6 +80,12 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING,
             defaultValue: 'DRAFT'
        },
+
+       cashflow_date: {
+        field: 'cashflow_date',
+        type: DataTypes.DATE,
+        allowNull: true
+        },
        decant_time: {
             field: 'decant_time',
             type: DataTypes.DECIMAL
