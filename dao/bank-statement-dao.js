@@ -193,7 +193,8 @@ saveTransaction: async (transactionData) => {
 
         // 2️⃣ Auto-create receipt (ONLY for CREDIT deposits)
         if (
-            transactionData.external_source === 'CREDIT' &&
+            transactionData.external_source &&
+            transactionData.external_source.toUpperCase() === 'CREDIT' &&
             parseFloat(transactionData.credit_amount) > 0 &&
             transactionData.external_id
         ) {
