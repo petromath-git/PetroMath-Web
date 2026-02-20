@@ -198,6 +198,14 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
                     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                 }
                 break;
+
+            case 'DD/MM/YY':
+                // 01/01/26 → 2026-01-01 (HDFC)
+                if (v.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+                    const [day, month, year] = v.split('/');
+                    return `20${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                }
+                break;    
         }
     }
     
@@ -227,6 +235,12 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
         const [day, monthName, year] = v.split(/\s+/);
         const month = monthMap[monthName];
         if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
+    }
+
+    // DD/MM/YY (HDFC) - 01/01/26
+    if (v.match(/^\d{1,2}\/\d{1,2}\/\d{2}$/)) {
+        const [day, month, year] = v.split('/');
+        return `20${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
     
     // DD/MM/YYYY vs MM/DD/YYYY (ambiguous)
