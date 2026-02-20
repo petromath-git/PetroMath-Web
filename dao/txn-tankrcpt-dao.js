@@ -6,6 +6,7 @@ const config = require("../config/app-config");
 const TxnTankReceipts = db.txn_tank_stkrcpt;
 const TxnTankRcptViewDao = db.txn_tank_receipt_views;
 const Location = db.location;
+const locationConfigDao = require('../dao/location-config-dao');
 
 module.exports = {
     getTankRcptByDate: (locationCode, QueryFromDate, QueryToDate) => {
@@ -66,12 +67,53 @@ module.exports = {
         return receiptTxn;
     },
 
-    finishClosing: (ttank_id) => {
-        const receiptTxn = db.sequelize.query(
-            'CALL close_tankreceipt(' + ttank_id + ');', null, { raw: true }
-        );
-        return receiptTxn;
-    },
+    // finishClosing: (ttank_id) => {
+    //     const receiptTxn = db.sequelize.query(
+    //         'CALL close_tankreceipt(' + ttank_id + ');', null, { raw: true }
+    //     );
+    //     return receiptTxn;
+    // },
+
+
+    finishClosing: async (ttank_id) => {
+
+            // 1️⃣ Get header
+            const header = await TxnTankReceipts.findByPk(ttank_id);
+
+            if (!header) {
+                throw new Error('Tank receipt not found');
+            }
+
+            const locationCode = header.location_code;
+
+            // 2️⃣ Check config
+            const cashflowEnabledRaw = await locationConfigDao.getSetting(
+                locationCode,
+                'CASHFLOW_ENABLED'
+            );
+
+            const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
+
+            // 3️⃣ Call stored procedure (operational close)
+            await db.sequelize.query(
+                `CALL close_tankreceipt(:ttank_id)`,
+                {
+                    replacements: { ttank_id },
+                    type: Sequelize.QueryTypes.RAW
+                }
+            );
+
+            // 4️⃣ Financial close ONLY if cashflow disabled
+            if (!cashflowEnabled) {
+                await TxnTankReceipts.update(
+                    { cashflow_date: new Date() },
+                    { where: { ttank_id } }
+                );
+            }
+
+            return { success: true };
+        },
+
 
     getLocationId: (locationCode) => {
         return Location.findOne({
