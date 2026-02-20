@@ -21,6 +21,7 @@ module.exports = function (sequelize, DataTypes) {
       creation_date: DataTypes.DATE,
       updation_date: DataTypes.DATE,
       receipt_date: DataTypes.DATE,
+      cashflow_date: DataTypes.DATE,
       receipt_date_fmt: {
         type: DataTypes.DATE
       },

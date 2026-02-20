@@ -104,12 +104,15 @@ module.exports = {
     },
 
     closeData: (req, res, next) => {
-        TxnTankRcptDao.finishClosing(req.query.id).then(() => {
-                res.status(200).send({message: 'The decant record is made final.'});
-        }).error((err) => {
-                    res.status(500).send({error: 'Error while closing the Tank Receipt.'});
+     TxnTankRcptDao.finishClosing(req.query.id)
+        .then(() => {
+            res.status(200).send({ message: 'The decant record is made final.' });
+        })
+        .catch((err) => {   // ← change only this
+            console.error(err);
+            res.status(500).send({ error: 'Error while closing the Tank Receipt.' });
         });
-    }
+}
 
 }
 const getDraftsCount = (locationCode) => {

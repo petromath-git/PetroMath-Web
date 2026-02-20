@@ -3,6 +3,8 @@ const CashReceipts = db.credit_receipts;
 const Credit = db.credit;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
+const locationConfigDao = require('../dao/location-config-dao');
+
 
 module.exports = {
     findCreditReceipts: (locationCode, fromDate, toDate) => {
@@ -45,9 +47,33 @@ module.exports = {
           });
         }
     },
-    create: (receipt) => {
-        return CashReceipts.create(receipt)
-    },
+
+    
+    create: async (receipt) => {
+
+    // Apply only for manual receipts (no bank link)
+    if (!receipt.source_txn_id) {
+
+        const locationCode = receipt.location_code;
+
+        const cashflowEnabledRaw = await locationConfigDao.getSetting(
+            locationCode,
+            'CASHFLOW_ENABLED'
+        );
+
+        const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
+
+        // If cashflow process is NOT enabled → auto close
+        if (!cashflowEnabled) {
+            receipt.cashflow_date = new Date();
+        }
+        // else → leave cashflow_date NULL (Day Close will assign)
+    }
+
+    return CashReceipts.create(receipt);
+},
+
+
     update: (receipt) => {
         return CashReceipts.update(receipt, {
             where: {'treceipt_id': receipt.treceipt_id},
