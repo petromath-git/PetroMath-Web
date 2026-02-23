@@ -449,13 +449,14 @@ function setDigitalSalesDateRestrictions() {
     minDate.setDate(minDate.getDate() - backdateDays);
     
     // Calculate max date (closing date + future days)
-    const maxDate = new Date(closingDate);
-    maxDate.setDate(maxDate.getDate() + futureDays);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (maxDate > today) maxDate = today; 
+    let maxDate = new Date(closingDate);
+    maxDate.setDate(maxDate.getDate() + futureDays);   
     
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (maxDate > today) maxDate = today;
+
+
     // Format dates as YYYY-MM-DD for input fields
     const minDateStr = minDate.toISOString().split('T')[0];
     const maxDateStr = maxDate.toISOString().split('T')[0];
