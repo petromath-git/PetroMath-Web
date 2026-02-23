@@ -451,6 +451,10 @@ function setDigitalSalesDateRestrictions() {
     // Calculate max date (closing date + future days)
     const maxDate = new Date(closingDate);
     maxDate.setDate(maxDate.getDate() + futureDays);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (maxDate > today) maxDate = today; 
     
     // Format dates as YYYY-MM-DD for input fields
     const minDateStr = minDate.toISOString().split('T')[0];

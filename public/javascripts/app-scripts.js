@@ -1261,14 +1261,24 @@ function saveCreditSales() {
         const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + creditSaleRow + ']:not([type="hidden"])');
         let newSales = [], updateSales = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+
         salesObj.forEach((saleObj) => {
+            if (hasValidationError) return;
             if (!saleObj.className.includes('-none')) {
                 const saleObjRowNum = saleObj.id.replace(creditSaleRow, '');
                 const saleField = document.getElementById(creditSaleTag + 'amt-' + saleObjRowNum);
                 const hiddenField = document.getElementById(creditSaleTag + saleObjRowNum + '_hiddenId');
                 if (parseFloat(saleField.value) > 0 || (hiddenField.value && parseInt(hiddenField.value) > 0)) {
+
+                    const creditParty = getCreditType(creditSaleTag, saleObjRowNum);
+                    if (!creditParty) {
+                        alert(`Row ${parseInt(saleObjRowNum) + 1}: Please select a customer before saving.`);
+                        hasValidationError = true;
+                        return;
+                    }
+
                     if (hiddenField.value && parseInt(hiddenField.value) > 0) {
-                        // Scenario: Where user clears the value to '0', so just update the data in DB
                         updateSales.push(formCreditSales(hiddenField.value, creditSaleTag, saleObjRowNum, user));
                     } else {
                         newHiddenFieldsArr.push(creditSaleTag + saleObjRowNum);
@@ -1277,6 +1287,12 @@ function saveCreditSales() {
                 }
             }
         });
+
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+
         console.log("New Credit sales data " + JSON.stringify(newSales));
         console.log("Update Credit sales data " + JSON.stringify(updateSales));
         postAjaxNew('new-credit-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'tcredit_id')
@@ -1284,11 +1300,10 @@ function saveCreditSales() {
                 resolve(data);
             });
         if (newSales.length == 0 && updateSales.length == 0) {
-            resolve(true);      // tab click handled in trackMenu()
+            resolve(true);
         }
     });
 }
-
 
 
 

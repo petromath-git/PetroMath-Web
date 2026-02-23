@@ -76,8 +76,7 @@ exports.getVehiclesByCreditlist = async function (req, res, next) {
     }
 };
 
-// Add a new vehicle to the credit party
-// Save a single vehicle and render vehicles page
+
 // exports.saveVehicle = async function (req, res, next) {
 //     try {
 //         const creditlistId = req.body.creditlist_id;
@@ -85,28 +84,8 @@ exports.getVehiclesByCreditlist = async function (req, res, next) {
 //         // Create the vehicle
 //         await CreditVehiclesDao.create(dbMapping.newVehicle(req));
         
-//         // Fetch updated vehicles list
-//         const vehicles = await CreditVehiclesDao.findAll(creditlistId);
-
-//         const vehiclesList = vehicles.map(vehicle => {
-//             return {
-//                 vehicle_id: vehicle.vehicle_id,
-//                 vehicle_number: vehicle.vehicle_number,
-//                 vehicle_type: vehicle.vehicle_type || "N/A",
-//                 created_by: vehicle.created_by,
-//                 updated_by: vehicle.updated_by,
-//                 creation_date: dateFormat(vehicle.creation_date, "yyyy-mm-dd"),
-//                 updation_date: dateFormat(vehicle.updation_date, "yyyy-mm-dd")
-//             };
-//         });
-
-//         // Render the vehicles page with updated data
-//         res.render('vehicles', {
-//             title: 'Vehicles List',
-//             user: req.user,
-//             vehicles: vehiclesList,
-//             creditlist_id: creditlistId
-//         });
+//         // Redirect to the GET route
+//         res.redirect(`/vehicles/${creditlistId}`);
         
 //     } catch (error) {
 //         console.error('Error saving vehicle:', error);
@@ -121,13 +100,22 @@ exports.getVehiclesByCreditlist = async function (req, res, next) {
 exports.saveVehicle = async function (req, res, next) {
     try {
         const creditlistId = req.body.creditlist_id;
-        
-        // Create the vehicle
+
+        // Normalize vehicle number (same logic as DAO create)
+        const rawNumber = req.body.mvehiclenumber_0 || '';
+        const cleanVehicleNumber = rawNumber.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        // Server-side duplicate check
+        const existing = await CreditVehiclesDao.findByNumberAndCustomer(cleanVehicleNumber, creditlistId);
+        if (existing) {
+            req.flash('error', `Vehicle number ${cleanVehicleNumber} already exists for this customer.`);
+            return res.redirect(`/vehicles/${creditlistId}`);
+        }
+
         await CreditVehiclesDao.create(dbMapping.newVehicle(req));
-        
-        // Redirect to the GET route
+        req.flash('success', `Vehicle ${cleanVehicleNumber} added successfully.`);
         res.redirect(`/vehicles/${creditlistId}`);
-        
+
     } catch (error) {
         console.error('Error saving vehicle:', error);
         res.status(500).render('error', {
@@ -136,7 +124,6 @@ exports.saveVehicle = async function (req, res, next) {
         });
     }
 };
-
 
 
 // Update a vehicle's information
