@@ -117,7 +117,7 @@ block content
                                         td.text-right(scope="row") #{val.Price !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Price) : ''}
                                         if showPriceDiscountColumn
                                             td.text-right(scope="row") #{val['Price Discount'] !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val['Price Discount']) : ''}
-                                        td.text-right(scope="row") #{val.Qty !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(val.Qty) : ''}                                                        
+                                        td.text-right(scope="row") #{val.Qty !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Qty) : ''}                                                        
                                         td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
                                         td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
                                         td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
@@ -141,8 +141,49 @@ block content
                                         td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
                                         td &nbsp;                      
                         
-                        div.col-12.text-right E &amp; OE
-                        div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                
+                        div.col-12
+                        
+                            // Vehicle Breakup Addendum
+                            - var saleRows = creditstmt.filter(val => val.Debit !== null)
+                            - var hasVehicleData = saleRows.some(function(val) { return val['Vehicle Number'] && val['Vehicle Number'] !== '' })
+                            if(cidparam != -1 && hasVehicleData && showVehicleBreakup === 'Y')
+                                div.row &nbsp;
+                                hr
+                                h6.font-weight-bold.text-center= "Vehicle Breakup"
+                                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+                                - var vehicleGroups = {}
+                                - var untaggedRows = []
+                                - saleRows.forEach(function(row) { if(!row['Vehicle Number'] || row['Vehicle Number'] === '') { untaggedRows.push(row); } else { if(!vehicleGroups[row['Vehicle Number']]) vehicleGroups[row['Vehicle Number']] = []; vehicleGroups[row['Vehicle Number']].push(row); } })
+                                - if(untaggedRows.length > 0) { vehicleGroups['Untagged'] = untaggedRows; }
+                                each rows, vehicleNo in vehicleGroups
+                                    div.mt-3
+                                        h6.font-weight-bold.text-center= vehicleNo
+                                        table.table.table-bordered.table-sm
+                                            thead.thead-light
+                                                tr
+                                                    th.text-center Date
+                                                    th.text-center Particulars
+                                                    th.text-center Product
+                                                    th.text-right Qty
+                                                    th.text-right Amount (Rs.)
+                                            tbody
+                                                each row in rows
+                                                    tr
+                                                        td.text-center= row.Date
+                                                        td.text-left= row.Particulars
+                                                        td.text-left= row.Product
+                                                        td.text-right= row.Qty !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(row.Qty) : ''
+                                                        td.text-right= row.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(row.Debit) : ''
+                                                - var totalQty = rows.reduce(function(sum, r) { return sum + (parseFloat(r.Qty) || 0); }, 0)
+                                                - var totalAmt = rows.reduce(function(sum, r) { return sum + (parseFloat(r.Debit) || 0); }, 0)
+                                                tr.font-weight-bold.bg-light
+                                                    td &nbsp;
+                                                    td.text-right(colspan=2) Total
+                                                    td.text-right= new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalQty)
+                                                    td.text-right= new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalAmt)
+                            div.row &nbsp;
+                            div.col-12.text-right E &amp; OE
+                            div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                        
         else
             div.row &nbsp;
             div.row.bg-light No Transactions.  
