@@ -1,15 +1,24 @@
 td &nbsp;
-                td 
-                    input(type="hidden" name="caller" value="notpdf")             
-                td
-                td
-                    button.btn.btn-primary.mr-2(type='submit',id='goButton') Go
-                td                    
-                    button.btn.btn-success.mr-2(type='button',onClick='generatePDF(window.location.href,"N")') 
-                        i.bi.bi-cloud-download
-                        |  Download 
-                td                    
-                    
-                    button.btn.btn-info(type='button', onClick='generatePDF(window.location.href,"Y")')
-                        i.bi.bi-printer
-                        |  Print                  
+td 
+    input(type="hidden" name="caller" value="notpdf")             
+td
+td
+    button.btn.btn-primary.mr-2(type='submit', id='goButton') Go
+td                    
+    button.btn.btn-success.mr-2(
+        type='button'
+        onClick='generatePDF(window.location.href,"N")'
+        title='Download PDF'
+        data-toggle='tooltip'
+        data-placement='top'
+    )
+        i.bi.bi-cloud-download
+td                    
+    button.btn.btn-info(
+        type='button'
+        onClick='generatePDF(window.location.href,"Y")'
+        title='Print'
+        data-toggle='tooltip'
+        data-placement='top'
+    )
+        i.bi.bi-printer

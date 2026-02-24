@@ -13,6 +13,12 @@ module.exports = {
         let locationCode = req.user.location_code;
         let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
         let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+
+        const showVehicleBreakup = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'SHOW_VEHICLE_BREAKUP',
+            'N'
+        );
        // let cname = req.body.company_name;
         let cid;
         let route;
@@ -203,7 +209,8 @@ module.exports = {
                         closingbalance: closingBal,
                         cidparam: cid, 
                         totalDebits: totalDebits,
-                        totalCredits: totalCredits
+                        totalCredits: totalCredits,
+                        showVehicleBreakup: showVehicleBreakup,
                       }
 
                     if(caller=='notpdf') {
