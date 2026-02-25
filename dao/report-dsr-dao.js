@@ -24,24 +24,41 @@ module.exports = {
     
        },
 
-    getclosingid: async (locationCode, reportDate) =>{
-    const result = await db.sequelize.query(`SELECT closing_id
-                                                FROM   t_closing tc
-                                                WHERE  tc.location_code = :locationCode
-                                                    AND cashflow_id in (SELECT cashflow_id
-                                                    FROM   t_cashflow_closing tc
-                                                    WHERE  tc.location_code = :locationCode
-                                                        AND Date(tc.cashflow_date) = :reportDate
-                                                        AND closing_status = 'CLOSED')`,                                                   
-                                                    {
-                                                        replacements: { locationCode: locationCode, reportDate: reportDate },
-                                                        type: Sequelize.QueryTypes.SELECT
-                                                      }
+      
 
-       );
-       return result;
+//     getclosingid: async (locationCode, reportDate) =>{
+//     const result = await db.sequelize.query(`SELECT closing_id
+//                                                 FROM   t_closing tc
+//                                                 WHERE  tc.location_code = :locationCode
+//                                                     AND cashflow_id in (SELECT cashflow_id
+//                                                     FROM   t_cashflow_closing tc
+//                                                     WHERE  tc.location_code = :locationCode
+//                                                         AND Date(tc.cashflow_date) = :reportDate
+//                                                         AND closing_status = 'CLOSED')`,                                                   
+//                                                     {
+//                                                         replacements: { locationCode: locationCode, reportDate: reportDate },
+//                                                         type: Sequelize.QueryTypes.SELECT
+//                                                       }
 
-   },
+//        );
+//        return result;
+
+//    },
+
+        getclosingid: async (locationCode, reportDate) => {
+            const result = await db.sequelize.query(
+                `SELECT closing_id
+                FROM t_closing
+                WHERE location_code = :locationCode
+                AND DATE(closing_date) = :reportDate
+                AND closing_status = 'CLOSED'`,
+                {
+                    replacements: { locationCode, reportDate },
+                    type: Sequelize.QueryTypes.SELECT
+                }
+            );
+            return result;
+        },
 
    getreadings: async (locationCode, reportDate) => {
     const data = await module.exports.getclosingid(locationCode,reportDate);
@@ -474,7 +491,8 @@ return result;
     return result;
 
     },
-    getstockreceipt: async (locationCode, reportDate) => {
+    getstockreceipt: async (locationCode, reportDate, cashflowEnabled) => {
+    const dateColumn = cashflowEnabled ? 'tts.cashflow_date' : 'DATE(tts.decant_date)';
         
         const result = await db.sequelize.query(
             
@@ -513,11 +531,10 @@ return result;
                                           0 product
                               FROM
                                   t_tank_stk_rcpt tts
-                              WHERE
-                                  tts.cashflow_date = :cashflow_date
-                              AND tts.location_code = :location_code`    ,                              
-            {
-            replacements: {location_code:locationCode,cashflow_date: reportDate}, 
+                             WHERE ${dateColumn} = :cashflow_date
+              AND tts.location_code = :location_code`,
+        {
+            replacements: { location_code: locationCode, cashflow_date: reportDate },
             type: Sequelize.QueryTypes.SELECT
             }
 
@@ -528,27 +545,24 @@ return result;
         return result;
 
     },     
-    getcreditreceipt: async (locationCode, reportDate) => {
-        
-        const result = await db.sequelize.query(
-                                    `select tr.receipt_no,
-                                            date_format(tr.receipt_date,'%d-%m-%Y') receipt_date,
-                                            COALESCE (mcl.short_name,mcl.company_name) name,
-                                            tr.receipt_type,
-                                            tr.amount,tr.notes
-                                            from t_receipts tr,m_credit_list mcl 
-                                            where 1=1
-                                            and tr.creditlist_id = mcl.creditlist_id
-                                            and tr.location_code = :location_code
-                                            and coalesce(card_flag,'N') <> 'Y'
-                                            and   DATE(tr.cashflow_date) = :cashflow_date`,
-            {
-            replacements: {location_code:locationCode,cashflow_date: reportDate}, 
+   getcreditreceipt: async (locationCode, reportDate, cashflowEnabled) => {
+    const dateColumn = cashflowEnabled ? 'DATE(tr.cashflow_date)' : 'DATE(tr.receipt_date)';
+    const result = await db.sequelize.query(
+        `SELECT tr.receipt_no,
+                date_format(tr.receipt_date,'%d-%m-%Y') receipt_date,
+                COALESCE(mcl.short_name, mcl.company_name) name,
+                tr.receipt_type,
+                tr.amount, tr.notes
+         FROM t_receipts tr, m_credit_list mcl
+         WHERE tr.creditlist_id = mcl.creditlist_id
+           AND tr.location_code = :location_code
+           AND COALESCE(card_flag,'N') <> 'Y'
+           AND ${dateColumn} = :cashflow_date`,
+        {
+            replacements: { location_code: locationCode, cashflow_date: reportDate },
             type: Sequelize.QueryTypes.SELECT
-            }
-    
-    
-        );
+        }
+    );
         
         
         return result;

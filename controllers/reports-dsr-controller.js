@@ -27,6 +27,13 @@ module.exports = {
           'N' // default value if not configured
       );
 
+        // Fetch cashflow enabled config
+        const cashflowEnabledRaw = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CASHFLOW_DSR_STRICT',
+            'false'
+        );
+        const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
       
 
       console.log('getdsrReport: personId:', personId);
@@ -72,7 +79,8 @@ module.exports = {
 
       // First check if there is any closing records for the date 
       const closingPromise= await DsrReportDao.getclosingid(locationCode, fromDate);
-      const dayClosePromise= await DsrReportDao.getDayClose(locationCode, fromDate);
+      const dayClosePromise = cashflowEnabled ? await DsrReportDao.getDayClose(locationCode, fromDate) : [{ closing_id: 1 }];
+
      
       
 
@@ -90,8 +98,8 @@ module.exports = {
       const cardSalesSummaryPromise = DsrReportDao.getcardsalesSummary(locationCode, fromDate);
       const cashSalesSummaryPromise = DsrReportDao.getCashsales(locationCode, fromDate);
       const expensesPromise = DsrReportDao.getexpenses(locationCode, fromDate);
-      const stockReceiptPromise = DsrReportDao.getstockreceipt(locationCode, fromDate);
-      const creditReceiptPromise = DsrReportDao.getcreditreceipt(locationCode, fromDate);
+      const stockReceiptPromise = DsrReportDao.getstockreceipt(locationCode, fromDate, cashflowEnabled);
+      const creditReceiptPromise = DsrReportDao.getcreditreceipt(locationCode, fromDate, cashflowEnabled);
       const shiftSummaryPromise =  DsrReportDao.getshiftsummary(locationCode, fromDate);
       const cashFlowTransPromise =  CashFlowReportDao.getCashflowTrans(locationCode, fromDate);
       const bankTransPromise =  CashFlowReportDao.getBankTransaction(locationCode, fromDate);
