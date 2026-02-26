@@ -1,0 +1,309 @@
+extends layout
+include mixins/mixins
+
+block content
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display:none;")
+        span#messageText
+        button.close(type="button", data-dismiss="alert", aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .customers-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col
+                    h4.mb-0.text-primary Account Heads
+                .col-auto
+                    if canAdd
+                        button.btn.btn-success.btn-sm#addHeadBtn(type="button", data-toggle="modal", data-target="#addHeadModal", style="margin-right:8px;")
+                            i.bi.bi-plus-circle
+                            span.d-none.d-md-inline.ms-1 Add Account Head
+                            span.d-inline.d-md-none.ms-1 Add
+                    button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
+                        i.bi.bi-arrow-clockwise
+                        span.d-none.d-md-inline.ms-1 Refresh
+
+    .customers-container
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(type="text", placeholder="Search by name or type...", autocomplete="off")
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display:none;")
+                            i.bi.bi-x-circle
+
+        //- Desktop Table View
+        .desktop-table-view.d-none.d-lg-block
+            .table-responsive.table-desktop-container
+                table.table.table-hover.table-striped#account-heads-table
+                    thead.thead-dark.sticky-top
+                        tr
+                            th #
+                            th Account Head Name
+                            th Head Type
+                            th Entry Type
+                            th Notes Required
+                            th Active
+                            th Effective From
+                            th Effective To
+                            if canEdit
+                                th Edit
+                            if canDisable
+                                th Deactivate
+                    tbody#tableBody
+                        each head, index in accountHeads
+                            tr.head-row(id=`head-row-${index}`)
+                                th(scope="row")= index + 1
+                                td.searchable= head.account_head_name
+                                td.searchable= head.account_head_type
+                                td
+                                    span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
+                                td= head.notes_required_flag === 'Y' ? 'Yes' : 'No'
+                                td= head.active_flag
+                                td= head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'
+                                td= head.effective_end_date   ? new Date(head.effective_end_date).toLocaleDateString('en-GB')   : '-'
+                                if canEdit
+                                    td
+                                        button.btn.btn-primary.btn-sm.btn-edit-head(
+                                            type="button",
+                                            data-id=head.account_head_id,
+                                            data-name=head.account_head_name,
+                                            data-head-type=head.account_head_type,
+                                            data-entry-type=head.allowed_entry_type,
+                                            data-notes=head.notes_required_flag,
+                                            data-active=head.active_flag,
+                                            data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
+                                            data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
+                                            i.bi.bi-pencil
+                                if canDisable
+                                    td
+                                        button.btn.btn-danger.btn-sm(
+                                            type="button",
+                                            onclick=`confirmDeactivate(${head.account_head_id})`)
+                                            i.bi.bi-trash
+
+        //- Mobile Card View
+        .mobile-cards-view.d-block.d-lg-none
+            .row#mobileCards
+                each head, index in accountHeads
+                    .col-12.mb-3.head-card(id=`head-card-${index}`)
+                        .card.shadow-sm
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                h6.mb-0.text-uppercase= head.account_head_name
+                                .actions
+                                    if canEdit
+                                        button.btn.btn-primary.btn-sm.me-1.btn-edit-head(
+                                            type="button",
+                                            data-id=head.account_head_id,
+                                            data-name=head.account_head_name,
+                                            data-head-type=head.account_head_type,
+                                            data-entry-type=head.allowed_entry_type,
+                                            data-notes=head.notes_required_flag,
+                                            data-active=head.active_flag,
+                                            data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
+                                            data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
+                                            i.bi.bi-pencil
+                                    if canDisable
+                                        button.btn.btn-danger.btn-sm(
+                                            type="button",
+                                            onclick=`confirmDeactivate(${head.account_head_id})`)
+                                            i.bi.bi-trash
+                            .card-body.p-2
+                                p.mb-1
+                                    b Head Type: 
+                                    = head.account_head_type
+                                p.mb-1
+                                    b Entry Type: 
+                                    span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
+                                p.mb-1
+                                    b Notes Required: 
+                                    = head.notes_required_flag === 'Y' ? 'Yes' : 'No'
+                                p.mb-1
+                                    b Active: 
+                                    = head.active_flag
+                                p.mb-1
+                                    b Effective: 
+                                    = `${head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'} to ${head.effective_end_date ? new Date(head.effective_end_date).toLocaleDateString('en-GB') : '-'}`
+
+    //- Add Modal
+    .modal.fade#addHeadModal(tabindex="-1", role="dialog", aria-hidden="true")
+        .modal-dialog.modal-md(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Add Account Head
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#addHeadForm(method='POST', action='/account-heads')
+                        .form-group
+                            label.form-label Account Head Name *
+                            input.form-control(
+                                type="text",
+                                name="account_head_name",
+                                required,
+                                style="text-transform:uppercase;",
+                                autocomplete="off")
+                        .form-group
+                            label.form-label Head Type *
+                            select.form-control(name="account_head_type", required)
+                                option(value="") Select...
+                                option(value="EXPENSE") EXPENSE
+                                option(value="INCOME") INCOME
+                                option(value="ADJUSTMENT") ADJUSTMENT
+                                option(value="OTHER") OTHER
+                        .form-group
+                            label.form-label Entry Type *
+                            select.form-control(name="allowed_entry_type", required)
+                                option(value="") Select...
+                                option(value="DEBIT") DEBIT
+                                option(value="CREDIT") CREDIT
+                                option(value="BOTH") BOTH
+                        .form-group
+                            label.form-label Notes Required
+                            select.form-control(name="notes_required_flag")
+                                option(value="N") No
+                                option(value="Y") Yes
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="submit", form="addHeadForm") Save
+
+    //- Edit Modal
+    .modal.fade#editHeadModal(tabindex="-1", role="dialog", aria-hidden="true")
+        .modal-dialog.modal-md(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Account Head
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editHeadForm(method='POST', action='/account-heads/update')
+                        input(type="hidden", name="account_head_id", id="edit_account_head_id")
+                        .form-group
+                            label.form-label Account Head Name *
+                            input.form-control(
+                                type="text",
+                                name="account_head_name",
+                                id="edit_account_head_name",
+                                required,
+                                style="text-transform:uppercase;",
+                                autocomplete="off")
+                        .form-group
+                            label.form-label Head Type *
+                            select.form-control(name="account_head_type", id="edit_account_head_type", required)
+                                option(value="EXPENSE") EXPENSE
+                                option(value="INCOME") INCOME
+                                option(value="ADJUSTMENT") ADJUSTMENT
+                                option(value="OTHER") OTHER
+                        .form-group
+                            label.form-label Entry Type *
+                            select.form-control(name="allowed_entry_type", id="edit_allowed_entry_type", required)
+                                option(value="DEBIT") DEBIT
+                                option(value="CREDIT") CREDIT
+                                option(value="BOTH") BOTH
+                        .form-group
+                            label.form-label Notes Required
+                            select.form-control(name="notes_required_flag", id="edit_notes_required_flag")
+                                option(value="N") No
+                                option(value="Y") Yes
+                        .form-group
+                            label.form-label Active
+                            select.form-control(name="active_flag", id="edit_active_flag")
+                                option(value="Y") Yes
+                                option(value="N") No
+                        .form-group
+                            label.form-label Effective From
+                            input.form-control(type="date", name="effective_start_date", id="edit_effective_start_date")
+                        .form-group
+                            label.form-label Effective To
+                            input.form-control(type="date", name="effective_end_date", id="edit_effective_end_date")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="editHeadForm") Update
+
+    //- Hidden deactivate form (POST-based, no DELETE fetch needed)
+    form#deactivateForm(method="POST", action="" style="display:none;")
+        input(type="hidden", name="_method", value="DELETE")
+
+    style.
+        .customers-header-sticky { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 1px solid #dee2e6; }
+        .customers-container { padding: 1rem; }
+        .input-group-text { background-color: #f8f9fa; border-right: 0; }
+        #clearSearch { border-left: 0; }
+        table.table th, table.table td { vertical-align: middle !important; }
+
+    script.
+        function showMessage(msg, type) {
+            const a = document.getElementById('messageAlert');
+            const tx = document.getElementById('messageText');
+            a.className = `alert alert-${type} alert-dismissible fade show`;
+            tx.textContent = msg;
+            a.style.display = 'block';
+            setTimeout(() => {
+                a.classList.remove('show');
+                setTimeout(() => a.style.display = 'none', 150);
+            }, 3000);
+        }
+
+        // Edit reads from data attributes to avoid JSON/quote escaping issues
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-edit-head');
+            if (!btn) return;
+            const d = btn.dataset;
+            document.getElementById('edit_account_head_id').value      = d.id;
+            document.getElementById('edit_account_head_name').value    = d.name;
+            document.getElementById('edit_account_head_type').value    = d.headType;
+            document.getElementById('edit_allowed_entry_type').value   = d.entryType;
+            document.getElementById('edit_notes_required_flag').value  = d.notes;
+            document.getElementById('edit_active_flag').value          = d.active;
+            document.getElementById('edit_effective_start_date').value = d.start;
+            document.getElementById('edit_effective_end_date').value   = d.end;
+            $('#editHeadModal').modal('show');
+        });
+
+        function confirmDeactivate(id) {
+            if (confirm('Are you sure you want to deactivate this account head?')) {
+                const form = document.getElementById('deactivateForm');
+                form.action = `/account-heads/${id}/deactivate`;
+                form.submit();
+            }
+        }
+
+        // Search filtering
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput  = document.getElementById('searchInput');
+            const clearBtn     = document.getElementById('clearSearch');
+            const rows         = document.querySelectorAll('#tableBody tr.head-row');
+            const cards        = document.querySelectorAll('.head-card');
+
+            searchInput.addEventListener('input', function () {
+                const term = this.value.toLowerCase().trim();
+                clearBtn.style.display = term ? 'block' : 'none';
+
+                rows.forEach(row => {
+                    const text = Array.from(row.querySelectorAll('.searchable'))
+                        .map(el => el.textContent.toLowerCase()).join(' ');
+                    row.style.display = text.includes(term) ? '' : 'none';
+                });
+
+                cards.forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    card.style.display = text.includes(term) ? '' : 'none';
+                });
+            });
+
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                clearBtn.style.display = 'none';
+                rows.forEach(r  => r.style.display = '');
+                cards.forEach(c => c.style.display = '');
+            });
+
+            document.getElementById('refreshDataBtn').addEventListener('click', () => location.reload());
+
+            // Flash messages from server
+            const flash = !{JSON.stringify(messages || {})};
+            if (flash.success) showMessage(flash.success, 'success');
+            if (flash.error)   showMessage(flash.error,   'danger');
+        });

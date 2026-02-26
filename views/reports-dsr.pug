@@ -1,6 +1,29 @@
 extends layout
 
 block content
+    style.
+        .draft-watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 120px;
+            font-weight: bold;
+            color: rgba(255, 0, 0, 0.15);
+            pointer-events: none;
+            z-index: 9999;
+            white-space: nowrap;
+            user-select: none;
+        }
+        @media print {
+            .draft-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(-45deg);
+                color: rgba(255, 0, 0, 0.15);
+            }
+        }
     form(method='POST' action='/reports-dsr')
         script.
             
@@ -203,7 +226,7 @@ block content
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);
                 document.getElementById('cardsale-table-container').innerHTML = renderTable(cardSalesSummaryFromServer,'Digital Sales',['Date','Amount'],"col-sm-8 mx-auto");
-                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount']);
+                document.getElementById('cashsale-table-container').innerHTML = renderTable(cashSalesFromServer,'Lubes & Others',['Quantity','Price','Discount','Amount','Type']);
                 document.getElementById('expense-table-container').innerHTML = renderTable(expenseFromServer,'Expenses',['Amount'],"col-sm-8 mx-auto");
                 document.getElementById('shiftsummary-table-container').innerHTML = renderTransposedTable(shiftSummaryFromServer,'Cashier Shift Summary',[],"col-sm-8 mx-auto");
                 document.getElementById('stockreceipt-table-container').innerHTML = renderTable(stockReceiptFromServer,'Stock Receipt',['Invoice Amount']);
@@ -284,7 +307,10 @@ block content
         h4.font-weight-bold.text-center= "Day Close Report "                                                                 
         h4.font-weight-bold.text-center= formattedFromClosingDate                
         h4.font-weight-bold.text-success.text-center                           
-    if(closingData == 'Available')                
+    if(closingData == 'Available') 
+        if isDraft
+            div.draft-watermark DRAFT
+        div.row               
         div.row        
             div.col-md-8
                 div.row &nbsp;                
