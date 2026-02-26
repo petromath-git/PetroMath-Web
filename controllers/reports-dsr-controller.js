@@ -29,15 +29,18 @@ module.exports = {
 
         // Fetch cashflow enabled config
         const cashflowEnabledRaw = await locationConfig.getLocationConfigValue(
-            locationCode,
-            'CASHFLOW_DSR_STRICT',
-            'false'
+            locationCode, 'CASHFLOW_ENABLED', 'true'
         );
         const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
+
+        const cashflowDsrStrictRaw = await locationConfig.getLocationConfigValue(
+            locationCode, 'CASHFLOW_DSR_STRICT', 'false'
+        );
+        const cashflowDsrStrict = String(cashflowDsrStrictRaw).toLowerCase() === 'true';
+
+
       
-
-      console.log('getdsrReport: personId:', personId);
-
+       
 
       let fromDate = dateFormat(new Date(), "yyyy-mm-dd");   
       const closingDate = new Date(req.body.fromClosingDate); // Convert to a Date object   
@@ -76,13 +79,32 @@ module.exports = {
        });
      });
       
+     const closingPromise = await DsrReportDao.getclosingid(locationCode, fromDate);
 
-      // First check if there is any closing records for the date 
-      const closingPromise= await DsrReportDao.getclosingid(locationCode, fromDate);
-      const dayClosePromise = cashflowEnabled ? await DsrReportDao.getDayClose(locationCode, fromDate) : [{ closing_id: 1 }];
+      let dayClosePromise = [];
+      let isDraft = false;
 
-     
-      
+      if (!cashflowEnabled) {
+          // Cashflow not used — always allow DSR
+          dayClosePromise = [{ closing_id: 1 }];
+      } else {
+          // Cashflow is enabled — check if a CLOSED cashflow exists
+          dayClosePromise = await DsrReportDao.getDayClose(locationCode, fromDate);
+          if (dayClosePromise.length === 0) {
+              if (cashflowDsrStrict) {
+                  // Strict mode — block DSR if no closed cashflow
+                  dayClosePromise = [];
+              } else {
+                  // Non-strict — allow DSR with DRAFT watermark
+                  isDraft = true;
+                  dayClosePromise = [{ closing_id: 1 }];
+              }
+          }
+      }      
+            
+
+              
+
 
       if(dayClosePromise && dayClosePromise.length>0 && closingPromise && closingPromise.length > 0)
       {
@@ -660,7 +682,9 @@ module.exports = {
         skippedReadingsList: skippedReadingsList,
         creditSummaryTitle: (dayOfMonth === 15 || dayOfMonth === lastDayOfMonth) 
         ? 'Credit Customer Balances (All Customers)' 
-        : 'Credit Customer Balances (Top 3)'  // Pass title dynamically
+        : 'Credit Customer Balances (Top 3)' , // Pass title dynamically
+        isDraft: isDraft,
+        cashflowEnabled: cashflowEnabled,
       }
     }else
     {
