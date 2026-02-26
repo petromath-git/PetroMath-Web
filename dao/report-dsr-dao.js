@@ -404,69 +404,73 @@ getDigitalSales: async (locationCode, reportDate) => {
     return result;
 }
     ,
-  getCashsales: async (locationCode, reportDate) => {
-    const data =  await module.exports.getclosingid(locationCode,reportDate);
+getCashsales: async (locationCode, reportDate) => {
+    const data = await module.exports.getclosingid(locationCode, reportDate);
     const closing_id = data.map(item => item.closing_id);
-    
-const result = await db.sequelize.query(
-    `select mp.product_name,sum(tc.qty) qty,tc.price,tc.qty*tc.price_discount discount,sum(amount) amt
-                                              from t_cashsales tc,m_product mp 
-                                              where 1=1
-                                              and   tc.product_id = mp.product_id
-                                              and   tc.closing_id in (:closing_id)
-                                              AND mp.product_name NOT IN (
-                                                    SELECT DISTINCT mp2.product_code
-                                                    FROM t_reading tr
-                                                    JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
-                                                    WHERE tr.closing_id = tc.closing_id
-                                                )
-                                              group by mp.product_name,tc.price,discount
-                                              union all
-                                              SELECT mp.product_name product_name,
-                                                    SUM((given_qty-returned_qty)) qty,
-                                                    CASE 
-                                                        WHEN :locationCode IN ('MC','MUE','MC2','MME') 
-                                                        THEN (SELECT price 
-                                                                FROM m_product 
-                                                                WHERE product_name = 'DSR - OIL' 
-                                                                AND location_code = mp.location_code)
-                                                        ELSE tc.price
-                                                    END AS price,
-                                                    0,
-                                                    SUM((given_qty-returned_qty) * 
-                                                        CASE 
-                                                            WHEN :locationCode IN ('MC','MUE','MC2','MME') 
-                                                            THEN (SELECT price 
-                                                                    FROM m_product 
-                                                                    WHERE product_name = 'DSR - OIL' 
-                                                                    AND location_code = mp.location_code)
-                                                            ELSE tc.price
-                                                        END
-                                                    ) AS amt
-                                                FROM t_2toil tc
-                                                JOIN m_product mp ON tc.product_id = mp.product_id
-                                                WHERE upper(mp.product_name) = '2T LOOSE'
-                                                AND tc.closing_id in (:closing_id)
-                                                GROUP BY mp.product_name, price
-                                            union all
-                                            select mp.product_name product_name,sum((given_qty-returned_qty)) qty,tc.price,0,sum((given_qty-returned_qty)*tc.price) amt 
-                                               from t_2toil tc,
-                                                    m_product mp
-                                              where tc.product_id = mp.product_id
-                                              and upper(mp.product_name) = '2T POUCH'
-                                              and tc.closing_id in (:closing_id)
-                                              group by mp.product_name,mp.price`,
-    {
-    replacements: {locationCode: locationCode,closing_id: closing_id}, 
-    type: Sequelize.QueryTypes.SELECT
-    }
 
+    const result = await db.sequelize.query(
+        `SELECT mp.product_name, SUM(tc.qty) qty, tc.price, tc.qty*tc.price_discount discount, SUM(amount) amt, 'Cash' AS type
+           FROM t_cashsales tc, m_product mp
+          WHERE tc.product_id = mp.product_id
+            AND tc.closing_id IN (:closing_id)
+            AND mp.product_name NOT IN (
+                SELECT DISTINCT mp2.product_code
+                  FROM t_reading tr
+                  JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
+                 WHERE tr.closing_id = tc.closing_id
+            )
+          GROUP BY mp.product_name, tc.price, discount
+         UNION ALL
+         SELECT mp.product_name,
+                SUM((given_qty-returned_qty)) qty,
+                CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
+                     THEN (SELECT price FROM m_product WHERE product_name = 'DSR - OIL' AND location_code = mp.location_code)
+                     ELSE tc.price
+                END AS price,
+                0,
+                SUM((given_qty-returned_qty) *
+                    CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
+                         THEN (SELECT price FROM m_product WHERE product_name = 'DSR - OIL' AND location_code = mp.location_code)
+                         ELSE tc.price
+                    END
+                ) AS amt,
+                'Cash' AS type
+           FROM t_2toil tc
+           JOIN m_product mp ON tc.product_id = mp.product_id
+          WHERE UPPER(mp.product_name) = '2T LOOSE'
+            AND tc.closing_id IN (:closing_id)
+          GROUP BY mp.product_name, price
+         UNION ALL
+         SELECT mp.product_name, SUM((given_qty-returned_qty)) qty, tc.price, 0,
+                SUM((given_qty-returned_qty)*tc.price) amt, 'Cash' AS type
+           FROM t_2toil tc, m_product mp
+          WHERE tc.product_id = mp.product_id
+            AND UPPER(mp.product_name) = '2T POUCH'
+            AND tc.closing_id IN (:closing_id)
+          GROUP BY mp.product_name, mp.price
+         UNION ALL
+         SELECT mp.product_name, SUM(tc.qty) qty, tc.price,
+                ROUND(SUM(tc.price_discount * tc.qty), 2) discount,
+                ROUND(SUM(tc.amount), 2) amt, 'Credit' AS type
+           FROM t_credits tc
+           JOIN m_product mp ON tc.product_id = mp.product_id
+           JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+          WHERE tc.closing_id IN (:closing_id)
+            AND IFNULL(mcl.card_flag, 'N') != 'Y'
+            AND mp.product_name NOT IN (
+                SELECT DISTINCT mp2.product_code
+                  FROM t_reading tr
+                  JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
+                 WHERE tr.closing_id IN (:closing_id)
+            )
+          GROUP BY mp.product_name, tc.price`,
+        {
+            replacements: { locationCode: locationCode, closing_id: closing_id },
+            type: Sequelize.QueryTypes.SELECT
+        }
+    );
 
-);
-
-
-return result;
-
+    return result;
 },
     getexpenses: async (locationCode, reportDate) => {
         const data =  await module.exports.getclosingid(locationCode,reportDate);

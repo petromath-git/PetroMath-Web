@@ -415,29 +415,29 @@ module.exports = {
 
       
 
-      cashSalesData.forEach((cashSales) => {
+    cashSalesData.forEach((cashSales) => {
 
-        totalCashSales += parseFloat(cashSales.amt);
+    totalCashSales += parseFloat(cashSales.amt);
 
-        CashSaleslist.push({
-           Product: cashSales.product_name,
-           Quantity: cashSales.qty,
-           Price: cashSales.price,
-           Discount: cashSales.discount,
-           Amount: cashSales.amt,
-        });
-      });
+    CashSaleslist.push({
+       Product: cashSales.product_name,
+       Quantity: cashSales.qty,
+       Price: cashSales.price,
+       Discount: cashSales.discount,
+       Amount: cashSales.amt,
+       Type: cashSales.type,
+    });
+  });
 
-        // Push the total amount after the loop
-        CashSaleslist.push({
-          Product: 'Total',
-          Quantity: '-',
-          Price: '-',
-          Discount: '-',
-          Amount: totalCashSales,
-        }); 
-
-
+    CashSaleslist.push({
+      Product: 'Total',
+      Quantity: '-',
+      Price: '-',
+      Discount: '-',
+      Amount: totalCashSales,
+      Type: '-',
+    });
+    
       let totalExpenses = 0; 
       // Process expenses data
       expensesData.forEach((expense) => {
