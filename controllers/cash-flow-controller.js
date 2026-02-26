@@ -7,9 +7,27 @@ const appCache = require("../utils/app-cache");
 
 module.exports = {
     getCashFlowHome: (req, res, next) => {
-        gatherCashflowClosings(req.query.cashflow_fromDate, req.query.cashflow_toDate, req.user,
-            res, next, {});
-    },
+    const fromDate = req.query.cashflow_fromDate;
+    const toDate = req.query.cashflow_toDate;
+
+    if (fromDate && toDate) {
+        gatherCashflowClosings(fromDate, toDate, req.user, res, next, {});
+    } else {
+        cashflowDao.findLatestCashflowDate(req.user.location_code).then(result => {
+            const latestDate = (result && result[0] && result[0].latest_date) 
+                ? result[0].latest_date 
+                : utils.currentDate();
+            
+            const fromDateDefault = new Date(latestDate);
+            fromDateDefault.setDate(fromDateDefault.getDate() - 4);
+            const fromDateStr = dateFormat(fromDateDefault, 'yyyy-mm-dd');
+            
+            gatherCashflowClosings(fromDateStr, latestDate, req.user, res, next, {});
+        }).catch(err => {
+            gatherCashflowClosings(utils.currentDate(), utils.currentDate(), req.user, res, next, {});
+        });
+    }
+},
     getCashFlowEntry: (req, res, next) => {
     cashflowDao.findCashflow(req.user.location_code, req.query.id).then(data => {
         if (data) {

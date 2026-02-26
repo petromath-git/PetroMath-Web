@@ -32,6 +32,18 @@ module.exports = {
             order: [Sequelize.literal('cashflow_date')]
         });
     },
+
+    findLatestCashflowDate: (locationCode) => {
+        return db.sequelize.query(
+            `SELECT DATE_FORMAT(MAX(cashflow_date), '%Y-%m-%d') as latest_date 
+            FROM t_cashflow_closing 
+            WHERE location_code = :locationCode`,
+            {
+                replacements: { locationCode },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+    },
     // check if cash flow for a specific date is available
     findCashflowClosingsWithSpecificDate: (locationCode, cashflowDate) => {
         return CashFlowClosing.findAll({
