@@ -205,7 +205,11 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
                     const [day, month, year] = v.split('/');
                     return `20${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                 }
-                break;    
+                break;  
+             case 'YYYY-MM-DD':
+                // 2026-02-01 → already correct (BPCL SAP)
+                if (v.match(/^\d{4}-\d{2}-\d{2}$/)) return v;
+                break;              
         }
     }
     
@@ -287,6 +291,56 @@ function formatDateForDisplay(dateStr) {
     }
     return dateStr;
 }
+
+
+// ========== HTML-XLS Detection & Parser (for SAP downloads e.g. BPCL) ==========
+
+function isHtmlFile(buffer) {
+    const start = buffer.slice(0, 200).toString('utf8').trimStart().toLowerCase();
+    return start.startsWith('<html') || start.startsWith('<!doctype html');
+}
+
+function parseHtmlXlsToData(buffer) {
+    const html = buffer.toString('utf8');
+    const rows = [];
+    let currentRow = null;
+    let currentCell = '';
+    let inCell = false;
+
+    const decode = (s) => s
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n));
+
+    const tagRegex = /<(\/?)([a-zA-Z]+)[^>]*>|([^<]+)/g;
+    let match;
+
+    while ((match = tagRegex.exec(html)) !== null) {
+        const isClosing = match[1] === '/';
+        const tag = (match[2] || '').toLowerCase();
+        const text = match[3];
+
+        if (text !== undefined && inCell) {
+            currentCell += text;
+        } else if (tag === 'tr' && !isClosing) {
+            currentRow = [];
+        } else if (tag === 'tr' && isClosing) {
+            if (currentRow && currentRow.length > 0) rows.push(currentRow);
+            currentRow = null;
+        } else if ((tag === 'td' || tag === 'th') && !isClosing) {
+            inCell = true;
+            currentCell = '';
+        } else if ((tag === 'td' || tag === 'th') && isClosing) {
+            if (currentRow !== null) currentRow.push(decode(currentCell.trim()));
+            inCell = false;
+        }
+    }
+
+    return rows;
+}
+
 
 /**
  * Validate that uploaded file is for the correct bank account
@@ -473,10 +527,16 @@ previewTransactions: async (req, res) => {
             });
         }
 
-        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+        let data;
+        if (isHtmlFile(req.file.buffer)) {
+            console.log('HTML-XLS detected (SAP download), using HTML parser');
+            data = parseHtmlXlsToData(req.file.buffer);
+        } else {
+            const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+        }
 
         // ========== STEP 1: Parse all dates first to find earliest date ==========
         const tempDates = [];
@@ -591,6 +651,8 @@ previewTransactions: async (req, res) => {
                 row[columnToIndex(template.value_date_column || template.date_column)],
                 template.date_format  // ← Pass the format from template
             );
+
+            if (!txnDate) continue;  // skip opening/closing balance and summary rows
             
             if (excludeToday && txnDate > yesterdayStr) {
                 excludedTodayCount.push(txnDate);
