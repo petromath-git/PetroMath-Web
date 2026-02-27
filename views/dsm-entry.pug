@@ -1,0 +1,556 @@
+doctype html
+html(lang='en')
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+    title Credit Entry · PetroMath
+    link(rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css')
+    link(rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css')
+  body
+    style.
+        body {
+            background: #f0f2f5;
+        }
+
+        .dsm-header {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: white;
+            padding: 12px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .dsm-header .logout-link {
+            font-size: 12px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            padding: 4px 8px;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 8px;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+
+        .dsm-header .logout-link:hover {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            text-decoration: none;
+        }
+            margin: 0;
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .dsm-header .shift-badge {
+            font-size: 11px;
+            background: rgba(255,255,255,0.2);
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-top: 3px;
+            display: inline-block;
+        }
+
+        .dsm-container {
+            padding: 14px;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .form-card {
+            background: white;
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+
+        .form-card .card-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6c757d;
+            margin-bottom: 14px;
+        }
+
+        .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .form-control, .form-select {
+            font-size: 16px;
+            height: 50px;
+            border-radius: 10px;
+            border: 1.5px solid #dee2e6;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
+        }
+
+        .btn-save {
+            width: 100%;
+            height: 52px;
+            font-size: 17px;
+            font-weight: 700;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            border: none;
+            color: white;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-save:disabled {
+            opacity: 0.6;
+        }
+
+        .product-btn {
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 15px;
+            font-weight: 600;
+            background: white;
+            color: #333;
+            width: 100%;
+            text-align: left;
+            margin-bottom: 8px;
+            transition: all 0.15s ease;
+        }
+
+        .product-btn.selected {
+            border-color: #1a73e8;
+            background: #e8f0fe;
+            color: #1a73e8;
+        }
+
+        .product-btn .product-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .no-shift-card {
+            background: white;
+            border-radius: 14px;
+            padding: 36px 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-top: 20px;
+        }
+
+        .no-shift-card .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .entries-section .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6c757d;
+            margin-bottom: 10px;
+            padding: 0 2px;
+        }
+
+        .entry-card {
+            background: white;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .entry-card .entry-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .entry-card .entry-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .entry-card .entry-customer {
+            font-size: 14px;
+            font-weight: 600;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .entry-card .entry-meta {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+
+        .entry-card .entry-shift {
+            color: #adb5bd;
+            font-size: 11px;
+        }
+
+        .entry-card .entry-amount {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1a73e8;
+            white-space: nowrap;
+        }
+
+        .entry-card .btn-delete {
+            background: none;
+            border: none;
+            color: #dc3545;
+            padding: 4px 6px;
+            font-size: 16px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .toast-msg {
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 12px 18px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        select option:disabled {
+            color: #aaa;
+        }
+
+        #vehicleGroup {
+            transition: opacity 0.2s ease;
+        }
+
+    .dsm-header
+        div
+            h5 Credit Entry
+            if activeClosing
+                span.shift-badge Shift ##{activeClosing.closing_id} · Active
+        a.logout-link(href='/logout') Logout
+
+    if !activeClosing
+        .dsm-container
+            .no-shift-card
+                .icon ⏸️
+                h6.fw-bold.text-secondary No Active Shift
+                p.text-muted.mb-0 You don't have an active shift at this location. Please ask your manager to create a shift for you.
+
+    else
+        .dsm-container
+
+            //- Entry Form
+            .form-card
+                .card-title New Entry
+
+                //- Product selection
+                .mb-3
+                    label.form-label Product *
+                    #productButtons
+                        each product in products
+                            button.product-btn(
+                                type='button'
+                                data-product-id=product.product_id
+                                data-product-name=product.product_name
+                                data-color=product.rgb_color || '#6c757d'
+                                data-price=product.price || 0
+                            )
+                                span.product-dot(style=`background:${product.rgb_color || '#6c757d'}`)
+                                | #{product.product_name}
+
+                //- Customer
+                .mb-3
+                    label.form-label(for='customerSelect') Customer *
+                    select#customerSelect.form-control
+                        option(value='') Select Customer
+                        each credit in credits
+                            option(value=credit.creditlist_id) #{credit.Company_Name}
+
+                //- Vehicle (loads dynamically)
+                .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
+                    label.form-label(for='vehicleSelect') Vehicle
+                    select#vehicleSelect.form-control
+                        option(value='') Select Vehicle
+
+                //- Qty and Amount
+                .input-row.mb-3
+                    div
+                        label.form-label(for='qtyInput') Qty (L) *
+                        input#qtyInput.form-control(
+                            type='number'
+                            inputmode='decimal'
+                            placeholder='0.00'
+                            min='0.001'
+                            step='0.001'
+                        )
+                    div
+                        label.form-label(for='amountInput') Amount (₹) *
+                        input#amountInput.form-control(
+                            type='number'
+                            inputmode='decimal'
+                            placeholder='0.00'
+                            min='0.01'
+                            step='0.01'
+                        )
+
+                button#btnSave.btn.btn-save(type='button' disabled) Save Entry
+
+            //- Today's entries
+            .entries-section
+                .section-title Today's Entries
+                #entriesList
+                    if entries && entries.length > 0
+                        each entry in entries
+                            .entry-card(data-id=entry.tcredit_id)
+                                span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                                .entry-info
+                                    .entry-customer= entry.Company_Name
+                                    .entry-meta
+                                        | #{entry.product_name}
+                                        if entry.vehicle_number
+                                            |  · #{entry.vehicle_number}
+                                        |  · #{entry.qty} L
+                                        span.entry-shift  · Shift ##{entry.closing_id}
+                                .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                                button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
+                    else
+                        p.text-muted.text-center.py-3(style='font-size:14px') No entries yet for this shift.
+
+        //- Toast notification
+        .toast-container
+            #toastMsg.toast-msg(style='display:none')
+
+    script.
+        const pageData = !{pageData};
+
+        let selectedProductId = null;
+        let selectedProductPrice = 0;
+
+        // Product button selection
+        document.querySelectorAll('.product-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedProductId = this.dataset.productId;
+                selectedProductPrice = parseFloat(this.dataset.price) || 0;
+                // Recalculate if a value already entered
+                const qty = parseFloat(document.getElementById('qtyInput').value);
+                const amt = parseFloat(document.getElementById('amountInput').value);
+                if (qty > 0 && selectedProductPrice > 0) {
+                    document.getElementById('amountInput').value = (qty * selectedProductPrice).toFixed(2);
+                } else if (amt > 0 && selectedProductPrice > 0) {
+                    document.getElementById('qtyInput').value = (amt / selectedProductPrice).toFixed(3);
+                }
+                checkFormReady();
+            });
+        });
+
+        // Customer change — load vehicles
+        const customerSelect = document.getElementById('customerSelect');
+        const vehicleGroup = document.getElementById('vehicleGroup');
+        const vehicleSelect = document.getElementById('vehicleSelect');
+
+        customerSelect.addEventListener('change', async function() {
+            const creditlistId = this.value;
+            vehicleSelect.innerHTML = '<option value="">Select Vehicle</option>';
+            vehicleGroup.style.opacity = '0.4';
+            vehicleGroup.style.pointerEvents = 'none';
+
+            if (!creditlistId) {
+                checkFormReady();
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/dsm-entry/vehicles/${creditlistId}`);
+                const data = await resp.json();
+                if (data.success && data.vehicles.length > 0) {
+                    data.vehicles.forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.vehicle_id;
+                        opt.textContent = v.vehicle_number + (v.vehicle_type ? ` (${v.vehicle_type})` : '');
+                        vehicleSelect.appendChild(opt);
+                    });
+                    vehicleGroup.style.opacity = '1';
+                    vehicleGroup.style.pointerEvents = 'auto';
+                }
+            } catch(e) {
+                console.error('Vehicle load error:', e);
+            }
+            checkFormReady();
+        });
+
+        // Form validation — qty OR amount is enough (other auto-calculates)
+        function checkFormReady() {
+            const qty = parseFloat(document.getElementById('qtyInput').value);
+            const amt = parseFloat(document.getElementById('amountInput').value);
+            const ready = selectedProductId &&
+                          customerSelect.value &&
+                          (qty > 0 || amt > 0);
+            document.getElementById('btnSave').disabled = !ready;
+        }
+
+        // Qty entered — calculate amount
+        document.getElementById('qtyInput')?.addEventListener('input', function() {
+            const qty = parseFloat(this.value);
+            if (qty > 0 && selectedProductPrice > 0) {
+                document.getElementById('amountInput').value = (qty * selectedProductPrice).toFixed(2);
+            }
+            checkFormReady();
+        });
+
+        // Amount entered — calculate qty
+        document.getElementById('amountInput')?.addEventListener('input', function() {
+            const amt = parseFloat(this.value);
+            if (amt > 0 && selectedProductPrice > 0) {
+                document.getElementById('qtyInput').value = (amt / selectedProductPrice).toFixed(3);
+            }
+            checkFormReady();
+        });
+
+        // Save entry
+        document.getElementById('btnSave')?.addEventListener('click', async function() {
+            this.disabled = true;
+            this.textContent = 'Saving...';
+
+            const body = {
+                product_id:   selectedProductId,
+                creditlist_id: customerSelect.value,
+                vehicle_id:   vehicleSelect.value || null,
+                qty:          document.getElementById('qtyInput').value,
+                amount:       document.getElementById('amountInput').value
+            };
+
+            try {
+                const resp = await fetch('/dsm-entry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    showToast('Entry saved!', 'success');
+                    resetForm();
+                    renderEntries(data.entries);
+                } else {
+                    showToast(data.message || 'Save failed.', 'danger');
+                }
+            } catch(e) {
+                showToast('Network error. Try again.', 'danger');
+            }
+
+            this.textContent = 'Save Entry';
+            checkFormReady();
+        });
+
+        // Delete entry
+        document.getElementById('entriesList')?.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-delete');
+            if (!btn) return;
+
+            const tcreditId = btn.dataset.id;
+            if (!confirm('Delete this entry?')) return;
+
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch(`/dsm-entry/${tcreditId}`, { method: 'DELETE' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    showToast('Entry deleted.', 'success');
+                    renderEntries(data.entries);
+                } else {
+                    showToast(data.message || 'Delete failed.', 'danger');
+                    btn.disabled = false;
+                }
+            } catch(e) {
+                showToast('Network error. Try again.', 'danger');
+                btn.disabled = false;
+            }
+        });
+
+        // Render entries list
+        function renderEntries(entries) {
+            const list = document.getElementById('entriesList');
+            if (!entries || entries.length === 0) {
+                list.innerHTML = '<p class="text-muted text-center py-3" style="font-size:14px">No entries yet for this shift.</p>';
+                return;
+            }
+
+            list.innerHTML = entries.map(e => `
+                <div class="entry-card" data-id="${e.tcredit_id}">
+                    <span class="entry-dot" style="background:${e.rgb_color || '#6c757d'}"></span>
+                    <div class="entry-info">
+                        <div class="entry-customer">${e.Company_Name}</div>
+                        <div class="entry-meta">
+                            ${e.product_name}${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L<span class="entry-shift"> · Shift #${e.closing_id}</span>
+                        </div>
+                    </div>
+                    <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
+                    <button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>
+                </div>
+            `).join('');
+        }
+
+        // Reset form after save
+        function resetForm() {
+            selectedProductId = null;
+            selectedProductPrice = 0;
+            document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
+            customerSelect.value = '';
+            vehicleSelect.innerHTML = '<option value="">Select Vehicle</option>';
+            vehicleGroup.style.opacity = '0.4';
+            vehicleGroup.style.pointerEvents = 'none';
+            document.getElementById('qtyInput').value = '';
+            document.getElementById('amountInput').value = '';
+        }
+
+        // Toast
+        function showToast(message, type) {
+            const toast = document.getElementById('toastMsg');
+            toast.textContent = message;
+            toast.style.background = type === 'success' ? '#198754' : '#dc3545';
+            toast.style.color = 'white';
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+    script(src='https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js')
+    script(src='https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js')
