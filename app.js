@@ -387,6 +387,7 @@ app.use('/campaigns', campaignRoutes);
 app.use('/campaign', campaignPublicRoutes);
 app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
+app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 
 
 
@@ -455,6 +456,9 @@ app.get('/login', function (req, res) {
 app.get('/', isLoginEnsured, function (req, res) {
     if(req.user.Role === 'Customer') {
         res.redirect('/home-customer');    
+    }
+    if (req.user.Role === 'Cashier') {
+        return res.redirect('/dsm-entry');
     }
     res.redirect('/home');
 });
@@ -1116,6 +1120,10 @@ app.post('/login', function(req, res, next) {
 		                 return; // Redirect happened, stop processing
 		            }	
 
+            // Cashier goes directly to credit entry page
+            if (user.Role === 'Cashier') {
+                return res.redirect('/dsm-entry');
+            }            
 
              // Check if the user is a superuser
              if (user.Role === 'SuperUser') {
