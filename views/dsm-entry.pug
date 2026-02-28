@@ -242,6 +242,12 @@ html(lang='en')
             flex-shrink: 0;
         }
 
+        .entry-card .entry-locked {
+            font-size: 14px;
+            flex-shrink: 0;
+            opacity: 0.5;
+        }
+
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -511,7 +517,10 @@ html(lang='en')
                                         |  · #{entry.qty} L
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
-                                button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
+                                if entry.closing_status === 'DRAFT'
+                                    button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
+                                else
+                                    span.entry-locked(title='Shift closed — cannot delete') 🔒
                     else
                         p.text-muted.text-center.py-3(style='font-size:14px') No entries yet for this shift.
 
@@ -825,7 +834,10 @@ html(lang='en')
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
                     <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
-                    <button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>
+                    ${e.closing_status === 'DRAFT'
+                        ? `<button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>`
+                        : `<span class="entry-locked" title="Shift closed — cannot delete">🔒</span>`
+                    }
                 </div>
             `).join('');
         }

@@ -79,9 +79,9 @@ module.exports = {
 
         const result = await db.sequelize.query(`
             INSERT INTO t_credits
-                (closing_id, creditlist_id, vehicle_id, product_id, price, qty, amount, bill_no, notes, created_by, creation_date, updation_date)
+                (closing_id, creditlist_id, vehicle_id, product_id, price, price_discount, qty, amount, bill_no, notes, created_by, creation_date, updation_date)
             VALUES
-                (:closingId, :creditlistId, :vehicleId, :productId, :price, :qty, :amount, :billNo, :notes, :createdBy, NOW(), NOW())
+                (:closingId, :creditlistId, :vehicleId, :productId, :price, 0, :qty, :amount, :billNo, :notes, :createdBy, NOW(), NOW())
         `, {
             replacements: {
                 closingId:    data.closing_id,
@@ -111,6 +111,7 @@ module.exports = {
                 tc.bill_no,
                 tc.notes,
                 tc.creation_date,
+                cl.closing_status,
                 mp.product_name,
                 mp.rgb_color,
                 mcl.Company_Name,
