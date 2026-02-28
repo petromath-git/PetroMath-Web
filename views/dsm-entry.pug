@@ -41,9 +41,17 @@ html(lang='en')
             color: white;
             text-decoration: none;
         }
+
+        .dsm-header h5 {
             margin: 0;
             font-size: 17px;
             font-weight: 600;
+        }
+
+        .dsm-header .cashier-name {
+            font-size: 12px;
+            opacity: 0.85;
+            margin-top: 2px;
         }
 
         .dsm-header .shift-badge {
@@ -139,6 +147,15 @@ html(lang='en')
             border-radius: 50%;
             display: inline-block;
             margin-right: 8px;
+        }
+
+        .dsm-warning {
+            background: #fff3cd;
+            color: #856404;
+            font-size: 13px;
+            padding: 10px 16px;
+            border-bottom: 1px solid #ffc107;
+            line-height: 1.4;
         }
 
         .no-shift-card {
@@ -257,14 +274,129 @@ html(lang='en')
             transition: opacity 0.2s ease;
         }
 
+        .vehicle-search-wrap {
+            position: relative;
+        }
+
+        .vehicle-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1.5px solid #1a73e8;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .vehicle-dropdown .vehicle-option {
+            padding: 12px 14px;
+            font-size: 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .vehicle-dropdown .vehicle-option:last-child {
+            border-bottom: none;
+        }
+
+        .vehicle-dropdown .vehicle-option:hover,
+        .vehicle-dropdown .vehicle-option.highlighted {
+            background: #e8f0fe;
+            color: #1a73e8;
+        }
+
+        .vehicle-dropdown .no-results {
+            padding: 12px 14px;
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .vehicle-selected-tag {
+            margin-top: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #e8f0fe;
+            color: #1a73e8;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .vehicle-selected-tag .clear-vehicle {
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            color: #1a73e8;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .vehicle-input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .vehicle-input-row .form-control {
+            flex: 1;
+        }
+
+        .btn-scan {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            border: 1.5px solid #dee2e6;
+            background: white;
+            color: #1a73e8;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-scan:hover {
+            background: #e8f0fe;
+            border-color: #1a73e8;
+        }
+
+        .btn-scan.scanning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+
+        #scanStatus {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #6c757d;
+            min-height: 18px;
+        }
+
+        #scanStatus.error { color: #dc3545; }
+        #scanStatus.success { color: #198754; }
+
     .dsm-header
         div
             h5 Credit Entry
+            .cashier-name #{user.Person_Name}
             if activeClosing
                 span.shift-badge Shift ##{activeClosing.closing_id} · Active
         a.logout-link(href='/logout') Logout
 
-    if !activeClosing
+    if activeClosing && activeClosing.multipleDrafts
+        .dsm-warning
+            | ⚠️ You have #{activeClosing.draftCount} open shifts. Entries are going to the latest one (Shift ##{activeClosing.closing_id}). Ask your manager to close the older shifts.
         .dsm-container
             .no-shift-card
                 .icon ⏸️
@@ -301,11 +433,43 @@ html(lang='en')
                         each credit in credits
                             option(value=credit.creditlist_id) #{credit.Company_Name}
 
-                //- Vehicle (loads dynamically)
+                //- Vehicle smart search
                 .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
-                    label.form-label(for='vehicleSelect') Vehicle
-                    select#vehicleSelect.form-control
-                        option(value='') Select Vehicle
+                    label.form-label Vehicle
+                    .vehicle-search-wrap
+                        .vehicle-input-row
+                            input#vehicleSearch.form-control(
+                                type='text'
+                                placeholder='Type to search vehicle...'
+                                autocomplete='off'
+                            )
+                            button#btnScanPlate.btn-scan(type='button' title='Scan number plate')
+                                i.bi.bi-camera
+                        #vehicleDropdown.vehicle-dropdown(style='display:none')
+                    input#vehicleId(type='hidden' value='')
+                    #vehicleSelected.vehicle-selected-tag(style='display:none')
+                    //- Hidden camera input
+                    input#cameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+                    //- Scan status
+                    #scanStatus(style='display:none')
+
+                //- Bill No and Notes
+                .input-row.mb-3
+                    div
+                        label.form-label(for='billNoInput') Bill No
+                        input#billNoInput.form-control(
+                            type='text'
+                            placeholder='Optional'
+                            maxlength='50'
+                            value='0'
+                        )
+                    div
+                        label.form-label(for='notesInput') Notes
+                        input#notesInput.form-control(
+                            type='text'
+                            placeholder='Optional'
+                            maxlength='100'
+                        )
 
                 //- Qty and Amount
                 .input-row.mb-3
@@ -380,40 +544,174 @@ html(lang='en')
             });
         });
 
-        // Customer change — load vehicles
+        // Customer change — load vehicles into memory for smart search
         const customerSelect = document.getElementById('customerSelect');
         const vehicleGroup = document.getElementById('vehicleGroup');
-        const vehicleSelect = document.getElementById('vehicleSelect');
+        const vehicleSearch = document.getElementById('vehicleSearch');
+        const vehicleDropdown = document.getElementById('vehicleDropdown');
+        const vehicleIdInput = document.getElementById('vehicleId');
+        const vehicleSelectedTag = document.getElementById('vehicleSelected');
+
+        let loadedVehicles = []; // all vehicles for selected customer
 
         customerSelect.addEventListener('change', async function() {
             const creditlistId = this.value;
-            vehicleSelect.innerHTML = '<option value="">Select Vehicle</option>';
+
+            // Reset vehicle
+            fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
 
-            if (!creditlistId) {
-                checkFormReady();
-                return;
-            }
+            if (!creditlistId) { checkFormReady(); return; }
 
             try {
                 const resp = await fetch(`/dsm-entry/vehicles/${creditlistId}`);
                 const data = await resp.json();
                 if (data.success && data.vehicles.length > 0) {
-                    data.vehicles.forEach(v => {
-                        const opt = document.createElement('option');
-                        opt.value = v.vehicle_id;
-                        opt.textContent = v.vehicle_number + (v.vehicle_type ? ` (${v.vehicle_type})` : '');
-                        vehicleSelect.appendChild(opt);
-                    });
+                    loadedVehicles = data.vehicles;
                     vehicleGroup.style.opacity = '1';
                     vehicleGroup.style.pointerEvents = 'auto';
+                } else {
+                    loadedVehicles = [];
                 }
             } catch(e) {
                 console.error('Vehicle load error:', e);
+                loadedVehicles = [];
             }
             checkFormReady();
         });
+
+        // Smart search — filter loaded vehicles
+        vehicleSearch.addEventListener('focus', function() {
+            showVehicleDropdown(this.value.trim());
+        });
+
+        vehicleSearch.addEventListener('input', function() {
+            vehicleIdInput.value = '';
+            vehicleSelectedTag.style.display = 'none';
+            showVehicleDropdown(this.value.trim());
+        });
+
+        function showVehicleDropdown(term) {
+            if (!loadedVehicles.length) return;
+
+            const matches = term
+                ? loadedVehicles.filter(v =>
+                    v.vehicle_number.toLowerCase().includes(term.toLowerCase()) ||
+                    (v.vehicle_type && v.vehicle_type.toLowerCase().includes(term.toLowerCase()))
+                  )
+                : loadedVehicles;
+
+            if (matches.length === 0) {
+                vehicleDropdown.innerHTML = '<div class="no-results">No matching vehicles</div>';
+            } else {
+                vehicleDropdown.innerHTML = matches.map(v => `
+                    <div class="vehicle-option" data-id="${v.vehicle_id}" data-number="${v.vehicle_number}">
+                        ${v.vehicle_number}${v.vehicle_type ? ' <span style="color:#6c757d;font-size:13px">(' + v.vehicle_type + ')</span>' : ''}
+                    </div>
+                `).join('');
+            }
+            vehicleDropdown.style.display = 'block';
+        }
+
+        // Select a vehicle from dropdown
+        vehicleDropdown.addEventListener('click', function(e) {
+            const opt = e.target.closest('.vehicle-option');
+            if (!opt) return;
+            vehicleIdInput.value = opt.dataset.id;
+            vehicleSearch.value = '';
+            vehicleDropdown.style.display = 'none';
+            vehicleSelectedTag.innerHTML = `${opt.dataset.number} <button class="clear-vehicle" type="button">✕</button>`;
+            vehicleSelectedTag.style.display = 'inline-flex';
+            checkFormReady();
+        });
+
+        // Clear selected vehicle
+        vehicleSelectedTag.addEventListener('click', function(e) {
+            if (e.target.closest('.clear-vehicle')) {
+                resetVehicle();
+                vehicleSearch.focus();
+                showVehicleDropdown('');
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!vehicleGroup.contains(e.target)) vehicleDropdown.style.display = 'none';
+        });
+
+        function resetVehicle() {
+            // Clear selection only — keep loadedVehicles intact so search still works
+            vehicleIdInput.value = '';
+            vehicleSearch.value = '';
+            vehicleDropdown.style.display = 'none';
+            vehicleSelectedTag.style.display = 'none';
+            vehicleSelectedTag.innerHTML = '';
+        }
+
+        function fullResetVehicle() {
+            // Full reset including loaded data — used when customer changes
+            loadedVehicles = [];
+            resetVehicle();
+        }
+
+        // Number plate scan via camera + Tesseract OCR
+        const btnScanPlate = document.getElementById('btnScanPlate');
+        const cameraInput  = document.getElementById('cameraInput');
+        const scanStatus   = document.getElementById('scanStatus');
+
+        btnScanPlate.addEventListener('click', function() {
+            cameraInput.value = ''; // reset so same file can be re-selected
+            cameraInput.click();
+        });
+
+        cameraInput.addEventListener('change', async function() {
+            const file = this.files[0];
+            if (!file) return;
+
+            // Show scanning state
+            btnScanPlate.classList.add('scanning');
+            btnScanPlate.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            showScanStatus('Scanning plate...', '');
+            scanStatus.style.display = 'block';
+
+            try {
+                const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+                    logger: () => {}
+                });
+
+                // Clean OCR text — keep only alphanumeric, uppercase
+                const cleaned = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+
+                // Try to extract Indian number plate pattern (e.g. TN26AC2345)
+                const plateMatch = cleaned.match(/[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}/);
+                const result = plateMatch ? plateMatch[0] : cleaned.substring(0, 10);
+
+                if (result.length >= 4) {
+                    vehicleSearch.value = result;
+                    showVehicleDropdown(result);
+                    showScanStatus(`Read: ${result}`, 'success');
+                } else {
+                    showScanStatus('Could not read plate. Try again.', 'error');
+                }
+
+            } catch (err) {
+                console.error('OCR error:', err);
+                showScanStatus('Scan failed. Type manually.', 'error');
+            }
+
+            btnScanPlate.classList.remove('scanning');
+            btnScanPlate.innerHTML = '<i class="bi bi-camera"></i>';
+        });
+
+        function showScanStatus(msg, type) {
+            scanStatus.textContent = msg;
+            scanStatus.className = type;
+            scanStatus.style.display = 'block';
+            if (type === 'success') {
+                setTimeout(() => { scanStatus.style.display = 'none'; }, 3000);
+            }
+        }
 
         // Form validation — qty OR amount is enough (other auto-calculates)
         function checkFormReady() {
@@ -449,11 +747,13 @@ html(lang='en')
             this.textContent = 'Saving...';
 
             const body = {
-                product_id:   selectedProductId,
+                product_id:    selectedProductId,
                 creditlist_id: customerSelect.value,
-                vehicle_id:   vehicleSelect.value || null,
-                qty:          document.getElementById('qtyInput').value,
-                amount:       document.getElementById('amountInput').value
+                vehicle_id:    vehicleIdInput.value || null,
+                qty:           document.getElementById('qtyInput').value,
+                amount:        document.getElementById('amountInput').value,
+                bill_no:       document.getElementById('billNoInput').value.trim() || null,
+                notes:         document.getElementById('notesInput').value.trim() || null
             };
 
             try {
@@ -522,6 +822,7 @@ html(lang='en')
                         <div class="entry-meta">
                             ${e.product_name}${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L<span class="entry-shift"> · Shift #${e.closing_id}</span>
                         </div>
+                        ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
                     <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
                     <button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>
@@ -535,11 +836,13 @@ html(lang='en')
             selectedProductPrice = 0;
             document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
             customerSelect.value = '';
-            vehicleSelect.innerHTML = '<option value="">Select Vehicle</option>';
+            fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
             document.getElementById('qtyInput').value = '';
             document.getElementById('amountInput').value = '';
+            document.getElementById('billNoInput').value = '0';
+            document.getElementById('notesInput').value = '';
         }
 
         // Toast
@@ -552,5 +855,6 @@ html(lang='en')
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
         }
 
+    script(src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js')
     script(src='https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js')
     script(src='https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js')

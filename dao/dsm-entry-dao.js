@@ -2,21 +2,26 @@ const db = require("../db/db-connection");
 
 module.exports = {
 
-    // Get the active (OPEN) closing for this cashier at their location
+    // Get the active (DRAFT) closing for this cashier — returns latest, flags if multiple exist
     getActiveClosing: async (cashierId, locationCode) => {
-        const result = await db.sequelize.query(`
+        const results = await db.sequelize.query(`
             SELECT closing_id, closing_date, closing_status
             FROM t_closing
             WHERE cashier_id = :cashierId
               AND location_code = :locationCode
               AND closing_status = 'DRAFT'
             ORDER BY closing_date DESC
-            LIMIT 1
         `, {
             replacements: { cashierId, locationCode },
             type: db.Sequelize.QueryTypes.SELECT
         });
-        return result[0] || null;
+
+        if (!results.length) return null;
+
+        const active = results[0];
+        active.multipleDrafts = results.length > 1;
+        active.draftCount = results.length;
+        return active;
     },
 
     // Get tank products for this location
@@ -63,19 +68,31 @@ module.exports = {
 
     // Save a new credit entry to t_credits
     saveEntry: async (data) => {
+        // Fetch product price server-side — do not trust client
+        const priceResult = await db.sequelize.query(`
+            SELECT price FROM m_product WHERE product_id = :productId LIMIT 1
+        `, {
+            replacements: { productId: data.product_id },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        const price = priceResult.length ? parseFloat(priceResult[0].price) || 0 : 0;
+
         const result = await db.sequelize.query(`
             INSERT INTO t_credits
-                (closing_id, creditlist_id, vehicle_id, product_id, qty, amount, created_by, creation_date, updation_date)
+                (closing_id, creditlist_id, vehicle_id, product_id, price, qty, amount, bill_no, notes, created_by, creation_date, updation_date)
             VALUES
-                (:closingId, :creditlistId, :vehicleId, :productId, :qty, :amount, :createdBy, NOW(), NOW())
+                (:closingId, :creditlistId, :vehicleId, :productId, :price, :qty, :amount, :billNo, :notes, :createdBy, NOW(), NOW())
         `, {
             replacements: {
                 closingId:    data.closing_id,
                 creditlistId: data.creditlist_id,
                 vehicleId:    data.vehicle_id || null,
                 productId:    data.product_id,
+                price:        price,
                 qty:          data.qty,
                 amount:       data.amount,
+                billNo:       data.bill_no && data.bill_no.trim() !== '' ? data.bill_no.trim() : null,
+                notes:        data.notes && data.notes.trim() !== '' ? data.notes.trim() : null,
                 createdBy:    data.created_by
             },
             type: db.Sequelize.QueryTypes.INSERT
@@ -91,6 +108,8 @@ module.exports = {
                 tc.closing_id,
                 tc.qty,
                 tc.amount,
+                tc.bill_no,
+                tc.notes,
                 tc.creation_date,
                 mp.product_name,
                 mp.rgb_color,
