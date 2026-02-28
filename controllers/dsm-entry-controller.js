@@ -67,7 +67,7 @@ module.exports = {
             const locationCode = user.location_code;
             const cashierId = user.Person_id;
 
-            const { creditlist_id, vehicle_id, product_id, qty, amount } = req.body;
+            const { creditlist_id, vehicle_id, product_id, qty, amount, bill_no, notes } = req.body;
 
             // Validate required fields
             if (!creditlist_id || !product_id || !qty || !amount) {
@@ -91,6 +91,8 @@ module.exports = {
                 product_id:    parseInt(product_id),
                 qty:           parseFloat(qty),
                 amount:        parseFloat(amount),
+                bill_no:       bill_no || null,
+                notes:         notes || null,
                 created_by:    user.User_Name
             });
 
