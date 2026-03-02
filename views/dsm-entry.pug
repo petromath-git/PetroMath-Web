@@ -276,6 +276,40 @@ html(lang='en')
             color: #aaa;
         }
 
+        .search-mode-toggle {
+            display: flex;
+            gap: 8px;
+        }
+
+        .toggle-pill {
+            flex: 1;
+            padding: 10px;
+            border-radius: 20px;
+            border: 1.5px solid #dee2e6;
+            background: white;
+            color: #6c757d;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .toggle-pill.active {
+            background: #1a73e8;
+            border-color: #1a73e8;
+            color: white;
+            font-weight: 600;
+        }
+
+        .customer-auto-badge {
+            background: #e8f0fe;
+            color: #1a73e8;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px 14px;
+            border-radius: 10px;
+        }
+
         #vehicleGroup {
             transition: opacity 0.2s ease;
         }
@@ -400,16 +434,33 @@ html(lang='en')
                 span.shift-badge Shift ##{activeClosing.closing_id} · Active
         a.logout-link(href='/logout') Logout
 
-    if activeClosing && activeClosing.multipleDrafts
-        .dsm-warning
-            | ⚠️ You have #{activeClosing.draftCount} open shifts. Entries are going to the latest one (Shift ##{activeClosing.closing_id}). Ask your manager to close the older shifts.
+    if !activeClosing
         .dsm-container
             .no-shift-card
                 .icon ⏸️
                 h6.fw-bold.text-secondary No Active Shift
                 p.text-muted.mb-0 You don't have an active shift at this location. Please ask your manager to create a shift for you.
+            if entries && entries.length > 0
+                .entries-section
+                    .section-title Today's Entries
+                    each entry in entries
+                        .entry-card(data-id=entry.tcredit_id)
+                            span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                            .entry-info
+                                .entry-customer= entry.Company_Name
+                                .entry-meta
+                                    | #{entry.product_name}
+                                    if entry.vehicle_number
+                                        |  · #{entry.vehicle_number}
+                                    |  · #{entry.qty} L
+                                    span.entry-shift  · Shift ##{entry.closing_id}
+                            .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                            span.entry-locked(title='Shift closed — cannot delete') 🔒
 
     else
+        if activeClosing.multipleDrafts
+            .dsm-warning
+                | ⚠️ You have #{activeClosing.draftCount} open shifts. Entries are going to the latest one (Shift ##{activeClosing.closing_id}). Ask your manager to close the older shifts.
         .dsm-container
 
             //- Entry Form
@@ -431,33 +482,59 @@ html(lang='en')
                                 span.product-dot(style=`background:${product.rgb_color || '#6c757d'}`)
                                 | #{product.product_name}
 
-                //- Customer
+                //- Search mode toggle
                 .mb-3
-                    label.form-label(for='customerSelect') Customer *
-                    select#customerSelect.form-control
-                        option(value='') Select Customer
-                        each credit in credits
-                            option(value=credit.creditlist_id) #{credit.Company_Name}
+                    .search-mode-toggle
+                        button#toggleCustomer.toggle-pill.active(type='button') By Customer
+                        button#toggleVehicle.toggle-pill(type='button') By Vehicle
 
-                //- Vehicle smart search
-                .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
-                    label.form-label Vehicle
-                    .vehicle-search-wrap
-                        .vehicle-input-row
-                            input#vehicleSearch.form-control(
-                                type='text'
-                                placeholder='Type to search vehicle...'
-                                autocomplete='off'
-                            )
-                            button#btnScanPlate.btn-scan(type='button' title='Scan number plate')
-                                i.bi.bi-camera
-                        #vehicleDropdown.vehicle-dropdown(style='display:none')
-                    input#vehicleId(type='hidden' value='')
-                    #vehicleSelected.vehicle-selected-tag(style='display:none')
-                    //- Hidden camera input
-                    input#cameraInput(type='file' accept='image/*' capture='environment' style='display:none')
-                    //- Scan status
-                    #scanStatus(style='display:none')
+                //- CUSTOMER FIRST MODE
+                #modeCustomer
+                    .mb-3
+                        label.form-label(for='customerSelect') Customer *
+                        select#customerSelect.form-control
+                            option(value='') Select Customer
+                            each credit in credits
+                                option(value=credit.creditlist_id) #{credit.Company_Name}
+
+                    .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
+                        label.form-label Vehicle
+                        .vehicle-search-wrap
+                            .vehicle-input-row
+                                input#vehicleSearch.form-control(
+                                    type='text'
+                                    placeholder='Type to search vehicle...'
+                                    autocomplete='off'
+                                )
+                                button#btnScanPlate.btn-scan(type='button' title='Scan number plate')
+                                    i.bi.bi-camera
+                            #vehicleDropdown.vehicle-dropdown(style='display:none')
+                        input#vehicleId(type='hidden' value='')
+                        #vehicleSelected.vehicle-selected-tag(style='display:none')
+                        input#cameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+                        #scanStatus(style='display:none')
+
+                //- VEHICLE FIRST MODE
+                #modeVehicle(style='display:none')
+                    .mb-3
+                        label.form-label Vehicle *
+                        .vehicle-search-wrap
+                            .vehicle-input-row
+                                input#allVehicleSearch.form-control(
+                                    type='text'
+                                    placeholder='Type to search vehicle...'
+                                    autocomplete='off'
+                                )
+                                button#btnScanPlateAlt.btn-scan(type='button' title='Scan number plate')
+                                    i.bi.bi-camera
+                            #allVehicleDropdown.vehicle-dropdown(style='display:none')
+                        input#allVehicleId(type='hidden' value='')
+                        input#allCreditlistId(type='hidden' value='')
+                        #allVehicleSelected.vehicle-selected-tag(style='display:none')
+                        input#cameraInputAlt(type='file' accept='image/*' capture='environment' style='display:none')
+                    .mb-3#allCustomerDisplay(style='display:none')
+                        label.form-label Customer
+                        .customer-auto-badge#allCustomerName
 
                 //- Bill No and Notes
                 .input-row.mb-3
@@ -553,6 +630,165 @@ html(lang='en')
             });
         });
 
+        // Search mode toggle
+        let searchMode = 'customer'; // 'customer' or 'vehicle'
+        let allVehiclesLoaded = pageData.allVehicles || [];
+
+        document.getElementById('toggleCustomer').addEventListener('click', function() {
+            if (searchMode === 'customer') return;
+            searchMode = 'customer';
+            this.classList.add('active');
+            document.getElementById('toggleVehicle').classList.remove('active');
+            document.getElementById('modeCustomer').style.display = '';
+            document.getElementById('modeVehicle').style.display = 'none';
+            resetAllVehicleMode();
+            checkFormReady();
+        });
+
+        document.getElementById('toggleVehicle').addEventListener('click', function() {
+            if (searchMode === 'vehicle') return;
+            searchMode = 'vehicle';
+            this.classList.add('active');
+            document.getElementById('toggleCustomer').classList.remove('active');
+            document.getElementById('modeCustomer').style.display = 'none';
+            document.getElementById('modeVehicle').style.display = '';
+            // Reset customer-first fields only
+            customerSelect.value = '';
+            fullResetVehicle();
+            vehicleGroup.style.opacity = '0.4';
+            vehicleGroup.style.pointerEvents = 'none';
+            checkFormReady();
+        });
+
+        // Vehicle-first mode search
+        const allVehicleSearch   = document.getElementById('allVehicleSearch');
+        const allVehicleDropdown = document.getElementById('allVehicleDropdown');
+        const allVehicleId       = document.getElementById('allVehicleId');
+        const allCreditlistId    = document.getElementById('allCreditlistId');
+        const allVehicleSelected = document.getElementById('allVehicleSelected');
+        const allCustomerDisplay = document.getElementById('allCustomerDisplay');
+        const allCustomerName    = document.getElementById('allCustomerName');
+
+        allVehicleSearch.addEventListener('focus', function() {
+            showAllVehicleDropdown(this.value.trim());
+        });
+
+        allVehicleSearch.addEventListener('input', function() {
+            allVehicleId.value = '';
+            allCreditlistId.value = '';
+            allVehicleSelected.style.display = 'none';
+            allCustomerDisplay.style.display = 'none';
+            showAllVehicleDropdown(this.value.trim());
+            checkFormReady();
+        });
+
+        function showAllVehicleDropdown(term) {
+            if (!allVehiclesLoaded.length) return;
+            const matches = term
+                ? allVehiclesLoaded.filter(v =>
+                    v.vehicle_number.toLowerCase().includes(term.toLowerCase()) ||
+                    (v.vehicle_type && v.vehicle_type.toLowerCase().includes(term.toLowerCase()))
+                  )
+                : allVehiclesLoaded;
+
+            if (matches.length === 0) {
+                allVehicleDropdown.innerHTML = `
+                    <div class="no-results">
+                        No vehicle found.
+                        <a href="#" id="switchToCustomer" style="color:#1a73e8;text-decoration:underline;display:block;margin-top:4px">Switch to Customer mode</a>
+                    </div>`;
+                // Switch to customer mode link
+                setTimeout(() => {
+                    const link = document.getElementById('switchToCustomer');
+                    if (link) link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        document.getElementById('toggleCustomer').click();
+                    });
+                }, 50);
+            } else {
+                allVehicleDropdown.innerHTML = matches.map(v => `
+                    <div class="vehicle-option"
+                        data-id="${v.vehicle_id}"
+                        data-number="${v.vehicle_number}"
+                        data-creditlist="${v.creditlist_id}"
+                        data-customer="${v.Company_Name}">
+                        ${v.vehicle_number}${v.vehicle_type ? ' <span style="color:#6c757d;font-size:13px">(' + v.vehicle_type + ')</span>' : ''}
+                        <div style="font-size:12px;color:#6c757d">${v.Company_Name}</div>
+                    </div>
+                `).join('');
+            }
+            allVehicleDropdown.style.display = 'block';
+        }
+
+        allVehicleDropdown.addEventListener('click', function(e) {
+            const opt = e.target.closest('.vehicle-option');
+            if (!opt) return;
+            allVehicleId.value     = opt.dataset.id;
+            allCreditlistId.value  = opt.dataset.creditlist;
+            allVehicleSearch.value = '';
+            allVehicleDropdown.style.display = 'none';
+            allVehicleSelected.innerHTML = `${opt.dataset.number} <button class="clear-vehicle" type="button">✕</button>`;
+            allVehicleSelected.style.display = 'inline-flex';
+            allCustomerName.textContent = opt.dataset.customer;
+            allCustomerDisplay.style.display = '';
+            checkFormReady();
+        });
+
+        allVehicleSelected.addEventListener('click', function(e) {
+            if (e.target.closest('.clear-vehicle')) {
+                resetAllVehicleMode();
+                allVehicleSearch.focus();
+                setTimeout(() => showAllVehicleDropdown(''), 50);
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!document.getElementById('modeVehicle').contains(e.target)) {
+                allVehicleDropdown.style.display = 'none';
+            }
+        });
+
+        function resetAllVehicleMode() {
+            allVehicleId.value = '';
+            allCreditlistId.value = '';
+            allVehicleSearch.value = '';
+            allVehicleDropdown.style.display = 'none';
+            allVehicleSelected.style.display = 'none';
+            allVehicleSelected.innerHTML = '';
+            allCustomerDisplay.style.display = 'none';
+            allCustomerName.textContent = '';
+        }
+
+        // Scan for vehicle-first mode
+        const btnScanPlateAlt = document.getElementById('btnScanPlateAlt');
+        const cameraInputAlt  = document.getElementById('cameraInputAlt');
+
+        btnScanPlateAlt.addEventListener('click', function() {
+            cameraInputAlt.value = '';
+            cameraInputAlt.click();
+        });
+
+        cameraInputAlt.addEventListener('change', async function() {
+            const file = this.files[0];
+            if (!file) return;
+            btnScanPlateAlt.classList.add('scanning');
+            btnScanPlateAlt.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            try {
+                const { data: { text } } = await Tesseract.recognize(file, 'eng', { logger: () => {} });
+                const cleaned = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                const plateMatch = cleaned.match(/[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}/);
+                const result = plateMatch ? plateMatch[0] : cleaned.substring(0, 10);
+                if (result.length >= 4) {
+                    allVehicleSearch.value = result;
+                    showAllVehicleDropdown(result);
+                }
+            } catch(e) {
+                console.error('OCR error:', e);
+            }
+            btnScanPlateAlt.classList.remove('scanning');
+            btnScanPlateAlt.innerHTML = '<i class="bi bi-camera"></i>';
+        });
+
         // Customer change — load vehicles into memory for smart search
         const customerSelect = document.getElementById('customerSelect');
         const vehicleGroup = document.getElementById('vehicleGroup');
@@ -563,7 +799,7 @@ html(lang='en')
 
         let loadedVehicles = []; // all vehicles for selected customer
 
-        customerSelect.addEventListener('change', async function() {
+        customerSelect.addEventListener('change', function() {
             const creditlistId = this.value;
 
             // Reset vehicle
@@ -573,19 +809,11 @@ html(lang='en')
 
             if (!creditlistId) { checkFormReady(); return; }
 
-            try {
-                const resp = await fetch(`/dsm-entry/vehicles/${creditlistId}`);
-                const data = await resp.json();
-                if (data.success && data.vehicles.length > 0) {
-                    loadedVehicles = data.vehicles;
-                    vehicleGroup.style.opacity = '1';
-                    vehicleGroup.style.pointerEvents = 'auto';
-                } else {
-                    loadedVehicles = [];
-                }
-            } catch(e) {
-                console.error('Vehicle load error:', e);
-                loadedVehicles = [];
+            // Filter from already-loaded vehicles — no API call needed
+            loadedVehicles = allVehiclesLoaded.filter(v => String(v.creditlist_id) === String(creditlistId));
+            if (loadedVehicles.length > 0) {
+                vehicleGroup.style.opacity = '1';
+                vehicleGroup.style.pointerEvents = 'auto';
             }
             checkFormReady();
         });
@@ -722,13 +950,17 @@ html(lang='en')
             }
         }
 
-        // Form validation — qty OR amount is enough (other auto-calculates)
+        // Form validation — handles both modes
         function checkFormReady() {
             const qty = parseFloat(document.getElementById('qtyInput').value);
             const amt = parseFloat(document.getElementById('amountInput').value);
-            const ready = selectedProductId &&
-                          customerSelect.value &&
-                          (qty > 0 || amt > 0);
+            let customerReady = false;
+            if (searchMode === 'customer') {
+                customerReady = !!customerSelect.value;
+            } else {
+                customerReady = !!allCreditlistId.value;
+            }
+            const ready = selectedProductId && customerReady && (qty > 0 || amt > 0);
             document.getElementById('btnSave').disabled = !ready;
         }
 
@@ -757,8 +989,8 @@ html(lang='en')
 
             const body = {
                 product_id:    selectedProductId,
-                creditlist_id: customerSelect.value,
-                vehicle_id:    vehicleIdInput.value || null,
+                creditlist_id: searchMode === 'customer' ? customerSelect.value : allCreditlistId.value,
+                vehicle_id:    searchMode === 'customer' ? (vehicleIdInput.value || null) : (allVehicleId.value || null),
                 qty:           document.getElementById('qtyInput').value,
                 amount:        document.getElementById('amountInput').value,
                 bill_no:       document.getElementById('billNoInput').value.trim() || null,
@@ -847,10 +1079,14 @@ html(lang='en')
             selectedProductId = null;
             selectedProductPrice = 0;
             document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
+            // Reset customer mode
             customerSelect.value = '';
             fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
+            // Reset vehicle mode
+            resetAllVehicleMode();
+            allCustomerDisplay.style.display = 'none';
             document.getElementById('qtyInput').value = '';
             document.getElementById('amountInput').value = '';
             document.getElementById('billNoInput').value = '0';

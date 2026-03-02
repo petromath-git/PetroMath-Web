@@ -38,13 +38,14 @@ module.exports = {
         });
     },
 
-    // Get active credit customers for this location
+    // Get active credit customers for this location (excluding card customers)
     getCreditCustomers: async (locationCode) => {
         return db.sequelize.query(`
             SELECT creditlist_id, Company_Name, short_name
             FROM m_credit_list
             WHERE location_code = :locationCode
               AND (effective_end_date IS NULL OR effective_end_date >= CURDATE())
+              AND (card_flag IS NULL OR card_flag != 'Y')
             ORDER BY Company_Name
         `, {
             replacements: { locationCode },
@@ -127,6 +128,28 @@ module.exports = {
             ORDER BY tc.creation_date DESC
         `, {
             replacements: { cashierId, locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
+    // Get all active vehicles across all customers for this location (for vehicle-first mode)
+    getAllVehicles: async (locationCode) => {
+        return db.sequelize.query(`
+            SELECT
+                mv.vehicle_id,
+                mv.vehicle_number,
+                mv.vehicle_type,
+                mcl.creditlist_id,
+                mcl.Company_Name
+            FROM m_creditlist_vehicles mv
+            JOIN m_credit_list mcl ON mv.creditlist_id = mcl.creditlist_id
+            WHERE mcl.location_code = :locationCode
+              AND (mv.effective_end_date IS NULL OR mv.effective_end_date >= CURDATE())
+              AND (mcl.effective_end_date IS NULL OR mcl.effective_end_date >= CURDATE())
+              AND (mcl.card_flag IS NULL OR mcl.card_flag != 'Y')
+            ORDER BY mv.vehicle_number
+        `, {
+            replacements: { locationCode },
             type: db.Sequelize.QueryTypes.SELECT
         });
     },
