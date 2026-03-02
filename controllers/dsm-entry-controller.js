@@ -14,33 +14,38 @@ module.exports = {
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
 
             if (!activeClosing) {
+                // Still fetch today's entries from closed shifts so cashier can see them
+                const entries = await dsmEntryDao.getEntriesByClosing(null, cashierId, locationCode);
                 return res.render("dsm-entry", {
                     title: "Credit Entry",
                     user,
                     activeClosing: null,
                     products: [],
                     credits: [],
-                    entries: [],
+                    entries,
                     pageData: JSON.stringify({
                         activeClosing: null,
                         products: [],
                         credits: [],
-                        entries: []
+                        entries,
+                        allVehicles: []
                     })
                 });
             }
 
-            const [products, credits, entries] = await Promise.all([
+            const [products, credits, entries, allVehicles] = await Promise.all([
                 dsmEntryDao.getTankProducts(locationCode),
                 dsmEntryDao.getCreditCustomers(locationCode),
-                dsmEntryDao.getEntriesByClosing(activeClosing.closing_id, cashierId, locationCode)
+                dsmEntryDao.getEntriesByClosing(activeClosing.closing_id, cashierId, locationCode),
+                dsmEntryDao.getAllVehicles(locationCode)
             ]);
 
             const pageData = {
                 activeClosing,
                 products,
                 credits,
-                entries
+                entries,
+                allVehicles
             };
 
             return res.render("dsm-entry", {
@@ -152,6 +157,19 @@ module.exports = {
 
         } catch (err) {
             console.error("DSM get vehicles error:", err);
+            return res.status(500).json({ success: false, message: "Server error." });
+        }
+    },
+
+    // GET /dsm-entry/all-vehicles
+    // Returns all vehicles across all customers for this location (vehicle-first mode)
+    getAllVehicles: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const vehicles = await dsmEntryDao.getAllVehicles(locationCode);
+            return res.json({ success: true, vehicles });
+        } catch (err) {
+            console.error("DSM get all vehicles error:", err);
             return res.status(500).json({ success: false, message: "Server error." });
         }
     }
