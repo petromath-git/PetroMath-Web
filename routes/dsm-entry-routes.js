@@ -29,6 +29,14 @@ router.delete('/:tcreditId',
     }
 );
 
+// GET /dsm-entry/all-vehicles - Load all vehicles for location (vehicle-first mode)
+router.get('/all-vehicles',
+    [isLoginEnsured, security.hasPermission('DSM_CREDIT_ENTRY')],
+    (req, res, next) => {
+        dsmEntryController.getAllVehicles(req, res, next);
+    }
+);
+
 // GET /dsm-entry/vehicles/:creditlistId - Load vehicles for selected customer
 router.get('/vehicles/:creditlistId',
     [isLoginEnsured, security.hasPermission('DSM_CREDIT_ENTRY')],
