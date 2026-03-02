@@ -640,7 +640,7 @@ html(lang='en')
             if (e.target.closest('.clear-vehicle')) {
                 resetVehicle();
                 vehicleSearch.focus();
-                showVehicleDropdown('');
+                setTimeout(() => showVehicleDropdown(''), 50);
             }
         });
 
