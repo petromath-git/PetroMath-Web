@@ -197,4 +197,117 @@ getStockSummaryOptimized: async (locationCode, fromDate, toDate) => {
     }
 },
 
+// Tank variance input data (tank dips + dip chart + pump readings + receipts)
+getTankVarianceInputs: async (locationCode, fromDate, toDate) => {
+    try {
+        const fromStart = `${fromDate} 00:00:00`;
+
+        const tanks = await db.sequelize.query(
+            `SELECT tank_id, tank_code, product_code, dipchartid
+             FROM m_tank
+             WHERE location_code = :locationCode`,
+            {
+                replacements: { locationCode },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+
+        const dipchartIds = [...new Set(tanks.map(t => t.dipchartid).filter(Boolean))];
+        let dipChartLines = [];
+        if (dipchartIds.length > 0) {
+            dipChartLines = await db.sequelize.query(
+                `SELECT dipchartid, dip_cm, volume_liters, diff_liters_mm
+                 FROM m_tank_dipchart_lines
+                 WHERE dipchartid IN (:dipchartIds)
+                 ORDER BY dipchartid, dip_cm`,
+                {
+                    replacements: { dipchartIds },
+                    type: Sequelize.QueryTypes.SELECT
+                }
+            );
+        }
+
+        const currentDips = await db.sequelize.query(
+            `SELECT td.tdip_id,
+                    td.tank_id,
+                    DATE_FORMAT(td.dip_date, '%Y-%m-%d') AS dip_date,
+                    TIME_FORMAT(td.dip_time, '%H:%i:%s') AS dip_time,
+                    td.dip_reading
+             FROM t_tank_dip td
+             WHERE td.location_code = :locationCode
+               AND DATE(td.dip_date) BETWEEN :fromDate AND :toDate`,
+            {
+                replacements: { locationCode, fromDate, toDate },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+
+        const previousDips = await db.sequelize.query(
+            `SELECT td.tdip_id,
+                    td.tank_id,
+                    DATE_FORMAT(td.dip_date, '%Y-%m-%d') AS dip_date,
+                    TIME_FORMAT(td.dip_time, '%H:%i:%s') AS dip_time,
+                    td.dip_reading
+             FROM t_tank_dip td
+             INNER JOIN (
+                 SELECT tank_id,
+                        MAX(CONCAT(DATE(dip_date), ' ', TIME(dip_time))) AS max_ts
+                 FROM t_tank_dip
+                 WHERE location_code = :locationCode
+                   AND CONCAT(DATE(dip_date), ' ', TIME(dip_time)) < :fromStart
+                 GROUP BY tank_id
+             ) prev
+             ON prev.tank_id = td.tank_id
+             AND CONCAT(DATE(td.dip_date), ' ', TIME(td.dip_time)) = prev.max_ts
+             WHERE td.location_code = :locationCode`,
+            {
+                replacements: { locationCode, fromStart },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+
+        const allDipIds = [...new Set([...currentDips, ...previousDips].map(d => d.tdip_id))];
+        let pumpReadings = [];
+        if (allDipIds.length > 0) {
+            pumpReadings = await db.sequelize.query(
+                `SELECT tdip_id, pump_id, reading
+                 FROM t_tank_reading
+                 WHERE tdip_id IN (:allDipIds)`,
+                {
+                    replacements: { allDipIds },
+                    type: Sequelize.QueryTypes.SELECT
+                }
+            );
+        }
+
+        const receipts = await db.sequelize.query(
+            `SELECT dtl.tank_id,
+                    DATE_FORMAT(rcpt.decant_date, '%Y-%m-%d') AS decant_date,
+                    rcpt.decant_time,
+                    SUM(dtl.quantity) AS quantity_kl
+             FROM t_tank_stk_rcpt_dtl dtl
+             INNER JOIN t_tank_stk_rcpt rcpt ON rcpt.ttank_id = dtl.ttank_id
+             WHERE rcpt.location_code = :locationCode
+               AND DATE(rcpt.decant_date) BETWEEN :fromDate AND :toDate
+             GROUP BY dtl.tank_id, DATE(rcpt.decant_date), rcpt.decant_time`,
+            {
+                replacements: { locationCode, fromDate, toDate },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+
+        return {
+            tanks,
+            dipChartLines,
+            currentDips,
+            previousDips,
+            pumpReadings,
+            receipts
+        };
+    } catch (error) {
+        console.error('Error fetching tank variance inputs:', error);
+        throw error;
+    }
+},
+
 };

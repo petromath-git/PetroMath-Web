@@ -44,6 +44,12 @@ function generatePDF(currentPage,isPrint = 'N') {
         const locationCodeElement = document.getElementById('locationCode');
         requestBody.locationCode = locationCodeElement ? locationCodeElement.value:'';  // if no location code obtained
                                                                                         // subsequent code will use req.user.location_code       
+    }else if (currentPage.includes('reports/stock/tank-variance')) {
+        requestBody.reportType = 'TankVariance';
+        requestBody.fromDate = document.getElementById('fromDate').value;
+        requestBody.toDate = document.getElementById('toDate').value;
+        requestBody.tank_code = document.getElementById('tank_code') ? document.getElementById('tank_code').value : '';
+        requestBody.product_code = document.getElementById('product_code') ? document.getElementById('product_code').value : '';
     }else if (currentPage.includes('reports/stock/summary')) {
         requestBody.reportType = 'StockSummary';
         requestBody.fromDate = document.getElementById('fromDate').value;
