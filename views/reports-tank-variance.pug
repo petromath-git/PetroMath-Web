@@ -1,0 +1,103 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports/stock/tank-variance')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format='dd/mm/yyyy', required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format='dd/mm/yyyy', required)
+                td &nbsp;
+                td Tank:
+                td
+                    select#tank_code.form-control(name='tank_code')
+                        option(value='') All Tanks
+                        each tank in tankOptions
+                            option(value=tank, selected=(selectedTank === tank))= tank
+                td &nbsp;
+                td Product:
+                td
+                    select#product_code.form-control(name='product_code')
+                        option(value='') All Products
+                        each product in productOptions
+                            option(value=product, selected=(selectedProduct === product))= product
+                td &nbsp;
+                include report-print-download.pug
+
+    div &nbsp;
+    div
+        div.row &nbsp;
+        h4.font-weight-bold.text-center Tank Loss/Gain
+        if formattedFromDate && formattedToDate
+            h6.text-center.text-muted= `${formattedFromDate} to ${formattedToDate}`
+
+        if varianceRows && varianceRows.length > 0
+            .table-responsive
+                table.table.table-bordered.table-hover.table-sm
+                    thead.thead-light
+                        tr
+                            th Date
+                            th Time
+                            th Tank
+                            th Product
+                            th.text-right Opening (L)
+                            th.text-right Receipts (L)
+                            th.text-right Sales (L)
+                            th.text-right Expected (L)
+                            th.text-right Actual (L)
+                            th.text-right Variance (L)
+                            th.text-right Variance %
+                    tbody
+                        - var totalOpening = 0
+                        - var totalReceipts = 0
+                        - var totalSales = 0
+                        - var totalExpected = 0
+                        - var totalActual = 0
+                        - var totalVariance = 0
+                        each row in varianceRows
+                            - totalOpening += row.opening_liters || 0
+                            - totalReceipts += row.receipts_liters || 0
+                            - totalSales += row.sales_liters || 0
+                            - totalExpected += row.expected_liters || 0
+                            - totalActual += row.actual_liters || 0
+                            - totalVariance += row.variance_liters || 0
+                            tr(class=(Math.abs(row.variance_liters) >= 100 ? 'table-warning' : ''))
+                                td= row.date_display
+                                td= row.time
+                                td= row.tank_code
+                                td= row.product_code
+                                td.text-right= Number(row.opening_liters || 0).toFixed(2)
+                                td.text-right.text-success= Number(row.receipts_liters || 0).toFixed(2)
+                                td.text-right.text-danger= Number(row.sales_liters || 0).toFixed(2)
+                                td.text-right= Number(row.expected_liters || 0).toFixed(2)
+                                td.text-right= Number(row.actual_liters || 0).toFixed(2)
+                                td.text-right(class=(row.variance_liters < 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'))
+                                    = Number(row.variance_liters || 0).toFixed(2)
+                                td.text-right
+                                    if row.variance_pct !== null
+                                        = Number(row.variance_pct).toFixed(3) + '%'
+                                    else
+                                        | -
+                    tfoot.bg-light
+                        tr.font-weight-bold
+                            td(colspan='4') Total
+                            td.text-right= totalOpening.toFixed(2)
+                            td.text-right.text-success= totalReceipts.toFixed(2)
+                            td.text-right.text-danger= totalSales.toFixed(2)
+                            td.text-right= totalExpected.toFixed(2)
+                            td.text-right= totalActual.toFixed(2)
+                            td.text-right= totalVariance.toFixed(2)
+                            td.text-right
+                                if totalSales > 0
+                                    = ((totalVariance / totalSales) * 100).toFixed(3) + '%'
+                                else
+                                    | -
+        else
+            div.row &nbsp;
+            div.alert.alert-info.text-center No records to display for selected range.
+
+    include overlay.pug

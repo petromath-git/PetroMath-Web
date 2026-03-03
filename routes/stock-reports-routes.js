@@ -31,4 +31,17 @@ router.post('/ledger', isLoginEnsured, function (req, res, next) {
     stockReportsController.getStockLedgerReport(req, res, next);
 });
 
+// Tank Variance Report - GET (initial load)
+router.get('/tank-variance', isLoginEnsured, function (req, res, next) {
+    req.body.fromDate = new Date(Date.now());
+    req.body.toDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
+    stockReportsController.getTankVarianceReport(req, res, next);
+});
+
+// Tank Variance Report - POST (form submit / PDF generation)
+router.post('/tank-variance', isLoginEnsured, function (req, res, next) {
+    stockReportsController.getTankVarianceReport(req, res, next);
+});
+
 module.exports = router;
