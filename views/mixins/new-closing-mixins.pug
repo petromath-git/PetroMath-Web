@@ -365,7 +365,7 @@ mixin addDenomRows(denominationValues)
                 td(width="40%")
                     label(for=prefix + val.label + '-cnt')= val.label
                 td(width="60%")
-                    input.form-control(type='number' min=0 oninput='validity.valid||(value="")' id=prefix + val.id + '-cnt', name=prefix + val.id + '-cnt' value=demonCnt onChange=`calculateDenominations()` step= (val.id == 0 || val.id == 1 ? 0.01: 1))
+                    input.form-control(type='number' min=0 oninput='validity.valid||(value="")' id=prefix + val.id + '-cnt', name=prefix + val.id + '-cnt' value=demonCnt onChange=`calculateDenominations()` step=1)
 
 
 //- Add new page: Show rows for attendance
