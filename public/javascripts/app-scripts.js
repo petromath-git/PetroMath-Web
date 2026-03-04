@@ -1309,6 +1309,11 @@ function saveCreditSales() {
 
 
 function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
+    const creditBillDateEl = document.getElementById(creditSaleTag + 'bill-date-' + creditObjRowNum);
+    const creditBillDate = creditBillDateEl && creditBillDateEl.value
+        ? creditBillDateEl.value
+        : (creditBillDateEl ? creditBillDateEl.getAttribute('data-closing-date') : null);
+
     return {
         'tcredit_id': salesId,
         'closing_id': document.getElementById('closing_hiddenId').value,
@@ -1316,6 +1321,7 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'creditlist_id': getCreditType(creditSaleTag, creditObjRowNum),
         'vehicle_id': document.getElementById(creditSaleTag + 'vehicle-' + creditObjRowNum).value,  // ADD THIS
         'odometer_reading': document.getElementById(creditSaleTag + 'odometer-' + creditObjRowNum).value,
+        'credit_bill_date': creditBillDate,
         'product_id': document.getElementById(creditSaleTag + 'product-' + creditObjRowNum).value,
         'price': document.getElementById(creditSaleTag + 'price-' + creditObjRowNum).value,
         'price_discount': document.getElementById(creditSaleTag + 'discount-' + creditObjRowNum).value,
@@ -1325,6 +1331,38 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
+}
+
+function applyCreditBillDateConstraints() {
+    const dateInputs = document.querySelectorAll('.credit-bill-date');
+    if (!dateInputs || dateInputs.length === 0) return;
+
+    const systemDate = (typeof currentSystemDate !== 'undefined' && currentSystemDate)
+        ? currentSystemDate
+        : new Date().toISOString().slice(0, 10);
+
+    dateInputs.forEach((inputEl) => {
+        const closing = inputEl.getAttribute('data-closing-date');
+        if (!closing) return;
+
+        const prev = addDays(closing, -1);
+        const next = addDays(closing, 1);
+        // Next-day billing is enabled only once system date reaches that next day.
+        const allowNext = systemDate >= next;
+
+        inputEl.min = prev;
+        inputEl.max = allowNext ? next : closing;
+
+        if (!inputEl.value || inputEl.value < inputEl.min || inputEl.value > inputEl.max) {
+            inputEl.value = closing;
+        }
+    });
+}
+
+function addDays(yyyyMmDd, days) {
+    const d = new Date(yyyyMmDd + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
 }
 
 
@@ -2492,6 +2530,15 @@ function showAddedCreditRow() {
     
     // Then initialize Select2 for any new vehicle dropdowns
     initializeNewVehicleSelects();
+    applyCreditBillDateConstraints();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+        applyCreditBillDateConstraints();
+    });
+} else {
+    applyCreditBillDateConstraints();
 }
 
 // Function to initialize Select2 for newly added rows

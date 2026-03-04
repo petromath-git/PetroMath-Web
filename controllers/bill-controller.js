@@ -10,6 +10,7 @@ const pug = require('pug');
 const path = require('path');
 const { getBrowser } = require('../utils/browserHelper');
 const BillNumberingService = require('../services/bill-numbering-service');
+const locationConfig = require('../utils/location-config');
 
 
 module.exports = {
@@ -350,13 +351,13 @@ createBill: async (req, res, next) => {
                             closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                             product_id, price, price_discount, qty, amount,
                             base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                            notes, created_by, creation_date, vehicle_number, indent_number,
+                            notes, credit_bill_date, created_by, creation_date, vehicle_number, indent_number,
                             odometer_reading
                         ) VALUES (
                             :closingId, :billNo, :billId, :creditlistId, :vehicleId,
                             :productId, :price, :priceDiscount, :qty, :amount,
                             :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                            :notes, :createdBy, NOW(), :vehicleNumber, :indentNumber,
+                            :notes, :creditBillDate, :createdBy, NOW(), :vehicleNumber, :indentNumber,
                             :odometerReading
                         )
                     `, {
@@ -377,6 +378,7 @@ createBill: async (req, res, next) => {
                             cgstAmount: item.cgst_amount || 0,
                             sgstAmount: item.sgst_amount || 0,
                             notes: item.notes || '',
+                            creditBillDate: req.body.credit_bill_date || null,
                             createdBy: req.user.Person_id,
                             vehicleNumber: item.vehicle_number || '',
                             indentNumber: item.indent_number || '',
@@ -845,12 +847,12 @@ getBills: async (req, res, next) => {
                             closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                             product_id, price, price_discount, qty, amount,
                             base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                            notes, odometer_reading, created_by, creation_date
+                            notes, odometer_reading, credit_bill_date, created_by, creation_date
                         ) VALUES (
                             :closingId, :billNo, :billId, :creditlistId, :vehicleId,
                             :productId, :price, :discount, :qty, :amount,
                             :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                            :notes, :odometerReading, :createdBy, NOW()
+                            :notes, :odometerReading, :creditBillDate, :createdBy, NOW()
                         )`
                         :  `INSERT INTO t_cashsales (
                             closing_id, bill_no, bill_id, customer_name,
@@ -885,6 +887,7 @@ getBills: async (req, res, next) => {
                 cgstAmount: parseFloat(item.cgst_amount || 0),
                 sgstAmount: parseFloat(item.sgst_amount || 0),
                 notes: item.notes || '',
+                creditBillDate: req.body.credit_bill_date || null,
                 createdBy: req.user.Person_id
             },
             type: Sequelize.QueryTypes.INSERT,
@@ -1490,59 +1493,12 @@ getBillsApi: async (req, res, next) => {
     }
 },
 
-// getNewBillApi: async (req, res, next) => {
-//     try {
-//         const locationCode = req.user.location_code;
-
-//         if (!locationCode) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Location code missing in token"
-//             });
-//         }
-
-//         // Get active shifts with cashier name
-//         const activeShifts = await db.sequelize.query(`
-//             SELECT c.closing_id, c.creation_date, c.cashier_id,
-//                    p.Person_Name as cashier_name
-//             FROM t_closing c
-//             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
-//             WHERE c.location_code = :locationCode 
-//             AND c.closing_status != 'CLOSED'
-//             ORDER BY c.creation_date DESC
-//         `, {
-//             replacements: { locationCode },
-//             type: Sequelize.QueryTypes.SELECT
-//         });
-
-//         // Get products for the location
-//         const products = await ProductDao.findProducts(locationCode);
-
-//         // Get credit customers for the location
-//         const credits = await CreditDao.findCredits(locationCode);
-
-//         // Return JSON response
-//         res.status(200).json({
-//             success: true,
-//             locationCode,
-//             shifts: activeShifts,
-//             products,
-//             credits
-//         });
-
-//     } catch (error) {
-//         console.error(error);
-//         res.status(203).json({
-//             success: false,
-//         });
-//     }
-// },
-
-
 
 getNewBillApi: async (req, res, next) => {
     try {
         const locationCode = req.user.location_code;
+        const userRole = req.user.role;
+        const userId = req.user.person_id;
 
         if (!locationCode) {
             return res.status(400).json({
@@ -1551,8 +1507,8 @@ getNewBillApi: async (req, res, next) => {
             });
         }
 
-        // 1. Get active shifts with cashier name
-        const activeShifts = await db.sequelize.query(`
+        // Build shift query based on role
+        let shiftQuery = `
             SELECT c.closing_id, c.creation_date, c.cashier_id,
                    p.Person_Name as cashier_name,
                    DATE_FORMAT(c.creation_date, '%Y-%m-%d %H:%i') as shift_date
@@ -1560,22 +1516,45 @@ getNewBillApi: async (req, res, next) => {
             LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
             WHERE c.location_code = :locationCode 
             AND c.closing_status != 'CLOSED'
-            ORDER BY c.creation_date DESC
-        `, {
-            replacements: { locationCode },
+        `;
+
+        const replacements = { locationCode };
+
+        // Cashiers: Check location config for shift restriction
+        if (userRole === 'Cashier') {
+            const restrictCashierShift = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'BILLING_RESTRICT_CASHIER_SHIFT',
+                1  // Default to restricted (strict mode)
+            );
+
+            // Only restrict if config is enabled
+            if (Number(restrictCashierShift) === 1) {
+                shiftQuery += ` AND c.cashier_id = :userId`;
+                replacements.userId = userId;
+            }
+            // If config is 0, cashiers see all active shifts at their location
+        }
+        // Managers and Admins: See all shifts (no additional filter needed)
+
+        shiftQuery += ` ORDER BY c.creation_date DESC`;
+
+        // 1. Get active shifts based on role
+        const activeShifts = await db.sequelize.query(shiftQuery, {
+            replacements,
             type: Sequelize.QueryTypes.SELECT
         });
 
         // 2. Get products for the location
         const products = await ProductDao.findProducts(locationCode);
 
-        // 3. Get credit customers for the location (exclude digital-only)
-        const credits = await CreditDao.findCredits(locationCode);
+        // 3. Get credit customers for the location (exclude digital)
+        const credits = await CreditDao.findCreditsExcludeDigital(locationCode);
 
-        // 4. Get ALL vehicles for the location (grouped by customer)
+        // 4. Get all vehicles for the location
         const vehicleData = await CreditVehicleDao.findAllVehiclesForLocation(locationCode);
 
-        // 5. Group vehicles by creditlist_id for easier Flutter consumption
+        // 5. Group vehicles by creditlist_id for easier access
         const vehiclesByCredit = {};
         vehicleData.forEach(vehicle => {
             if (!vehiclesByCredit[vehicle.creditlist_id]) {
@@ -1589,35 +1568,31 @@ getNewBillApi: async (req, res, next) => {
             });
         });
 
-        // Return JSON response with all data needed to create a bill
-        return res.status(200).json({
+        // Return JSON response
+        res.status(200).json({
             success: true,
-            locationCode: locationCode,
+            locationCode,
+            userRole,
             shifts: activeShifts,
-            products: products,
-            credits: credits,
-            vehiclesByCredit: vehiclesByCredit,  // ← NEW: Vehicles grouped by customer
-            meta: {
-                totalShifts: activeShifts.length,
-                totalProducts: products.length,
-                totalCustomers: credits.length,
-                totalVehicles: vehicleData.length
-            }
+            products,
+            credits,
+            vehicleData: vehiclesByCredit
         });
 
     } catch (error) {
-        console.error("Error in getNewBillApi:", error);
-        return res.status(500).json({
+        console.error('Error in getNewBillApi:', error);
+        res.status(500).json({
             success: false,
-            message: "Failed to fetch bill requirements",
+            message: 'Failed to fetch bill requirements',
             error: error.message
         });
     }
 },
 
 
-// NEW METHOD: getBillDetailsApi
-// Add this to bill-controller.js in module.exports
+
+//getBillDetailsApi
+
 
 getBillDetailsApi: async (req, res, next) => {
     try {
@@ -1890,54 +1865,108 @@ getBillDetailsApi: async (req, res, next) => {
 
 createBillApi: async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
-
+    
     try {
         const locationCode = req.user.location_code;
-        
-        // 1. Validate bill items FIRST
-        const validation = await validateBillItems(req.body.items, locationCode);
-        if (!validation.valid) {
-            await transaction.rollback();
+        const userRole = req.user.role;
+        const userId = req.user.person_id;
+
+        if (!locationCode) {
             return res.status(400).json({
                 success: false,
-                message: 'Bill validation failed',
-                errors: validation.errors
+                message: "Location code missing in token"
             });
         }
 
-        // 2. Validate shift status
-        await validateShiftForBillOperation(req.body.closing_id, locationCode, 'create');
+        // Validate required fields
+        if (!req.body.closing_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Shift (closing_id) is required"
+            });
+        }
 
-        // 3. Validate pump readings for fuel products
-        await validateProductPumpReadings(locationCode, req.body.closing_id, req.body.items);
+        if (!req.body.bill_type) {
+            return res.status(400).json({
+                success: false,
+                message: "Bill type is required"
+            });
+        }
 
-        // 4. Generate next bill number using BillNumberingService
-        const nextBillNo = await BillNumberingService.generateNextBillNumber(
-            locationCode, 
-            req.body.bill_type
+        if (!req.body.items || !Array.isArray(req.body.items) || req.body.items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "At least one bill item is required"
+            });
+        }
+
+        // CHECK SHIFT ACCESS - New validation
+        const hasAccess = await canAccessShift(
+            userRole,
+            userId,
+            req.body.closing_id,
+            locationCode
         );
 
-        // 5. Calculate total amount
-        let totalAmount = 0;
-        req.body.items.forEach(item => {
-            if (item.product_id) {
-                totalAmount += parseFloat(item.amount || 0);
-            }
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to create bills for this shift"
+            });
+        }
+
+        // Validate bill items
+        const validation = await validateBillItems(req.body.items, locationCode);
+        if (!validation.valid) {
+            return res.status(400).json({
+                success: false,
+                message: validation.errors.join('. ')
+            });
+        }
+
+        // Validate closing status
+        const closing = await db.sequelize.query(`
+            SELECT closing_status 
+            FROM t_closing 
+            WHERE closing_id = :closingId
+            AND location_code = :locationCode
+        `, {
+            replacements: { 
+                closingId: req.body.closing_id,
+                locationCode: locationCode 
+            },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
         });
 
-        // 6. Prepare customer name (for cash bills)
-        const customerName = req.body.bill_type === 'CASH' 
-            ? (req.body.customer_name || req.body.customer_name_mobile || null) 
-            : null;
+        if (!closing.length || closing[0].closing_status === 'CLOSED') {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot create bills for closed or invalid shifts'
+            });
+        }
 
-        // 7. Create bill header
+        // Get next bill number using the service
+        const nextBillNo = await BillNumberingService.getNextBillNumber(
+            locationCode,
+            req.body.bill_type,
+            transaction
+        );
+
+        // Calculate total amount
+        const totalAmount = req.body.items.reduce((sum, item) => {
+            return sum + parseFloat(item.amount || 0);
+        }, 0);
+
+        // Create bill
         const [billResult] = await db.sequelize.query(`
             INSERT INTO t_bills (
                 location_code, bill_no, bill_type, closing_id,
-                customer_name, total_amount, created_by, creation_date
+                total_amount, bill_status, created_by, creation_date
             ) VALUES (
                 :locationCode, :billNo, :billType, :closingId,
-                :customerName, :totalAmount, :createdBy, NOW()
+                :totalAmount, 'DRAFT', :createdBy, NOW()
             )
         `, {
             replacements: {
@@ -1945,9 +1974,8 @@ createBillApi: async (req, res, next) => {
                 billNo: nextBillNo,
                 billType: req.body.bill_type,
                 closingId: req.body.closing_id,
-                customerName: customerName,
                 totalAmount: totalAmount,
-                createdBy: req.user.person_id
+                createdBy: userId
             },
             type: Sequelize.QueryTypes.INSERT,
             transaction
@@ -1955,34 +1983,41 @@ createBillApi: async (req, res, next) => {
 
         const billId = billResult;
 
-        // 8. Insert bill items based on bill type
-        for (const item of req.body.items) {
-            if (!item.product_id) continue; // Skip empty rows
+        // Create bill items based on bill type
+        if (req.body.bill_type === 'CREDIT') {
+            // Validate credit-specific fields
+            if (!req.body.creditlist_id) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Credit customer (creditlist_id) is required for credit bills'
+                });
+            }
 
-            if (req.body.bill_type === 'CREDIT') {
-                // Insert into t_credits
+            for (const item of req.body.items) {
                 await db.sequelize.query(`
                     INSERT INTO t_credits (
                         closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                         product_id, price, price_discount, qty, amount,
                         base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                        notes, odometer_reading, created_by, creation_date
+                        notes, odometer_reading, credit_bill_date, created_by, creation_date
                     ) VALUES (
                         :closingId, :billNo, :billId, :creditlistId, :vehicleId,
-                        :productId, :price, :priceDiscount, :qty, :amount,
+                        :productId, :price, :discount, :qty, :amount,
                         :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                        :notes, :odometerReading, :createdBy, NOW()
+                        :notes, :odometerReading, :creditBillDate, :createdBy, NOW()
                     )
                 `, {
                     replacements: {
                         closingId: req.body.closing_id,
                         billNo: nextBillNo,
                         billId: billId,
-                        creditlistId: req.body.creditlist_id || req.body.creditlist_id_mobile,
-                        vehicleId: req.body.bill_vehicle_id || req.body.bill_vehicle_id_mobile || null,
+                        creditlistId: req.body.creditlist_id,
+                        vehicleId: req.body.bill_vehicle_id || null,
+                        odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
                         productId: parseInt(item.product_id),
                         price: parseFloat(item.price),
-                        priceDiscount: parseFloat(item.price_discount || 0),
+                        discount: parseFloat(item.price_discount || 0),
                         qty: parseFloat(item.qty),
                         amount: parseFloat(item.amount),
                         baseAmount: parseFloat(item.base_amount || item.amount),
@@ -1990,36 +2025,39 @@ createBillApi: async (req, res, next) => {
                         sgstPercent: parseFloat(item.sgst_percent || 0),
                         cgstAmount: parseFloat(item.cgst_amount || 0),
                         sgstAmount: parseFloat(item.sgst_amount || 0),
-                        notes: item.notes || '',
-                        odometerReading: parseFloat(req.body.bill_odometer_reading || req.body.bill_odometer_reading_mobile || 0) || null,
-                        createdBy: req.user.person_id
+                        notes: item.notes || null,
+                        creditBillDate: req.body.credit_bill_date || null,
+                        createdBy: userId
                     },
                     type: Sequelize.QueryTypes.INSERT,
                     transaction
                 });
-            } else {
-                // Insert into t_cashsales
+            }
+        } else {
+            // CASH bill items
+            for (const item of req.body.items) {
                 await db.sequelize.query(`
-                    INSERT INTO t_cashsales (
-                        closing_id, bill_no, bill_id, customer_name,
-                        product_id, price, price_discount, qty, amount,
+                    INSERT INTO t_cash (
+                        closing_id, bill_no, bill_id, product_id, 
+                        price, price_discount, qty, amount,
                         base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                        notes, vehicle_number, odometer_reading, created_by, creation_date
+                        notes, vehicle_number, odometer_reading, customer_name,
+                        created_by, creation_date
                     ) VALUES (
-                        :closingId, :billNo, :billId, :customerName,
-                        :productId, :price, :priceDiscount, :qty, :amount,
+                        :closingId, :billNo, :billId, :productId,
+                        :price, :discount, :qty, :amount,
                         :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                        :notes, :vehicleNumber, :odometerReading, :createdBy, NOW()
+                        :notes, :vehicleNumber, :odometerReading, :customerName,
+                        :createdBy, NOW()
                     )
                 `, {
                     replacements: {
                         closingId: req.body.closing_id,
                         billNo: nextBillNo,
                         billId: billId,
-                        customerName: customerName,
                         productId: parseInt(item.product_id),
                         price: parseFloat(item.price),
-                        priceDiscount: parseFloat(item.price_discount || 0),
+                        discount: parseFloat(item.price_discount || 0),
                         qty: parseFloat(item.qty),
                         amount: parseFloat(item.amount),
                         baseAmount: parseFloat(item.base_amount || item.amount),
@@ -2027,10 +2065,11 @@ createBillApi: async (req, res, next) => {
                         sgstPercent: parseFloat(item.sgst_percent || 0),
                         cgstAmount: parseFloat(item.cgst_amount || 0),
                         sgstAmount: parseFloat(item.sgst_amount || 0),
-                        notes: item.notes || '',
-                        vehicleNumber: req.body.bill_vehicle_number || req.body.bill_vehicle_number_mobile || null,
-                        odometerReading: parseFloat(req.body.bill_odometer_reading || req.body.bill_odometer_reading_mobile || 0) || null,
-                        createdBy: req.user.person_id
+                        notes: item.notes || null,
+                        vehicleNumber: req.body.bill_vehicle_number || null,
+                        odometerReading: parseFloat(req.body.bill_odometer_reading || 0) || null,
+                        customerName: req.body.customer_name || null,
+                        createdBy: userId
                     },
                     type: Sequelize.QueryTypes.INSERT,
                     transaction
@@ -2042,36 +2081,24 @@ createBillApi: async (req, res, next) => {
 
         return res.status(201).json({
             success: true,
-            message: `Bill ${nextBillNo} created successfully`,
-            billNo: nextBillNo,
-            billId: billId,
-            totalAmount: totalAmount
+            message: 'Bill created successfully',
+            bill_no: nextBillNo,
+            bill_id: billId
         });
 
     } catch (error) {
         await transaction.rollback();
-        console.error('Bill creation error:', error);
-
-        // Friendly error messages
-        let errorMessage = 'Error creating bill';
-        if (error.message.includes('Shift')) {
-            errorMessage = error.message;
-        } else if (error.message.includes('pump readings')) {
-            errorMessage = error.message;
-        } else if (error.message.includes('validation')) {
-            errorMessage = 'Invalid bill data';
-        }
-
+        console.error('Error in createBillApi:', error);
         return res.status(500).json({
             success: false,
-            message: errorMessage,
+            message: 'Failed to create bill',
             error: error.message
         });
     }
 },
 
-// NEW METHOD: deleteBillApi
-// Add this to bill-controller.js in module.exports
+// deleteBillApi
+
 
 deleteBillApi: async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
@@ -2195,6 +2222,435 @@ deleteBillApi: async (req, res, next) => {
         });
     }
 },
+
+
+
+
+//Get list of cashiers for shift creation
+getCashiersApi: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const userId = req.user.person_id;
+        const userRole = req.user.Role;
+
+        // Check if user can create shifts
+        const cashierCanCreateShift = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CASHIER_SHIFT_CREATION_ALLOWED',
+            'Y'
+        );
+
+        const cashierCanCreateForOthers = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CASHIER_CAN_CREATE_SHIFT_FOR_OTHERS',
+            'N'
+        );
+
+        const isCashierRole = userRole === 'Cashier';
+        const isAdminRole = ['Manager', 'Admin', 'SuperUser'].includes(userRole);
+
+        // Check if cashier can create shifts
+        if (isCashierRole && cashierCanCreateShift === 'N') {
+            return res.status(403).json({
+                success: false,
+                message: 'Cashiers are not allowed to create shifts at this location'
+            });
+        }
+
+        // Build cashier list based on role and permissions
+        let cashiers;
+
+        if (isAdminRole) {
+            // Admins can see all active cashiers in location
+            cashiers = await db.sequelize.query(`
+                SELECT 
+                    Person_id as cashier_id,
+                    Person_Name as cashier_name,
+                    location_code
+                FROM m_persons
+                WHERE location_code = :locationCode
+                AND is_active = 1
+                AND Role IN ('Cashier', 'Manager', 'Admin', 'SuperUser')
+                ORDER BY Person_Name
+            `, {
+                replacements: { locationCode },
+                type: Sequelize.QueryTypes.SELECT
+            });
+        } else if (isCashierRole) {
+            if (cashierCanCreateForOthers === 'Y') {
+                // Cashier can create for others - show all cashiers
+                cashiers = await db.sequelize.query(`
+                    SELECT 
+                        Person_id as cashier_id,
+                        Person_Name as cashier_name,
+                        location_code
+                    FROM m_persons
+                    WHERE location_code = :locationCode
+                    AND is_active = 1
+                    AND Role = 'Cashier'
+                    ORDER BY Person_Name
+                `, {
+                    replacements: { locationCode },
+                    type: Sequelize.QueryTypes.SELECT
+                });
+            } else {
+                // Cashier can only create for self
+                cashiers = await db.sequelize.query(`
+                    SELECT 
+                        Person_id as cashier_id,
+                        Person_Name as cashier_name,
+                        location_code
+                    FROM m_persons
+                    WHERE Person_id = :userId
+                    AND is_active = 1
+                `, {
+                    replacements: { userId },
+                    type: Sequelize.QueryTypes.SELECT
+                });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            cashiers: cashiers,
+            permissions: {
+                canCreateShift: true,
+                canCreateForOthers: isAdminRole || cashierCanCreateForOthers === 'Y'
+            }
+        });
+
+    } catch (error) {
+        console.error('Error getting cashiers:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching cashiers',
+            error: error.message
+        });
+    }
+},
+
+
+//Create shift
+createShiftApi: async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+
+    try {
+        const locationCode = req.user.location_code;
+        const userId = req.user.person_id;
+        const userRole = req.user.Role;
+
+        // Extract request body
+        const {
+            cashier_id,
+            closing_date,
+            cash_given = 0  // Default to 0 if not provided
+        } = req.body;
+
+        // ========================================
+        // 1. BASIC VALIDATIONS
+        // ========================================
+        if (!cashier_id) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Cashier ID is required'
+            });
+        }
+
+        if (!closing_date) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Shift date is required'
+            });
+        }
+
+        // ========================================
+        // 2. FETCH LOCATION CONFIGS
+        // ========================================
+        const cashierCanCreateShift = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CASHIER_SHIFT_CREATION_ALLOWED',
+            'Y'
+        );
+
+        const cashierCanCreateForOthers = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CASHIER_CAN_CREATE_SHIFT_FOR_OTHERS',
+            'N'
+        );
+
+        const maxBackDateDays = Number(await locationConfig.getLocationConfigValue(
+            locationCode,
+            'MAX_DAYS_ALLOWED_BACK_DATE_CLOSING',
+            5
+        ));
+
+        const maxAllowedDrafts = Number(await locationConfig.getLocationConfigValue(
+            locationCode,
+            'MAX_ALLOWED_DRAFTS',
+            2
+        ));
+
+        // ========================================
+        // 3. AUTHORIZATION CHECKS
+        // ========================================
+        const isAdminRole = ['Manager', 'Admin', 'SuperUser'].includes(userRole);
+        const isCashierRole = userRole === 'Cashier';
+
+        // Check if cashiers can create shifts at this location
+        if (isCashierRole && cashierCanCreateShift === 'N') {
+            await transaction.rollback();
+            return res.status(403).json({
+                success: false,
+                message: 'Cashiers are not allowed to create shifts at this location'
+            });
+        }
+
+        // Check if creating for self or others
+        if (isCashierRole && parseInt(cashier_id) !== parseInt(userId)) {
+            if (cashierCanCreateForOthers === 'N') {
+                await transaction.rollback();
+                return res.status(403).json({
+                    success: false,
+                    message: 'You can only create shifts for yourself'
+                });
+            }
+        }
+
+        // ========================================
+        // 4. VALIDATE CASHIER EXISTS AND LOCATION
+        // ========================================
+        const cashierInfo = await db.sequelize.query(`
+            SELECT Person_id, Person_Name, location_code
+            FROM m_persons
+            WHERE Person_id = :cashierId
+            AND is_active = 1
+        `, {
+            replacements: { cashierId: cashier_id },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        if (!cashierInfo.length) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Cashier not found or inactive'
+            });
+        }
+
+        // For cashiers, ensure same location
+        if (isCashierRole && cashierInfo[0].location_code !== locationCode) {
+            await transaction.rollback();
+            return res.status(403).json({
+                success: false,
+                message: 'Cannot create shift for cashier from different location'
+            });
+        }
+
+        // ========================================
+        // 5. VALIDATE DATE RANGE
+        // ========================================
+        const shiftDate = new Date(closing_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        shiftDate.setHours(0, 0, 0, 0);
+
+        const minAllowedDate = new Date(today);
+        minAllowedDate.setDate(minAllowedDate.getDate() - maxBackDateDays);
+
+        if (shiftDate < minAllowedDate) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Shift date cannot be more than ${maxBackDateDays} days in the past`
+            });
+        }
+
+        if (shiftDate > today) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Shift date cannot be in the future'
+            });
+        }
+
+        // ========================================
+        // 6. CHECK EXISTING DRAFTS FOR CASHIER
+        // ========================================
+        const existingDrafts = await db.sequelize.query(`
+            SELECT 
+                closing_id, 
+                closing_date,
+                credit_billing_stopped,
+                closing_status
+            FROM t_closing
+            WHERE cashier_id = :cashierId
+            AND location_code = :locationCode
+            AND closing_status = 'DRAFT'
+            ORDER BY closing_date DESC
+        `, {
+            replacements: { 
+                cashierId: cashier_id,
+                locationCode: locationCode
+            },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        // Apply business rules for draft shifts
+        if (existingDrafts.length > 0) {
+            // Count drafts with credit_billing_stopped = 0
+            const activeBillingDrafts = existingDrafts.filter(d => d.credit_billing_stopped === 0);
+            
+            // Rule: Cannot have draft with active billing
+            if (activeBillingDrafts.length > 0) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Cannot create new shift. Please close the existing draft shift (${activeBillingDrafts[0].closing_id}) first.`,
+                    existingShift: {
+                        closingId: activeBillingDrafts[0].closing_id,
+                        shiftDate: activeBillingDrafts[0].closing_date
+                    }
+                });
+            }
+
+            // Count drafts with credit_billing_stopped = 1
+            const stoppedBillingDrafts = existingDrafts.filter(d => d.credit_billing_stopped === 1);
+            
+            // Rule: Cannot have more than 1 draft with credit_billing_stopped = 1
+            if (stoppedBillingDrafts.length >= 1) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Cannot create new shift. Only one paused shift allowed. Please close shift ${stoppedBillingDrafts[0].closing_id} before creating a new one.`,
+                    pausedShift: {
+                        closingId: stoppedBillingDrafts[0].closing_id,
+                        shiftDate: stoppedBillingDrafts[0].closing_date
+                    }
+                });
+            }
+        }
+
+        // ========================================
+        // 7. CHECK TOTAL DRAFT LIMIT FOR LOCATION
+        // ========================================
+        const totalDraftsCount = await db.sequelize.query(`
+            SELECT COUNT(*) as draft_count
+            FROM t_closing
+            WHERE location_code = :locationCode
+            AND closing_status = 'DRAFT'
+        `, {
+            replacements: { locationCode },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        if (totalDraftsCount[0].draft_count >= maxAllowedDrafts) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Cannot create shift. Maximum ${maxAllowedDrafts} draft shifts allowed for this location.`
+            });
+        }
+
+        // ========================================
+        // 8. CHECK FOR DUPLICATE SHIFT ON SAME DATE
+        // ========================================
+        const duplicateShift = await db.sequelize.query(`
+            SELECT closing_id
+            FROM t_closing
+            WHERE cashier_id = :cashierId
+            AND location_code = :locationCode
+            AND DATE(closing_date) = DATE(:closingDate)
+            AND closing_status = 'DRAFT'
+        `, {
+            replacements: {
+                cashierId: cashier_id,
+                locationCode: locationCode,
+                closingDate: closing_date
+            },
+            type: Sequelize.QueryTypes.SELECT,
+            transaction
+        });
+
+        if (duplicateShift.length > 0) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `A draft shift already exists for this cashier on ${new Date(closing_date).toLocaleDateString('en-IN')}`,
+                existingShiftId: duplicateShift[0].closing_id
+            });
+        }
+
+        // ========================================
+        // 9. CREATE THE SHIFT
+        // ========================================
+        const [shiftResult] = await db.sequelize.query(`
+            INSERT INTO t_closing (
+                cashier_id,
+                closer_id,
+                location_code,
+                closing_date,
+                cash,
+                closing_status,
+                credit_billing_stopped,
+                created_by,
+                creation_date,
+                updation_date
+            ) VALUES (
+                :cashierId,
+                :closerId,
+                :locationCode,
+                :closingDate,
+                :cashGiven,
+                'DRAFT',
+                0,
+                :createdBy,
+                NOW(),
+                NOW()
+            )
+        `, {
+            replacements: {
+                cashierId: cashier_id,
+                closerId: userId,  // Person creating the shift
+                locationCode: locationCode,
+                closingDate: closing_date,
+                cashGiven: cash_given,
+                createdBy: userId
+            },
+            type: Sequelize.QueryTypes.INSERT,
+            transaction
+        });
+
+        await transaction.commit();
+
+        return res.status(201).json({
+            success: true,
+            message: `Shift created successfully for ${cashierInfo[0].Person_Name}`,
+            shift: {
+                closingId: shiftResult,
+                cashierName: cashierInfo[0].Person_Name,
+                cashierId: cashier_id,
+                shiftDate: closing_date,
+                openingCash: cash_given,
+                closingStatus: 'DRAFT'
+            }
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Shift creation error:', error);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Error creating shift',
+            error: error.message
+        });
+    }
+}
 
 
     
@@ -2495,12 +2951,12 @@ module.exports.updateBillApi = async (req, res, next) => {
                     closing_id, bill_no, bill_id, creditlist_id, vehicle_id,
                     product_id, price, price_discount, qty, amount,
                     base_amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount,
-                    notes, odometer_reading, created_by, creation_date
+                    notes, odometer_reading, credit_bill_date, created_by, creation_date
                 ) VALUES (
                     :closingId, :billNo, :billId, :creditlistId, :vehicleId,
                     :productId, :price, :discount, :qty, :amount,
                     :baseAmount, :cgstPercent, :sgstPercent, :cgstAmount, :sgstAmount,
-                    :notes, :odometerReading, :createdBy, NOW()
+                    :notes, :odometerReading, :creditBillDate, :createdBy, NOW()
                 )`
                 : `INSERT INTO t_cashsales (
                     closing_id, bill_no, bill_id, customer_name,
@@ -2535,6 +2991,7 @@ module.exports.updateBillApi = async (req, res, next) => {
                     cgstAmount: parseFloat(item.cgst_amount || 0),
                     sgstAmount: parseFloat(item.sgst_amount || 0),
                     notes: item.notes || '',
+                    creditBillDate: req.body.credit_bill_date || null,
                     createdBy: req.user.Person_id
                 },
                 type: Sequelize.QueryTypes.INSERT,
@@ -2565,8 +3022,6 @@ module.exports.updateBillApi = async (req, res, next) => {
     }
 };
 
-
-// FINAL CORRECTED VERSION - Uses views/bills/print.pug (your actual template)
 
 module.exports.getBillPDFApi = async (req, res, next) => {
     let page = null;
@@ -2874,3 +3329,49 @@ module.exports.getBillPDFApi = async (req, res, next) => {
     }
 };
 
+/**
+ * Check if user can access a specific shift
+ * - Cashiers: Based on location config (own shifts or all shifts)
+ * - Managers/Admins: All shifts at their location
+ */
+async function canAccessShift(userRole, userId, closingId, locationCode) {
+    // Admins and Managers can access all shifts
+    const adminRoles = ['Admin', 'SuperUser', 'Manager'];
+    if (adminRoles.includes(userRole)) {
+        return true;
+    }
+
+    // Cashiers: Check location config
+    if (userRole === 'Cashier') {
+        const restrictCashierShift = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'BILLING_RESTRICT_CASHIER_SHIFT',
+            1  // Default to restricted
+        );
+
+        // If restriction is disabled, allow access to all shifts
+        if (Number(restrictCashierShift) === 0) {
+            return true;
+        }
+
+        // If restriction is enabled, check if shift belongs to cashier
+        const shift = await db.sequelize.query(`
+            SELECT cashier_id 
+            FROM t_closing 
+            WHERE closing_id = :closingId 
+            AND location_code = :locationCode
+        `, {
+            replacements: { closingId, locationCode },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        if (shift.length && shift[0].cashier_id === userId) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // Other roles: deny by default
+    return false;
+}

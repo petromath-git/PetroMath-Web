@@ -325,6 +325,7 @@ block content
                         #credit-table .col-company   { width: 16%; }  /* More room for credit party */
                         #credit-table .col-vehicle   { width: 13%; }  /* More room for vehicle dropdown */
                         #credit-table .col-odo       { width: 7%; }
+                        #credit-table .col-date      { width: 9%; }
                         #credit-table .col-price     { width: 7%; }
                         #credit-table .col-discount  { width: 5%; }
                         #credit-table .col-qty       { width: 6%; }
@@ -372,6 +373,7 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
+                                                th.col-date(scope="col") Bill Date
                                                 th.col-product(scope="col") Product
                                                 th.col-bill(scope="col") Bill #
                                                 th.col-company(scope="col") Company
@@ -389,7 +391,7 @@ block content
                                                 +addCredits(rowCnt++)
 
                                             tr
-                                                td(colspan=4)
+                                                td(colspan=5)
                                                 td Total
                                                 td
                                                     input.form-control#credit-total(type='text' name='credit-total' readonly value='0')
@@ -656,6 +658,7 @@ block content
 
     script.    
         var vehicleData = !{JSON.stringify(vehicleData || {})};  
+        const currentSystemDate = "#{currentDate}";
         const digitalSalesBackdateDays = #{digitalSalesBackdateDays};
         const digitalSalesFutureDays = #{digitalSalesFutureDays};      
         window.pumpsData = !{JSON.stringify(pumps)};    
