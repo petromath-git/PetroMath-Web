@@ -107,7 +107,7 @@ saveReadings: (data) => {
         updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
             "product_id", "price", "price_discount", "qty", "amount", "notes", 
             "vehicle_number", "indent_number", "settlement_date", "recon_id", "bill_id",
-            "odometer_reading", "updated_by", "updation_date"]});
+            "credit_bill_date", "odometer_reading", "updated_by", "updation_date"]});
     return salesTxn;
     },
     saveDigitalSales: (data) => {

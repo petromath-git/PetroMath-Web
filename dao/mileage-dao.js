@@ -23,14 +23,14 @@ getMileageData: (locationCode, creditlistId, fromDate, toDate) => {
                 tc.amount,
                 tc.odometer_reading,
                 tc.notes,
-                tcl.closing_date,
+                COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) as closing_date,
                 LAG(tc.odometer_reading) OVER (
                     PARTITION BY tc.vehicle_id 
-                    ORDER BY tcl.closing_date, tc.bill_no
+                    ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no
                 ) as prev_odometer_reading,
                 ROW_NUMBER() OVER (
                     PARTITION BY tc.vehicle_id 
-                    ORDER BY tcl.closing_date, tc.bill_no
+                    ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no
                 ) as transaction_sequence_number
             FROM t_credits tc
             JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
@@ -124,16 +124,16 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 tc.qty as fuel_quantity,
                 tc.odometer_reading,
                 tc.amount,
-                tcl.closing_date,
+                COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) as closing_date,
                 tc.bill_no,
                 LAG(tc.odometer_reading) OVER (
                     PARTITION BY tc.vehicle_id 
-                    ORDER BY tcl.closing_date, tc.bill_no
+                    ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no
                 ) as prev_odometer_reading,
                 -- Check if this vehicle has ANY historical data before this transaction
                 COUNT(*) OVER (
                     PARTITION BY tc.vehicle_id 
-                    ORDER BY tcl.closing_date, tc.bill_no 
+                    ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no
                     ROWS UNBOUNDED PRECEDING
                 ) as transaction_sequence_number
             FROM t_credits tc
@@ -253,14 +253,14 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 tc.odometer_reading,
                 LAG(tc.odometer_reading) OVER (
                     PARTITION BY tc.vehicle_id 
-                    ORDER BY tcl.closing_date, tc.bill_no
+                    ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no
                 ) as prev_odometer_reading
             FROM t_credits tc
             JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
             WHERE tcl.location_code = :locationCode
               AND tc.creditlist_id = :creditlistId
               AND tc.vehicle_id IS NOT NULL
-              AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+              AND COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :fromDate AND :toDate
         ),
         fleet_calculations AS (
             SELECT 
@@ -324,7 +324,7 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
             WHERE mcv.creditlist_id = :creditlistId
               AND (mcv.effective_end_date IS NULL OR mcv.effective_end_date >= CURDATE())
               AND (tcl.location_code = :locationCode OR tcl.location_code IS NULL)
-              AND (DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate OR tcl.closing_date IS NULL)
+              AND (COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :fromDate AND :toDate OR tcl.closing_date IS NULL)
             GROUP BY mcv.vehicle_id, mcv.vehicle_number, mcv.vehicle_type
             HAVING fuel_transactions = 0 OR missing_odometer_count > 0
             ORDER BY mcv.vehicle_number
@@ -348,12 +348,12 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                 SELECT 
                     tc.vehicle_id,
                     mcv.vehicle_number,
-                    tcl.closing_date,
+                    COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) as closing_date,
                     tc.qty,
                     tc.odometer_reading,
                     LAG(tc.odometer_reading) OVER (
                         PARTITION BY tc.vehicle_id
-                        ORDER BY tcl.closing_date
+                        ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date))
                     ) AS prev_odometer
                 FROM t_credits tc
                 JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
@@ -363,7 +363,7 @@ getVehicleMileageSummary: (locationCode, creditlistId, fromDate, toDate) => {
                   AND tc.vehicle_id IS NOT NULL
                   AND tc.odometer_reading IS NOT NULL
                   AND tc.odometer_reading > 0
-                  AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+                  AND COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :fromDate AND :toDate
             )
             SELECT
                 DATE_FORMAT(closing_date, '%Y-%m'),

@@ -80,9 +80,9 @@ module.exports = {
 
         const result = await db.sequelize.query(`
             INSERT INTO t_credits
-                (closing_id, creditlist_id, vehicle_id, product_id, price, price_discount, qty, amount, bill_no, notes, created_by, creation_date, updation_date)
+                (closing_id, creditlist_id, vehicle_id, product_id, price, price_discount, qty, amount, bill_no, credit_bill_date, notes, created_by, creation_date, updation_date)
             VALUES
-                (:closingId, :creditlistId, :vehicleId, :productId, :price, 0, :qty, :amount, :billNo, :notes, :createdBy, NOW(), NOW())
+                (:closingId, :creditlistId, :vehicleId, :productId, :price, 0, :qty, :amount, :billNo, :creditBillDate, :notes, :createdBy, NOW(), NOW())
         `, {
             replacements: {
                 closingId:    data.closing_id,
@@ -93,6 +93,7 @@ module.exports = {
                 qty:          data.qty,
                 amount:       data.amount,
                 billNo:       data.bill_no && data.bill_no.trim() !== '' ? data.bill_no.trim() : null,
+                creditBillDate: data.credit_bill_date || null,
                 notes:        data.notes && data.notes.trim() !== '' ? data.notes.trim() : null,
                 createdBy:    data.created_by
             },
@@ -110,6 +111,7 @@ module.exports = {
                 tc.qty,
                 tc.amount,
                 tc.bill_no,
+                tc.credit_bill_date,
                 tc.notes,
                 tc.creation_date,
                 cl.closing_status,

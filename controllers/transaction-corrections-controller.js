@@ -39,7 +39,7 @@ module.exports = {
             let replacements = { fromDate, toDate, userLocation };
             
             // Date range filter
-            whereConditions.push('DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate');
+            whereConditions.push('COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :fromDate AND :toDate');
             
             // Location filter
             whereConditions.push('tcl.location_code = :userLocation');
@@ -71,7 +71,7 @@ module.exports = {
                     tc.odometer_reading,
                     tc.qty,
                     tc.amount,
-                    tcl.closing_date,
+                    COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) as closing_date,
                     mcl.Company_Name,
                     mp.product_name
                 FROM t_credits tc
@@ -81,7 +81,7 @@ module.exports = {
                 LEFT JOIN m_creditlist_vehicles mv ON tc.vehicle_id = mv.vehicle_id 
                     AND (mv.effective_end_date IS NULL OR mv.effective_end_date >= CURDATE())
                 WHERE ${whereConditions.join(' AND ')}
-                ORDER BY tcl.closing_date DESC, tc.bill_no DESC
+                ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) DESC, tc.bill_no DESC
                 LIMIT 500
             `;
             

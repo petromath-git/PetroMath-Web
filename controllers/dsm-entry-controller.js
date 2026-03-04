@@ -72,7 +72,7 @@ module.exports = {
             const locationCode = user.location_code;
             const cashierId = user.Person_id;
 
-            const { creditlist_id, vehicle_id, product_id, qty, amount, bill_no, notes } = req.body;
+            const { creditlist_id, vehicle_id, product_id, qty, amount, bill_no, credit_bill_date, notes } = req.body;
 
             // Validate required fields
             if (!creditlist_id || !product_id || !qty || !amount) {
@@ -83,10 +83,27 @@ module.exports = {
                 return res.status(400).json({ success: false, message: "Quantity and amount must be greater than zero." });
             }
 
+            if (!credit_bill_date) {
+                return res.status(400).json({ success: false, message: "Credit bill date is required." });
+            }
+
             // Re-verify active closing on save (don't trust client-side closing_id)
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
             if (!activeClosing) {
                 return res.status(400).json({ success: false, message: "No active shift found. Cannot save entry." });
+            }
+
+            const closingDateStr = new Date(activeClosing.closing_date).toISOString().slice(0, 10);
+            const selectedDateStr = new Date(credit_bill_date).toISOString().slice(0, 10);
+            const previousDateStr = addDays(closingDateStr, -1);
+            const nextDateStr = addDays(closingDateStr, 1);
+            const systemDateStr = new Date().toISOString().slice(0, 10);
+
+            if (![previousDateStr, closingDateStr, nextDateStr].includes(selectedDateStr)) {
+                return res.status(400).json({ success: false, message: "Credit bill date must be closing date, previous day, or next day." });
+            }
+            if (selectedDateStr === nextDateStr && systemDateStr < nextDateStr) {
+                return res.status(400).json({ success: false, message: "Next-day credit bill date is allowed only when system date has reached that day." });
             }
 
             const insertId = await dsmEntryDao.saveEntry({
@@ -97,6 +114,7 @@ module.exports = {
                 qty:           parseFloat(qty),
                 amount:        parseFloat(amount),
                 bill_no:       bill_no || null,
+                credit_bill_date: credit_bill_date,
                 notes:         notes || null,
                 created_by:    user.User_Name
             });
@@ -175,3 +193,9 @@ module.exports = {
     }
 
 };
+
+function addDays(dateStr, days) {
+    const date = new Date(dateStr + "T00:00:00");
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+}

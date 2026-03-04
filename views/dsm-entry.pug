@@ -536,6 +536,12 @@ html(lang='en')
                         label.form-label Customer
                         .customer-auto-badge#allCustomerName
 
+                .mb-3
+                    label.form-label(for='creditBillDateInput') Credit Bill Date *
+                    input#creditBillDateInput.form-control(
+                        type='date'
+                    )
+
                 //- Bill No and Notes
                 .input-row.mb-3
                     div
@@ -607,6 +613,16 @@ html(lang='en')
 
     script.
         const pageData = !{pageData};
+        const currentSystemDate = new Date().toISOString().slice(0, 10);
+        const activeClosingDate = pageData.activeClosing && pageData.activeClosing.closing_date
+            ? new Date(pageData.activeClosing.closing_date).toISOString().slice(0, 10)
+            : currentSystemDate;
+
+        const creditBillDateInput = document.getElementById('creditBillDateInput');
+        if (creditBillDateInput) {
+            creditBillDateInput.value = activeClosingDate;
+            applyCreditBillDateConstraints();
+        }
 
         let selectedProductId = null;
         let selectedProductPrice = 0;
@@ -1027,13 +1043,14 @@ html(lang='en')
         function checkFormReady() {
             const qty = parseFloat(document.getElementById('qtyInput').value);
             const amt = parseFloat(document.getElementById('amountInput').value);
+            const hasCreditBillDate = !!document.getElementById('creditBillDateInput').value;
             let customerReady = false;
             if (searchMode === 'customer') {
                 customerReady = !!customerSelect.value;
             } else {
                 customerReady = !!allCreditlistId.value;
             }
-            const ready = selectedProductId && customerReady && (qty > 0 || amt > 0);
+            const ready = selectedProductId && customerReady && hasCreditBillDate && (qty > 0 || amt > 0);
             document.getElementById('btnSave').disabled = !ready;
         }
 
@@ -1055,6 +1072,8 @@ html(lang='en')
             checkFormReady();
         });
 
+        document.getElementById('creditBillDateInput')?.addEventListener('change', checkFormReady);
+
         // Save entry
         document.getElementById('btnSave')?.addEventListener('click', async function() {
             this.disabled = true;
@@ -1066,6 +1085,7 @@ html(lang='en')
                 vehicle_id:    searchMode === 'customer' ? (vehicleIdInput.value || null) : (allVehicleId.value || null),
                 qty:           document.getElementById('qtyInput').value,
                 amount:        document.getElementById('amountInput').value,
+                credit_bill_date: document.getElementById('creditBillDateInput').value,
                 bill_no:       document.getElementById('billNoInput').value.trim() || null,
                 notes:         document.getElementById('notesInput').value.trim() || null
             };
@@ -1162,6 +1182,10 @@ html(lang='en')
             allCustomerDisplay.style.display = 'none';
             document.getElementById('qtyInput').value = '';
             document.getElementById('amountInput').value = '';
+            if (creditBillDateInput) {
+                creditBillDateInput.value = activeClosingDate;
+                applyCreditBillDateConstraints();
+            }
             document.getElementById('billNoInput').value = '0';
             document.getElementById('notesInput').value = '';
         }
@@ -1174,6 +1198,28 @@ html(lang='en')
             toast.style.color = 'white';
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        function addDays(dateStr, days) {
+            const dt = new Date(dateStr + 'T00:00:00');
+            dt.setDate(dt.getDate() + days);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        function applyCreditBillDateConstraints() {
+            if (!creditBillDateInput) return;
+
+            const prevDate = addDays(activeClosingDate, -1);
+            const nextDate = addDays(activeClosingDate, 1);
+            // Restrict calendar selection to previous/closing day and conditionally next day.
+            const allowNext = currentSystemDate >= nextDate;
+
+            creditBillDateInput.min = prevDate;
+            creditBillDateInput.max = allowNext ? nextDate : activeClosingDate;
+
+            if (!creditBillDateInput.value || creditBillDateInput.value < creditBillDateInput.min || creditBillDateInput.value > creditBillDateInput.max) {
+                creditBillDateInput.value = activeClosingDate;
+            }
         }
 
     script(src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js')

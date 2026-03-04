@@ -373,6 +373,7 @@ block content
                         #credit-table .col-company   { width: 14%; }
                         #credit-table .col-vehicle   { width: 10%; }
                         #credit-table .col-odo       { width: 8%; }
+                        #credit-table .col-date      { width: 9%; }
                         #credit-table .col-price     { width: 7%; }
                         #credit-table .col-discount  { width: 6%; }  /* small field */
                         #credit-table .col-qty       { width: 6%; }
@@ -385,6 +386,7 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
+                                                th(scope="col") Bill Date
                                                 th(scope="col") Product
                                                 th(scope="col") Bill #                                                
                                                 th(scope="col") Company
@@ -402,7 +404,7 @@ block content
                                                 +addCredits(rowCnt, t_credits[rowCnt++])
 
                                             tr
-                                                td(colspan=4)
+                                                td(colspan=5)
                                                 td Total
                                                 td
                                                     input.form-control#credit-total(type='text' name='credit-total' readonly value='0')
@@ -691,6 +693,7 @@ block content
                                     button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home\')') CLOSE &raquo;
     script.    
         var vehicleData = !{JSON.stringify(vehicleData || {})};        
+        const currentSystemDate = "#{currentDate}";
         const digitalSalesBackdateDays = #{digitalSalesBackdateDays};
         const digitalSalesFutureDays = #{digitalSalesFutureDays};
         window.pumpsData = !{JSON.stringify(pumps)};

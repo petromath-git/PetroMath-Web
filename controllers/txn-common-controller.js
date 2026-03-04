@@ -161,6 +161,7 @@ const txnCreditsPromise = (closingId) => {
                                 priceDiscount: credit.price_discount,
                                 qty: credit.qty,
                                 amount: credit.amount,
+                                creditBillDate: credit.credit_bill_date,
                                 notes: credit.notes,
                                 odometerReading: credit.odometer_reading  // ADD THIS LINE
                             });
