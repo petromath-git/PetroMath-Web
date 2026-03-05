@@ -699,5 +699,24 @@ block content
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
         window.allowSecondaryPump = !{allowSecondaryPump};
+    // Quick Add Vehicle Modal
+    .modal.fade#quickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='quickAddVehicleModalLabel' aria-hidden='true')
+        .modal-dialog(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title#quickAddVehicleModalLabel Add New Vehicle
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .form-group
+                        label Vehicle Number *
+                        input.form-control.text-uppercase#quickVehicleNumber(type='text' maxlength='20' placeholder='e.g., TN01AB1234' autocomplete='off')
+                        small.form-text.text-danger.d-none#quickVehicleDupMsg Vehicle already exists for this customer
+                    .form-group
+                        label Vehicle Type
+                        input.form-control.text-uppercase#quickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
 

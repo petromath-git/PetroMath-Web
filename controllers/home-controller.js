@@ -67,8 +67,12 @@ module.exports = {
     'SHOW_2T_SALES_TAB',
     'N' // default - hide by default
         );
-    
-      
+
+    const allowQuickAddVehicle = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'ALLOW_QUICK_ADD_VEHICLE',
+    'N' // default - disabled
+    );
 
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
@@ -105,7 +109,8 @@ module.exports = {
                             allowSecondaryPump: allowSecondaryPump === 'true',
                             digitalSalesBackdateDays: digitalSalesBackdateDays,
                             digitalSalesFutureDays: digitalSalesFutureDays,
-                            show2TSalesTab: show2TSalesTab === 'Y'
+                            show2TSalesTab: show2TSalesTab === 'Y',
+                            allowQuickAddVehicle: allowQuickAddVehicle === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
