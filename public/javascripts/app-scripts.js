@@ -2514,9 +2514,94 @@ function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
     
     // Trigger Select2 update
     $(vehicleSelect).trigger('change');
+
+    // Show/hide the + Add Vehicle button
+    const addBtn = document.getElementById(creditRowPrefix + 'add-vehicle-btn-' + rowNo);
+    if (addBtn) addBtn.style.display = creditListId ? '' : 'none';
 }
 
 
+var _quickAddVehicleContext = null;
+
+function openAddVehicleModal(prefix, rowNo) {
+    const creditListId = document.getElementById(prefix + 'companyId_' + rowNo)?.value;
+    const creditPartyName = document.getElementById(prefix + 'companyName_' + rowNo)?.value;
+    if (!creditListId) return;
+
+    _quickAddVehicleContext = { prefix, rowNo, creditListId };
+
+    document.getElementById('quickVehicleNumber').value = '';
+    document.getElementById('quickVehicleType').value = '';
+    document.getElementById('quickVehicleDupMsg').classList.add('d-none');
+    const saveBtn = document.getElementById('quickAddVehicleSaveBtn');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Add Vehicle';
+
+    document.getElementById('quickAddVehicleModalLabel').textContent =
+        'Add New Vehicle' + (creditPartyName ? ' for ' + creditPartyName : '');
+
+    $('#quickAddVehicleModal').modal('show');
+}
+
+function quickSaveVehicle() {
+    if (!_quickAddVehicleContext) return;
+
+    const vehicleNumber = document.getElementById('quickVehicleNumber').value.trim().toUpperCase();
+    const vehicleType = document.getElementById('quickVehicleType').value.trim().toUpperCase();
+
+    if (!vehicleNumber) {
+        document.getElementById('quickVehicleNumber').focus();
+        return;
+    }
+
+    const saveBtn = document.getElementById('quickAddVehicleSaveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    document.getElementById('quickVehicleDupMsg').classList.add('d-none');
+
+    fetch('/vehicles/api/quick-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            creditlist_id: _quickAddVehicleContext.creditListId,
+            vehicle_number: vehicleNumber,
+            vehicle_type: vehicleType
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            const { vehicleId, vehicleNumber: vNum, vehicleType: vType } = d.vehicle;
+
+            // Update in-memory cache so other rows in this session see it too
+            const cid = _quickAddVehicleContext.creditListId;
+            if (!vehicleDataByCredit[cid]) vehicleDataByCredit[cid] = [];
+            vehicleDataByCredit[cid].push({ vehicleId, vehicleNumber: vNum, vehicleType: vType });
+
+            // Add option to dropdown and auto-select it
+            const vehicleSelect = document.getElementById(
+                _quickAddVehicleContext.prefix + 'vehicle-' + _quickAddVehicleContext.rowNo
+            );
+            const label = vType ? `${vNum} (${vType})` : vNum;
+            const option = new Option(label, vehicleId, true, true);
+            $(vehicleSelect).append(option).trigger('change');
+
+            $('#quickAddVehicleModal').modal('hide');
+        } else {
+            if (d.error && d.error.includes('already exists')) {
+                document.getElementById('quickVehicleDupMsg').classList.remove('d-none');
+            } else {
+                alert('Error: ' + (d.error || 'Could not add vehicle'));
+            }
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Add Vehicle';
+        }
+    })
+    .catch(() => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Add Vehicle';
+    });
+}
 
 
 function showAddedDigitalSalesRow(prefix) {

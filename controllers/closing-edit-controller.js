@@ -102,6 +102,12 @@ module.exports = {
                 'N' // default - hide by default
             );
 
+            const allowQuickAddVehicle = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'ALLOW_QUICK_ADD_VEHICLE',
+                'N' // default - disabled
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -133,6 +139,7 @@ module.exports = {
                         digitalSalesBackdateDays: digitalSalesBackdateDays,
                         digitalSalesFutureDays: digitalSalesFutureDays,
                         show2TSalesTab: show2TSalesTab === 'Y',
+                        allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,

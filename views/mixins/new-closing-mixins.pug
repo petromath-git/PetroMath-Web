@@ -305,12 +305,17 @@ mixin addCredits(creditRowNo, rowData)
                 each party in allCreditParties
                     option(value=`${party.creditorId}` selected= rowData.creditListId === party.creditorId)= party.creditorName
         td
-            select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
-                option(value='') Select Vehicle
-                //- If editing and vehicle data exists, populate vehicles for the selected credit party
-                if rowData.creditListId && vehicleData && vehicleData[rowData.creditListId]
-                    each vehicle in vehicleData[rowData.creditListId]
-                        option(value=vehicle.vehicleId selected= rowData.vehicleId === vehicle.vehicleId)= vehicle.vehicleNumber + ' (' + vehicle.vehicleType + ')'        
+            .d-flex.align-items-center(style='gap:4px')
+                .flex-grow-1
+                    select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
+                        option(value='') Select Vehicle
+                        //- If editing and vehicle data exists, populate vehicles for the selected credit party
+                        if rowData.creditListId && vehicleData && vehicleData[rowData.creditListId]
+                            each vehicle in vehicleData[rowData.creditListId]
+                                option(value=vehicle.vehicleId selected= rowData.vehicleId === vehicle.vehicleId)= vehicle.vehicleNumber + ' (' + vehicle.vehicleType + ')'
+                if allowQuickAddVehicle
+                    button.btn.btn-primary.btn-sm.flex-shrink-0(id=prefix + 'add-vehicle-btn-' + creditRowNo type='button' title='Add new vehicle' style=(rowData.creditListId ? '' : 'display:none') onclick='openAddVehicleModal(\'' + prefix + '\', ' + creditRowNo + ')')
+                        | +
         td
             input.form-control(type='number' name=prefix + 'odometer-' + creditRowNo id=prefix + 'odometer-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.odometerReading step=0.01 placeholder='Odometer Reading')
         td
