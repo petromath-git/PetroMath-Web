@@ -8,6 +8,7 @@ const creditVehiclesController = require('../controllers/credit-vehicles-control
 const rolePermissionsDao = require('../dao/role-permissions-dao');
 const CreditDao = require('../dao/credits-dao');
 const ProductDao = require('../dao/product-dao');
+const CreditVehiclesDao = require('../dao/credit-vehicles-dao');
 
 // Display vehicles page with permission checks
 router.post('/get', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function(req, res, next) {
@@ -184,6 +185,45 @@ router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('
     } catch (error) {
         console.error('Error fetching disabled vehicles:', error);
         res.status(500).json({ success: false, error: 'Error fetching disabled vehicles' });
+    }
+});
+
+// Quick-add vehicle from closing page (returns JSON)
+router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function(req, res) {
+    try {
+        const { creditlist_id, vehicle_number, vehicle_type } = req.body;
+        const cleanNumber = (vehicle_number || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!cleanNumber) {
+            return res.status(400).json({ success: false, error: 'Vehicle number is required' });
+        }
+        const existing = await CreditVehiclesDao.findByNumberAndCustomer(cleanNumber, creditlist_id);
+        if (existing) {
+            return res.status(400).json({ success: false, error: `Vehicle ${cleanNumber} already exists for this customer` });
+        }
+        const created = await CreditVehiclesDao.create({
+            creditlist_id,
+            vehicle_number: cleanNumber,
+            vehicle_type: (vehicle_type || '').trim().toUpperCase() || null,
+            product_id: null,
+            notes: '',
+            created_by: req.user.Person_id,
+            updated_by: req.user.Person_id,
+            creation_date: new Date(),
+            updation_date: new Date(),
+            effective_start_date: new Date(),
+            effective_end_date: null
+        });
+        res.json({
+            success: true,
+            vehicle: {
+                vehicleId: created.vehicle_id,
+                vehicleNumber: cleanNumber,
+                vehicleType: (vehicle_type || '').trim().toUpperCase() || ''
+            }
+        });
+    } catch (error) {
+        console.error('Error quick-adding vehicle:', error);
+        res.status(500).json({ success: false, error: 'Error creating vehicle' });
     }
 });
 
