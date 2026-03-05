@@ -45,7 +45,9 @@ const DENOMINATION_VALUES = [
   { id: 50, label: "50*" },
   { id: 20, label: "20*" },
   { id: 10, label: "10*" },
-  { id: 1, label: "Coins" },
+  { id: 5, label: "5*" },
+  { id: 2, label: "2*" },
+  { id: 1, label: "1*" },
 ];
 const CASH_FLOW_DENOMINATION_VALUES = [    
     { id: 500, label: "500*" },
@@ -54,7 +56,9 @@ const CASH_FLOW_DENOMINATION_VALUES = [
     { id: 50, label: "50*" },
     { id: 20, label: "20*" },
     { id: 10, label: "10*" },
-    { id: 1, label: "Coins" },
+    { id: 5, label: "5*" },
+    { id: 2, label: "2*" },
+    { id: 1, label: "1*" },
 ];
 
 const MAX_ALLOWED_DRAFTS_PER_LOCATION = 10;

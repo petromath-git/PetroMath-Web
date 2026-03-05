@@ -87,6 +87,11 @@ module.exports = function(sequelize, DataTypes) {
             field: 'bill_id',
             type: DataTypes.INTEGER
         },
+        credit_bill_date: {
+            field: 'credit_bill_date',
+            type: DataTypes.DATEONLY,
+            allowNull: true
+        },
         odometer_reading: {
             field: 'odometer_reading',
             type: DataTypes.DECIMAL(12, 2),

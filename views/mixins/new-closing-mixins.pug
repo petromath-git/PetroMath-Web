@@ -272,11 +272,14 @@ mixin addCredits(creditRowNo, rowData)
     if(creditCompanyValues && creditCompanyValues[0])
         - creditName = creditCompanyValues[0].creditorName;
     if(!rowData)
-        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null};
+        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null, creditBillDate: (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)};
     if(rowData.tCreditId && parseInt(rowData.tCreditId) > 0)
         - trClass = ''
     tr(class=trClass id=trId)
         input(type='hidden' id=prefix + creditRowNo + '_hiddenId' value=rowData.tCreditId)
+        td
+            - var defaultCreditDate = rowData.creditBillDate || (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)
+            input.form-control.credit-bill-date(type='date' name=prefix + 'bill-date-' + creditRowNo id=prefix + 'bill-date-' + creditRowNo value=defaultCreditDate data-closing-date=(typeof closingData !== 'undefined' ? closingData.closingDate : currentDate))
         td
             select.form-control(name=prefix + 'product-'+creditRowNo id=prefix + 'product-'+creditRowNo  onChange='creditOrSaleUpdateProductTypePrices(this, ' + creditRowNo + ', \'' + prefix +'\')')
                 if productValues
@@ -365,7 +368,7 @@ mixin addDenomRows(denominationValues)
                 td(width="40%")
                     label(for=prefix + val.label + '-cnt')= val.label
                 td(width="60%")
-                    input.form-control(type='number' min=0 oninput='validity.valid||(value="")' id=prefix + val.id + '-cnt', name=prefix + val.id + '-cnt' value=demonCnt onChange=`calculateDenominations()` step= (val.id == 0 || val.id == 1 ? 0.01: 1))
+                    input.form-control(type='number' min=0 oninput='validity.valid||(value="")' id=prefix + val.id + '-cnt', name=prefix + val.id + '-cnt' value=demonCnt onChange=`calculateDenominations()` step=1)
 
 
 //- Add new page: Show rows for attendance

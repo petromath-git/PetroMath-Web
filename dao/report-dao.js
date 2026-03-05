@@ -130,7 +130,7 @@ module.exports = {
 getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
     return db.sequelize.query(
         `SELECT 
-            tcl.closing_date AS tran_date,
+            COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) AS tran_date,
             tcl.location_code,
             CONCAT('To Bill No: ', tc.bill_no) AS bill_no,
             mcl.Company_Name AS company_name,
@@ -151,7 +151,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
         WHERE tcl.location_code = :locationCode
           AND mcl.creditlist_id = :creditId
-          AND DATE(tcl.closing_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
+          AND COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :closingQueryFromDate AND :closingQueryToDate
 
         UNION ALL
 

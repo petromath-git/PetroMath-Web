@@ -536,6 +536,12 @@ html(lang='en')
                         label.form-label Customer
                         .customer-auto-badge#allCustomerName
 
+                .mb-3
+                    label.form-label(for='creditBillDateInput') Credit Bill Date *
+                    input#creditBillDateInput.form-control(
+                        type='date'
+                    )
+
                 //- Bill No and Notes
                 .input-row.mb-3
                     div
@@ -607,6 +613,16 @@ html(lang='en')
 
     script.
         const pageData = !{pageData};
+        const currentSystemDate = new Date().toISOString().slice(0, 10);
+        const activeClosingDate = pageData.activeClosing && pageData.activeClosing.closing_date
+            ? new Date(pageData.activeClosing.closing_date).toISOString().slice(0, 10)
+            : currentSystemDate;
+
+        const creditBillDateInput = document.getElementById('creditBillDateInput');
+        if (creditBillDateInput) {
+            creditBillDateInput.value = activeClosingDate;
+            applyCreditBillDateConstraints();
+        }
 
         let selectedProductId = null;
         let selectedProductPrice = 0;
@@ -633,6 +649,63 @@ html(lang='en')
         // Search mode toggle
         let searchMode = 'customer'; // 'customer' or 'vehicle'
         let allVehiclesLoaded = pageData.allVehicles || [];
+
+        function normalizeVehicleNumber(value) {
+            return (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        const OCR_TO_ALPHA = { '0': 'O', '1': 'I', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '7': 'T', '8': 'B' };
+        const OCR_TO_DIGIT = { 'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8', 'T': '7' };
+
+        function normalizeByType(chunk, targetType) {
+            return chunk.split('').map(ch => {
+                if (targetType === 'alpha' && OCR_TO_ALPHA[ch]) return OCR_TO_ALPHA[ch];
+                if (targetType === 'digit' && OCR_TO_DIGIT[ch]) return OCR_TO_DIGIT[ch];
+                return ch;
+            }).join('');
+        }
+
+        function extractPlateCandidates(rawText) {
+            const cleaned = normalizeVehicleNumber(rawText);
+            if (!cleaned) return [];
+
+            const candidates = new Set();
+            for (let start = 0; start < cleaned.length; start++) {
+                for (let len = 8; len <= 10; len++) {
+                    const slice = cleaned.slice(start, start + len);
+                    if (slice.length < 8) continue;
+                    const m = slice.match(/^([A-Z0-9]{2})([A-Z0-9]{1,2})([A-Z0-9]{1,3})([A-Z0-9]{3,4})$/);
+                    if (!m) continue;
+
+                    const normalized = `${normalizeByType(m[1], 'alpha')}${normalizeByType(m[2], 'digit')}${normalizeByType(m[3], 'alpha')}${normalizeByType(m[4], 'digit')}`;
+                    if (/^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{3,4}$/.test(normalized)) {
+                        candidates.add(normalized);
+                    }
+                }
+            }
+
+            const strictMatches = cleaned.match(/[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{3,4}/g) || [];
+            strictMatches.forEach(m => candidates.add(m));
+            return Array.from(candidates).sort((a, b) => b.length - a.length);
+        }
+
+        function resolveScannedPlate(rawText, vehicles) {
+            const candidates = extractPlateCandidates(rawText);
+            if (!candidates.length) {
+                return { plate: normalizeVehicleNumber(rawText).substring(0, 10), match: null };
+            }
+
+            const normalizedVehicles = (vehicles || []).map(v => ({
+                norm: normalizeVehicleNumber(v.vehicle_number),
+                vehicle: v
+            }));
+
+            for (const candidate of candidates) {
+                const matched = normalizedVehicles.find(v => v.norm === candidate);
+                if (matched) return { plate: candidate, match: matched.vehicle };
+            }
+            return { plate: candidates[0], match: null };
+        }
 
         document.getElementById('toggleCustomer').addEventListener('click', function() {
             if (searchMode === 'customer') return;
@@ -684,9 +757,10 @@ html(lang='en')
 
         function showAllVehicleDropdown(term) {
             if (!allVehiclesLoaded.length) return;
-            const matches = term
+            const normalizedTerm = normalizeVehicleNumber(term);
+            const matches = normalizedTerm
                 ? allVehiclesLoaded.filter(v =>
-                    v.vehicle_number.toLowerCase().includes(term.toLowerCase()) ||
+                    normalizeVehicleNumber(v.vehicle_number).includes(normalizedTerm) ||
                     (v.vehicle_type && v.vehicle_type.toLowerCase().includes(term.toLowerCase()))
                   )
                 : allVehiclesLoaded;
@@ -775,10 +849,20 @@ html(lang='en')
             btnScanPlateAlt.innerHTML = '<i class="bi bi-hourglass-split"></i>';
             try {
                 const { data: { text } } = await Tesseract.recognize(file, 'eng', { logger: () => {} });
-                const cleaned = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-                const plateMatch = cleaned.match(/[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}/);
-                const result = plateMatch ? plateMatch[0] : cleaned.substring(0, 10);
-                if (result.length >= 4) {
+                const resolved = resolveScannedPlate(text, allVehiclesLoaded);
+                const result = resolved.plate;
+
+                if (resolved.match) {
+                    allVehicleId.value = resolved.match.vehicle_id;
+                    allCreditlistId.value = resolved.match.creditlist_id;
+                    allVehicleSearch.value = '';
+                    allVehicleDropdown.style.display = 'none';
+                    allVehicleSelected.innerHTML = `${resolved.match.vehicle_number} <button class="clear-vehicle" type="button">✕</button>`;
+                    allVehicleSelected.style.display = 'inline-flex';
+                    allCustomerName.textContent = resolved.match.Company_Name;
+                    allCustomerDisplay.style.display = '';
+                    checkFormReady();
+                } else if (result.length >= 4) {
                     allVehicleSearch.value = result;
                     showAllVehicleDropdown(result);
                 }
@@ -832,9 +916,10 @@ html(lang='en')
         function showVehicleDropdown(term) {
             if (!loadedVehicles.length) return;
 
-            const matches = term
+            const normalizedTerm = normalizeVehicleNumber(term);
+            const matches = normalizedTerm
                 ? loadedVehicles.filter(v =>
-                    v.vehicle_number.toLowerCase().includes(term.toLowerCase()) ||
+                    normalizeVehicleNumber(v.vehicle_number).includes(normalizedTerm) ||
                     (v.vehicle_type && v.vehicle_type.toLowerCase().includes(term.toLowerCase()))
                   )
                 : loadedVehicles;
@@ -917,14 +1002,18 @@ html(lang='en')
                     logger: () => {}
                 });
 
-                // Clean OCR text — keep only alphanumeric, uppercase
-                const cleaned = text.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                const resolved = resolveScannedPlate(text, loadedVehicles);
+                const result = resolved.plate;
 
-                // Try to extract Indian number plate pattern (e.g. TN26AC2345)
-                const plateMatch = cleaned.match(/[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}/);
-                const result = plateMatch ? plateMatch[0] : cleaned.substring(0, 10);
-
-                if (result.length >= 4) {
+                if (resolved.match) {
+                    vehicleIdInput.value = resolved.match.vehicle_id;
+                    vehicleSearch.value = '';
+                    vehicleDropdown.style.display = 'none';
+                    vehicleSelectedTag.innerHTML = `${resolved.match.vehicle_number} <button class="clear-vehicle" type="button">✕</button>`;
+                    vehicleSelectedTag.style.display = 'inline-flex';
+                    showScanStatus(`Matched: ${resolved.match.vehicle_number}`, 'success');
+                    checkFormReady();
+                } else if (result.length >= 4) {
                     vehicleSearch.value = result;
                     showVehicleDropdown(result);
                     showScanStatus(`Read: ${result}`, 'success');
@@ -954,13 +1043,14 @@ html(lang='en')
         function checkFormReady() {
             const qty = parseFloat(document.getElementById('qtyInput').value);
             const amt = parseFloat(document.getElementById('amountInput').value);
+            const hasCreditBillDate = !!document.getElementById('creditBillDateInput').value;
             let customerReady = false;
             if (searchMode === 'customer') {
                 customerReady = !!customerSelect.value;
             } else {
                 customerReady = !!allCreditlistId.value;
             }
-            const ready = selectedProductId && customerReady && (qty > 0 || amt > 0);
+            const ready = selectedProductId && customerReady && hasCreditBillDate && (qty > 0 || amt > 0);
             document.getElementById('btnSave').disabled = !ready;
         }
 
@@ -982,6 +1072,8 @@ html(lang='en')
             checkFormReady();
         });
 
+        document.getElementById('creditBillDateInput')?.addEventListener('change', checkFormReady);
+
         // Save entry
         document.getElementById('btnSave')?.addEventListener('click', async function() {
             this.disabled = true;
@@ -993,6 +1085,7 @@ html(lang='en')
                 vehicle_id:    searchMode === 'customer' ? (vehicleIdInput.value || null) : (allVehicleId.value || null),
                 qty:           document.getElementById('qtyInput').value,
                 amount:        document.getElementById('amountInput').value,
+                credit_bill_date: document.getElementById('creditBillDateInput').value,
                 bill_no:       document.getElementById('billNoInput').value.trim() || null,
                 notes:         document.getElementById('notesInput').value.trim() || null
             };
@@ -1089,6 +1182,10 @@ html(lang='en')
             allCustomerDisplay.style.display = 'none';
             document.getElementById('qtyInput').value = '';
             document.getElementById('amountInput').value = '';
+            if (creditBillDateInput) {
+                creditBillDateInput.value = activeClosingDate;
+                applyCreditBillDateConstraints();
+            }
             document.getElementById('billNoInput').value = '0';
             document.getElementById('notesInput').value = '';
         }
@@ -1101,6 +1198,28 @@ html(lang='en')
             toast.style.color = 'white';
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        function addDays(dateStr, days) {
+            const dt = new Date(dateStr + 'T00:00:00');
+            dt.setDate(dt.getDate() + days);
+            return dt.toISOString().slice(0, 10);
+        }
+
+        function applyCreditBillDateConstraints() {
+            if (!creditBillDateInput) return;
+
+            const prevDate = addDays(activeClosingDate, -1);
+            const nextDate = addDays(activeClosingDate, 1);
+            // Restrict calendar selection to previous/closing day and conditionally next day.
+            const allowNext = currentSystemDate >= nextDate;
+
+            creditBillDateInput.min = prevDate;
+            creditBillDateInput.max = allowNext ? nextDate : activeClosingDate;
+
+            if (!creditBillDateInput.value || creditBillDateInput.value < creditBillDateInput.min || creditBillDateInput.value > creditBillDateInput.max) {
+                creditBillDateInput.value = activeClosingDate;
+            }
         }
 
     script(src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js')
