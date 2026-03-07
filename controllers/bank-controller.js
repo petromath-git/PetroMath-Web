@@ -1,7 +1,8 @@
 // controllers/bank-controller.js
 const BankDao = require('../dao/bank-dao');
+const bankReconDao = require('../dao/bank-reconciliation-dao');
 const rolePermissionsDao = require('../dao/role-permissions-dao');
-const db = require('../db/db-connection');  
+const db = require('../db/db-connection');
 
 module.exports = {
     
@@ -29,8 +30,11 @@ module.exports = {
     getBankMasterPage: async (req, res) => {
         try {
             const locationCode = req.user.location_code;
-            const banks = await BankDao.findAll(locationCode);
-            
+            const [banks, templates] = await Promise.all([
+                BankDao.findAll(locationCode),
+                bankReconDao.getAllTemplates()
+            ]);
+
             // Check permissions
             const canEdit = await rolePermissionsDao.hasPermission(
                 req.user.Role,
@@ -52,6 +56,7 @@ module.exports = {
                 title: 'Bank Master',
                 user: req.user,
                 banks: banks,
+                templates: templates,
                 canEdit: canEdit,
                 canAdd: canAdd,
                 canDisable: canDisable
@@ -125,6 +130,7 @@ module.exports = {
                 account_nickname: req.body.account_nickname || null,
                 internal_flag: req.body.internal_flag || 'N',
                 is_oil_company: req.body.is_oil_company || 'N',
+                template_id: req.body.template_id ? parseInt(req.body.template_id, 10) : null,
                 updated_by: req.user.Person_id,
                 updation_date: new Date()
             };
@@ -195,9 +201,10 @@ module.exports = {
                 cc_limit: req.body.cc_limit || null,
                 ledger_name: req.body.ledger_name || null,
                 account_nickname: req.body.account_nickname || null,
-                location_id:locationId,
+                location_id: locationId,
                 internal_flag: req.body.internal_flag || 'N',
                 is_oil_company: req.body.is_oil_company || 'N',
+                template_id: req.body.template_id ? parseInt(req.body.template_id, 10) : null,
                 active_flag: 'Y',
                 created_by: req.user.Person_id,
                 updated_by: req.user.Person_id

@@ -63,6 +63,10 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: true,
             defaultValue: 'Y'
         },
+        template_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
         created_by: {
             type: DataTypes.STRING(45),
             allowNull: true
