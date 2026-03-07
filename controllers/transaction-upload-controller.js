@@ -294,6 +294,35 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
     return null;
 }
 
+function normalizeYmd(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = parseInt(match[1], 10);
+    let month = parseInt(match[2], 10);
+    let day = parseInt(match[3], 10);
+
+    // Auto-fix obvious swapped month/day values like 2026-20-02.
+    if (month > 12 && day <= 12) {
+        const temp = month;
+        month = day;
+        day = temp;
+    }
+
+    const d = new Date(year, month - 1, day);
+    if (
+        d.getFullYear() !== year ||
+        d.getMonth() !== month - 1 ||
+        d.getDate() !== day
+    ) {
+        return null;
+    }
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 
 // NEW: Helper function to format date as DD-MM-YYYY
 function formatDateForDisplay(dateStr) {
@@ -564,8 +593,9 @@ previewTransactions: async (req, res) => {
                 row[columnToIndex(template.value_date_column || template.date_column)],
                 template.date_format  // ← Pass the format from template
             );
-            if (txnDate) {
-                tempDates.push(txnDate);
+            const normalizedTxnDate = normalizeYmd(txnDate);
+            if (normalizedTxnDate) {
+                tempDates.push(normalizedTxnDate);
             }
         }
         
@@ -596,8 +626,18 @@ previewTransactions: async (req, res) => {
         const lastUploadedDate = await bankReconDao.getLastTransactionDate(locationCode, bankId);
         
         if (lastUploadedDate && overlapMode !== 'off') {
-            const lastDate = new Date(lastUploadedDate);
-            const uploadDate = new Date(earliestUploadDate);
+            const safeLastUploadedDate = normalizeYmd(lastUploadedDate);
+            const safeEarliestUploadDate = normalizeYmd(earliestUploadDate);
+
+            if (!safeLastUploadedDate || !safeEarliestUploadDate) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Unable to validate overlap due to invalid transaction date format in upload.'
+                });
+            }
+
+            const lastDate = new Date(safeLastUploadedDate);
+            const uploadDate = new Date(safeEarliestUploadDate);
             
             const expectedOverlapDate = new Date(lastDate);
             expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
@@ -663,10 +703,11 @@ previewTransactions: async (req, res) => {
             const row = data[i];
             if (!row || row.length === 0) continue;
 
-            const txnDate = parseExcelDate(
+            const parsedTxnDate = parseExcelDate(
                 row[columnToIndex(template.value_date_column || template.date_column)],
-                template.date_format  // ← Pass the format from template
+                template.date_format  // Pass the format from template
             );
+            const txnDate = normalizeYmd(parsedTxnDate);
 
             if (!txnDate) continue;  // skip opening/closing balance and summary rows
             
@@ -1150,6 +1191,7 @@ async function checkTransactionDuplicates(bankId, transactions) {
         throw error;
     }
 }
+
 
 
 
