@@ -342,11 +342,15 @@ getBanksForReconciliation: async (locationCode) => {
      */
     getBankTemplate: async (bankId) => {
         const result = await db.sequelize.query(
-            `SELECT t.* 
+            `SELECT t.*
              FROM m_bank_statement_template t
-             JOIN m_bank b ON t.bank_name = b.bank_name
-             WHERE b.bank_id = :bankId 
+             JOIN m_bank b ON (
+                 b.template_id = t.template_id
+                 OR (b.template_id IS NULL AND t.bank_name = b.bank_name)
+             )
+             WHERE b.bank_id = :bankId
                AND t.is_active = 1
+             ORDER BY (b.template_id IS NOT NULL) DESC
              LIMIT 1`,
             {
                 replacements: { bankId },
@@ -354,6 +358,17 @@ getBanksForReconciliation: async (locationCode) => {
             }
         );
         return result[0];
+    },
+
+    getAllTemplates: async () => {
+        const result = await db.sequelize.query(
+            `SELECT template_id, template_name, bank_name, date_format
+             FROM m_bank_statement_template
+             WHERE is_active = 1
+             ORDER BY bank_name, template_name`,
+            { type: db.Sequelize.QueryTypes.SELECT }
+        );
+        return result;
     },
 
     /**
