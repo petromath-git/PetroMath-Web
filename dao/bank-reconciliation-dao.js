@@ -340,17 +340,25 @@ getBanksForReconciliation: async (locationCode) => {
     /**
      * Get bank statement template for a bank account
      */
-    getBankTemplate: async (bankId) => {
-        const result = await db.sequelize.query(
+getBankTemplate: async (bankId) => {
+    const result = await db.sequelize.query(
             `SELECT t.*
-             FROM m_bank_statement_template t
-             JOIN m_bank b ON (
-                 b.template_id = t.template_id
-                 OR (b.template_id IS NULL AND t.bank_name = b.bank_name)
-             )
+             FROM m_bank b
+             JOIN m_bank_statement_template t
+               ON t.is_active = 1
+              AND (
+                   t.template_id = b.template_id
+                   OR UPPER(TRIM(t.bank_name)) = UPPER(TRIM(b.bank_name))
+              )
              WHERE b.bank_id = :bankId
-               AND t.is_active = 1
-             ORDER BY (b.template_id IS NOT NULL) DESC
+             ORDER BY
+               CASE
+                 WHEN b.template_id IS NOT NULL AND t.template_id = b.template_id THEN 0
+                 WHEN UPPER(TRIM(t.bank_name)) = UPPER(TRIM(b.bank_name)) THEN 1
+                 ELSE 2
+               END,
+               t.updated_at DESC,
+               t.template_id DESC
              LIMIT 1`,
             {
                 replacements: { bankId },
