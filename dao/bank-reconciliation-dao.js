@@ -340,13 +340,25 @@ getBanksForReconciliation: async (locationCode) => {
     /**
      * Get bank statement template for a bank account
      */
-    getBankTemplate: async (bankId) => {
-        const result = await db.sequelize.query(
-            `SELECT t.* 
-             FROM m_bank_statement_template t
-             JOIN m_bank b ON t.bank_name = b.bank_name
-             WHERE b.bank_id = :bankId 
-               AND t.is_active = 1
+getBankTemplate: async (bankId) => {
+    const result = await db.sequelize.query(
+            `SELECT t.*
+             FROM m_bank b
+             JOIN m_bank_statement_template t
+               ON t.is_active = 1
+              AND (
+                   t.template_id = b.template_id
+                   OR UPPER(TRIM(t.bank_name)) = UPPER(TRIM(b.bank_name))
+              )
+             WHERE b.bank_id = :bankId
+             ORDER BY
+               CASE
+                 WHEN b.template_id IS NOT NULL AND t.template_id = b.template_id THEN 0
+                 WHEN UPPER(TRIM(t.bank_name)) = UPPER(TRIM(b.bank_name)) THEN 1
+                 ELSE 2
+               END,
+               t.updated_at DESC,
+               t.template_id DESC
              LIMIT 1`,
             {
                 replacements: { bankId },
@@ -354,6 +366,17 @@ getBanksForReconciliation: async (locationCode) => {
             }
         );
         return result[0];
+    },
+
+    getAllTemplates: async () => {
+        const result = await db.sequelize.query(
+            `SELECT template_id, template_name, bank_name, date_format
+             FROM m_bank_statement_template
+             WHERE is_active = 1
+             ORDER BY bank_name, template_name`,
+            { type: db.Sequelize.QueryTypes.SELECT }
+        );
+        return result;
     },
 
     /**

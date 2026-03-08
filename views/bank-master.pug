@@ -63,6 +63,7 @@ block content
                             th Ledger Name
                             th Internal
                             th Oil Company
+                            th Statement Template
                             if canEdit || canDisable
                                 th Actions
                     tbody
@@ -84,6 +85,12 @@ block content
                                     td
                                         span.badge(class=bank.is_oil_company === 'Y' ? 'badge-warning' : 'badge-secondary')
                                             = bank.is_oil_company === 'Y' ? 'Yes' : 'No'
+                                    td
+                                        - const tpl = bank.template_id ? templates.find(t => t.template_id === bank.template_id) : null
+                                        if tpl
+                                            span.badge.badge-success= tpl.template_name
+                                        else
+                                            span.text-muted(style="font-size:0.85em") auto
                                     if canEdit || canDisable
                                         td
                                             if canEdit
@@ -94,7 +101,7 @@ block content
                                                     i.bi.bi-trash
                         else
                             tr
-                                td(colspan="12").text-center No banks found
+                                td(colspan="13").text-center No banks found
         
         // Mobile cards view
         .mobile-cards-view.d-block.d-lg-none
@@ -200,6 +207,12 @@ block content
                                 select.form-control(name="is_oil_company")
                                     option(value="N") No
                                     option(value="Y") Yes
+                            .col-md-6.mb-3
+                                label.form-label Statement Template
+                                select.form-control(name="template_id")
+                                    option(value="") Auto (match by bank name)
+                                    each t in templates
+                                        option(value=t.template_id)= `${t.template_name} (${t.date_format})`
                         .modal-footer
                             button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                             button.btn.btn-primary(type="submit") Save Bank
@@ -250,6 +263,12 @@ block content
                                 select.form-control(name="is_oil_company", id="edit-oil-company")
                                     option(value="N") No
                                     option(value="Y") Yes
+                            .col-md-6.mb-3
+                                label.form-label Statement Template
+                                select.form-control(name="template_id", id="edit-template-id")
+                                    option(value="") Auto (match by bank name)
+                                    each t in templates
+                                        option(value=t.template_id)= `${t.template_name} (${t.date_format})`
                         .modal-footer
                             button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                             button.btn.btn-primary(type="button", onclick="saveBankEdit()") Save Changes
@@ -320,6 +339,7 @@ block content
     // JavaScript
     script.
         let banksData = !{JSON.stringify(banks)};
+        let templatesData = !{JSON.stringify(templates)};
         const canEdit = #{canEdit ? 'true' : 'false'};
         const canAdd = #{canAdd ? 'true' : 'false'};
         const canDisable = #{canDisable ? 'true' : 'false'};
@@ -399,7 +419,8 @@ block content
             document.getElementById('edit-ledger-name').value = bank.ledger_name || '';
             document.getElementById('edit-internal-flag').value = bank.internal_flag;
             document.getElementById('edit-oil-company').value = bank.is_oil_company;
-            
+            document.getElementById('edit-template-id').value = bank.template_id || '';
+
             $('#editBankModal').modal('show');
         }
         
@@ -419,8 +440,9 @@ block content
                 type: document.getElementById('edit-type').value,
                 cc_limit: document.getElementById('edit-cc-limit').value,
                 ledger_name: document.getElementById('edit-ledger-name').value,
-                internal_flag: internalFlag || 'N',  // Default to 'N' if empty
-                is_oil_company: isOilCompany || 'N'  // Default to 'N' if empty
+                internal_flag: internalFlag || 'N',
+                is_oil_company: isOilCompany || 'N',
+                template_id: document.getElementById('edit-template-id').value || null
             };
             
             fetch(`/bank-master/api/${bankId}`, {
