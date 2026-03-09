@@ -1097,15 +1097,24 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
                 }
                 break;
                 
+            case 'DD-MMM-YY':
+                // 20-Feb-26 → 2026-02-20 (SBI)
+                if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+                    const [day, monthName, year] = v.split('-');
+                    const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
+                    if (month) return `20${year}-${month}-${day.padStart(2, '0')}`;
+                }
+                break;
+
             case 'DD-MMM-YYYY':
                 // 11-Feb-2026 → 2026-02-11
                 if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
                     const [day, monthName, year] = v.split('-');
-                    const month = monthMap[monthName];
+                    const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
                     if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
                 }
                 break;
-                
+
             case 'DD MMM YYYY':
                 // 1 Jan 2026 → 2026-01-01
                 if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
@@ -1154,13 +1163,20 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
     
+    // DD-MMM-YY (SBI) - 20-Feb-26
+    if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+        const [day, monthName, year] = v.split('-');
+        const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
+        if (month) return `20${year}-${month}-${day.padStart(2, '0')}`;
+    }
+
     // DD-MMM-YYYY (IOB)
     if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
         const [day, monthName, year] = v.split('-');
-        const month = monthMap[monthName];
+        const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
         if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
     }
-    
+
     // DD MMM YYYY (SBI)
     if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
         const [day, monthName, year] = v.split(/\s+/);

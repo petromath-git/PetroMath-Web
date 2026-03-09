@@ -555,7 +555,11 @@ block content
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         bank_id: bankId,
-                        transactions: nonDuplicates
+                        transactions: nonDuplicates,
+                        total_transactions: uploadedTransactions.length,
+                        duplicates_found: duplicateCount,
+                        source_file: uploadedTransactions[0]?.source_file || null,
+                        retained_file_name: uploadedTransactions[0]?.retained_file_name || null
                     })
                 });
                 

@@ -1,6 +1,13 @@
 // controllers/transaction-upload-controller.js
 const BankStatementDao = require('../dao/bank-statement-dao');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
+const fs = require('fs/promises');
+const path = require('path');
+
+const DEBUG_UPLOAD_DIR = path.join(process.cwd(), 'tmp', 'transaction-upload-debug');
+const DEBUG_FILE_RETENTION_DAYS = 7;
+const DEBUG_MAX_TOTAL_BYTES = 500 * 1024 * 1024; // 500 MB
+const DEBUG_MAX_FILE_COUNT = 200;
 
 // Helper function to convert Excel column letter to index
 function columnToIndex(column) {
@@ -165,15 +172,24 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
                 }
                 break;
                 
+            case 'DD-MMM-YY':
+                // 20-Feb-26 → 2026-02-20 (SBI)
+                if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+                    const [day, monthName, year] = v.split('-');
+                    const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
+                    if (month) return `20${year}-${month}-${day.padStart(2, '0')}`;
+                }
+                break;
+
             case 'DD-MMM-YYYY':
                 // 11-Feb-2026 → 2026-02-11
                 if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
                     const [day, monthName, year] = v.split('-');
-                    const month = monthMap[monthName];
+                    const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
                     if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
                 }
                 break;
-                
+
             case 'DD MMM YYYY':
                 // 1 Jan 2026 → 2026-01-01
                 if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
@@ -227,13 +243,20 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
     
+    // DD-MMM-YY (SBI) - 20-Feb-26
+    if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+        const [day, monthName, year] = v.split('-');
+        const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
+        if (month) return `20${year}-${month}-${day.padStart(2, '0')}`;
+    }
+
     // DD-MMM-YYYY (IOB)
     if (v.match(/^\d{1,2}-[A-Za-z]{3}-\d{4}$/)) {
         const [day, monthName, year] = v.split('-');
-        const month = monthMap[monthName];
+        const month = monthMap[monthName.charAt(0).toUpperCase() + monthName.slice(1).toLowerCase()];
         if (month) return `${year}-${month}-${day.padStart(2, '0')}`;
     }
-    
+
     // DD MMM YYYY (SBI)
     if (v.match(/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/)) {
         const [day, monthName, year] = v.split(/\s+/);
@@ -276,6 +299,122 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
     }
     
     return null;
+}
+
+function sanitizeFileName(name) {
+    return String(name || 'upload')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_+/g, '_')
+        .slice(0, 120);
+}
+
+async function purgeExpiredDebugUploads() {
+    try {
+        await fs.mkdir(DEBUG_UPLOAD_DIR, { recursive: true });
+        const files = await fs.readdir(DEBUG_UPLOAD_DIR, { withFileTypes: true });
+        const cutoff = Date.now() - (DEBUG_FILE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+        const fileStats = [];
+
+        for (const f of files) {
+            if (!f.isFile()) continue;
+            const fullPath = path.join(DEBUG_UPLOAD_DIR, f.name);
+            try {
+                const stat = await fs.stat(fullPath);
+                fileStats.push({
+                    name: f.name,
+                    fullPath,
+                    size: stat.size,
+                    mtimeMs: stat.mtimeMs
+                });
+            } catch (statErr) {
+                console.warn(`Debug upload stat failed for ${f.name}:`, statErr.message);
+            }
+        }
+
+        // Phase 1: age-based cleanup
+        for (const file of fileStats) {
+            if (file.mtimeMs < cutoff) {
+                await fs.unlink(file.fullPath).catch(() => {});
+            }
+        }
+
+        // Re-scan after age cleanup
+        const currentFiles = [];
+        const names = await fs.readdir(DEBUG_UPLOAD_DIR, { withFileTypes: true });
+        for (const f of names) {
+            if (!f.isFile()) continue;
+            const fullPath = path.join(DEBUG_UPLOAD_DIR, f.name);
+            try {
+                const stat = await fs.stat(fullPath);
+                currentFiles.push({
+                    name: f.name,
+                    fullPath,
+                    size: stat.size,
+                    mtimeMs: stat.mtimeMs
+                });
+            } catch (statErr) {
+                console.warn(`Debug upload stat failed for ${f.name}:`, statErr.message);
+            }
+        }
+
+        let totalBytes = currentFiles.reduce((sum, f) => sum + f.size, 0);
+        currentFiles.sort((a, b) => a.mtimeMs - b.mtimeMs); // oldest first
+
+        // Phase 2: enforce count and size caps by deleting oldest files
+        while (
+            currentFiles.length > DEBUG_MAX_FILE_COUNT ||
+            totalBytes > DEBUG_MAX_TOTAL_BYTES
+        ) {
+            const oldest = currentFiles.shift();
+            if (!oldest) break;
+            await fs.unlink(oldest.fullPath).catch(() => {});
+            totalBytes -= oldest.size;
+        }
+    } catch (e) {
+        console.warn('Debug upload cleanup failed:', e.message);
+    }
+}
+
+async function retainUploadedFile(file, locationCode, bankId) {
+    if (!file || !file.buffer) return null;
+
+    await fs.mkdir(DEBUG_UPLOAD_DIR, { recursive: true });
+    const ext = path.extname(file.originalname || '') || '.bin';
+    const base = sanitizeFileName(path.basename(file.originalname || 'upload', ext));
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${stamp}_loc-${locationCode}_bank-${bankId}_${base}${ext}`;
+
+    await fs.writeFile(path.join(DEBUG_UPLOAD_DIR, fileName), file.buffer);
+    return fileName;
+}
+
+function normalizeYmd(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = parseInt(match[1], 10);
+    let month = parseInt(match[2], 10);
+    let day = parseInt(match[3], 10);
+
+    // Auto-fix obvious swapped month/day values like 2026-20-02.
+    if (month > 12 && day <= 12) {
+        const temp = month;
+        month = day;
+        day = temp;
+    }
+
+    const d = new Date(year, month - 1, day);
+    if (
+        d.getFullYear() !== year ||
+        d.getMonth() !== month - 1 ||
+        d.getDate() !== day
+    ) {
+        return null;
+    }
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 
@@ -519,6 +658,14 @@ previewTransactions: async (req, res) => {
             });
         }
 
+        await purgeExpiredDebugUploads();
+        let retainedFileName = null;
+        try {
+            retainedFileName = await retainUploadedFile(req.file, locationCode, bankId);
+        } catch (retainErr) {
+            console.warn('Failed to retain uploaded file for debug:', retainErr.message);
+        }
+
         const template = await bankReconDao.getBankTemplate(bankId);
         if (!template) {
             return res.status(404).json({
@@ -548,8 +695,9 @@ previewTransactions: async (req, res) => {
                 row[columnToIndex(template.value_date_column || template.date_column)],
                 template.date_format  // ← Pass the format from template
             );
-            if (txnDate) {
-                tempDates.push(txnDate);
+            const normalizedTxnDate = normalizeYmd(txnDate);
+            if (normalizedTxnDate) {
+                tempDates.push(normalizedTxnDate);
             }
         }
         
@@ -580,8 +728,18 @@ previewTransactions: async (req, res) => {
         const lastUploadedDate = await bankReconDao.getLastTransactionDate(locationCode, bankId);
         
         if (lastUploadedDate && overlapMode !== 'off') {
-            const lastDate = new Date(lastUploadedDate);
-            const uploadDate = new Date(earliestUploadDate);
+            const safeLastUploadedDate = normalizeYmd(lastUploadedDate);
+            const safeEarliestUploadDate = normalizeYmd(earliestUploadDate);
+
+            if (!safeLastUploadedDate || !safeEarliestUploadDate) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Unable to validate overlap due to invalid transaction date format in upload.'
+                });
+            }
+
+            const lastDate = new Date(safeLastUploadedDate);
+            const uploadDate = new Date(safeEarliestUploadDate);
             
             const expectedOverlapDate = new Date(lastDate);
             expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
@@ -647,10 +805,11 @@ previewTransactions: async (req, res) => {
             const row = data[i];
             if (!row || row.length === 0) continue;
 
-            const txnDate = parseExcelDate(
+            const parsedTxnDate = parseExcelDate(
                 row[columnToIndex(template.value_date_column || template.date_column)],
-                template.date_format  // ← Pass the format from template
+                template.date_format  // Pass the format from template
             );
+            const txnDate = normalizeYmd(parsedTxnDate);
 
             if (!txnDate) continue;  // skip opening/closing balance and summary rows
             
@@ -687,6 +846,7 @@ previewTransactions: async (req, res) => {
                 running_balance: parseFloat(String(balanceRaw).replace(/,/g, '')) || null,
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
                 source_file: req.file.originalname,
+                retained_file_name: retainedFileName,
                 ledger_name: null,
                 remarks: row[columnToIndex(template.description_column)] || ''
             };
@@ -771,6 +931,7 @@ previewTransactions: async (req, res) => {
                 last_uploaded_date: lastUploadedDate,
                 earliest_upload_date: earliestUploadDate,
                 latest_upload_date: latestUploadDate,
+                retained_file_name: retainedFileName,
                 overlap_mode: overlapMode,
                 has_gap: lastUploadedDate && earliestUploadDate > lastUploadedDate
             }
@@ -795,6 +956,10 @@ previewTransactions: async (req, res) => {
             const bankId = parseInt(req.body.bank_id);
             const transactions = req.body.transactions;
             const userName = req.user.User_Name || req.user.username || req.user.user_id;
+            const sourceFile = req.body.source_file || transactions?.[0]?.source_file || 'Unknown';
+            const retainedFileName = req.body.retained_file_name || transactions?.[0]?.retained_file_name || null;
+            const totalTransactions = parseInt(req.body.total_transactions, 10) || transactions?.length || 0;
+            const duplicatesFound = parseInt(req.body.duplicates_found, 10) || Math.max(0, totalTransactions - (transactions?.length || 0));
 
             if (!transactions || transactions.length === 0) {
                 return res.status(400).json({
@@ -902,6 +1067,25 @@ previewTransactions: async (req, res) => {
             }
 
             if (failedEntries.length > 0) {
+                const dates = transactions.map(t => t.txn_date).filter(Boolean).sort();
+                const firstTxnDate = dates[0] || null;
+                const lastTxnDate = dates[dates.length - 1] || null;
+                await bankReconDao.insertUploadHistory({
+                    location_code: locationCode,
+                    bank_id: bankId,
+                    source_file: sourceFile,
+                    uploaded_by: userName,
+                    total_transactions: totalTransactions,
+                    duplicates_found: duplicatesFound,
+                    transactions_imported: successCount,
+                    first_txn_date: firstTxnDate,
+                    last_txn_date: lastTxnDate,
+                    status: 'COMPLETED',
+                    remarks: retainedFileName
+                        ? `Partial save (${failedEntries.length} failed). retained_file=${retainedFileName}`
+                        : `Partial save (${failedEntries.length} failed)`
+                });
+
                 return res.json({
                     success: true,
                     count: successCount,
@@ -911,6 +1095,25 @@ previewTransactions: async (req, res) => {
                 });
             }
 
+            const dates = transactions.map(t => t.txn_date).filter(Boolean).sort();
+            const firstTxnDate = dates[0] || null;
+            const lastTxnDate = dates[dates.length - 1] || null;
+            await bankReconDao.insertUploadHistory({
+                location_code: locationCode,
+                bank_id: bankId,
+                source_file: sourceFile,
+                uploaded_by: userName,
+                total_transactions: totalTransactions,
+                duplicates_found: duplicatesFound,
+                transactions_imported: successCount,
+                first_txn_date: firstTxnDate,
+                last_txn_date: lastTxnDate,
+                status: 'COMPLETED',
+                remarks: retainedFileName
+                    ? `retained_file=${retainedFileName}`
+                    : null
+            });
+
             res.json({
                 success: true,
                 count: successCount,
@@ -919,6 +1122,21 @@ previewTransactions: async (req, res) => {
 
         } catch (error) {
             console.error('Error in saveTransactions:', error);
+            try {
+                await bankReconDao.insertUploadHistory({
+                    location_code: req.user.location_code,
+                    bank_id: parseInt(req.body.bank_id, 10),
+                    source_file: req.body.source_file || req.body.transactions?.[0]?.source_file || 'Unknown',
+                    uploaded_by: req.user.User_Name || req.user.username || req.user.user_id,
+                    total_transactions: parseInt(req.body.total_transactions, 10) || req.body.transactions?.length || 0,
+                    duplicates_found: parseInt(req.body.duplicates_found, 10) || 0,
+                    transactions_imported: 0,
+                    status: 'FAILED',
+                    remarks: error.message
+                });
+            } catch (historyErr) {
+                console.error('Error recording upload history:', historyErr);
+            }
             res.status(500).json({
                 success: false,
                 error: error.message
@@ -1134,6 +1352,7 @@ async function checkTransactionDuplicates(bankId, transactions) {
         throw error;
     }
 }
+
 
 
 
