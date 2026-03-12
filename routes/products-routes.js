@@ -7,43 +7,61 @@ const security = require("../utils/app-security");
 const ProductDao = require('../dao/product-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
+const locationConfigDao = require('../dao/location-config-dao');
+
+const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
+
+const isTruthySetting = (value) => {
+    if (value === null || value === undefined) return false;
+    const normalized = String(value).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y'].includes(normalized);
+};
 
 // Route to display the products page (GET)
-router.get('/', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, next) {
     const locationCode = req.user.location_code;
     let products = [];
-    
-    ProductDao.findProducts(locationCode)
-        .then(data => {
-            data.forEach((product) => {
-                products.push({
-                    id: product.product_id,
-                    name: product.product_name,
-                    unit: product.unit,
-                    qty: product.qty,
-                    price: product.price,
-                    ledger_name: product.ledger_name,
-                    cgst_percent: product.cgst_percent,
-                    sgst_percent: product.sgst_percent,
-                    sku_name: product.sku_name,
-                    sku_number: product.sku_number,
-                    hsn_code: product.hsn_code,
-                    is_tank_product: product.is_tank_product                   
-                });
+    try {
+        const [data, editableSetting, pumpLinkedNames] = await Promise.all([
+            ProductDao.findProducts(locationCode),
+            locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
+            ProductDao.findPumpLinkedProductNames(locationCode)
+        ]);
+        const canEditProductName = isTruthySetting(editableSetting);
+        const pumpLinkedSet = new Set(pumpLinkedNames);
+
+        data.forEach((product) => {
+            const canEditNameForRow = canEditProductName && !pumpLinkedSet.has(product.product_name);
+            products.push({
+                id: product.product_id,
+                name: product.product_name,
+                unit: product.unit,
+                qty: product.qty,
+                price: product.price,
+                ledger_name: product.ledger_name,
+                cgst_percent: product.cgst_percent,
+                sgst_percent: product.sgst_percent,
+                sku_name: product.sku_name,
+                sku_number: product.sku_number,
+                hsn_code: product.hsn_code,
+                is_tank_product: product.is_tank_product,
+                can_edit_name: canEditNameForRow
             });
-            res.render('products', { 
-                title: 'Products', 
-                user: req.user, 
-                products: products, 
-                config: config.APP_CONFIGS,
-                messages: req.flash()
-            });
-        })
-        .catch(error => {
-            console.error('Error loading products page:', error);
-            req.flash('error', 'Failed to load products: ' + error.message);
-            res.redirect('/home');
         });
+
+        res.render('products', { 
+            title: 'Products', 
+            user: req.user, 
+            products: products, 
+            config: config.APP_CONFIGS,
+            canEditProductName: canEditProductName,
+            messages: req.flash()
+        });
+    } catch (error) {
+        console.error('Error loading products page:', error);
+        req.flash('error', 'Failed to load products: ' + error.message);
+        res.redirect('/home');
+    }
 });
 
 // API endpoint for getting products data (JSON)
@@ -130,19 +148,59 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, ne
 });
 
 // API endpoint for updating product
-router.put('/api/:id', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req, res, next) {
     const productId = req.params.id;
-    
-    ProductDao.update({
-        product_id: productId,
-        price: req.body.m_product_price,
-        unit: req.body.m_product_unit,
-        ledger_name: req.body.m_product_ledger_name,
-        cgst_percent: req.body.m_product_cgst,
-        sgst_percent: req.body.m_product_sgst,
-        is_tank_product: req.body.m_product_is_tank_product
-    })
-    .then(data => {
+    const locationCode = req.user.location_code;
+
+    try {
+        const [existingProduct, editableSetting] = await Promise.all([
+            ProductDao.findById(productId, locationCode),
+            locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING)
+        ]);
+        if (!existingProduct) {
+            return res.status(404).json({ success: false, error: 'Product not found' });
+        }
+
+        const canEditProductName = isTruthySetting(editableSetting);
+        const newProductName = (req.body.m_product_name || '').trim().toUpperCase();
+        const isRenameRequested = Boolean(newProductName) && newProductName !== existingProduct.product_name;
+
+        if (isRenameRequested) {
+            if (!canEditProductName) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Product name editing is not enabled for this location'
+                });
+            }
+
+            const isLinked = await ProductDao.isProductLinkedToPumpOrTank(locationCode, existingProduct.product_name);
+            if (isLinked) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Product is linked to pump/tank configuration and name cannot be changed'
+                });
+            }
+
+            const duplicate = await ProductDao.findByName(newProductName, locationCode);
+            if (duplicate && Number(duplicate.product_id) !== Number(productId)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Another product with this name already exists'
+                });
+            }
+        }
+
+        const data = await ProductDao.update({
+            product_id: productId,
+            product_name: isRenameRequested ? newProductName : undefined,
+            price: req.body.m_product_price,
+            unit: req.body.m_product_unit,
+            ledger_name: req.body.m_product_ledger_name,
+            cgst_percent: req.body.m_product_cgst,
+            sgst_percent: req.body.m_product_sgst,
+            is_tank_product: req.body.m_product_is_tank_product
+        });
+
         if (data == 1 || data == 0) {
             res.json({
                 success: true,
@@ -154,14 +212,13 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], function (req, res,
                 error: 'Unexpected response from database'
             });
         }
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Error updating product:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to update product: ' + error.message
         });
-    });
+    }
 });
 
 // Legacy route for form-based product creation (maintaining backward compatibility)
