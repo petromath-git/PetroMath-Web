@@ -48,90 +48,23 @@ block content
                             th(scope="col") Edit
                     tbody
                         each val, index in products
+                            - const productPayload = JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }).replace(/"/g, '&quot;')
                             tr(id=`product-row-${index}`)
                                 th(scope="row")= index + 1
                                 td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text",
-                                        id=`product-name-${index}`,
-                                        value=val.name,
-                                        readonly,
-                                        title=val.can_edit_name ? '' : 'Product name cannot be edited because it is linked to pump configuration',
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`product-sku-name-${index}`, 
-                                        value=val.sku_name, 
-                                        readonly,
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`product-sku-number-${index}`, 
-                                        value=val.sku_number, 
-                                        readonly,
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`product-hsn-code-${index}`, 
-                                        value=val.hsn_code, 
-                                        readonly,
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`product-unit-${index}`, 
-                                        value=val.unit, 
-                                        readonly,
-                                        style="text-transform: uppercase;"
-                                    )
+                                    strong= val.name
+                                td(scope="row")= val.sku_name || '-'
+                                td(scope="row")= val.sku_number || '-'
+                                td(scope="row")= val.hsn_code || '-'
+                                td(scope="row")= val.unit || '-'
                                 td(scope="row")
                                     .input-group.input-group-sm
                                         .input-group-prepend
                                             span.input-group-text ₹
-                                        input.form-control(
-                                            type="number", 
-                                            id=`product-price-${index}`, 
-                                            value=val.price, 
-                                            readonly, 
-                                            step=0.01
-                                        )
-                                td(scope="row")
-                                    input.form-control.form-control-sm.text-uppercase(
-                                        type="text", 
-                                        id=`product-ledger-name-${index}`, 
-                                        value=val.ledger_name, 
-                                        readonly,
-                                        style="text-transform: uppercase;"
-                                    )
-                                td(scope="row")
-                                    .input-group.input-group-sm
-                                        input.form-control(
-                                            type="number", 
-                                            id=`product-cgst-${index}`, 
-                                            value=val.cgst_percent, 
-                                            readonly, 
-                                            step=0.01
-                                        )
-                                        .input-group-append
-                                            span.input-group-text %
-                                td(scope="row")
-                                    .input-group.input-group-sm
-                                        input.form-control(
-                                            type="number", 
-                                            id=`product-sgst-${index}`, 
-                                            value=val.sgst_percent, 
-                                            readonly, 
-                                            step=0.01
-                                        )
-                                        .input-group-append
-                                            span.input-group-text %
+                                        span.form-control-plaintext= val.price
+                                td(scope="row")= val.ledger_name || '-'
+                                td(scope="row") #{val.cgst_percent}%
+                                td(scope="row") #{val.sgst_percent}%
                                 if user.Role === 'SuperUser'
                                     td(scope="row").text-center
                                         .form-check.d-inline-block
@@ -149,7 +82,7 @@ block content
                                 td(scope="row")
                                     button.btn.btn-primary.btn-sm(
                                         type="button", 
-                                        onclick=`editProduct(${index}, ${val.id}, ${val.is_tank_product ? 1 : 0}, ${val.can_edit_name ? 1 : 0})`
+                                        onclick=`openEditProductModal(${productPayload})`
                                     )
                                         i.bi.bi-pencil
 
@@ -157,6 +90,7 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             .row
                 each val, index in products
+                    - const mobileProductPayload = JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }).replace(/"/g, '&quot;')
                     .col-12.mb-3
                         .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
@@ -175,7 +109,7 @@ block content
                                 .product-actions
                                     button.btn.btn-primary.btn-sm(
                                         type="button", 
-                                        onclick=`editProductMobile(${index}, ${val.id}, ${val.is_tank_product ? 1 : 0}, ${val.can_edit_name ? 1 : 0})`
+                                        onclick=`openEditProductModal(${mobileProductPayload})`
                                     )
                                         i.bi.bi-pencil
                             .card-body.p-3
@@ -341,6 +275,56 @@ block content
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-success(type="submit", form="addProductForm") Add Product
 
+    .modal.fade#editProductModal(tabindex="-1", role="dialog", aria-labelledby="editProductModalLabel", aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#editProductModalLabel Edit Product
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editProductForm
+                        input(type="hidden", id="edit-product-id")
+                        .alert.alert-info#edit-product-name-note(style="display:none;")
+                            | Product name cannot be edited because this product is linked to pump/tank configuration.
+                        .row
+                            .col-md-6.mb-3
+                                label.form-label Product Name
+                                input#edit-product-name.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label SKU Name
+                                input#edit-sku-name.form-control.text-uppercase(type="text", readonly, style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label SKU Number
+                                input#edit-sku-number.form-control.text-uppercase(type="text", readonly, style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label HSN Code
+                                input#edit-hsn-code.form-control.text-uppercase(type="text", readonly, style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label Unit
+                                input#edit-unit.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label Price
+                                input#edit-price.form-control(type="number", step="0.01")
+                            .col-md-12.mb-3
+                                label.form-label Ledger Name
+                                input#edit-ledger-name.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label CGST %
+                                input#edit-cgst.form-control(type="number", step="0.01", min="0", max="100")
+                            .col-md-6.mb-3
+                                label.form-label SGST %
+                                input#edit-sgst.form-control(type="number", step="0.01", min="0", max="100")
+                            if user.Role === 'SuperUser'
+                                .col-md-12.mb-3
+                                    .form-check
+                                        input.form-check-input#edit-is-tank-product(type="checkbox")
+                                        label.form-check-label(for="edit-is-tank-product")
+                                            strong Tank Product
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="button", onclick="saveProductFromModal()") Save Changes
+
         // End of main-content wrapper
     
     // CSS for mobile responsiveness and sticky header
@@ -487,104 +471,57 @@ block content
             input.value = input.value.toUpperCase();
         }
         
-        function editProduct(index, productId, isTankProduct, canEditName) {
-            // Enable editing for the specific product row
-            const row = document.getElementById(`product-row-${index}`);
-            const inputs = row.querySelectorAll('input[readonly]');
-            
-            inputs.forEach(input => {
-                if (input.id.includes('product-name') && !canEditName) return;
-                if (!input.id.includes('sku-name') && !input.id.includes('sku-number') && !input.id.includes('hsn-code')) {
-                    input.removeAttribute('readonly');
-                    input.classList.add('bg-light');
-                    
-                    // Add uppercase input listener for text fields
-                    if (input.type === 'text') {
-                        input.addEventListener('input', function() {
-                            makeUppercase(this);
-                        });
-                    }
-                }
-            });
+        function openEditProductModal(product) {
+            document.getElementById('edit-product-id').value = product.id;
+            document.getElementById('edit-product-name').value = product.name || '';
+            document.getElementById('edit-sku-name').value = product.sku_name || '';
+            document.getElementById('edit-sku-number').value = product.sku_number || '';
+            document.getElementById('edit-hsn-code').value = product.hsn_code || '';
+            document.getElementById('edit-unit').value = product.unit || '';
+            document.getElementById('edit-price').value = product.price || '';
+            document.getElementById('edit-ledger-name').value = product.ledger_name || '';
+            document.getElementById('edit-cgst').value = product.cgst_percent || 0;
+            document.getElementById('edit-sgst').value = product.sgst_percent || 0;
 
-            if (!canEditName) {
-                showMessage('Product name cannot be edited because this product is linked to pump configuration', 'info');
-            }
-            
-            // Enable tank product checkbox for SuperUser
-            if (userRole === 'SuperUser') {
-                const tankCheckbox = document.getElementById(`is-tank-product-${index}`);
-                if (tankCheckbox) {
-                    tankCheckbox.removeAttribute('disabled');
-                }
-            }
-            
-            // Change edit button to save button
-            const editBtn = row.querySelector('button');
-            editBtn.innerHTML = '<i class="bi bi-check"></i>';
-            editBtn.classList.remove('btn-primary');
-            editBtn.classList.add('btn-success');
-            editBtn.setAttribute('onclick', `saveProduct(${index}, ${productId})`);
-        }
-        
-        function editProductMobile(index, productId, isTankProduct, canEditName) {
-            // Enable editing for mobile card inputs
-            const card = document.getElementById(`mobile-product-card-${index}`);
-            const inputs = card.querySelectorAll('input[readonly]');
-            
-            inputs.forEach(input => {
-                if (input.id.includes('product-name') && !canEditName) return;
-                if (!input.id.includes('sku-name') && !input.id.includes('sku-number') && !input.id.includes('hsn-code')) {
-                    input.removeAttribute('readonly');
-                    input.classList.add('editable');
-                    
-                    // Add uppercase input listener for text fields
-                    if (input.type === 'text') {
-                        input.addEventListener('input', function() {
-                            makeUppercase(this);
-                        });
-                    }
-                }
-            });
+            const productNameInput = document.getElementById('edit-product-name');
+            const productNameNote = document.getElementById('edit-product-name-note');
 
-            if (!canEditName) {
-                showMessage('Product name cannot be edited because this product is linked to pump configuration', 'info');
+            if (product.can_edit_name) {
+                productNameInput.removeAttribute('readonly');
+                productNameNote.style.display = 'none';
+            } else {
+                productNameInput.setAttribute('readonly', 'readonly');
+                productNameNote.style.display = 'block';
             }
-            
-            // Enable tank product checkbox for SuperUser
+
             if (userRole === 'SuperUser') {
-                const tankCheckbox = document.getElementById(`mobile-is-tank-product-${index}`);
+                const tankCheckbox = document.getElementById('edit-is-tank-product');
                 if (tankCheckbox) {
-                    tankCheckbox.removeAttribute('disabled');
+                    tankCheckbox.checked = !!product.is_tank_product;
                 }
             }
-            
-            // Change edit button to save button
-            const editBtn = card.querySelector('button');
-            editBtn.innerHTML = '<i class="bi bi-check"></i>';
-            editBtn.classList.remove('btn-primary');
-            editBtn.classList.add('btn-success');
-            editBtn.setAttribute('onclick', `saveProductMobile(${index}, ${productId})`);
+
+            $('#editProductModal').modal('show');
         }
-        
-        function saveProductMobile(index, productId) {
+
+        function saveProductFromModal() {
+            const productId = document.getElementById('edit-product-id').value;
             const updateData = {
-                m_product_name: document.getElementById(`mobile-product-name-${index}`).value.toUpperCase().trim(),
-                m_product_price: document.getElementById(`mobile-price-${index}`).value,
-                m_product_unit: document.getElementById(`mobile-unit-${index}`).value.toUpperCase(),
-                m_product_ledger_name: document.getElementById(`mobile-ledger-${index}`).value.toUpperCase(),
-                m_product_cgst: document.getElementById(`mobile-cgst-${index}`).value,
-                m_product_sgst: document.getElementById(`mobile-sgst-${index}`).value
+                m_product_name: document.getElementById('edit-product-name').value.toUpperCase().trim(),
+                m_product_price: document.getElementById('edit-price').value,
+                m_product_unit: document.getElementById('edit-unit').value.toUpperCase(),
+                m_product_ledger_name: document.getElementById('edit-ledger-name').value.toUpperCase(),
+                m_product_cgst: document.getElementById('edit-cgst').value,
+                m_product_sgst: document.getElementById('edit-sgst').value
             };
-            
-            // SuperUser can update is_tank_product flag
+
             if (userRole === 'SuperUser') {
-                const isTankProductCheckbox = document.getElementById(`mobile-is-tank-product-${index}`);
+                const isTankProductCheckbox = document.getElementById('edit-is-tank-product');
                 if (isTankProductCheckbox) {
                     updateData.m_product_is_tank_product = isTankProductCheckbox.checked ? 1 : 0;
                 }
             }
-            
+
             fetch(`/products/api/${productId}`, {
                 method: 'PUT',
                 headers: {
@@ -595,47 +532,7 @@ block content
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showMessage('Product updated successfully', 'success');
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    showMessage('Error updating product: ' + data.error, 'danger');
-                }
-            })
-            .catch(error => {
-                showMessage('Error updating product: ' + error.message, 'danger');
-            });
-        }
-        
-        function saveProduct(index, productId) {
-            const row = document.getElementById(`product-row-${index}`);
-            
-            const updateData = {
-                m_product_name: document.getElementById(`product-name-${index}`).value.toUpperCase().trim(),
-                m_product_price: document.getElementById(`product-price-${index}`).value,
-                m_product_unit: document.getElementById(`product-unit-${index}`).value.toUpperCase(),
-                m_product_ledger_name: document.getElementById(`product-ledger-name-${index}`).value.toUpperCase(),
-                m_product_cgst: document.getElementById(`product-cgst-${index}`).value,
-                m_product_sgst: document.getElementById(`product-sgst-${index}`).value
-            };
-            
-            // SuperUser can update is_tank_product flag
-            if (userRole === 'SuperUser') {
-                const isTankProductCheckbox = document.getElementById(`is-tank-product-${index}`);
-                if (isTankProductCheckbox) {
-                    updateData.m_product_is_tank_product = isTankProductCheckbox.checked ? 1 : 0;
-                }
-            }
-            
-            fetch(`/products/api/${productId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updateData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+                    $('#editProductModal').modal('hide');
                     showMessage('Product updated successfully', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
