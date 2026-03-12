@@ -4,6 +4,48 @@ const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 
 module.exports = {
+    findPumpLinkedProductNames: async (locationCode) => {
+        const rows = await db.sequelize.query(`
+            SELECT DISTINCT product_code
+            FROM m_pump
+            WHERE location_code = :locationCode
+              AND product_code IS NOT NULL
+        `, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+
+        return rows.map(r => r.product_code);
+    },
+
+    findById: (productId, locationCode) => {
+        const where = { product_id: productId };
+        if (locationCode) where.location_code = locationCode;
+        return Product.findOne({ where });
+    },
+
+    findByName: (productName, locationCode) => {
+        const where = { product_name: productName };
+        if (locationCode) where.location_code = locationCode;
+        return Product.findOne({ where });
+    },
+
+    isProductLinkedToPumpOrTank: async (locationCode, productName) => {
+        const rows = await db.sequelize.query(`
+            SELECT
+                (
+                    (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_code = :productName)
+                    +
+                    (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_code = :productName)
+                ) AS link_count
+        `, {
+            replacements: { locationCode, productName },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+
+        return Number(rows?.[0]?.link_count || 0) > 0;
+    },
+
     findProducts: async (locationCode) => {
         // Base pump products query with location filter
         const pumpProductsQuery = `
@@ -165,6 +207,7 @@ findPumpProducts: async (locationCode) => {
             updation_date: new Date()
         };
 
+        if (product.product_name) updateFields.product_name = product.product_name;
         if (product.sku_name) updateFields.sku_name = product.sku_name;
         if (product.sku_number) updateFields.sku_number = product.sku_number;
         if (product.hsn_code) updateFields.hsn_code = product.hsn_code;
