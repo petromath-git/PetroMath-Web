@@ -224,6 +224,63 @@ const DayBillDao = {
         );
     },
 
+    // Returns shift cash bills (t_cashsales) for the date — snapshot only
+    getCashSalesSnapshotByDate: (locationCode, billDate) => {
+        return db.sequelize.query(
+            `SELECT
+                cs.bill_no,
+                p.product_name,
+                cs.qty,
+                cs.price,
+                cs.amount,
+                COALESCE(cs.cgst_percent, 0) as cgst_percent,
+                COALESCE(cs.cgst_amount,  0) as cgst_amount,
+                COALESCE(cs.sgst_percent, 0) as sgst_percent,
+                COALESCE(cs.sgst_amount,  0) as sgst_amount
+            FROM t_cashsales cs
+            JOIN t_closing c  ON cs.closing_id = c.closing_id
+            JOIN m_product p  ON cs.product_id = p.product_id
+            WHERE c.location_code = :locationCode
+              AND DATE(c.closing_date) = :billDate
+              AND c.closing_status = 'CLOSED'
+            ORDER BY cs.bill_no, p.product_name`,
+            {
+                replacements: { locationCode, billDate },
+                type: db.sequelize.QueryTypes.SELECT
+            }
+        );
+    },
+
+    // Returns shift credit bills (t_credits) for the date — snapshot only
+    getCreditSalesSnapshotByDate: (locationCode, billDate) => {
+        return db.sequelize.query(
+            `SELECT
+                cl.Company_Name  as customer_name,
+                tc.vehicle_number,
+                tc.bill_no,
+                p.product_name,
+                tc.qty,
+                tc.price,
+                tc.amount,
+                COALESCE(tc.cgst_percent, 0) as cgst_percent,
+                COALESCE(tc.cgst_amount,  0) as cgst_amount,
+                COALESCE(tc.sgst_percent, 0) as sgst_percent,
+                COALESCE(tc.sgst_amount,  0) as sgst_amount
+            FROM t_credits tc
+            JOIN t_closing c        ON tc.closing_id = c.closing_id
+            JOIN m_product p        ON tc.product_id = p.product_id
+            LEFT JOIN m_credit_list cl ON tc.creditlist_id = cl.creditlist_id
+            WHERE c.location_code = :locationCode
+              AND DATE(c.closing_date) = :billDate
+              AND c.closing_status = 'CLOSED'
+            ORDER BY cl.Company_Name, tc.bill_no, p.product_name`,
+            {
+                replacements: { locationCode, billDate },
+                type: db.sequelize.QueryTypes.SELECT
+            }
+        );
+    },
+
     // ─── Save / update ────────────────────────────────────────────────────────
 
     upsertDayBill: (locationCode, billDate, cashflowId, userId) => {
