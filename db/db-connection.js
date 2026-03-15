@@ -78,6 +78,9 @@ db.important_link_roles = require("./important-link-roles")(sequelize, Sequelize
 db.gst_config = require("./gst-config")(sequelize, Sequelize);
 db.gst_return_data = require("./gst-return-data")(sequelize, Sequelize);
 db.gst_filing_log = require("./gst-filing-log")(sequelize, Sequelize);
+db.day_bill = require("./day-bill")(sequelize, Sequelize);
+db.day_bill_header = require("./day-bill-header")(sequelize, Sequelize);
+db.day_bill_items = require("./day-bill-items")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -293,6 +296,14 @@ db.gst_filing_log.belongsTo(db.gst_return_data, {foreignKey: 'return_data_id'});
 
 db.location.hasMany(db.gst_filing_log, {foreignKey: 'location_code', sourceKey: 'location_code'});
 db.gst_filing_log.belongsTo(db.location, {foreignKey: 'location_code', targetKey: 'location_code'});
+
+// Day Bill relations
+db.day_bill.hasMany(db.day_bill_header, {foreignKey: 'day_bill_id', as: 'headers'});
+db.day_bill_header.belongsTo(db.day_bill, {foreignKey: 'day_bill_id'});
+db.day_bill_header.hasMany(db.day_bill_items, {foreignKey: 'header_id', as: 'items'});
+db.day_bill_items.belongsTo(db.day_bill_header, {foreignKey: 'header_id'});
+db.day_bill_header.belongsTo(db.credit, {foreignKey: 'vendor_id', targetKey: 'creditlist_id', as: 'vendor'});
+db.day_bill_items.belongsTo(db.product, {foreignKey: 'product_id', targetKey: 'product_id'});
 
 module.exports = db;
 

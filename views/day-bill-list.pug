@@ -1,0 +1,122 @@
+extends layout
+
+block content
+    style.
+        .table-responsive {
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+        .sticky-top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+        table.table-desktop thead.thead-light {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+
+    //- Collapsible Filter Section
+    .card.mb-3
+        .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-funnel.me-2
+                    | Day Bill Filters
+                i#filter-toggle-icon.bi.bi-chevron-down
+        .filter-content.collapse.show#filterContent
+            .card-body
+                .row.g-3
+                    //- From Date
+                    .col-md-2.col-6
+                        label.form-label From Date:
+                        input#fromDate.form-control(type='date' name='fromDate' value=fromDate max=today)
+                    //- To Date
+                    .col-md-2.col-6
+                        label.form-label To Date:
+                        input#toDate.form-control(type='date' name='toDate' value=toDate max=today)
+                    //- Filter button
+                    .col-md-2.col-12.d-flex.align-items-end
+                        button.btn.btn-primary.w-100(type='button' onclick='applyFilter()')
+                            i.bi.bi-search.me-2
+                            | Go
+                    //- Divider
+                    .col-md-1.d-none.d-md-flex.align-items-end
+                        span.text-muted(style='padding-bottom: 6px;') |
+                    //- Generate for date
+                    .col-md-2.col-7
+                        label.form-label Generate for:
+                        input.form-control#genDate(type='date' max=today)
+                    //- Generate button
+                    .col-md-2.col-5.d-flex.align-items-end
+                        button.btn.btn-outline-success.w-100#btnGenerate(type='button') Generate
+
+    div &nbsp;
+
+    div.container-fluid
+        if bills && bills.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light.sticky-top
+                        tr
+                            th Date
+                            th.text-center Bills
+                            th.text-right Total (₹)
+                            th.text-center Last Updated
+                            th.text-center Edit/View
+                    tbody
+                        each b in bills
+                            tr
+                                td
+                                    a(href=`/day-bill/${b.bill_date}`)
+                                        = new Date(b.bill_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td.text-center= b.bill_count
+                                td.text-right= parseFloat(b.grand_total || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                td.text-center= b.updation_date ? new Date(b.updation_date + 'T00:00:00').toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) : '-'
+                                td.text-center
+                                    a.action-btn.btn-edit(href=`/day-bill/${b.bill_date}`)
+                                        i.bi.bi-eye
+                                        |  View
+        else
+            .alert.alert-info No day bills found for the selected period.
+
+    script.
+        function toggleFilters() {
+            const filterContent = document.getElementById('filterContent');
+            const icon = document.getElementById('filter-toggle-icon');
+            if (filterContent.classList.contains('show')) {
+                filterContent.classList.remove('show');
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            } else {
+                filterContent.classList.add('show');
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        }
+
+        function applyFilter() {
+            const from = document.getElementById('fromDate').value;
+            const to   = document.getElementById('toDate').value;
+            window.location.href = '/day-bill?fromDate=' + from + '&toDate=' + to;
+        }
+
+        $('#btnGenerate').on('click', function() {
+            const d = $('#genDate').val();
+            if (!d) { alert('Please select a date.'); return; }
+            $(this).prop('disabled', true).text('Generating...');
+            $.ajax({
+                url:    '/day-bill/' + d + '/recalculate',
+                method: 'POST',
+                success: function() {
+                    window.location.href = '/day-bill/' + d;
+                },
+                error: function() {
+                    alert('Generation failed. Check that shifts are closed for this date.');
+                    $('#btnGenerate').prop('disabled', false).text('Generate');
+                }
+            });
+        });

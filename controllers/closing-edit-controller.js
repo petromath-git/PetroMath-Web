@@ -11,6 +11,7 @@ const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const locationConfig = require('../utils/location-config');
 const db = require('../db/db-connection');
+const DayBillSvc = require('../services/day-bill-service');
 // Edit flow: This controller takes care of all joins to get data for editing.
 
 module.exports = {
@@ -202,6 +203,13 @@ module.exports = {
             
             // Check if update was successful (data is array [affectedRows])
             if (data && data[0] >= 1) {
+                // Trigger day bill generation — picks all closed shifts for the same date
+                const closingDateStr = closingDetails.closing_date_fmt1 || null;
+                if (closingDateStr) {
+                    DayBillSvc.recalculateDayBill(
+                        req.user.location_code, closingDateStr, req.user.username
+                    ).catch(e => console.error('DayBillSvc trigger failed:', e));
+                }
                 res.status(200).send({
                     message: 'The closing record is made final.',
                     success: true
@@ -271,6 +279,17 @@ reopenShift: async (req, res, next) => {
         const result = await TxnWriteDao.reopenShift(closingId, locationCode, userId);
 
         if (result > 0) {
+            // Clear stale day bill items so they rebuild on re-close (non-blocking)
+            db.sequelize.query(
+                `SELECT DATE_FORMAT(closing_date, '%Y-%m-%d') as closing_date FROM t_closing WHERE closing_id = :closingId`,
+                { replacements: { closingId }, type: db.Sequelize.QueryTypes.SELECT }
+            ).then(rows => {
+                const dateStr = rows[0] && rows[0].closing_date;
+                if (dateStr) {
+                    DayBillSvc.clearDayBillOnReopen(locationCode, dateStr)
+                        .catch(e => console.error('DayBillSvc clearOnReopen failed:', e));
+                }
+            }).catch(() => {});
             res.status(200).json({
                 message: 'Shift reopened successfully. Status changed to DRAFT.'
             });
