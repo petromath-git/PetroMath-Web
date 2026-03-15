@@ -41,9 +41,11 @@ const DayBillController = {
             const locationCode = req.user.location_code;
             const billDate     = req.params.date; // YYYY-MM-DD
 
-            const [dayBill, shifts] = await Promise.all([
+            const [dayBill, shifts, cashSalesSnap, creditSalesSnap] = await Promise.all([
                 DayBillDao.findByDate(locationCode, billDate),
-                DayBillDao.getShiftsByDate(locationCode, billDate)
+                DayBillDao.getShiftsByDate(locationCode, billDate),
+                DayBillDao.getCashSalesSnapshotByDate(locationCode, billDate),
+                DayBillDao.getCreditSalesSnapshotByDate(locationCode, billDate)
             ]);
 
             if (!dayBill) {
@@ -56,6 +58,8 @@ const DayBillController = {
                     cashHeaders:    [],
                     digitalHeaders: [],
                     summaryData:    [],
+                    cashSalesSnap:   cashSalesSnap || [],
+                    creditSalesSnap: creditSalesSnap || [],
                     config: config.APP_CONFIGS,
                     user: req.user
                 });
@@ -74,6 +78,8 @@ const DayBillController = {
                 cashHeaders,
                 digitalHeaders,
                 summaryData,
+                cashSalesSnap,
+                creditSalesSnap,
                 config: config.APP_CONFIGS,
                 user: req.user
             });
