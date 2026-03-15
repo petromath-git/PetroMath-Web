@@ -169,6 +169,11 @@ module.exports = {
   TXN_DIGITAL_SALES_TABLE: "t_digital_sales",
   PERSON_LOCATION_TABLE: "m_person_location",
 
+// Day Bill tables
+DAY_BILL_TABLE: "t_day_bill",
+DAY_BILL_HEADER_TABLE: "t_day_bill_header",
+DAY_BILL_ITEMS_TABLE: "t_day_bill_items",
+
 // GST Configuration
 GST_CONFIG_TABLE: "m_gst_config",
 GST_RETURN_DATA_TABLE: "t_gst_return_data",

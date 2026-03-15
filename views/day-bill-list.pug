@@ -1,0 +1,69 @@
+extends layout
+
+block content
+    .container-fluid.mt-3
+        .row.mb-3
+            .col
+                h4 Day Bill
+            .col-auto.d-flex.align-items-center
+                //- Manual generate for a specific date
+                .input-group.input-group-sm.mr-3
+                    .input-group-prepend
+                        span.input-group-text Generate for
+                    input.form-control#genDate(type='date' max=today)
+                    .input-group-append
+                        button.btn.btn-outline-success#btnGenerate(type='button') Generate
+                //- Date range filter
+                form.form-inline(method='GET' action='/day-bill')
+                    .input-group.input-group-sm.mr-2
+                        .input-group-prepend
+                            span.input-group-text From
+                        input.form-control(type='date' name='fromDate' value=fromDate max=today)
+                    .input-group.input-group-sm.mr-2
+                        .input-group-prepend
+                            span.input-group-text To
+                        input.form-control(type='date' name='toDate' value=toDate max=today)
+                    button.btn.btn-outline-secondary.btn-sm(type='submit') Filter
+
+        if bills && bills.length
+            .card
+                .card-body.p-0
+                    table.table.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Date
+                                th.text-center Bills
+                                th.text-right Total (₹)
+                                th.text-center Last Updated
+                                th
+                        tbody
+                            each b in bills
+                                tr
+                                    td
+                                        a(href=`/day-bill/${b.bill_date}`)
+                                            = new Date(b.bill_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                    td.text-center= b.bill_count
+                                    td.text-right= parseFloat(b.grand_total || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                    td.text-center= b.updation_date || '-'
+                                    td.text-center
+                                        a.btn.btn-sm.btn-outline-primary(href=`/day-bill/${b.bill_date}`) View
+        else
+            .alert.alert-info No day bills found for the selected period.
+
+    script.
+        $('#btnGenerate').on('click', function() {
+            const d = $('#genDate').val();
+            if (!d) { alert('Please select a date.'); return; }
+            $(this).prop('disabled', true).text('Generating...');
+            $.ajax({
+                url:    '/day-bill/' + d + '/recalculate',
+                method: 'POST',
+                success: function() {
+                    window.location.href = '/day-bill/' + d;
+                },
+                error: function() {
+                    alert('Generation failed. Check that shifts are closed for this date.');
+                    $('#btnGenerate').prop('disabled', false).text('Generate');
+                }
+            });
+        });

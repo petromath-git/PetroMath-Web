@@ -1,0 +1,297 @@
+extends layout
+
+block content
+    - const displayDate = new Date(billDate).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+
+    .container-fluid.mt-3
+
+        .row.mb-2
+            .col
+                h4 Day Bill — #{displayDate}
+            .col-auto
+                a.btn.btn-outline-secondary.btn-sm(href='/day-bill') &laquo; Back to List
+                if dayBill
+                    button.btn.btn-outline-warning.btn-sm.ml-2(id='btnRecalculate' title='Recalculate from shift data')
+                        i.bi.bi-arrow-clockwise
+                        |  Recalculate
+
+        if !dayBill
+            .alert.alert-warning
+                i.bi.bi-info-circle
+                |  No day bill found for #{displayDate}. Day bills are auto-created when shifts are closed.
+            if shifts && shifts.length
+                .card
+                    .card-header Shifts on #{displayDate}
+                    .card-body
+                        p #{shifts.length} shift(s) found but bill not yet generated.
+                        button.btn.btn-primary(id='btnRecalculate') Generate Day Bill
+        else
+            input(type='hidden' id='billDate' value=billDate)
+            input(type='hidden' id='dayBillId' value=dayBill.day_bill_id)
+
+            //- ── 4-Tab navigation ───────────────────────────────────────────────
+            ul.nav.nav-tabs.mt-2
+                li.nav-item
+                    a.nav-link.active(data-toggle='tab' href='#tab-header') Header
+                li.nav-item
+                    a.nav-link(data-toggle='tab' href='#tab-cash') Cash Bill
+                li.nav-item
+                    a.nav-link(data-toggle='tab' href='#tab-digital') Digital Bills
+                li.nav-item
+                    a.nav-link(data-toggle='tab' href='#tab-summary') Summary
+
+            .tab-content.border.border-top-0.p-3
+
+                //- ── TAB 1: HEADER ─────────────────────────────────────────────
+                #tab-header.tab-pane.active
+                    .row.mt-3
+                        .col-md-6
+                            table.table.table-sm.table-borderless
+                                tbody
+                                    tr
+                                        th(width='35%') Bill Date
+                                        td= displayDate
+                                    tr
+                                        th Location
+                                        td= dayBill.location_code
+                                    if dayBill.cashflow_id
+                                        tr
+                                            th Cashflow Ref
+                                            td= 'CF#' + dayBill.cashflow_id
+                                    tr
+                                        th Status
+                                        td
+                                            span.badge.badge-success GENERATED
+                                    tr
+                                        th Last Updated
+                                        td= dayBill.updation_date || '-'
+                                    tr
+                                        th Updated By
+                                        td= dayBill.updated_by || '-'
+
+                    .row.mt-2
+                        .col
+                            h6.text-muted Shifts Contributing to this Bill
+                            if shifts && shifts.length
+                                table.table.table-sm.table-hover
+                                    thead.thead-light
+                                        tr
+                                            th # Closing ID
+                                            th Date
+                                            th Cashier
+                                            th.text-center Status
+                                            th Cashflow
+                                    tbody
+                                        each s in shifts
+                                            tr
+                                                td= s.closing_id
+                                                td= s.closing_date
+                                                td= s.cashier_name || '—'
+                                                td.text-center
+                                                    span.badge.badge-success= s.closing_status
+                                                td= s.cashflow_id ? 'CF#' + s.cashflow_id : '—'
+                            else
+                                p.text-muted No shift records found for this date.
+
+                //- ── TAB 2: CASH BILL ──────────────────────────────────────────
+                #tab-cash.tab-pane
+                    if cashHeaders && cashHeaders.length
+                        each hdr in cashHeaders
+                            .card.mt-3
+                                .card-header.bg-light
+                                    .row.align-items-center
+                                        .col
+                                            strong Cash Bill
+                                        .col-auto
+                                            .input-group.input-group-sm
+                                                .input-group-prepend
+                                                    span.input-group-text Bill No
+                                                input.form-control.bill-number-input(
+                                                    type='text'
+                                                    data-header-id=hdr.header_id
+                                                    value=hdr.bill_number || ''
+                                                    placeholder='Enter bill number'
+                                                    style='width:180px'
+                                                )
+                                .card-body.p-0
+                                    +billItemsTable(hdr.items)
+                                .card-footer.text-right
+                                    strong Total: ₹&nbsp;
+                                    span= parseFloat(hdr.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                    else
+                        .alert.alert-info.mt-3 No cash bill data for this date.
+
+                //- ── TAB 3: DIGITAL BILLS ──────────────────────────────────────
+                #tab-digital.tab-pane
+                    if digitalHeaders && digitalHeaders.length
+                        each hdr in digitalHeaders
+                            .card.mt-3
+                                .card-header.bg-light
+                                    .row.align-items-center
+                                        .col
+                                            strong= hdr.vendor ? hdr.vendor.Company_Name : ('Vendor #' + hdr.vendor_id)
+                                        .col-auto
+                                            .input-group.input-group-sm
+                                                .input-group-prepend
+                                                    span.input-group-text Bill No
+                                                input.form-control.bill-number-input(
+                                                    type='text'
+                                                    data-header-id=hdr.header_id
+                                                    value=hdr.bill_number || ''
+                                                    placeholder='Enter bill number'
+                                                    style='width:180px'
+                                                )
+                                .card-body.p-0
+                                    +billItemsTable(hdr.items)
+                                .card-footer.text-right
+                                    strong Total: ₹&nbsp;
+                                    span= parseFloat(hdr.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                    else
+                        .alert.alert-info.mt-3 No digital sales recorded for this date.
+
+                //- ── TAB 4: SUMMARY ────────────────────────────────────────────
+                #tab-summary.tab-pane
+                    .mt-3
+                        if summaryData && summaryData.length
+                            .table-responsive
+                                table.table.table-sm.table-bordered
+                                    thead.thead-dark
+                                        tr
+                                            th Product
+                                            th.text-right Cash Qty
+                                            th.text-right Cash (₹)
+                                            th.text-right Digital Qty
+                                            th.text-right Digital (₹)
+                                            th.text-right Total Qty
+                                            th.text-right Total (₹)
+                                    tbody
+                                        - var grandCashAmt = 0, grandDigAmt = 0, grandTotalAmt = 0
+                                        each row in summaryData
+                                            - grandCashAmt += row.cash_amt
+                                            - grandDigAmt  += row.digital_amt
+                                            - grandTotalAmt += row.total_amt
+                                            tr
+                                                td
+                                                    strong= row.product_name
+                                                    if row.hsn_code
+                                                        br
+                                                        small.text-muted HSN: #{row.hsn_code}
+                                                td.text-right= row.cash_qty.toFixed(3)
+                                                td.text-right= row.cash_amt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                                td.text-right= row.digital_qty.toFixed(3)
+                                                td.text-right= row.digital_amt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                                td.text-right= row.total_qty.toFixed(3)
+                                                td.text-right= row.total_amt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                    tfoot
+                                        tr.table-dark.font-weight-bold
+                                            td TOTAL
+                                            td(colspan='1')
+                                            td.text-right= grandCashAmt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                            td(colspan='1')
+                                            td.text-right= grandDigAmt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                                            td(colspan='1')
+                                            td.text-right= grandTotalAmt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                        else
+                            .alert.alert-info No summary data available.
+
+            //- Save button (sticky footer style)
+            .row.mt-3
+                .col.text-right
+                    button.btn.btn-primary(id='btnSaveBillNumbers')
+                        i.bi.bi-save
+                        |  Save Bill Numbers
+                    span.ml-3.text-muted.small(id='saveStatus')
+
+    script.
+        $(function() {
+            // ── Save bill numbers ──────────────────────────────────────────────
+            $('#btnSaveBillNumbers').on('click', function() {
+                const billDate = $('#billDate').val();
+                const updates = [];
+                $('.bill-number-input').each(function() {
+                    updates.push({
+                        header_id:   $(this).data('header-id'),
+                        bill_number: $(this).val().trim()
+                    });
+                });
+                if (!updates.length) return;
+
+                $('#saveStatus').text('Saving...');
+                $.ajax({
+                    url:         `/day-bill/${billDate}/save-bill-numbers`,
+                    method:      'POST',
+                    contentType: 'application/json',
+                    data:        JSON.stringify({ updates }),
+                    success: function() {
+                        $('#saveStatus').text('Saved ✓').css('color', 'green');
+                        setTimeout(() => $('#saveStatus').text(''), 3000);
+                    },
+                    error: function(xhr) {
+                        const msg = xhr.responseJSON && xhr.responseJSON.error
+                            ? xhr.responseJSON.error : 'Save failed';
+                        $('#saveStatus').text(msg).css('color', 'red');
+                    }
+                });
+            });
+
+            // ── Recalculate ────────────────────────────────────────────────────
+            $('#btnRecalculate').on('click', function() {
+                const billDate = $('#billDate').val() || '!{billDate}';
+                if (!confirm('Recalculate day bill from shift data? Bill numbers will be preserved.')) return;
+                $.ajax({
+                    url:    `/day-bill/${billDate}/recalculate`,
+                    method: 'POST',
+                    success: function() {
+                        location.reload();
+                    },
+                    error: function() {
+                        alert('Recalculation failed. Please try again.');
+                    }
+                });
+            });
+
+            // ── Auto-save on Enter in bill number fields ───────────────────────
+            $('.bill-number-input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#btnSaveBillNumbers').trigger('click');
+                }
+            });
+        });
+
+mixin billItemsTable(items)
+    if items && items.length
+        table.table.table-sm.mb-0
+            thead.thead-light
+                tr
+                    th Product
+                    th HSN
+                    th.text-right Qty (L)
+                    th.text-right Rate (₹)
+                    th.text-right Taxable (₹)
+                    th.text-right CGST
+                    th.text-right SGST
+                    th.text-right Total (₹)
+            tbody
+                each item in items
+                    - const prod = item.m_product || {}
+                    tr
+                        td= prod.product_name || ('Prod #' + item.product_id)
+                        td.text-muted= prod.hsn_code || '—'
+                        td.text-right= parseFloat(item.quantity || 0).toFixed(3)
+                        td.text-right= parseFloat(item.rate || 0).toFixed(2)
+                        td.text-right= parseFloat(item.taxable_amount || 0).toFixed(2)
+                        td.text-right
+                            if item.cgst_rate > 0
+                                | #{item.cgst_rate}% = ₹#{parseFloat(item.cgst_amount || 0).toFixed(2)}
+                            else
+                                | —
+                        td.text-right
+                            if item.sgst_rate > 0
+                                | #{item.sgst_rate}% = ₹#{parseFloat(item.sgst_amount || 0).toFixed(2)}
+                            else
+                                | —
+                        td.text-right
+                            strong= parseFloat(item.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+    else
+        p.p-3.text-muted No items.

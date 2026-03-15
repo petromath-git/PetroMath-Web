@@ -49,6 +49,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING,
             defaultValue: 'DRAFT'
         },
+        credit_billing_stopped: {
+            field: 'credit_billing_stopped',
+            type: DataTypes.TINYINT,
+            defaultValue: 0
+        },
         ex_short: {
             field: 'ex_short',
             type: DataTypes.DECIMAL(20, 3)         
