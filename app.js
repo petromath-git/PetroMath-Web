@@ -225,6 +225,7 @@ const campaignRoutes = require('./routes/campaign-routes');
 const campaignPublicRoutes = require('./routes/campaign-public-routes');
 const gstRoutes = require('./routes/gst-routes');
 const transactionUploadRoutes = require('./routes/transaction-upload-routes');
+const dayBillRoutes = require('./routes/day-bill-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -388,6 +389,7 @@ app.use('/campaign', campaignPublicRoutes);
 app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
+app.use('/day-bill', dayBillRoutes);
 
 
 
