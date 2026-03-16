@@ -16,6 +16,16 @@ module.exports = {
         };
     },
 
+    // 🔹 Middleware to enforce SuperUser-only access
+    isSuperUser: () => {
+        return (req, res, next) => {
+            if (req.user && req.user.Role === 'SuperUser') {
+                return next();
+            }
+            res.status(403).send('You do not have access to this page.');
+        };
+    },
+
     // 🔹 Quick admin check for internal use
     isAdminChk: (user) => config.APP_CONFIGS.adminRoles.includes(user.Role),
 
