@@ -991,6 +991,14 @@ app.delete('/delete-closing', [isLoginEnsured, security.isAdmin()], function (re
     ClosingDeleteController.deleteClosingRecord(req, res, next);  // response returned inside controller
 });
 
+app.get('/deleted-closings', [isLoginEnsured, security.isSuperUser()], function (req, res, next) {
+    ClosingDeleteController.getDeletedClosings(req, res, next);
+});
+
+app.post('/restore-closing', [isLoginEnsured, security.isSuperUser()], function (req, res, next) {
+    ClosingDeleteController.restoreClosing(req, res, next);
+});
+
 app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });

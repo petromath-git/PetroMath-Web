@@ -236,11 +236,31 @@ saveReadings: (data) => {
 },
 
 
-    deleteClosing: (closingId) => {
-        const closingTxn = db.sequelize.query(
-            'CALL delete_closing(' + closingId + ');', null, { raw: true }
+    deleteClosing: (closingId, username) => {
+        const safeUser = (username || 'system').replace(/'/g, '');
+        return db.sequelize.query(
+            `CALL delete_closing(${closingId}, '${safeUser}');`, null, { raw: true }
         );
-        return closingTxn;
+    },
+
+    getDeletedClosings: (locationCode) => {
+        const whereClause = locationCode ? `WHERE location_code = '${locationCode}'` : '';
+        return db.sequelize.query(
+            `SELECT deleted_record_id, closing_id, location_code, closing_date,
+                    close_reading_time, closing_status, cash, ex_short,
+                    deleted_by, deleted_at, deletion_reason
+             FROM t_closing_deleted
+             ${whereClause}
+             ORDER BY deleted_at DESC`,
+            { type: db.sequelize.QueryTypes.SELECT }
+        );
+    },
+
+    restoreClosing: (deletedRecordId, username) => {
+        const safeUser = (username || 'system').replace(/'/g, '');
+        return db.sequelize.query(
+            `CALL restore_closing(${deletedRecordId}, '${safeUser}');`, null, { raw: true }
+        );
     },
 
     saveAttendance: (data) => {
