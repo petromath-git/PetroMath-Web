@@ -30,7 +30,7 @@ module.exports = {
     saveReceiptData: (data) => {
         const receiptTxn = TxnTankReceipts.bulkCreate(data, {
             returning: true,
-            updateOnDuplicate: ["ttank_id", "invoice_number", "invoice_date","decant_date","driver_id","helper_id","truck_id",
+            updateOnDuplicate: ["ttank_id", "invoice_number", "invoice_date","decant_date","driver_id","driver_name","helper_id","helper_name","truck_id","truck_number",
                 "decant_incharge", "odometer_reading","decant_time","truck_halt_flag", "updated_by", "updation_date"]
         });
         return receiptTxn;
@@ -47,7 +47,9 @@ module.exports = {
                     'decant_incharge',
                     'truck_number',
                     'driver_id',
+                    'driver_name',
                     'helper_id',
+                    'helper_name',
                     'closing_status',
                     'odometer_reading',
                     [Sequelize.fn('date_format', Sequelize.col('invoice_date'), '%d-%b-%Y'), 'invoice_date_fmt1'],

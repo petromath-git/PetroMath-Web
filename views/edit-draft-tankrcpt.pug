@@ -4,7 +4,9 @@ include mixins/summary-mixins
 
 
 block content
-    
+    div.mb-2
+        a.btn.btn-sm.btn-outline-secondary(href='/tankreceipts') &laquo; Tank Receipts
+
     //- Freeze closing record
     - var freezedRecord = false;
     - var divDisableClass = '';
@@ -87,24 +89,22 @@ block content
                                                         if inchargers
                                                             each val in inchargers
                                                                 option(value=`${val.personId}` selected=(val.personId === receiptsData.decant_incharge))= val.personName
-                                                td 
-                                                    select#ttnumber.form-control(name='Decant_ttnumber' required)
+                                                td
+                                                    input#ttnumber.form-control(type='text' name='Decant_ttnumber' list='truck-list' autocomplete='off' required value=receiptsData.truck_display)
+                                                    datalist#truck-list
                                                         if trucks
                                                             each val in trucks
-                                                                option(value=`${val.truck_id}` selected=(val.truck_id === receiptsData.truck_id))= val.truck_number
-                                                                          
-                                                td 
-                                                    select#driverid.form-control(name='Driverid' required)
-                                                        if drivers
-                                                            each val in drivers
-                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.driver_id))= val.personName
-                                                td 
-                                                    select#helperid.form-control(name='helperid' required)
-                                                        if drivers
-                                                            each val in drivers
-                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.helper_id))= val.personName
+                                                                option(value=`${val.truck_number}` data-id=`${val.truck_id}`)
                                                 td
-                                                    input#odometer.form-control(type="text" name="odometer" value=receiptsData.odometer_reading required)
+                                                    input#driverid.form-control(type='text' name='Driverid' list='driver-list' autocomplete='off' required value=receiptsData.driver_display)
+                                                    datalist#driver-list
+                                                        if drivers
+                                                            each val in drivers
+                                                                option(value=`${val.personName}` data-id=`${val.personId}`)
+                                                td
+                                                    input#helperid.form-control(type='text' name='helperid' list='driver-list' autocomplete='off' required value=receiptsData.helper_display)
+                                                td
+                                                    input#odometer.form-control(type="text" name="odometer" value=receiptsData.odometer_reading)
                                                 td  
                                                     input#halt_chk.form-control(type="checkbox" name="decant_halt_chk"  value=receiptsData.truck_halt_flag, onClick="changeHaltflag()", checked=('Y'===receiptsData.truck_halt_flag))
                         div.row
@@ -138,7 +138,7 @@ block content
                         div(align="center")
                             button.btn.btn-info(type="button", id="tankReceipts-add-new" onClick="showAddedRow('tankReceipts')" title="Only one can be added at a time.") Add New
                             span &nbsp;&nbsp;&nbsp;&nbsp;
-                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('summary_tab')") Next &raquo;
+                            button.btn.btn-primary(type="button", onClick="goToDecantSummary()") Next &raquo;
                             // ----------------------- Summary ----------------------------
                 div#summary(class= summaryTabActiveStatus)
                     div

@@ -73,16 +73,31 @@ module.exports = {
             truckDataPromise(locationCode),
             ])
             .then((values) => {
+                const receiptsData = values[1].value;
+                const drivers = values[2].value.drivers;
+                const trucks = values[5].value.trucks;
+
+                const truckDisplay = receiptsData.truck_number ||
+                    (trucks.find(t => t.truck_id === receiptsData.truck_id) || {}).truck_number || '';
+                const driverDisplay = receiptsData.driver_name ||
+                    (drivers.find(d => d.personId === receiptsData.driver_id) || {}).personName || '';
+                const helperDisplay = receiptsData.helper_name ||
+                    (drivers.find(d => d.personId === receiptsData.helper_id) || {}).personName || '';
+
                 res.render('edit-draft-tankrcpt',{
                     user: req.user,
                     config: config.APP_CONFIGS,
                     inchargers: values[0].value.inchargers,
                     currentDate: utils.currentDate(),
-                    receiptsData: values[1].value,
-                    drivers: values[2].value.drivers,
+                    receiptsData: Object.assign({}, receiptsData, {
+                        truck_display: truckDisplay,
+                        driver_display: driverDisplay,
+                        helper_display: helperDisplay
+                    }),
+                    drivers: drivers,
                     tanks: values[3].value.tanks,
                     decantLines: values[4].value.decantLines,
-                    trucks: values[5].value.trucks,
+                    trucks: trucks,
                 });
             }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
@@ -107,8 +122,11 @@ const txntankReceiptPromise = (ttank_id) => {
                     h_decantDate:data.decant_date_fmt1,
                     decant_incharge: data.decant_incharge,
                     truck_number: data.truck_number,
+                    truck_id: data.truck_id,
                     driver_id: data.driver_id,
+                    driver_name: data.driver_name,
                     helper_id: data.helper_id,
+                    helper_name: data.helper_name,
                     closingStatus: data.closing_status,
                     odometer_reading: data.odometer_reading,
                     decant_time: data.decant_time,

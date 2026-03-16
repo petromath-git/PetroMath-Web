@@ -3,6 +3,8 @@ include mixins/mixins
 include mixins/summary-mixins
 
 block content
+    div.mb-2
+        a.btn.btn-sm.btn-outline-secondary(href='/tankreceipts') &laquo; Tank Receipts
     form
         div
             ul.nav.nav-tabs
@@ -58,23 +60,22 @@ block content
                                                         if inchargers
                                                             each val in inchargers
                                                                 option(value=`${val.personId}`)= val.personName
-                                                td 
-                                                    select#ttnumber.form-control(name='decant_ttnumber' required)
+                                                td
+                                                    input#ttnumber.form-control(type='text' name='decant_ttnumber' list='truck-list' autocomplete='off' required)
+                                                    datalist#truck-list
                                                         if trucks
                                                             each val in trucks
-                                                                option(value=`${val.truck_id}`)= val.truck_number                       
-                                                td 
-                                                    select#driverid.form-control(name='decant_driverid' required)
-                                                        if drivers
-                                                            each val in drivers
-                                                                option(value=`${val.personId}`)= val.personName
-                                                td 
-                                                    select#helperid.form-control(name='decant_helperid' required)
-                                                        if drivers
-                                                            each val in drivers
-                                                                option(value=`${val.personId}`)= val.personName
+                                                                option(value=`${val.truck_number}` data-id=`${val.truck_id}`)
                                                 td
-                                                    input#odometer.form-control(type="text" name='decant_odometer' required)
+                                                    input#driverid.form-control(type='text' name='decant_driverid' list='driver-list' autocomplete='off' required)
+                                                    datalist#driver-list
+                                                        if drivers
+                                                            each val in drivers
+                                                                option(value=`${val.personName}` data-id=`${val.personId}`)
+                                                td
+                                                    input#helperid.form-control(type='text' name='decant_helperid' list='driver-list' autocomplete='off' required)
+                                                td
+                                                    input#odometer.form-control(type="text" name='decant_odometer')
                                                 td 
                                                     input#halt_chk.form-control(type="checkbox" name="decant_halt_chk" value='N', onClick="changeHaltflag()")
 
@@ -107,7 +108,7 @@ block content
                     div(align="center")
                         button.btn.btn-info(type="button", id="tankReceipts-add-new" onClick="showAddedRow('tankReceipts')" title="Only one can be added at a time.") Add New
                         span &nbsp;&nbsp;&nbsp;&nbsp;
-                        button.btn.btn-primary(type="button", onClick="trackMenuWithName('summary_tab')") Next &raquo;
+                        button.btn.btn-primary(type="button", onClick="goToDecantSummary()") Next &raquo;
                     //button.btn.btn-primary(type="submit", id="tankReceipts-save" disabled=true, title="Enabled on 'Add New'") Save  
                     // ----------------------- Summary ----------------------------
                 div.tab-pane.fade#summary

@@ -76,19 +76,6 @@ module.exports = function(sequelize, DataTypes) {
             field: 'decant_incharge',
             type: DataTypes.STRING
         },
-        MS: {
-            field: 'MS',
-            type: DataTypes.INTEGER
-        },
-        HSD: {
-            field: 'HSD',
-            type: DataTypes.INTEGER
-        },
-        XMS: {
-            field: 'XMS',
-            type: DataTypes.INTEGER
-        }
-        
     }, {
         timestamps: false,
         freezeTableName: true
