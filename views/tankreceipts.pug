@@ -29,9 +29,13 @@ block content
                         th Odometer
                         th Driver
                         th Helper
-                        th MS
-                        th HSD
-                        th XMS
+                        if productColumns && productColumns.length > 0
+                            each col in productColumns
+                                th= col.label
+                        else
+                            th MS
+                            th HSD
+                            th XMS
                         th Amount
                         th Status
                         th Edit/View
@@ -57,13 +61,18 @@ block content
                                     span= val.driver
                                 td
                                     span= val.helper
+                                if productColumns && productColumns.length > 0
+                                    each col in productColumns
+                                        td
+                                            span= val[col.key]
+                                else
+                                    td
+                                        span= val.MS
+                                    td
+                                        span= val.HSD
+                                    td
+                                        span= val.XMS
                                 td
-                                    span= val.MS
-                                td
-                                    span= val.HSD
-                                td
-                                    span= val.XMS
-                                td 
                                     span= val.amount
                                 td
                                     span= val.closingStatus

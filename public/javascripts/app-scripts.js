@@ -2144,6 +2144,15 @@ function saveDecantHeader() {
     });
 }
 
+function getDatalistId(inputId, datalistId) {
+    const val = (document.getElementById(inputId).value || '').trim();
+    const opts = document.querySelectorAll('#' + datalistId + ' option');
+    for (const opt of opts) {
+        if (opt.value === val) return opt.getAttribute('data-id') || null;
+    }
+    return null;
+}
+
 function formDecant(ttank_id, user) {
     return {
         'ttank_id': ttank_id,
@@ -2151,11 +2160,14 @@ function formDecant(ttank_id, user) {
         'invoice_number': document.getElementById('invoiceno').value,
         'decant_date': document.getElementById('decantDate').value,
         'decant_incharge': document.getElementById('inchargeid').value,
-        'truck_id': document.getElementById('ttnumber').value,
+        'truck_id': getDatalistId('ttnumber', 'truck-list'),
+        'truck_number': document.getElementById('ttnumber').value,
         'location_code': user.location_code,
         'location_id': document.getElementById('location_id').value,
-        'driver_id': document.getElementById('driverid').value,
-        'helper_id': document.getElementById('helperid').value,
+        'driver_id': getDatalistId('driverid', 'driver-list'),
+        'driver_name': document.getElementById('driverid').value,
+        'helper_id': getDatalistId('helperid', 'driver-list'),
+        'helper_name': document.getElementById('helperid').value,
         'odometer_reading': document.getElementById('odometer').value,
         'truck_halt_flag': document.getElementById('halt_chk').value,
         'decant_time': document.getElementById('decanttime').value,
@@ -2174,11 +2186,27 @@ function saveDecantLines() {
         const linesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + decantRow + ']:not([type="hidden"])');
         let newLines = [], updateLines = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
+        let amountMissing = false;
         linesObj.forEach((linesObj) => {
             if (!linesObj.className.includes('-none')) {
                 const linesObjRowNum = linesObj.id.replace(decantRow, '');
-                //const hiddenTag = 'closing';
-                //const hiddenField = document.getElementById(creditSaleTag + saleObjRowNum + '_hiddenId');
+                const amtField = document.getElementById(decantLineTag + 'amt_' + linesObjRowNum);
+                if (amtField && (amtField.value === '' || amtField.value === null)) {
+                    amtField.classList.add('is-invalid');
+                    amountMissing = true;
+                } else if (amtField) {
+                    amtField.classList.remove('is-invalid');
+                }
+            }
+        });
+        if (amountMissing) {
+            alert('Amount is required for all decant lines.');
+            resolve(false);
+            return;
+        }
+        linesObj.forEach((linesObj) => {
+            if (!linesObj.className.includes('-none')) {
+                const linesObjRowNum = linesObj.id.replace(decantRow, '');
                 const hiddenIdObj = document.getElementById(decantLineTag + linesObjRowNum + '_hiddenId');
                 console.log(hiddenIdObj);
                 console.log(hiddenIdObj.value);
@@ -2273,6 +2301,11 @@ function populateReceiptSummary(obj) {
 
 function populatesummaryreceiptFn() {
     return populateReceiptSummary();
+}
+
+function goToDecantSummary() {
+    trackMenuWithName('summary_tab');
+    setTimeout(populateReceiptSummary, 300);
 }
 
 function deleteTruckLoad(rowId, tload_id) {
