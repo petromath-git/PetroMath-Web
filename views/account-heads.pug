@@ -11,90 +11,100 @@ block content
         .container-fluid
             .row.align-items-center.py-3
                 .col
-                    h4.mb-0.text-primary Account Heads
-                .col-auto
+                    h4.mb-0.text-primary Accounting Masters
+                .col-auto.d-flex
                     if canAdd
-                        button.btn.btn-success.btn-sm#addHeadBtn(type="button", data-toggle="modal", data-target="#addHeadModal", style="margin-right:8px;")
+                        button.btn.btn-success.btn-sm.mr-2#addHeadBtn(type="button", data-toggle="modal", data-target="#addHeadModal" style="display:none;")
                             i.bi.bi-plus-circle
-                            span.d-none.d-md-inline.ms-1 Add Account Head
-                            span.d-inline.d-md-none.ms-1 Add
+                            span.d-none.d-md-inline  Add Account Head
+                            span.d-inline.d-md-none  Add
+                        button.btn.btn-success.btn-sm.mr-2#addRuleBtn(type="button", data-toggle="modal", data-target="#addRuleModal" style="display:none;")
+                            i.bi.bi-plus-circle
+                            span.d-none.d-md-inline  Add Rule
+                            span.d-inline.d-md-none  Add
                     button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
                         i.bi.bi-arrow-clockwise
-                        span.d-none.d-md-inline.ms-1 Refresh
+                        span.d-none.d-md-inline  Refresh
 
     .customers-container
-        .row.mb-3
-            .col-12.col-md-6.col-lg-4
-                .input-group
-                    .input-group-prepend
-                        span.input-group-text
-                            i.bi.bi-search
-                    input.form-control#searchInput(type="text", placeholder="Search by name or type...", autocomplete="off")
-                    .input-group-append
-                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display:none;")
-                            i.bi.bi-x-circle
+        ul.nav.nav-tabs.mb-3#masterTabs(role="tablist")
+            li.nav-item
+                a.nav-link(id="tab-heads-link", data-toggle="tab", href="#tab-heads", role="tab") Account Heads
+            li.nav-item
+                a.nav-link(id="tab-rules-link", data-toggle="tab", href="#tab-rules", role="tab")
+                    | Ledger Rules
+                    span.badge.badge-secondary.ml-1= allRules.length
 
-        //- Desktop Table View
-        .desktop-table-view.d-none.d-lg-block
-            .table-responsive.table-desktop-container
-                table.table.table-hover.table-striped#account-heads-table
-                    thead.thead-dark.sticky-top
-                        tr
-                            th #
-                            th Account Head Name
-                            th Head Type
-                            th Entry Type
-                            th Notes Required
-                            th Active
-                            th Effective From
-                            th Effective To
-                            if canEdit
-                                th Edit
-                            if canDisable
-                                th Deactivate
-                    tbody#tableBody
-                        each head, index in accountHeads
-                            tr.head-row(id=`head-row-${index}`)
-                                th(scope="row")= index + 1
-                                td.searchable= head.account_head_name
-                                td.searchable= head.account_head_type
-                                td
-                                    span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
-                                td= head.notes_required_flag === 'Y' ? 'Yes' : 'No'
-                                td= head.active_flag
-                                td= head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'
-                                td= head.effective_end_date   ? new Date(head.effective_end_date).toLocaleDateString('en-GB')   : '-'
-                                if canEdit
-                                    td
-                                        button.btn.btn-primary.btn-sm.btn-edit-head(
-                                            type="button",
-                                            data-id=head.account_head_id,
-                                            data-name=head.account_head_name,
-                                            data-head-type=head.account_head_type,
-                                            data-entry-type=head.allowed_entry_type,
-                                            data-notes=head.notes_required_flag,
-                                            data-active=head.active_flag,
-                                            data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
-                                            data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
-                                            i.bi.bi-pencil
-                                if canDisable
-                                    td
-                                        button.btn.btn-danger.btn-sm(
-                                            type="button",
-                                            onclick=`confirmDeactivate(${head.account_head_id})`)
-                                            i.bi.bi-trash
+        .tab-content
 
-        //- Mobile Card View
-        .mobile-cards-view.d-block.d-lg-none
-            .row#mobileCards
-                each head, index in accountHeads
-                    .col-12.mb-3.head-card(id=`head-card-${index}`)
-                        .card.shadow-sm
+            //- ── TAB 1: Account Heads ──────────────────────────────────────
+            #tab-heads.tab-pane.fade(role="tabpanel")
+                .row.mb-3
+                    .col-12.col-md-6.col-lg-4
+                        .input-group
+                            .input-group-prepend
+                                span.input-group-text
+                                    i.bi.bi-search
+                            input.form-control#searchHeads(type="text", placeholder="Search by name or type...", autocomplete="off")
+                            .input-group-append
+                                button.btn.btn-outline-secondary#clearHeads(type="button", style="display:none;")
+                                    i.bi.bi-x-circle
+
+                .desktop-table-view.d-none.d-lg-block
+                    .table-responsive
+                        table.table.table-hover.table-striped#heads-table
+                            thead.thead-dark.sticky-top
+                                tr
+                                    th #
+                                    th Account Head Name
+                                    th Head Type
+                                    th Entry Type
+                                    th Notes Req
+                                    th Active
+                                    th Effective From
+                                    th Effective To
+                                    if canEdit
+                                        th Edit
+                                    if canDisable
+                                        th Deactivate
+                            tbody#headsTableBody
+                                each head, index in accountHeads
+                                    tr.head-row
+                                        th(scope="row")= index + 1
+                                        td.searchable= head.account_head_name
+                                        td.searchable= head.account_head_type
+                                        td
+                                            span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
+                                        td= head.notes_required_flag === 'Y' ? 'Yes' : 'No'
+                                        td= head.active_flag
+                                        td= head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'
+                                        td= head.effective_end_date   ? new Date(head.effective_end_date).toLocaleDateString('en-GB')   : '-'
+                                        if canEdit
+                                            td
+                                                button.btn.btn-primary.btn-sm.btn-edit-head(
+                                                    type="button",
+                                                    data-id=head.account_head_id,
+                                                    data-name=head.account_head_name,
+                                                    data-head-type=head.account_head_type,
+                                                    data-entry-type=head.allowed_entry_type,
+                                                    data-notes=head.notes_required_flag,
+                                                    data-active=head.active_flag,
+                                                    data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
+                                                    data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
+                                                    i.bi.bi-pencil
+                                        if canDisable
+                                            td
+                                                button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
+                                                    i.bi.bi-trash
+
+                .mobile-cards-view.d-block.d-lg-none
+                    each head in accountHeads
+                        .card.shadow-sm.mb-2.head-card
                             .card-header.d-flex.justify-content-between.align-items-center
                                 h6.mb-0.text-uppercase= head.account_head_name
                                 .actions
                                     if canEdit
-                                        button.btn.btn-primary.btn-sm.me-1.btn-edit-head(
+                                        button.btn.btn-primary.btn-sm.mr-1.btn-edit-head(
                                             type="button",
                                             data-id=head.account_head_id,
                                             data-name=head.account_head_name,
@@ -106,28 +116,150 @@ block content
                                             data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
                                             i.bi.bi-pencil
                                     if canDisable
-                                        button.btn.btn-danger.btn-sm(
-                                            type="button",
-                                            onclick=`confirmDeactivate(${head.account_head_id})`)
+                                        button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
                                             i.bi.bi-trash
                             .card-body.p-2
                                 p.mb-1
-                                    b Head Type: 
+                                    b Head Type:&nbsp;
                                     = head.account_head_type
                                 p.mb-1
-                                    b Entry Type: 
+                                    b Entry Type:&nbsp;
                                     span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
                                 p.mb-1
-                                    b Notes Required: 
-                                    = head.notes_required_flag === 'Y' ? 'Yes' : 'No'
-                                p.mb-1
-                                    b Active: 
+                                    b Active:&nbsp;
                                     = head.active_flag
-                                p.mb-1
-                                    b Effective: 
-                                    = `${head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'} to ${head.effective_end_date ? new Date(head.effective_end_date).toLocaleDateString('en-GB') : '-'}`
 
-    //- Add Modal
+            //- ── TAB 2: Ledger Rules (all types) ──────────────────────────
+            #tab-rules.tab-pane.fade(role="tabpanel")
+                p.text-muted.small.mb-3
+                    i.bi.bi-info-circle.mr-1
+                    | Static rules are fully manageable here. Credit and Supplier rules are created automatically by the system — only the Entry Type can be overridden.
+
+                .row.mb-3
+                    .col-12.col-md-4.col-lg-3
+                        .input-group
+                            .input-group-prepend
+                                span.input-group-text
+                                    i.bi.bi-search
+                            input.form-control#searchRules(type="text", placeholder="Search ledger or bank...", autocomplete="off")
+                            .input-group-append
+                                button.btn.btn-outline-secondary#clearRules(type="button", style="display:none;")
+                                    i.bi.bi-x-circle
+                    .col-auto
+                        select.form-control#filterBank
+                            option(value="") All Banks
+                            each bank in banks
+                                option(value=bank.bank_id)
+                                    = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
+                    .col-auto
+                        select.form-control#filterType
+                            option(value="") All Types
+                            option(value="Static") Static
+                            option(value="Credit") Credit
+                            option(value="Supplier") Supplier
+
+                .desktop-table-view.d-none.d-lg-block
+                    .table-responsive
+                        table.table.table-hover.table-striped.table-sm#rules-table
+                            thead.thead-dark.sticky-top
+                                tr
+                                    th #
+                                    th Type
+                                    th Bank
+                                    th Ledger Name
+                                    th Entry Type
+                                    th Max Amt
+                                    th Effective
+                                    if canEdit
+                                        th Actions
+                            tbody#rulesTableBody
+                                each rule, index in allRules
+                                    - const isStatic = rule.source_type === 'Static'
+                                    tr.rule-row(data-bank-id=rule.bank_id, data-source-type=rule.source_type)
+                                        th(scope="row")= index + 1
+                                        td
+                                            span.badge(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : 'badge-warning'))= rule.source_type
+                                        td.searchable= rule.bank_display
+                                        td.searchable= rule.ledger_name
+                                        td
+                                            span.badge(class=rule.allowed_entry_type === 'CREDIT' ? 'badge-success' : (rule.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= rule.allowed_entry_type
+                                        td= rule.max_amount ? Number(rule.max_amount).toLocaleString('en-IN') : '—'
+                                        td= rule.effective_start_date ? new Date(rule.effective_start_date).toLocaleDateString('en-GB') : '—'
+                                        if canEdit
+                                            td
+                                                if isStatic
+                                                    button.btn.btn-primary.btn-sm.mr-1.btn-edit-rule(
+                                                        type="button",
+                                                        data-id=rule.rule_id,
+                                                        data-bank-id=rule.bank_id,
+                                                        data-account-head-id=rule.external_id,
+                                                        data-ledger-name=rule.ledger_name,
+                                                        data-entry-type=rule.allowed_entry_type,
+                                                        data-notes=rule.notes_required_flag,
+                                                        data-max-amount=rule.max_amount || '',
+                                                        data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
+                                                        data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
+                                                        i.bi.bi-pencil
+                                                    if canDisable
+                                                        button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeleteRule(${rule.rule_id})`)
+                                                            i.bi.bi-trash
+                                                else
+                                                    button.btn.btn-outline-secondary.btn-sm.btn-edit-entry-type(
+                                                        type="button",
+                                                        title="Override entry type",
+                                                        data-id=rule.rule_id,
+                                                        data-ledger-name=rule.ledger_name,
+                                                        data-entry-type=rule.allowed_entry_type)
+                                                        i.bi.bi-pencil-square
+
+                .mobile-cards-view.d-block.d-lg-none
+                    each rule in allRules
+                        - const isStatic = rule.source_type === 'Static'
+                        .card.shadow-sm.mb-2.rule-card(data-bank-id=rule.bank_id, data-source-type=rule.source_type)
+                            .card-header.d-flex.justify-content-between.align-items-center
+                                div
+                                    span.badge.mr-1(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : 'badge-warning'))= rule.source_type
+                                    strong= rule.ledger_name
+                                .actions
+                                    if canEdit
+                                        if isStatic
+                                            button.btn.btn-primary.btn-sm.mr-1.btn-edit-rule(
+                                                type="button",
+                                                data-id=rule.rule_id,
+                                                data-bank-id=rule.bank_id,
+                                                data-account-head-id=rule.external_id,
+                                                data-ledger-name=rule.ledger_name,
+                                                data-entry-type=rule.allowed_entry_type,
+                                                data-notes=rule.notes_required_flag,
+                                                data-max-amount=rule.max_amount || '',
+                                                data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
+                                                data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
+                                                i.bi.bi-pencil
+                                            if canDisable
+                                                button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeleteRule(${rule.rule_id})`)
+                                                    i.bi.bi-trash
+                                        else
+                                            button.btn.btn-outline-secondary.btn-sm.btn-edit-entry-type(
+                                                type="button",
+                                                title="Override entry type",
+                                                data-id=rule.rule_id,
+                                                data-ledger-name=rule.ledger_name,
+                                                data-entry-type=rule.allowed_entry_type)
+                                                i.bi.bi-pencil-square
+                            .card-body.p-2
+                                p.mb-1
+                                    b Bank:&nbsp;
+                                    = rule.bank_display
+                                p.mb-1
+                                    b Entry Type:&nbsp;
+                                    span.badge(class=rule.allowed_entry_type === 'CREDIT' ? 'badge-success' : (rule.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= rule.allowed_entry_type
+                                if rule.max_amount
+                                    p.mb-1
+                                        b Max Amount:&nbsp;
+                                        = Number(rule.max_amount).toLocaleString('en-IN')
+
+    //- ── Account Head Modals ──────────────────────────────────────────────────
+
     .modal.fade#addHeadModal(tabindex="-1", role="dialog", aria-hidden="true")
         .modal-dialog.modal-md(role="document")
             .modal-content
@@ -138,15 +270,10 @@ block content
                 .modal-body
                     form#addHeadForm(method='POST', action='/account-heads')
                         .form-group
-                            label.form-label Account Head Name *
-                            input.form-control(
-                                type="text",
-                                name="account_head_name",
-                                required,
-                                style="text-transform:uppercase;",
-                                autocomplete="off")
+                            label Account Head Name *
+                            input.form-control(type="text", name="account_head_name", required, style="text-transform:uppercase;", autocomplete="off")
                         .form-group
-                            label.form-label Head Type *
+                            label Head Type *
                             select.form-control(name="account_head_type", required)
                                 option(value="") Select...
                                 option(value="EXPENSE") EXPENSE
@@ -154,14 +281,14 @@ block content
                                 option(value="ADJUSTMENT") ADJUSTMENT
                                 option(value="OTHER") OTHER
                         .form-group
-                            label.form-label Entry Type *
+                            label Entry Type *
                             select.form-control(name="allowed_entry_type", required)
                                 option(value="") Select...
                                 option(value="DEBIT") DEBIT
                                 option(value="CREDIT") CREDIT
                                 option(value="BOTH") BOTH
                         .form-group
-                            label.form-label Notes Required
+                            label Notes Required
                             select.form-control(name="notes_required_flag")
                                 option(value="N") No
                                 option(value="Y") Yes
@@ -169,7 +296,6 @@ block content
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-success(type="submit", form="addHeadForm") Save
 
-    //- Edit Modal
     .modal.fade#editHeadModal(tabindex="-1", role="dialog", aria-hidden="true")
         .modal-dialog.modal-md(role="document")
             .modal-content
@@ -181,61 +307,198 @@ block content
                     form#editHeadForm(method='POST', action='/account-heads/update')
                         input(type="hidden", name="account_head_id", id="edit_account_head_id")
                         .form-group
-                            label.form-label Account Head Name *
-                            input.form-control(
-                                type="text",
-                                name="account_head_name",
-                                id="edit_account_head_name",
-                                required,
-                                style="text-transform:uppercase;",
-                                autocomplete="off")
+                            label Account Head Name *
+                            input.form-control(type="text", name="account_head_name", id="edit_account_head_name", required, style="text-transform:uppercase;", autocomplete="off")
                         .form-group
-                            label.form-label Head Type *
+                            label Head Type *
                             select.form-control(name="account_head_type", id="edit_account_head_type", required)
                                 option(value="EXPENSE") EXPENSE
                                 option(value="INCOME") INCOME
                                 option(value="ADJUSTMENT") ADJUSTMENT
                                 option(value="OTHER") OTHER
                         .form-group
-                            label.form-label Entry Type *
+                            label Entry Type *
                             select.form-control(name="allowed_entry_type", id="edit_allowed_entry_type", required)
                                 option(value="DEBIT") DEBIT
                                 option(value="CREDIT") CREDIT
                                 option(value="BOTH") BOTH
                         .form-group
-                            label.form-label Notes Required
+                            label Notes Required
                             select.form-control(name="notes_required_flag", id="edit_notes_required_flag")
                                 option(value="N") No
                                 option(value="Y") Yes
                         .form-group
-                            label.form-label Active
+                            label Active
                             select.form-control(name="active_flag", id="edit_active_flag")
                                 option(value="Y") Yes
                                 option(value="N") No
                         .form-group
-                            label.form-label Effective From
+                            label Effective From
                             input.form-control(type="date", name="effective_start_date", id="edit_effective_start_date")
                         .form-group
-                            label.form-label Effective To
+                            label Effective To
                             input.form-control(type="date", name="effective_end_date", id="edit_effective_end_date")
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-primary(type="submit", form="editHeadForm") Update
 
-    //- Hidden deactivate form (POST-based, no DELETE fetch needed)
     form#deactivateForm(method="POST", action="" style="display:none;")
-        input(type="hidden", name="_method", value="DELETE")
+
+    //- ── Static Ledger Rule Modals ────────────────────────────────────────────
+
+    .modal.fade#addRuleModal(tabindex="-1", role="dialog", aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Add Static Ledger Rule
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    p.text-muted.small Select the bank and the account head it should map to for statement uploads.
+                    form#addRuleForm(method='POST', action='/account-heads/rules')
+                        input(type="hidden", name="account_head_id", id="add_rule_head_id")
+                        input(type="hidden", name="ledger_name",     id="add_rule_ledger_name")
+                        .form-row
+                            .col-md-6
+                                .form-group
+                                    label Bank *
+                                    select.form-control(name="bank_id", required)
+                                        option(value="") — Select Bank —
+                                        each bank in banks
+                                            option(value=bank.bank_id)
+                                                = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
+                            .col-md-6
+                                .form-group
+                                    label Account Head (Ledger) *
+                                    select.form-control#add_rule_head_select(required)
+                                        option(value="") — Select Account Head —
+                                        each head in accountHeads
+                                            option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
+                        .form-row
+                            .col-md-4
+                                .form-group
+                                    label Entry Type *
+                                    select.form-control(name="allowed_entry_type", required)
+                                        option(value="BOTH") BOTH
+                                        option(value="DEBIT") DEBIT
+                                        option(value="CREDIT") CREDIT
+                            .col-md-4
+                                .form-group
+                                    label Notes Required
+                                    select.form-control(name="notes_required_flag")
+                                        option(value="N") No
+                                        option(value="Y") Yes
+                            .col-md-4
+                                .form-group
+                                    label Max Amount
+                                    input.form-control(type="number", name="max_amount", step="0.01", placeholder="Blank = unlimited")
+                        .form-row
+                            .col-md-6
+                                .form-group
+                                    label Effective From
+                                    input.form-control(type="date", name="effective_start_date")
+                            .col-md-6
+                                .form-group
+                                    label Effective To
+                                    input.form-control(type="date", name="effective_end_date")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="submit", form="addRuleForm") Save
+
+    .modal.fade#editRuleModal(tabindex="-1", role="dialog", aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Static Ledger Rule
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editRuleForm(method='POST', action='/account-heads/rules/update')
+                        input(type="hidden", name="rule_id",         id="edit_rule_id")
+                        input(type="hidden", name="account_head_id", id="edit_rule_head_id")
+                        input(type="hidden", name="ledger_name",     id="edit_rule_ledger_name")
+                        .form-row
+                            .col-md-6
+                                .form-group
+                                    label Bank *
+                                    select.form-control(name="bank_id", id="edit_rule_bank_id", required)
+                                        option(value="") — Select Bank —
+                                        each bank in banks
+                                            option(value=bank.bank_id)
+                                                = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
+                            .col-md-6
+                                .form-group
+                                    label Account Head (Ledger) *
+                                    select.form-control#edit_rule_head_select(required)
+                                        option(value="") — Select Account Head —
+                                        each head in accountHeads
+                                            option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
+                        .form-row
+                            .col-md-4
+                                .form-group
+                                    label Entry Type *
+                                    select.form-control(name="allowed_entry_type", id="edit_rule_entry_type", required)
+                                        option(value="BOTH") BOTH
+                                        option(value="DEBIT") DEBIT
+                                        option(value="CREDIT") CREDIT
+                            .col-md-4
+                                .form-group
+                                    label Notes Required
+                                    select.form-control(name="notes_required_flag", id="edit_rule_notes")
+                                        option(value="N") No
+                                        option(value="Y") Yes
+                            .col-md-4
+                                .form-group
+                                    label Max Amount
+                                    input.form-control(type="number", name="max_amount", id="edit_rule_max_amount", step="0.01", placeholder="Blank = unlimited")
+                        .form-row
+                            .col-md-6
+                                .form-group
+                                    label Effective From
+                                    input.form-control(type="date", name="effective_start_date", id="edit_rule_start")
+                            .col-md-6
+                                .form-group
+                                    label Effective To
+                                    input.form-control(type="date", name="effective_end_date", id="edit_rule_end")
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="editRuleForm") Update
+
+    //- ── Entry Type Override Modal (Credit / Supplier rules) ─────────────────
+
+    .modal.fade#editEntryTypeModal(tabindex="-1", role="dialog", aria-hidden="true")
+        .modal-dialog.modal-sm(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Override Entry Type
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    p.text-muted.small.mb-3#etModalLedgerName
+                    form#editEntryTypeForm(method='POST', action='')
+                        .form-group.mb-0
+                            label Allowed Entry Type *
+                            select.form-control(name="allowed_entry_type", id="et_allowed_entry_type", required)
+                                option(value="CREDIT") CREDIT
+                                option(value="DEBIT") DEBIT
+                                option(value="BOTH") BOTH
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="submit", form="editEntryTypeForm") Save
+
+    form#deleteRuleForm(method="POST", action="" style="display:none;")
 
     style.
         .customers-header-sticky { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 1px solid #dee2e6; }
         .customers-container { padding: 1rem; }
         .input-group-text { background-color: #f8f9fa; border-right: 0; }
-        #clearSearch { border-left: 0; }
+        #clearHeads, #clearRules { border-left: 0; }
         table.table th, table.table td { vertical-align: middle !important; }
 
     script.
+        // ── Utilities ─────────────────────────────────────────────────────
         function showMessage(msg, type) {
-            const a = document.getElementById('messageAlert');
+            const a  = document.getElementById('messageAlert');
             const tx = document.getElementById('messageText');
             a.className = `alert alert-${type} alert-dismissible fade show`;
             tx.textContent = msg;
@@ -246,64 +509,173 @@ block content
             }, 3000);
         }
 
-        // Edit reads from data attributes to avoid JSON/quote escaping issues
-        document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.btn-edit-head');
-            if (!btn) return;
-            const d = btn.dataset;
-            document.getElementById('edit_account_head_id').value      = d.id;
-            document.getElementById('edit_account_head_name').value    = d.name;
-            document.getElementById('edit_account_head_type').value    = d.headType;
-            document.getElementById('edit_allowed_entry_type').value   = d.entryType;
-            document.getElementById('edit_notes_required_flag').value  = d.notes;
-            document.getElementById('edit_active_flag').value          = d.active;
-            document.getElementById('edit_effective_start_date').value = d.start;
-            document.getElementById('edit_effective_end_date').value   = d.end;
-            $('#editHeadModal').modal('show');
+        // ── Tab activation ────────────────────────────────────────────────
+        const ACTIVE_TAB = '!{activeTab}';
+
+        function syncAddBtn(tabId) {
+            const addHeadBtn = document.getElementById('addHeadBtn');
+            const addRuleBtn = document.getElementById('addRuleBtn');
+            if (addHeadBtn) addHeadBtn.style.display = (tabId === 'heads') ? '' : 'none';
+            if (addRuleBtn) addRuleBtn.style.display = (tabId === 'rules') ? '' : 'none';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const tabLink = document.getElementById('tab-' + ACTIVE_TAB + '-link');
+            if (tabLink) $(tabLink).tab('show');
+            syncAddBtn(ACTIVE_TAB);
+
+            $('#masterTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+                syncAddBtn(e.target.getAttribute('href').replace('#tab-', ''));
+            });
+
+            // ── Account Heads search ──────────────────────────────────────
+            const searchHeads = document.getElementById('searchHeads');
+            const clearHeads  = document.getElementById('clearHeads');
+            const headRows    = document.querySelectorAll('#headsTableBody tr.head-row');
+            const headCards   = document.querySelectorAll('.head-card');
+
+            searchHeads.addEventListener('input', function () {
+                const term = this.value.toLowerCase().trim();
+                clearHeads.style.display = term ? 'block' : 'none';
+                headRows.forEach(r => {
+                    r.style.display = Array.from(r.querySelectorAll('.searchable'))
+                        .map(el => el.textContent.toLowerCase()).join(' ').includes(term) ? '' : 'none';
+                });
+                headCards.forEach(c => {
+                    c.style.display = c.textContent.toLowerCase().includes(term) ? '' : 'none';
+                });
+            });
+            clearHeads.addEventListener('click', () => {
+                searchHeads.value = '';
+                clearHeads.style.display = 'none';
+                headRows.forEach(r => r.style.display = '');
+                headCards.forEach(c => c.style.display = '');
+            });
+
+            // ── Ledger Rules search + filters ─────────────────────────────
+            const searchRules = document.getElementById('searchRules');
+            const clearRules  = document.getElementById('clearRules');
+            const filterBank  = document.getElementById('filterBank');
+            const filterType  = document.getElementById('filterType');
+            const ruleRows    = document.querySelectorAll('#rulesTableBody tr.rule-row');
+            const ruleCards   = document.querySelectorAll('.rule-card');
+
+            function applyRuleFilters() {
+                const term   = searchRules.value.toLowerCase().trim();
+                const bankId = filterBank.value;
+                const type   = filterType.value;
+                ruleRows.forEach(r => {
+                    const textOk = !term   || Array.from(r.querySelectorAll('.searchable')).map(el => el.textContent.toLowerCase()).join(' ').includes(term);
+                    const bankOk = !bankId || r.dataset.bankId === bankId;
+                    const typeOk = !type   || r.dataset.sourceType === type;
+                    r.style.display = (textOk && bankOk && typeOk) ? '' : 'none';
+                });
+                ruleCards.forEach(c => {
+                    const textOk = !term   || c.textContent.toLowerCase().includes(term);
+                    const bankOk = !bankId || c.dataset.bankId === bankId;
+                    const typeOk = !type   || c.dataset.sourceType === type;
+                    c.style.display = (textOk && bankOk && typeOk) ? '' : 'none';
+                });
+            }
+
+            searchRules.addEventListener('input', function () {
+                clearRules.style.display = this.value ? 'block' : 'none';
+                applyRuleFilters();
+            });
+            clearRules.addEventListener('click', () => {
+                searchRules.value = '';
+                clearRules.style.display = 'none';
+                applyRuleFilters();
+            });
+            filterBank.addEventListener('change', applyRuleFilters);
+            filterType.addEventListener('change', applyRuleFilters);
+
+            // ── Add Rule: sync hidden fields from account head dropdown ───
+            document.getElementById('add_rule_head_select').addEventListener('change', function () {
+                const opt = this.options[this.selectedIndex];
+                document.getElementById('add_rule_head_id').value     = opt.value;
+                document.getElementById('add_rule_ledger_name').value = opt.dataset.name || '';
+            });
+
+            $('#addRuleModal').on('hidden.bs.modal', function () {
+                document.getElementById('addRuleForm').reset();
+                document.getElementById('add_rule_head_id').value     = '';
+                document.getElementById('add_rule_ledger_name').value = '';
+            });
+
+            // ── Edit Account Head ─────────────────────────────────────────
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('.btn-edit-head');
+                if (!btn) return;
+                const d = btn.dataset;
+                document.getElementById('edit_account_head_id').value      = d.id;
+                document.getElementById('edit_account_head_name').value    = d.name;
+                document.getElementById('edit_account_head_type').value    = d.headType;
+                document.getElementById('edit_allowed_entry_type').value   = d.entryType;
+                document.getElementById('edit_notes_required_flag').value  = d.notes;
+                document.getElementById('edit_active_flag').value          = d.active;
+                document.getElementById('edit_effective_start_date').value = d.start;
+                document.getElementById('edit_effective_end_date').value   = d.end;
+                $('#editHeadModal').modal('show');
+            });
+
+            // ── Edit Static Rule ──────────────────────────────────────────
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('.btn-edit-rule');
+                if (!btn) return;
+                const d = btn.dataset;
+                document.getElementById('edit_rule_id').value          = d.id;
+                document.getElementById('edit_rule_bank_id').value     = d.bankId;
+                document.getElementById('edit_rule_head_id').value     = d.accountHeadId;
+                document.getElementById('edit_rule_ledger_name').value = d.ledgerName;
+                document.getElementById('edit_rule_head_select').value = d.accountHeadId;
+                document.getElementById('edit_rule_entry_type').value  = d.entryType;
+                document.getElementById('edit_rule_notes').value       = d.notes;
+                document.getElementById('edit_rule_max_amount').value  = d.maxAmount;
+                document.getElementById('edit_rule_start').value       = d.start;
+                document.getElementById('edit_rule_end').value         = d.end;
+                $('#editRuleModal').modal('show');
+            });
+
+            document.getElementById('edit_rule_head_select').addEventListener('change', function () {
+                const opt = this.options[this.selectedIndex];
+                document.getElementById('edit_rule_head_id').value     = opt.value;
+                document.getElementById('edit_rule_ledger_name').value = opt.dataset.name || '';
+            });
+
+            // ── Edit Entry Type (Credit / Supplier rules) ─────────────────
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('.btn-edit-entry-type');
+                if (!btn) return;
+                const d = btn.dataset;
+                document.getElementById('etModalLedgerName').textContent = d.ledgerName;
+                document.getElementById('et_allowed_entry_type').value   = d.entryType;
+                document.getElementById('editEntryTypeForm').action      = `/account-heads/rules/${d.id}/entry-type`;
+                $('#editEntryTypeModal').modal('show');
+            });
+
+            // ── Refresh ───────────────────────────────────────────────────
+            document.getElementById('refreshDataBtn').addEventListener('click', () => location.reload());
+
+            // ── Flash messages ────────────────────────────────────────────
+            const flash = !{JSON.stringify(messages || {})};
+            if (flash.success) showMessage(flash.success, 'success');
+            if (flash.error)   showMessage(flash.error,   'danger');
         });
 
         function confirmDeactivate(id) {
-            if (confirm('Are you sure you want to deactivate this account head?')) {
+            if (confirm('Deactivate this account head?')) {
                 const form = document.getElementById('deactivateForm');
                 form.action = `/account-heads/${id}/deactivate`;
                 form.submit();
             }
         }
 
-        // Search filtering
-        document.addEventListener('DOMContentLoaded', () => {
-            const searchInput  = document.getElementById('searchInput');
-            const clearBtn     = document.getElementById('clearSearch');
-            const rows         = document.querySelectorAll('#tableBody tr.head-row');
-            const cards        = document.querySelectorAll('.head-card');
-
-            searchInput.addEventListener('input', function () {
-                const term = this.value.toLowerCase().trim();
-                clearBtn.style.display = term ? 'block' : 'none';
-
-                rows.forEach(row => {
-                    const text = Array.from(row.querySelectorAll('.searchable'))
-                        .map(el => el.textContent.toLowerCase()).join(' ');
-                    row.style.display = text.includes(term) ? '' : 'none';
-                });
-
-                cards.forEach(card => {
-                    const text = card.textContent.toLowerCase();
-                    card.style.display = text.includes(term) ? '' : 'none';
-                });
-            });
-
-            clearBtn.addEventListener('click', () => {
-                searchInput.value = '';
-                clearBtn.style.display = 'none';
-                rows.forEach(r  => r.style.display = '');
-                cards.forEach(c => c.style.display = '');
-            });
-
-            document.getElementById('refreshDataBtn').addEventListener('click', () => location.reload());
-
-            // Flash messages from server
-            const flash = !{JSON.stringify(messages || {})};
-            if (flash.success) showMessage(flash.success, 'success');
-            if (flash.error)   showMessage(flash.error,   'danger');
-        });
+        function confirmDeleteRule(id) {
+            if (confirm('Delete this ledger rule? This cannot be undone.')) {
+                const form = document.getElementById('deleteRuleForm');
+                form.action = `/account-heads/rules/${id}/delete`;
+                form.submit();
+            }
+        }
