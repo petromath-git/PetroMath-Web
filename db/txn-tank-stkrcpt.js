@@ -24,9 +24,17 @@ module.exports = function(sequelize, DataTypes) {
             field: 'driver_id',
             type: DataTypes.INTEGER
         },
+        driver_name: {
+            field: 'driver_name',
+            type: DataTypes.STRING
+        },
         helper_id: {
             field: 'helper_id',
             type: DataTypes.INTEGER
+        },
+        helper_name: {
+            field: 'helper_name',
+            type: DataTypes.STRING
         },
         truck_number: {
             field: 'truck_number',

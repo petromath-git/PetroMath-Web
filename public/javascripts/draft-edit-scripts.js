@@ -136,7 +136,7 @@ function trackMenu(obj) {
             
             // Populate summary when navigating to summary tab
             if (obj.id === 'summary_tab') {
-                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
+                setTimeout(() => document.getElementById('tankheader-table') ? populateReceiptSummary() : populateSummary(null), 100);
             }
 
             return;
@@ -151,7 +151,7 @@ function trackMenu(obj) {
             
             // Populate summary when navigating to summary tab
             if (obj.id === 'summary_tab') {
-                setTimeout(() => populateSummary(null), 100);  // ← Changed obj to null
+                setTimeout(() => document.getElementById('tankheader-table') ? populateReceiptSummary() : populateSummary(null), 100);
             }
 
             return;

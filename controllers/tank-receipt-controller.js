@@ -2,6 +2,7 @@ const dbMapping = require("../db/ui-db-field-mapping")
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
+const db = require("../db/db-connection");
 const PersonDao = require("../dao/person-dao");
 const TxnReadDao = require("../dao/txn-read-dao");
 const TxnTankRcptDao = require ("../dao/txn-tankrcpt-dao");
@@ -237,13 +238,23 @@ const getHomeData = (req, res, next) => {
     if(req.query.tankreceipts_toDate) {
         toDate = req.query.tankreceipts_toDate;
     }
-    Promise.allSettled([getTankRcptByDate(locationCode, fromDate, toDate)])
+    Promise.allSettled([getTankRcptByDate(locationCode, fromDate, toDate), getTankProductColumns(locationCode), getTankProductQty(locationCode, fromDate, toDate)])
         .then(values => {
+            const receipts = values[0].value || [];
+            const productColumns = values[1].value || [];
+            const qtyMap = {};
+            (values[2].value || []).forEach(row => {
+                if (!qtyMap[row.ttank_id]) qtyMap[row.ttank_id] = {};
+                qtyMap[row.ttank_id][row.product_code] = row.qty;
+            });
+            receipts.forEach(r => Object.assign(r, qtyMap[r.ttank_id] || {}));
+
             res.render('tankreceipts', {
                 title: 'Tank Receipts',
                 user: req.user,
                 config: config.APP_CONFIGS,
-                tankReceiptsValues: values[0].value,
+                tankReceiptsValues: receipts,
+                productColumns: productColumns,
                 currentDate: utils.currentDate(),
                 fromDate: fromDate,
                 toDate: toDate,
@@ -271,10 +282,7 @@ const getTankRcptByDate = (locationCode, fromDate, toDate) => {
                         amount:receiptsData.amount,
                         driver: receiptsData.driver,
                         helper: receiptsData.helper,
-                        closingStatus: receiptsData.closing_status,
-                        MS: receiptsData.MS,
-                        HSD: receiptsData.HSD,
-                        XMS: receiptsData.XMS
+                        closingStatus: receiptsData.closing_status
                     });
                 });
                 resolve(receipts);
@@ -293,6 +301,43 @@ const truckDataPromise = (locationCode) => {
                 resolve({trucks: trucks});
             });
 
+    });
+}
+
+const getTankProductQty = (locationCode, fromDate, toDate) => {
+    return new Promise((resolve) => {
+        db.sequelize.query(
+            `SELECT d.ttank_id, mt.product_code, SUM(d.quantity) AS qty
+             FROM t_tank_stk_rcpt_dtl d
+             JOIN m_tank mt ON mt.tank_id = d.tank_id
+             JOIN t_tank_stk_rcpt h ON h.ttank_id = d.ttank_id
+             WHERE h.location_code = :locationCode
+               AND DATE_FORMAT(h.invoice_date, '%Y-%m-%d') >= :fromDate
+               AND DATE_FORMAT(h.invoice_date, '%Y-%m-%d') <= :toDate
+             GROUP BY d.ttank_id, mt.product_code`,
+            {
+                replacements: { locationCode, fromDate, toDate },
+                type: db.Sequelize.QueryTypes.SELECT
+            }
+        ).then(rows => resolve(rows)).catch(() => resolve([]));
+    });
+}
+
+const getTankProductColumns = (locationCode) => {
+    return new Promise((resolve) => {
+        TankDao.findActiveTanks(locationCode)
+            .then(data => {
+                const seen = new Set();
+                const productColumns = [];
+                data.forEach(tank => {
+                    if (tank.product_code && !seen.has(tank.product_code)) {
+                        seen.add(tank.product_code);
+                        productColumns.push({ key: tank.product_code, label: tank.product_code });
+                    }
+                });
+                resolve(productColumns);
+            })
+            .catch(() => resolve([]));
     });
 }
 
