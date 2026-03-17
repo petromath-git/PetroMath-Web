@@ -1,0 +1,67 @@
+extends layout
+
+block content
+    .container-fluid.mt-3
+        .row.mb-3
+            .col
+                h4 Deleted Shifts (Recycle Bin)
+                p.text-muted Shifts deleted from the system. Only shifts with data are stored here. Restore returns the shift and all its readings, sales, and expenses back to live tables.
+
+        if records && records.length > 0
+            .table-responsive
+                table.table.table-sm.table-bordered.table-hover
+                    thead.thead-dark
+                        tr
+                            th Deleted Record #
+                            th Closing ID
+                            th Location
+                            th Closing Date
+                            th Shift Time
+                            th Status
+                            th Cash
+                            th Ex/Short
+                            th Deleted By
+                            th Deleted At
+                            th Reason
+                            th Action
+                    tbody
+                        each rec in records
+                            tr
+                                td= rec.deleted_record_id
+                                td= rec.closing_id
+                                td= rec.location_code
+                                td= rec.closing_date ? new Date(rec.closing_date).toLocaleDateString('en-IN') : '-'
+                                td= rec.close_reading_time || '-'
+                                td
+                                    span(class=rec.closing_status === 'CLOSED' ? 'badge badge-success' : 'badge badge-warning')= rec.closing_status
+                                td= rec.cash
+                                td= rec.ex_short != null ? parseFloat(rec.ex_short).toFixed(3) : '-'
+                                td= rec.deleted_by || '-'
+                                td= rec.deleted_at ? new Date(rec.deleted_at).toLocaleString('en-IN') : '-'
+                                td= rec.deletion_reason || '-'
+                                td
+                                    button.btn.btn-sm.btn-success(onclick=`restoreShift(${rec.deleted_record_id}, ${rec.closing_id})`) Restore
+        else
+            .alert.alert-info No deleted shifts found.
+
+    script.
+        function restoreShift(deletedRecordId, closingId) {
+            if (!confirm('Restore shift (closing_id: ' + closingId + ') back to live records?')) return;
+
+            fetch('/restore-closing?id=' + deletedRecordId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.message) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(function(err) {
+                alert('Request failed: ' + err.message);
+            });
+        }

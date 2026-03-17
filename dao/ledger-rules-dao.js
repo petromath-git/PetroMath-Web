@@ -15,7 +15,7 @@ const BANK_DISPLAY = `
 
 module.exports = {
 
-    // All rules for the location — Static + Credit + Supplier.
+    // All rules for the location — Static + Credit + Supplier + Bank.
     getAllRules: async (locationCode) => {
         const query = `
             SELECT
@@ -24,7 +24,10 @@ module.exports = {
                 r.bank_id,
                 ${BANK_DISPLAY}          AS bank_display,
                 r.external_id,
-                r.ledger_name,
+                CASE
+                    WHEN r.source_type = 'Bank' THEN mb2.ledger_name
+                    ELSE r.ledger_name
+                END                      AS ledger_name,
                 r.allowed_entry_type,
                 r.notes_required_flag,
                 r.max_amount,
@@ -33,9 +36,13 @@ module.exports = {
                 r.created_by,
                 r.updated_by
             FROM m_ledger_rules r
-            INNER JOIN m_bank b ON b.bank_id = r.bank_id
+            INNER JOIN m_bank b  ON b.bank_id  = r.bank_id
+            LEFT  JOIN m_bank mb2
+                ON  r.source_type  = 'Bank'
+                AND r.external_id  = mb2.bank_id
             WHERE r.location_code = :locationCode
-            ORDER BY r.source_type, b.bank_name, r.ledger_name
+            ORDER BY r.source_type, b.bank_name,
+                     CASE WHEN r.source_type = 'Bank' THEN mb2.ledger_name ELSE r.ledger_name END
         `;
         return await db.sequelize.query(query, {
             replacements: { locationCode },

@@ -1,4 +1,5 @@
 const TxnWriteDao = require("../dao/txn-write-dao");
+const db = require("../db/db-connection");
 
 // New/edit flow : This controller takes care to delete txn table row.
 
@@ -15,32 +16,71 @@ module.exports = {
     txnDeleteExpensePromise: (expenseId) => {
         return txnDeleteExpensePromise(expenseId);
     },
-   deleteClosingRecord: async (req, res, next) => {
-                const closingId = req.query.id;
-                
-                try {
-                    // Check if bills exist for this shift
-                    const billsExist = await TxnWriteDao.checkBillsExistForShift(closingId);
-                    
-                    if (billsExist) {
-                        return res.status(400).send({
-                            error: 'Cannot delete shift - billing records exist for this shift'
-                        });
-                    }
-                    
-                    // If no bills, proceed with deletion
-                    await TxnWriteDao.deleteClosing(closingId);
-                    res.status(200).send({
-                        message: 'The closing record is deleted successfully.'
-                    });
-                    
-                } catch (err) {
-                    console.error('Error while deleting closing record:', err);
-                    res.status(500).send({
-                        error: 'Error while deleting the closing record.'
-                    });
-                }
-            },
+    deleteClosingRecord: async (req, res, next) => {
+        const closingId = req.query.id;
+        const username = req.user && req.user.username;
+
+        try {
+            // Guard: only DRAFT shifts may be deleted from UI
+            const [closing] = await db.sequelize.query(
+                `SELECT closing_status FROM t_closing WHERE closing_id = :closingId`,
+                { replacements: { closingId }, type: db.sequelize.QueryTypes.SELECT }
+            );
+            if (!closing) {
+                return res.status(404).send({ error: 'Shift not found.' });
+            }
+            if (closing.closing_status !== 'DRAFT') {
+                return res.status(400).send({
+                    error: `Cannot delete a shift in '${closing.closing_status}' status. Only DRAFT shifts can be deleted.`
+                });
+            }
+
+            // Check if bills exist for this shift
+            const billsExist = await TxnWriteDao.checkBillsExistForShift(closingId);
+            if (billsExist) {
+                return res.status(400).send({
+                    error: 'Cannot delete shift - billing records exist for this shift'
+                });
+            }
+
+            await TxnWriteDao.deleteClosing(closingId, username);
+            res.status(200).send({ message: 'The closing record is deleted successfully.' });
+
+        } catch (err) {
+            console.error('Error while deleting closing record:', err);
+            res.status(500).send({ error: 'Error while deleting the closing record.' });
+        }
+    },
+
+    getDeletedClosings: async (req, res, next) => {
+        try {
+            const locationCode = req.user && req.user.location_code;
+            const records = await TxnWriteDao.getDeletedClosings(locationCode);
+            res.render('deleted-closings', {
+                title: 'Deleted Shifts',
+                records,
+                user: req.user
+            });
+        } catch (err) {
+            console.error('Error fetching deleted closings:', err);
+            res.status(500).send({ error: 'Error fetching deleted shifts.' });
+        }
+    },
+
+    restoreClosing: async (req, res, next) => {
+        const deletedRecordId = req.query.id;
+        const username = req.user && req.user.username;
+
+        try {
+            await TxnWriteDao.restoreClosing(deletedRecordId, username);
+            res.status(200).send({ message: 'Shift restored successfully.' });
+        } catch (err) {
+            console.error('Error restoring closing:', err);
+            const spMessage = err && err.parent && err.parent.sqlMessage;
+            res.status(500).send({ error: spMessage || 'Error restoring the shift.' });
+        }
+    },
+
     txnDeleteAttendancePromise: (attendanceId) => {
         return txnDeleteAttendancePromise(attendanceId);
     },
