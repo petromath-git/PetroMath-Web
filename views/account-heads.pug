@@ -133,7 +133,7 @@ block content
             #tab-rules.tab-pane.fade(role="tabpanel")
                 p.text-muted.small.mb-3
                     i.bi.bi-info-circle.mr-1
-                    | Static rules are fully manageable here. Credit and Supplier rules are created automatically by the system — only the Entry Type can be overridden.
+                    | Static rules are fully manageable here. Credit, Supplier and Bank rules are created automatically by the system — only the Entry Type can be overridden.
 
                 .row.mb-3
                     .col-12.col-md-4.col-lg-3
@@ -157,6 +157,7 @@ block content
                             option(value="Static") Static
                             option(value="Credit") Credit
                             option(value="Supplier") Supplier
+                            option(value="Bank") Bank
 
                 .desktop-table-view.d-none.d-lg-block
                     .table-responsive
@@ -178,7 +179,7 @@ block content
                                     tr.rule-row(data-bank-id=rule.bank_id, data-source-type=rule.source_type)
                                         th(scope="row")= index + 1
                                         td
-                                            span.badge(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : 'badge-warning'))= rule.source_type
+                                            span.badge(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : (rule.source_type === 'Bank' ? 'badge-primary' : 'badge-warning')))= rule.source_type
                                         td.searchable= rule.bank_display
                                         td.searchable= rule.ledger_name
                                         td
