@@ -250,7 +250,7 @@ saveTransaction: async (transactionData) => {
                     'Bank Deposit',
                     :location_code,
                     CURDATE(),
-                    'Auto from Bank',
+                    :notes,
                     :created_by,
                     :created_by,
                     NOW(),
@@ -265,7 +265,10 @@ saveTransaction: async (transactionData) => {
                         receipt_date: transactionData.trans_date,
                         location_code: locationCode,
                         created_by: transactionData.created_by,
-                        source_txn_id: insertedId
+                        source_txn_id: insertedId,
+                        notes: transactionData.remarks
+                            ? `Auto from Bank - ${transactionData.remarks}`
+                            : 'Auto from Bank'
                     },
                     type: QueryTypes.INSERT,
                     transaction: t
