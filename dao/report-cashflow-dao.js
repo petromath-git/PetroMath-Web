@@ -84,7 +84,8 @@ module.exports = {
                                               tbt.ledger_name AS "Ledger Name",
                                               COALESCE(tbt.credit_amount, 0) AS "Credit",
                                               COALESCE(tbt.debit_amount, 0) AS "Debit",
-                                              tbt.remarks
+                                              tbt.remarks,
+                                              tbt.user_remark AS "User Remark"
                                           FROM 
                                               m_bank mb,
                                               t_bank_transaction tbt,
