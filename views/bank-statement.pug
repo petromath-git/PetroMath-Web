@@ -40,6 +40,17 @@ block content
             z-index: 10;
             background: white;
         }
+
+        .ledger-cell { min-width: 180px; }
+        .reclassify-btn { font-size: 0.75em; color: #6c757d; vertical-align: middle; }
+        .reclassify-btn:hover { color: #343a40; }
+        .reclassify-form { min-width: 220px; }
+        .ledger-unclassified { color: #856404; font-style: italic; }
+        .bulk-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1050; background: #343a40; color: #fff; padding: 10px 20px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .bulk-bar .bulk-count { font-weight: 600; white-space: nowrap; }
+        .bulk-bar select, .bulk-bar button { height: 32px; font-size: 0.85em; }
+        .bulk-bar .bulk-ledger-select { min-width: 220px; }
+        body.has-bulk-bar { padding-bottom: 60px; }
         
         /* Mobile styles */
         @media (max-width: 991.98px) {
@@ -144,6 +155,9 @@ block content
                 table#transactionsTable.table.table-bordered.table-hover.table-sm
                     thead.thead-light.sticky-top
                         tr
+                            if allowBankReclassify === 'true'
+                                th(style='width:32px')
+                                    input#selectAllUnclassified(type='checkbox' title='Select all unclassified' onchange='toggleSelectAll(this)')
                             th Transaction Date
                             if accountList && accountList.length > 1
                                 th Account
@@ -157,11 +171,29 @@ block content
                     tbody#transaction-rows
                         if transactionList && transactionList.length > 0
                             each val, index in transactionList
-                                tr(id='transaction_row_'+index data-search-text=(val.trans_date + ' ' + val.account_nickname + ' ' + val.ledger_name + ' ' + val.remarks))
+                                - const isUnclassified = !val.ledger_name || val.ledger_name === '' || val.ledger_name.toUpperCase() === 'OTHERS'
+                                - const canReclassify = !['Credit', 'Supplier'].includes(val.external_source)
+                                - const searchText = val.trans_date + ' ' + val.account_nickname + ' ' + (isUnclassified ? 'Unclassified ' + (val.ledger_name || '') : val.ledger_name) + ' ' + val.remarks
+                                tr(id='transaction_row_'+index data-search-text=searchText data-remarks=(val.remarks || ''))
+                                    if allowBankReclassify === 'true'
+                                        td.text-center
+                                            if isUnclassified && canReclassify
+                                                input.bulk-checkbox(type='checkbox' data-t-bank-id=val.t_bank_id data-bank-id=val.bank_id onchange='updateBulkBar()')
                                     td= val.trans_date
                                     if accountList && accountList.length > 1
                                         td= val.account_nickname
-                                    td= val.ledger_name
+                                    td.ledger-cell(data-t-bank-id=val.t_bank_id data-bank-id=val.bank_id)
+                                        span.ledger-display(class=isUnclassified ? 'ledger-unclassified' : '')= isUnclassified ? 'Unclassified' : val.ledger_name
+                                        if allowBankReclassify === 'true' && canReclassify
+                                            | &nbsp;
+                                            button.btn.btn-link.btn-sm.p-0.reclassify-btn(type='button' title='Reclassify ledger') ✎
+                                            .reclassify-form(style='display:none')
+                                                select.form-control.form-control-sm.reclassify-select
+                                                    option(value='') Loading...
+                                                .mt-1
+                                                    button.btn.btn-success.btn-sm.reclassify-save(type='button') ✓ Save
+                                                    |
+                                                    button.btn.btn-secondary.btn-sm.reclassify-cancel(type='button') ✕ Cancel
                                     td.text-right= val.debit_amount && val.debit_amount !== null ? parseFloat(val.debit_amount).toFixed(2) : '-'
                                     td.text-right= val.credit_amount && val.credit_amount !== null ? parseFloat(val.credit_amount).toFixed(2) : '-'
                                     td= val.remarks
@@ -176,6 +208,8 @@ block content
                         // New transaction entry row
                         if allowManualBankTransactions === 'true'
                             tr#new-transaction-row
+                                if allowBankReclassify === 'true'
+                                    td
                                 td
                                     input.form-control.form-control-sm(type='date' name='trans_date_0' id='trans_date_0' max=currentDate required)
                                 if accountList && accountList.length > 1
@@ -205,11 +239,23 @@ block content
                     button.btn.btn-info(type="button", id="bank-statement-add-new", onclick="addMoreRows()", title="Add new transaction row") Add New
                     span &nbsp;&nbsp;&nbsp;&nbsp;
                     button.btn.btn-primary(type="submit", id="bank-statement-save") Save               
+    // Sticky bulk reclassify bar (only rendered when reclassify is enabled)
+    if allowBankReclassify === 'true'
+        #bulkBar.bulk-bar
+            span.bulk-count#bulkCount 0 selected
+            span.text-muted.small#bulkBankLabel
+            span#bulkSuggestionNote(style='font-size:0.8em; color:#ffc107; display:none')
+            select.form-control.form-control-sm.bulk-ledger-select#bulkLedgerSelect(disabled)
+                option(value='') Select Ledger
+            button.btn.btn-success.btn-sm#bulkApplyBtn(onclick='applyBulkReclassify()' disabled) Apply
+            button.btn.btn-outline-light.btn-sm(onclick='clearBulkSelection()') ✕ Clear
+
     script.
-        const currentDate = '#{currentDate}';        
-        let transactionRowCounter = 1;        
+        const currentDate = '#{currentDate}';
+        let transactionRowCounter = 1;
         const accountList = !{JSON.stringify(accountList || [])};
         const showAccountColumn = accountList && accountList.length > 1;
+        const allowBankReclassify = '#{allowBankReclassify}' === 'true';
 
         console.log('accountList:', accountList);
         console.log('showAccountColumn:', showAccountColumn);
@@ -394,6 +440,7 @@ block content
             }
             
             newRow.innerHTML = `
+                ${allowBankReclassify ? '<td></td>' : ''}
                 <td>
                     <input class="form-control form-control-sm" type="date" name="trans_date_${transactionRowCounter}" id="trans_date_${transactionRowCounter}" max="${currentDate}" required>
                 </td>
@@ -531,6 +578,319 @@ block content
                             console.error('Error:', error);
                         });
                 }
+            }
+        });
+
+        // ── Bulk reclassify ─────────────────────────────────────────────────
+        let _bulkLedgerBankId = null;
+
+        window.toggleSelectAll = function(master) {
+            const visible = getVisibleBulkCheckboxes();
+            visible.forEach(cb => cb.checked = master.checked);
+            updateBulkBar();
+        }
+
+        window.updateBulkBar = function() {
+            const checked = getCheckedBulkCheckboxes();
+            const bar = document.getElementById('bulkBar');
+            const countEl = document.getElementById('bulkCount');
+            const bankLabel = document.getElementById('bulkBankLabel');
+            const ledgerSelect = document.getElementById('bulkLedgerSelect');
+            const applyBtn = document.getElementById('bulkApplyBtn');
+
+            if (checked.length === 0) {
+                bar.style.display = 'none';
+                document.body.classList.remove('has-bulk-bar');
+                _bulkLedgerBankId = null;
+                return;
+            }
+
+            bar.style.display = 'flex';
+            document.body.classList.add('has-bulk-bar');
+            countEl.textContent = checked.length + ' selected';
+
+            // Detect bank — if all same bank, load ledgers
+            const bankIds = [...new Set(checked.map(cb => cb.dataset.bankId))];
+            if (bankIds.length === 1 && bankIds[0] !== _bulkLedgerBankId) {
+                _bulkLedgerBankId = bankIds[0];
+                const note = document.getElementById('bulkSuggestionNote');
+                if (note) note.style.display = 'none';
+                loadBulkLedgers(_bulkLedgerBankId);
+                const account = accountList.find(a => String(a.bank_id) === String(bankIds[0]));
+                bankLabel.textContent = account ? account.account_nickname : '';
+            } else if (bankIds.length > 1) {
+                _bulkLedgerBankId = null;
+                bankLabel.textContent = '(multiple banks — select a single bank first)';
+                ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
+                ledgerSelect.disabled = true;
+                applyBtn.disabled = true;
+            }
+        }
+
+        function getVisibleBulkCheckboxes() {
+            return Array.from(document.querySelectorAll('.bulk-checkbox')).filter(cb => {
+                const row = cb.closest('tr');
+                return row && row.style.display !== 'none';
+            });
+        }
+
+        function getCheckedBulkCheckboxes() {
+            return Array.from(document.querySelectorAll('.bulk-checkbox:checked'));
+        }
+
+        function loadBulkLedgers(bankId, preselectLedger) {
+            const ledgerSelect = document.getElementById('bulkLedgerSelect');
+            const applyBtn = document.getElementById('bulkApplyBtn');
+            ledgerSelect.disabled = true;
+            ledgerSelect.innerHTML = '<option value="">Loading...</option>';
+            applyBtn.disabled = true;
+
+            fetch(`/bank-statement/ledgers?bank_id=${bankId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
+                        data.ledgers.forEach(ledger => {
+                            const opt = document.createElement('option');
+                            opt.value = ledger.ledger_name;
+                            opt.textContent = ledger.ledger_display_name;
+                            if (preselectLedger && ledger.ledger_name === preselectLedger) opt.selected = true;
+                            ledgerSelect.appendChild(opt);
+                        });
+                        ledgerSelect.disabled = false;
+                        applyBtn.disabled = !ledgerSelect.value;
+                        ledgerSelect.onchange = () => {
+                            applyBtn.disabled = !ledgerSelect.value;
+                        };
+                    }
+                })
+                .catch(() => {
+                    ledgerSelect.innerHTML = '<option value="">Error loading</option>';
+                });
+        }
+
+        // Mirror the server-side pattern extraction logic from learnFromSuggestion
+        // Extra step: strip trailing digits from compound tokens (e.g. "IOB150" → "IOB", "GL33061" → "GL")
+        // so "FROM IOB150" and "FROM IOB 150" produce the same pattern key.
+        function extractPatternKey(desc) {
+            if (!desc) return '';
+            const cleanDesc = desc.toUpperCase().trim();
+            let normalized = cleanDesc
+                .replace(/^(NEFT|IMPS|UPI|RTGS|IFT)[-\/][A-Z0-9]+[-\/]/gi, '')
+                .replace(/[A-Z0-9]{10,}/gi, '')
+                .replace(/[-\/\s]+/g, ' ')
+                .trim();
+            const words = normalized.split(' ')
+                .map(w => w.replace(/\d+$/, ''))           // strip trailing digits: IOB150→IOB, GL33061→GL
+                .filter(w => w.length >= 3 && !/^\d+$/.test(w))
+                .slice(0, 4);
+            return words.join(' ').substring(0, 200);
+        }
+
+        function suggestSimilarReclassify(savedBankId, savedRemarks, savedLedgerName) {
+            const pattern = extractPatternKey(savedRemarks);
+            if (!pattern) return;
+
+            // Find visible unclassified checkboxes whose row remarks share the same pattern
+            const candidates = getVisibleBulkCheckboxes().filter(cb => {
+                if (cb.checked) return false; // already selected
+                const row = cb.closest('tr');
+                const rowRemarks = row ? row.dataset.remarks || '' : '';
+                return extractPatternKey(rowRemarks) === pattern;
+            });
+
+            if (candidates.length === 0) return;
+
+            // Auto-check the candidates
+            candidates.forEach(cb => { cb.checked = true; });
+
+            // Show suggestion note
+            const note = document.getElementById('bulkSuggestionNote');
+            note.textContent = `★ ${candidates.length} similar transaction${candidates.length > 1 ? 's' : ''} auto-selected`;
+            note.style.display = '';
+
+            // Trigger bulk bar with bank + preselect ledger
+            _bulkLedgerBankId = savedBankId;
+            const bar = document.getElementById('bulkBar');
+            bar.style.display = 'flex';
+            document.body.classList.add('has-bulk-bar');
+            const countEl = document.getElementById('bulkCount');
+            countEl.textContent = candidates.length + ' selected';
+            const bankLabel = document.getElementById('bulkBankLabel');
+            const account = accountList.find(a => String(a.bank_id) === String(savedBankId));
+            bankLabel.textContent = account ? account.account_nickname : '';
+
+            loadBulkLedgers(savedBankId, savedLedgerName);
+        }
+
+        window.clearBulkSelection = function() {
+            document.querySelectorAll('.bulk-checkbox').forEach(cb => cb.checked = false);
+            const master = document.getElementById('selectAllUnclassified');
+            if (master) master.checked = false;
+            const note = document.getElementById('bulkSuggestionNote');
+            if (note) note.style.display = 'none';
+            updateBulkBar();
+        }
+
+        window.applyBulkReclassify = function() {
+            const checked = getCheckedBulkCheckboxes();
+            const ledgerSelect = document.getElementById('bulkLedgerSelect');
+            const ledgerName = ledgerSelect.value;
+
+            if (!ledgerName) { alert('Please select a ledger'); return; }
+            if (!_bulkLedgerBankId) { alert('All selected transactions must be from the same bank account'); return; }
+
+            const tBankIds = checked.map(cb => cb.dataset.tBankId);
+
+            const applyBtn = document.getElementById('bulkApplyBtn');
+            applyBtn.disabled = true;
+            applyBtn.textContent = 'Saving...';
+
+            fetch('/bank-statement/reclassify-bulk', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ t_bank_ids: tBankIds, ledger_name: ledgerName, bank_id: _bulkLedgerBankId })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // Update all affected rows in DOM
+                    const lockedSources = ['Credit', 'Supplier'];
+                    checked.forEach(cb => {
+                        const row = cb.closest('tr');
+                        const cell = row.querySelector('.ledger-cell');
+                        if (!cell) return;
+                        const display = cell.querySelector('.ledger-display');
+                        if (display) {
+                            display.textContent = ledgerName;
+                            display.className = 'ledger-display';
+                            display.style.display = '';
+                        }
+                        // Update search text
+                        const st = row.getAttribute('data-search-text') || '';
+                        row.setAttribute('data-search-text', st.replace(/Unclassified\s*\S*/i, ledgerName));
+                        // Remove pencil if locked source
+                        if (lockedSources.includes(data.source_type)) {
+                            const pencil = cell.querySelector('.reclassify-btn');
+                            const form = cell.querySelector('.reclassify-form');
+                            if (pencil) pencil.remove();
+                            if (form) form.remove();
+                        }
+                        // Remove checkbox from this row (no longer unclassified)
+                        cb.closest('td').innerHTML = '';
+                    });
+                    clearBulkSelection();
+                    alert(data.updated + ' transactions reclassified.');
+                } else {
+                    alert('Error: ' + data.error);
+                    applyBtn.disabled = false;
+                    applyBtn.textContent = 'Apply';
+                }
+            })
+            .catch(() => {
+                alert('Failed to bulk reclassify');
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Apply';
+            });
+        }
+
+        // ── Inline reclassify ───────────────────────────────────────────────
+        function closeAllReclassifyForms() {
+            document.querySelectorAll('.reclassify-form').forEach(f => f.style.display = 'none');
+            document.querySelectorAll('.ledger-display').forEach(d => d.style.display = '');
+            document.querySelectorAll('.reclassify-btn').forEach(b => b.style.display = '');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('reclassify-btn')) {
+                const cell = e.target.closest('.ledger-cell');
+                const bankId = cell.dataset.bankId;
+                const display = cell.querySelector('.ledger-display');
+                const btn = cell.querySelector('.reclassify-btn');
+                const form = cell.querySelector('.reclassify-form');
+                const select = cell.querySelector('.reclassify-select');
+
+                closeAllReclassifyForms();
+                display.style.display = 'none';
+                btn.style.display = 'none';
+                form.style.display = 'block';
+
+                fetch(`/bank-statement/ledgers?bank_id=${bankId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            const currentLedger = display.textContent.trim();
+                            select.innerHTML = '<option value="">Select Ledger</option>';
+                            data.ledgers.forEach(ledger => {
+                                const opt = document.createElement('option');
+                                opt.value = ledger.ledger_name;
+                                opt.textContent = ledger.ledger_display_name;
+                                if (ledger.ledger_name === currentLedger) opt.selected = true;
+                                select.appendChild(opt);
+                            });
+                        }
+                    })
+                    .catch(() => { select.innerHTML = '<option value="">Error loading</option>'; });
+            }
+
+            if (e.target.classList.contains('reclassify-cancel')) {
+                closeAllReclassifyForms();
+            }
+
+            if (e.target.classList.contains('reclassify-save')) {
+                const cell = e.target.closest('.ledger-cell');
+                const tBankId = cell.dataset.tBankId;
+                const bankId = cell.dataset.bankId;
+                const select = cell.querySelector('.reclassify-select');
+                const ledgerName = select.value;
+
+                if (!ledgerName) { alert('Please select a ledger'); return; }
+
+                const btn = e.target;
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+
+                fetch(`/bank-statement/${tBankId}/reclassify`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ledger_name: ledgerName, bank_id: bankId })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const display = cell.querySelector('.ledger-display');
+                        display.textContent = data.ledger_name;
+                        display.className = 'ledger-display';
+                        display.style.display = '';
+                        // Update row search text
+                        const row = cell.closest('tr');
+                        const rowRemarks = row.dataset.remarks || '';
+                        const st = row.getAttribute('data-search-text');
+                        row.setAttribute('data-search-text', st.replace('Unclassified', data.ledger_name));
+                        // Remove checkbox for this row (no longer unclassified)
+                        const cbTd = row.querySelector('.bulk-checkbox');
+                        if (cbTd) cbTd.closest('td').innerHTML = '';
+                        // If new source is locked (Credit/Supplier), remove the reclassify UI entirely
+                        const lockedSources = ['Credit', 'Supplier'];
+                        if (lockedSources.includes(data.source_type)) {
+                            cell.querySelector('.reclassify-btn').remove();
+                            cell.querySelector('.reclassify-form').remove();
+                        } else {
+                            closeAllReclassifyForms();
+                        }
+                        // Suggest similar unclassified transactions based on ML pattern
+                        suggestSimilarReclassify(bankId, rowRemarks, data.ledger_name);
+                    } else {
+                        alert('Error: ' + data.error);
+                        btn.disabled = false;
+                        btn.textContent = '✓ Save';
+                    }
+                })
+                .catch(() => {
+                    alert('Failed to reclassify transaction');
+                    btn.disabled = false;
+                    btn.textContent = '✓ Save';
+                });
             }
         });
 

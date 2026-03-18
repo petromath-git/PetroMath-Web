@@ -3,6 +3,7 @@ const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const BankStatementDao = require("../dao/bank-statement-dao");
 const locationConfigDao = require('../dao/location-config-dao');
+const bankReconDao = require('../dao/bank-reconciliation-dao');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -13,11 +14,12 @@ module.exports = {
             let bankId = req.query.bank_id || 0;
 
             // Get configuration for manual transactions (default: true if not configured)
-            const allowManualSetting = await locationConfigDao.getSetting(
-                locationCode,
-                'ALLOW_MANUAL_BANK_TRANSACTIONS'
-            );
+            const [allowManualSetting, allowReclassifySetting] = await Promise.all([
+                locationConfigDao.getSetting(locationCode, 'ALLOW_MANUAL_BANK_TRANSACTIONS'),
+                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_RECLASSIFY')
+            ]);
             const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
+            const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
 
             const [accountList, locationData, transactionList, transactionTypes, accountingTypes, ledgerList] = await Promise.all([
                 BankStatementDao.getBankAccounts(locationCode),
@@ -33,6 +35,7 @@ module.exports = {
                 title: 'Bank Statement',
                 config: config.APP_CONFIGS,
                 allowManualBankTransactions: allowManual,
+                allowBankReclassify: allowReclassify,
                 fromDate: fromDate,
                 toDate: toDate,
                 bankId: bankId,
@@ -142,6 +145,59 @@ module.exports = {
         }
     },
 
+    reclassifyTransaction: async (req, res, next) => {
+        try {
+            const tBankId = req.params.id;
+            const { ledger_name, bank_id } = req.body;
+            const locationCode = req.user.location_code;
+
+            if (!ledger_name || !bank_id) {
+                return res.status(400).json({ error: 'ledger_name and bank_id are required' });
+            }
+
+            // Block if the transaction already has downstream dependencies:
+            //   'Credit'   → auto-receipt created; would leave dangling receipt
+            //   'Supplier' → supplier reconciliation may reference external_id
+            const txn = await BankStatementDao.getTransactionById(tBankId);
+            if (txn && ['Credit', 'Supplier'].includes(txn.external_source)) {
+                return res.status(400).json({
+                    error: `Cannot reclassify: this transaction is already linked to a ${txn.external_source} ledger with downstream records. Delete and re-enter it with the correct ledger.`
+                });
+            }
+
+            const ledgerDetails = await BankStatementDao.getLedgerDetails(bank_id, ledger_name, locationCode);
+            const newSource = ledgerDetails ? ledgerDetails.source_type : null;
+
+            // If reclassifying TO a Credit ledger on a credit transaction,
+            // create the receipt the same way saveTransaction would have.
+            const createReceipt = newSource === 'Credit' && parseFloat(txn.credit_amount) > 0;
+
+            const locationData = await BankStatementDao.getLocationId(locationCode);
+
+            await BankStatementDao.reclassifyTransaction({
+                t_bank_id:       tBankId,
+                ledger_name,
+                external_id:     ledgerDetails ? ledgerDetails.external_id : null,
+                external_source: newSource,
+                create_receipt:  createReceipt,
+                location_code:   locationCode,
+                receipt_date:    txn.trans_date,
+                credit_amount:   txn.credit_amount,
+                created_by:      req.user.Person_id || req.user.username
+            });
+
+            // Update ML suggestion cache (fire-and-forget)
+            const entryType = parseFloat(txn.credit_amount) > 0 ? 'CREDIT' : 'DEBIT';
+            bankReconDao.learnFromSuggestion(parseInt(bank_id), txn.remarks || '', ledger_name, entryType)
+                .catch(err => console.error('learnFromSuggestion error (reclassify):', err));
+
+            res.status(200).json({ success: true, ledger_name, source_type: newSource });
+        } catch (error) {
+            console.error('Error reclassifying transaction:', error);
+            res.status(500).json({ error: 'Failed to reclassify transaction.' });
+        }
+    },
+
     // API endpoint to get allowed ledgers when bank is changed
     getLedgersForBank: async (req, res, next) => {
         try {
@@ -170,6 +226,63 @@ module.exports = {
         } catch (error) {
             console.error('Error fetching bank accounts:', error);
             res.status(500).json({ error: 'Failed to fetch banks' });
+        }
+    },
+
+    bulkReclassifyTransactions: async (req, res, next) => {
+        try {
+            const locationCode = req.user.location_code;
+            const { t_bank_ids, ledger_name, bank_id } = req.body;
+
+            if (!Array.isArray(t_bank_ids) || t_bank_ids.length === 0) {
+                return res.status(400).json({ error: 'No transactions selected' });
+            }
+            if (!ledger_name || !bank_id) {
+                return res.status(400).json({ error: 'ledger_name and bank_id are required' });
+            }
+
+            // Fetch all transactions and check none are locked
+            const txns = [];
+            for (const tBankId of t_bank_ids) {
+                const txn = await BankStatementDao.getTransactionById(tBankId);
+                if (!txn) continue;
+                if (['Credit', 'Supplier'].includes(txn.external_source)) {
+                    return res.status(400).json({
+                        error: `Transaction ${tBankId} is already linked to a ${txn.external_source} ledger and cannot be reclassified.`
+                    });
+                }
+                txns.push(txn);
+            }
+
+            const ledgerDetails = await BankStatementDao.getLedgerDetails(bank_id, ledger_name, locationCode);
+            const newSource = ledgerDetails ? ledgerDetails.source_type : null;
+            const newExternalId = ledgerDetails ? ledgerDetails.external_id : null;
+
+            const bulkUpdates = txns.map(txn => ({
+                t_bank_id: txn.t_bank_id,
+                ledger_name,
+                external_id: newExternalId,
+                external_source: newSource,
+                create_receipt: newSource === 'Credit' && parseFloat(txn.credit_amount) > 0,
+                location_code: locationCode,
+                receipt_date: txn.trans_date,
+                credit_amount: txn.credit_amount,
+                created_by: req.user.Person_id || req.user.username
+            }));
+
+            await BankStatementDao.bulkReclassifyTransactions(bulkUpdates);
+
+            // Update ML suggestion cache for each transaction (fire-and-forget)
+            for (const txn of txns) {
+                const entryType = parseFloat(txn.credit_amount) > 0 ? 'CREDIT' : 'DEBIT';
+                bankReconDao.learnFromSuggestion(parseInt(bank_id), txn.remarks || '', ledger_name, entryType)
+                    .catch(err => console.error('learnFromSuggestion error (bulk reclassify):', err));
+            }
+
+            res.status(200).json({ success: true, updated: bulkUpdates.length, source_type: newSource });
+        } catch (error) {
+            console.error('Error bulk reclassifying transactions:', error);
+            res.status(500).json({ error: 'Failed to bulk reclassify transactions.' });
         }
     },
 

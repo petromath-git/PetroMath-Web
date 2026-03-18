@@ -65,7 +65,7 @@ module.exports = {
     // Get bank transactions by date range and bank
     getTransactionsByDate: async (locationCode, fromDate, toDate, bankId) => {
         let query = `
-            SELECT 
+            SELECT
                 tbt.t_bank_id,
                 DATE_FORMAT(tbt.trans_date, '%d-%m-%Y') as trans_date,
                 tbt.bank_id,
@@ -77,6 +77,7 @@ module.exports = {
                 tbt.closed_date,
                 tbt.accounting_type,
                 tbt.transaction_type,
+                tbt.external_source,
                 mb.account_nickname,
                 mb.bank_name
             FROM t_bank_transaction tbt
@@ -290,12 +291,16 @@ saveTransaction: async (transactionData) => {
     // Get transaction by ID to check if it's closed
     getTransactionById: async (tBankId) => {
         const query = `
-            SELECT 
+            SELECT
                 tbt.t_bank_id,
                 tbt.trans_date,
                 tbt.bank_id,
                 tbt.closed_flag,
-                tbt.closed_date
+                tbt.closed_date,
+                tbt.external_source,
+                tbt.credit_amount,
+                tbt.debit_amount,
+                tbt.remarks
             FROM t_bank_transaction tbt
             WHERE tbt.t_bank_id = :tBankId
         `;
@@ -333,6 +338,116 @@ saveTransaction: async (transactionData) => {
         return await db.sequelize.query(query, {
             type: QueryTypes.SELECT
         });
+    },
+
+    // Reclassify an existing transaction's ledger.
+    // If reclassifying to a Credit ledger on a credit transaction, auto-creates
+    // a receipt in t_receipts (mirrors the saveTransaction receipt logic).
+    reclassifyTransaction: async ({ t_bank_id, ledger_name, external_id, external_source,
+                                    create_receipt, location_code, receipt_date, credit_amount, created_by }) => {
+        const t = await db.sequelize.transaction();
+        try {
+            await db.sequelize.query(
+                `UPDATE t_bank_transaction
+                 SET ledger_name     = :ledger_name,
+                     external_id     = :external_id,
+                     external_source = :external_source
+                 WHERE t_bank_id = :t_bank_id`,
+                { replacements: { t_bank_id, ledger_name, external_id, external_source }, type: QueryTypes.UPDATE, transaction: t }
+            );
+
+            if (create_receipt && external_id && parseFloat(credit_amount) > 0) {
+                const receiptMax = await db.sequelize.query(
+                    `SELECT COALESCE(MAX(receipt_no), 0) AS max_no FROM t_receipts WHERE location_code = :location_code`,
+                    { replacements: { location_code }, type: QueryTypes.SELECT, transaction: t }
+                );
+                const nextReceiptNo = parseInt(receiptMax[0].max_no) + 1;
+
+                await db.sequelize.query(
+                    `INSERT INTO t_receipts (
+                        receipt_no, creditlist_id, amount, receipt_date, receipt_type,
+                        location_code, cashflow_date, notes,
+                        created_by, updated_by, creation_date, updation_date, source_txn_id
+                     ) VALUES (
+                        :receipt_no, :creditlist_id, :amount, :receipt_date, 'Bank Deposit',
+                        :location_code, CURDATE(), 'Reclassified from Bank',
+                        :created_by, :created_by, NOW(), NOW(), :source_txn_id
+                     )`,
+                    {
+                        replacements: {
+                            receipt_no: nextReceiptNo,
+                            creditlist_id: external_id,
+                            amount: credit_amount,
+                            receipt_date,
+                            location_code,
+                            created_by,
+                            source_txn_id: t_bank_id
+                        },
+                        type: QueryTypes.INSERT,
+                        transaction: t
+                    }
+                );
+            }
+
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
+    },
+
+    bulkReclassifyTransactions: async (updates) => {
+        const t = await db.sequelize.transaction();
+        try {
+            for (const upd of updates) {
+                await db.sequelize.query(
+                    `UPDATE t_bank_transaction
+                     SET ledger_name     = :ledger_name,
+                         external_id     = :external_id,
+                         external_source = :external_source
+                     WHERE t_bank_id = :t_bank_id`,
+                    { replacements: { t_bank_id: upd.t_bank_id, ledger_name: upd.ledger_name, external_id: upd.external_id, external_source: upd.external_source }, type: QueryTypes.UPDATE, transaction: t }
+                );
+
+                if (upd.create_receipt && upd.external_id && parseFloat(upd.credit_amount) > 0) {
+                    const receiptMax = await db.sequelize.query(
+                        `SELECT COALESCE(MAX(receipt_no), 0) AS max_no FROM t_receipts WHERE location_code = :location_code`,
+                        { replacements: { location_code: upd.location_code }, type: QueryTypes.SELECT, transaction: t }
+                    );
+                    const nextReceiptNo = parseInt(receiptMax[0].max_no) + 1;
+
+                    await db.sequelize.query(
+                        `INSERT INTO t_receipts (
+                            receipt_no, creditlist_id, amount, receipt_date, receipt_type,
+                            location_code, cashflow_date, notes,
+                            created_by, updated_by, creation_date, updation_date, source_txn_id
+                         ) VALUES (
+                            :receipt_no, :creditlist_id, :amount, :receipt_date, 'Bank Deposit',
+                            :location_code, CURDATE(), 'Reclassified from Bank',
+                            :created_by, :created_by, NOW(), NOW(), :source_txn_id
+                         )`,
+                        {
+                            replacements: {
+                                receipt_no: nextReceiptNo,
+                                creditlist_id: upd.external_id,
+                                amount: upd.credit_amount,
+                                receipt_date: upd.receipt_date,
+                                location_code: upd.location_code,
+                                created_by: upd.created_by,
+                                source_txn_id: upd.t_bank_id
+                            },
+                            type: QueryTypes.INSERT,
+                            transaction: t
+                        }
+                    );
+                }
+            }
+
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
     },
 
     // Get accounting types
