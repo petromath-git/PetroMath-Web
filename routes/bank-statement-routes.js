@@ -47,8 +47,26 @@ router.post('/',
     }
 );
 
+// PATCH route - Bulk reclassify multiple transactions (must be before /:id routes)
+router.patch('/reclassify-bulk',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    (req, res, next) => {
+        bankStatementController.bulkReclassifyTransactions(req, res, next);
+    }
+);
+
+// PATCH route - Reclassify ledger on an existing transaction
+router.patch('/:id/reclassify',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    (req, res, next) => {
+        bankStatementController.reclassifyTransaction(req, res, next);
+    }
+);
+
 // DELETE route - Delete bank transaction
-router.delete('/:id', 
+router.delete('/:id',
     isLoginEnsured,
     appSecurity.hasPermission('DELETE_BANK_STATEMENT'), 
     (req, res, next) => {
