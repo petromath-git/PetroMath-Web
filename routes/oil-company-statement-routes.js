@@ -39,8 +39,26 @@ router.post('/',
     }
 );
 
+// PATCH route - Bulk reclassify multiple transactions (must be before /:id routes)
+router.patch('/reclassify-bulk',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_OIL_COMPANY_STATEMENT'),
+    (req, res, next) => {
+        oilCompanyStatementController.bulkReclassifyTransactions(req, res, next);
+    }
+);
+
+// PATCH route - Reclassify ledger on an existing transaction
+router.patch('/:id/reclassify',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_OIL_COMPANY_STATEMENT'),
+    (req, res, next) => {
+        oilCompanyStatementController.reclassifyTransaction(req, res, next);
+    }
+);
+
 // DELETE route - Delete oil company transaction
-router.delete('/:id', 
+router.delete('/:id',
     isLoginEnsured,
     appSecurity.hasPermission('DELETE_OIL_COMPANY_STATEMENT'), 
     (req, res, next) => {

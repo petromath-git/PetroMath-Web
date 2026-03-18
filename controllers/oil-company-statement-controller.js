@@ -12,12 +12,13 @@ module.exports = {
             let toDate = req.query.toDate || dateFormat(new Date(), "yyyy-mm-dd");
             let bankId = req.query.bank_id || 0;
 
-             // Get configuration for manual transactions (default: true if not configured)
-        const allowManualSetting = await locationConfigDao.getSetting(
-            locationCode,
-            'ALLOW_MANUAL_BANK_TRANSACTIONS'
-        );
-        const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
+            // Get configuration for manual transactions and reclassify
+            const [allowManualSetting, allowReclassifySetting] = await Promise.all([
+                locationConfigDao.getSetting(locationCode, 'ALLOW_MANUAL_BANK_TRANSACTIONS'),
+                locationConfigDao.getSetting(locationCode, 'ALLOW_OIL_RECLASSIFY')
+            ]);
+            const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
+            const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
 
             const [accountList, locationData, transactionList] = await Promise.all([
                 OilCompanyDao.getOilCompanyAccounts(locationCode),
@@ -36,6 +37,7 @@ module.exports = {
                 title: 'SAP Statement',
                 config: config.APP_CONFIGS,
                 allowManualBankTransactions: allowManual,
+                allowOilReclassify: allowReclassify,
                 fromDate: fromDate,
                 toDate: toDate,
                 bankId: bankId,
@@ -99,6 +101,7 @@ module.exports = {
                 credit_amount: credit || null,
                 debit_amount: debit || null,
                 remarks: req.body[`remarks_${index}`] || '',
+                user_remark: req.body[`user_remark_${index}`] || null,
                 external_id: externalId,
                 external_source: externalSource,
                 running_balance: null,
@@ -162,14 +165,103 @@ module.exports = {
     },
 
     getBanksForLocation: async (req, res, next) => {
-    try {
-        const locationCode = req.user.location_code;
-        const banks = await OilCompanyDao.getOilCompanyAccounts(locationCode);
-        
-        res.status(200).json({ success: true, banks: banks });
-    } catch (error) {
-        console.error('Error fetching oil company banks:', error);
-        res.status(500).json({ error: 'Failed to fetch banks' });
-    }
-}
+        try {
+            const locationCode = req.user.location_code;
+            const banks = await OilCompanyDao.getOilCompanyAccounts(locationCode);
+
+            res.status(200).json({ success: true, banks: banks });
+        } catch (error) {
+            console.error('Error fetching oil company banks:', error);
+            res.status(500).json({ error: 'Failed to fetch banks' });
+        }
+    },
+
+    reclassifyTransaction: async (req, res, next) => {
+        try {
+            const tBankId = req.params.id;
+            const { ledger_name, bank_id } = req.body;
+            const locationCode = req.user.location_code;
+
+            if (!ledger_name || !bank_id) {
+                return res.status(400).json({ error: 'ledger_name and bank_id are required' });
+            }
+
+            const txn = await OilCompanyDao.getTransactionById(tBankId);
+            if (txn && ['Credit', 'Supplier'].includes(txn.external_source)) {
+                return res.status(400).json({
+                    error: `Cannot reclassify: this transaction is already linked to a ${txn.external_source} ledger with downstream records. Delete and re-enter it with the correct ledger.`
+                });
+            }
+
+            const ledgerDetails = await OilCompanyDao.getLedgerDetails(bank_id, ledger_name, locationCode);
+            const newSource = ledgerDetails ? ledgerDetails.source_type : null;
+            const createReceipt = newSource === 'Credit' && parseFloat(txn.credit_amount) > 0;
+
+            await OilCompanyDao.reclassifyTransaction({
+                t_bank_id:       tBankId,
+                ledger_name,
+                external_id:     ledgerDetails ? ledgerDetails.external_id : null,
+                external_source: newSource,
+                create_receipt:  createReceipt,
+                location_code:   locationCode,
+                receipt_date:    txn.trans_date,
+                credit_amount:   txn.credit_amount,
+                created_by:      req.user.Person_id || req.user.username
+            });
+
+            res.status(200).json({ success: true, ledger_name, source_type: newSource });
+        } catch (error) {
+            console.error('Error reclassifying oil company transaction:', error);
+            res.status(500).json({ error: 'Failed to reclassify transaction.' });
+        }
+    },
+
+    bulkReclassifyTransactions: async (req, res, next) => {
+        try {
+            const locationCode = req.user.location_code;
+            const { t_bank_ids, ledger_name, bank_id } = req.body;
+
+            if (!Array.isArray(t_bank_ids) || t_bank_ids.length === 0) {
+                return res.status(400).json({ error: 'No transactions selected' });
+            }
+            if (!ledger_name || !bank_id) {
+                return res.status(400).json({ error: 'ledger_name and bank_id are required' });
+            }
+
+            const txns = [];
+            for (const tBankId of t_bank_ids) {
+                const txn = await OilCompanyDao.getTransactionById(tBankId);
+                if (!txn) continue;
+                if (['Credit', 'Supplier'].includes(txn.external_source)) {
+                    return res.status(400).json({
+                        error: `Transaction ${tBankId} is already linked to a ${txn.external_source} ledger and cannot be reclassified.`
+                    });
+                }
+                txns.push(txn);
+            }
+
+            const ledgerDetails = await OilCompanyDao.getLedgerDetails(bank_id, ledger_name, locationCode);
+            const newSource = ledgerDetails ? ledgerDetails.source_type : null;
+            const newExternalId = ledgerDetails ? ledgerDetails.external_id : null;
+
+            const bulkUpdates = txns.map(txn => ({
+                t_bank_id:       txn.t_bank_id,
+                ledger_name,
+                external_id:     newExternalId,
+                external_source: newSource,
+                create_receipt:  newSource === 'Credit' && parseFloat(txn.credit_amount) > 0,
+                location_code:   locationCode,
+                receipt_date:    txn.trans_date,
+                credit_amount:   txn.credit_amount,
+                created_by:      req.user.Person_id || req.user.username
+            }));
+
+            await OilCompanyDao.bulkReclassifyTransactions(bulkUpdates);
+
+            res.status(200).json({ success: true, updated: bulkUpdates.length, source_type: newSource });
+        } catch (error) {
+            console.error('Error bulk reclassifying oil company transactions:', error);
+            res.status(500).json({ error: 'Failed to bulk reclassify transactions.' });
+        }
+    },
 };
