@@ -335,6 +335,7 @@ block content
                                 <th class="text-right">Debit</th>
                                 <th class="text-right">Credit</th>
                                 <th style="min-width: 200px;">Ledger <span class="text-danger">*</span></th>
+                                <th style="min-width: 160px;">User Remark</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -356,15 +357,24 @@ block content
                         <td class="text-right">${txn.debit_amount > 0 ? txn.debit_amount.toFixed(2) : '-'}</td>
                         <td class="text-right">${txn.credit_amount > 0 ? txn.credit_amount.toFixed(2) : '-'}</td>
                         <td>
-                            ${isDuplicate ? 
+                            ${isDuplicate ?
                                 '<span class="text-muted">Already in system - will be skipped</span>' :
-                                `<select class="form-control form-control-sm ledger-select" 
-                                        data-index="${index}" 
+                                `<select class="form-control form-control-sm ledger-select"
+                                        data-index="${index}"
                                         data-description="${escapeHtml(txn.description)}"
                                         data-entry-type="${entryType}"
                                         required>
                                     <option value="">Loading ledgers...</option>
                                 </select>`
+                            }
+                        </td>
+                        <td>
+                            ${isDuplicate ? '' :
+                                `<input class="form-control form-control-sm user-remark-input"
+                                        type="text"
+                                        data-index="${index}"
+                                        maxlength="500"
+                                        placeholder="Optional">`
                             }
                         </td>
                     </tr>
@@ -379,7 +389,15 @@ block content
             
             document.getElementById('step2-transactions').innerHTML = tableHtml;
             document.getElementById('step2-actions').style.display = 'flex';
-            
+
+            // Wire up user_remark inputs
+            document.querySelectorAll('.user-remark-input').forEach(input => {
+                input.addEventListener('input', function() {
+                    const idx = parseInt(this.dataset.index);
+                    uploadedTransactions[idx].user_remark = this.value.trim() || null;
+                });
+            });
+
             // Load ledgers for NON-DUPLICATE rows only
             loadAllLedgers();
         }
