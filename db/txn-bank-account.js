@@ -24,6 +24,11 @@ module.exports = function(sequelize, DataTypes) {
             field: 'remarks',
             type: DataTypes.STRING
         },
+        user_remark: {
+            field: 'user_remark',
+            type: DataTypes.STRING(500),
+            allowNull: true
+        },
         credit_amount: {
             field: 'credit_amount',
             type: DataTypes.DECIMAL

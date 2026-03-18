@@ -1034,6 +1034,7 @@ previewTransactions: async (req, res) => {
                         credit_amount: credit > 0 ? credit : null,
                         debit_amount: debit > 0 ? debit : null,
                         remarks: txn.remarks || txn.description || '',
+                        user_remark: txn.user_remark || null,
                         external_id: externalId,  // ✓ Now properly populated
                         external_source: externalSource || 'upload',  // ✓ Use source_type or fallback to 'upload'
                         running_balance: txn.running_balance || null,

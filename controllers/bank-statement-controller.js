@@ -102,6 +102,7 @@ module.exports = {
                 credit_amount: credit || null,
                 debit_amount: debit || null,
                 remarks: req.body[`remarks_${index}`] || '',
+                user_remark: req.body[`user_remark_${index}`] || null,
                 external_id: externalId,
                 external_source: externalSource,
                 running_balance: null,
