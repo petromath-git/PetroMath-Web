@@ -9,6 +9,7 @@ const TxnTankRcptDao = require ("../dao/txn-tankrcpt-dao");
 const TxnStkRcptDtlDao = require("../dao/txn-stkrcpt-dtl-dao");
 const TankDao = require("../dao/tank-dao");
 const TruckDao = require("../dao/truck-dao");
+const LookupDao = require("../dao/lookup-dao");
 
 
 module.exports = {
@@ -41,7 +42,8 @@ module.exports = {
                 getDriverHelper(locationCode),
                 tankCodePromise(locationCode),
                 truckDataPromise(locationCode),
-                getLocationId(locationCode)])
+                getLocationId(locationCode),
+                LookupDao.getLookupByType('TANK_QUANTITY', locationCode)])
                     .then((values) => {
                         res.render('new-decant', {
                             user: req.user,
@@ -51,7 +53,8 @@ module.exports = {
                             drivers: values[1].value.drivers,
                             tanks: values[2].value.tanks,
                             trucks: values[3].value.trucks,
-                            location: values[4].value.location_id
+                            location: values[4].value.location_id,
+                            tankQuantities: values[5].value || []
                         });
                     }).catch((err) => {
                         console.warn("Error while getting data using promises " + err.toString());

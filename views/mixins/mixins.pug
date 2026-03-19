@@ -296,7 +296,7 @@ mixin addDecantLines(decantRowno,rowData)
     - var trClass = 'd-md-none';
     - var price = 0;
     if(!rowData)
-        - rowData = {tdtank_id:0, quantity: config.tankQuantity[0],opening_dip:0, closing_dip:0, amount:price,EB_MS_FLAG:'N'};
+        - rowData = {tdtank_id:0, quantity: tankQuantities[0] && tankQuantities[0].description,opening_dip:0, closing_dip:0, amount:price,EB_MS_FLAG:'N'};
     if(rowData.tdtank_id&& parseInt(rowData.tdtank_id) > 0)
         - trClass = ''
     tr(class=trClass id=trId)
@@ -308,9 +308,9 @@ mixin addDecantLines(decantRowno,rowData)
                         option(value=`${val.tankId}` selected=(val.tankId === rowData.tank_id))= val.tankCode    
         td
             select.form-control(id=prefix+"tankqty_" + decantRowno, name=prefix+"tankqty_" + decantRowno, required)
-                if config.tankQuantity
-                    each val in config.tankQuantity
-                        option(value=`${val}` selected= (rowData.quantity === val))= val
+                if tankQuantities
+                    each val in tankQuantities
+                        option(value=val.description selected= (rowData.quantity === val.description))= val.description
         td
             input.form-control(type="checkbox", id=prefix+"eb_" + decantRowno, name= prefix+"eb_" + decantRowno, value=rowData.EB_MS_FLAG, onClick="changeEBflag('"+prefix+"',"+decantRowno+")" checked=('Y'===rowData.EB_MS_FLAG))
                 
@@ -368,21 +368,21 @@ mixin addTxnTruckLoad(rowCnt)
         td(scope="row")
             select.form-control(id='MSQty_'+rowCnt, name='MSQty_'+rowCnt)
                 option(value=0)=0
-                if config.tankQuantity
-                    each val in config.tankQuantity
-                        option(value=`${val}`)= val
+                if tankQuantities
+                    each val in tankQuantities
+                        option(value=val.description)= val.description
         td(scope="row")
             select.form-control(id='HSDQty_'+rowCnt, name='HSDQty_'+rowCnt)
                 option(value=0)=0
-                if config.tankQuantity
-                    each val in config.tankQuantity
-                        option(value=`${val}`)= val
+                if tankQuantities
+                    each val in tankQuantities
+                        option(value=val.description)= val.description
         td(scope="row")
             select.form-control(id='XMSQty_'+rowCnt, name='XMSQty_'+rowCnt)
                 option(value=0)=0
-                if config.tankQuantity
-                    each val in config.tankQuantity
-                        option(value=`${val}`)= val
+                if tankQuantities
+                    each val in tankQuantities
+                        option(value=val.description)= val.description
         td(scope="row")
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'truckload\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
