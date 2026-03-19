@@ -51,33 +51,19 @@ module.exports = {
       
        // Retrieve purchase data, fuel sales data, and non-fuel sales data concurrently.
       const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
-      const purchaseConsolDataPromise = GstSummaryDao.getPurchaseSummaryConsolidated(locationCode, fromDate, toDate);
       const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
       const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
-      const nonFuelSalesByGSTPromise = GstSummaryDao.getNonFuelSalesByGST(locationCode, fromDate, toDate);
-      const nonFuelPurchaseByGSTPromise = GstSummaryDao.getNonFuelPurchaseByGST(locationCode, fromDate, toDate);
+      const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
       const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
 
-      const [purchaseData, purchaseConsolData, salesData, nonFuelSalesData, 
-            nonFuelSalesByGST, nonFuelPurchaseByGST, nonFuelPurchaseInvoices] = await Promise.all([
+      const [purchaseData, salesData, nonFuelSalesData,
+            nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
         purchaseDataPromise,
-        purchaseConsolDataPromise,
         salesDataPromise,
         nonFuelSalesDataPromise,
-        nonFuelSalesByGSTPromise,
-        nonFuelPurchaseByGSTPromise,
+        nonFuelSalesByItemPromise,
         nonFuelPurchaseInvoicesPromise
       ]);
-
-      //  purchaseData is retrieved by calling getPurchaseSummaryConsolidated
-      const purchaseSummaryList = [];
-      purchaseConsolData.forEach((purchaseRow) => {
-        purchaseSummaryList.push({
-          'Product': purchaseRow.Product,               // The product name
-          'Volume (Ltrs)': purchaseRow.Total_Quantity,    // Total quantity (already multiplied by 1000 as needed)
-          'Amount': purchaseRow.Total_Amount             // Total purchase amount
-        });
-      });
         
 
         const groupedTransactions = purchaseData.reduce((acc, transaction) => {
@@ -109,31 +95,20 @@ module.exports = {
       });
       
 
-              // Process non-fuel sales grouped by GST %
-        const nonFuelSalesByGSTList = [];
-        nonFuelSalesByGST.forEach((gstRow) => {
-          nonFuelSalesByGSTList.push({
-            'GST Rate': gstRow.gst_category,
-            'Quantity': gstRow.total_qty,
-            'Amount': gstRow.total_amount,
-            'CGST': gstRow.total_cgst,
-            'SGST': gstRow.total_sgst,
-            'Total GST': parseFloat(gstRow.total_cgst) + parseFloat(gstRow.total_sgst)
+        // Group non-fuel sales item-wise by GST rate (one table per rate in the view)
+        const groupedNonFuelSalesByGST = nonFuelSalesByItem.reduce((acc, row) => {
+          const key = row.gst_rate;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push({
+            'Product': row.product_name,
+            'Quantity': row.total_qty,
+            'Amount': row.total_amount,
+            'CGST': row.total_cgst,
+            'SGST': row.total_sgst,
+            'Total GST': parseFloat(row.total_cgst) + parseFloat(row.total_sgst)
           });
-        });
-
-        // Process non-fuel purchases grouped by GST %
-        const nonFuelPurchaseByGSTList = [];
-        nonFuelPurchaseByGST.forEach((gstRow) => {
-          nonFuelPurchaseByGSTList.push({
-            'GST Rate': gstRow.gst_category,
-            'Quantity': gstRow.total_qty,
-            'Amount': gstRow.total_amount,
-            'CGST': gstRow.total_cgst,
-            'SGST': gstRow.total_sgst,
-            'Total GST': parseFloat(gstRow.total_cgst) + parseFloat(gstRow.total_sgst)
-          });
-        });
+          return acc;
+        }, {});
 
         // Group non-fuel purchase invoices by GST category
         const groupedNonFuelPurchaseInvoices = nonFuelPurchaseInvoices.reduce((acc, invoice) => {
@@ -159,11 +134,9 @@ module.exports = {
         formattedFromDate: formattedFromDate,
         formattedToDate: formattedToDate,            
         purchaseTransactionlist: groupedTransactions,
-        purchaseSummaryList: purchaseSummaryList,
         salesSummaryList: salesSummaryList,
         nonFuelSalesSummaryList: nonFuelSalesSummaryList,
-        nonFuelSalesByGSTList: nonFuelSalesByGSTList,
-        nonFuelPurchaseByGSTList: nonFuelPurchaseByGSTList,
+        groupedNonFuelSalesByGST: groupedNonFuelSalesByGST,
         groupedNonFuelPurchaseInvoices: groupedNonFuelPurchaseInvoices
       }
           
@@ -202,21 +175,14 @@ module.exports = {
 
         // Fetch all data
         const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
-        const purchaseConsolDataPromise = GstSummaryDao.getPurchaseSummaryConsolidated(locationCode, fromDate, toDate);
         const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
-        const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
-        const nonFuelSalesByGSTPromise = GstSummaryDao.getNonFuelSalesByGST(locationCode, fromDate, toDate);
-        const nonFuelPurchaseByGSTPromise = GstSummaryDao.getNonFuelPurchaseByGST(locationCode, fromDate, toDate);
+        const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
         const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
 
-        const [purchaseData, purchaseConsolData, salesData, nonFuelSalesData, 
-               nonFuelSalesByGST, nonFuelPurchaseByGST, nonFuelPurchaseInvoices] = await Promise.all([
+        const [purchaseData, salesData, nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
           purchaseDataPromise,
-          purchaseConsolDataPromise,
           salesDataPromise,
-          nonFuelSalesDataPromise,
-          nonFuelSalesByGSTPromise,
-          nonFuelPurchaseByGSTPromise,
+          nonFuelSalesByItemPromise,
           nonFuelPurchaseInvoicesPromise
         ]);
 
@@ -290,55 +256,45 @@ module.exports = {
         
         currentRow++;
         
-        // Non-Fuel Sales
-        salesSheet.getCell(`A${currentRow}`).value = 'NON-FUEL SALES (BY GST %)';
-        salesSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
-        currentRow++;
-        
-        const nonFuelSalesHeaderRow = salesSheet.getRow(currentRow);
-        nonFuelSalesHeaderRow.values = ['GST Rate', 'Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'];
-        nonFuelSalesHeaderRow.font = { bold: true };
-        nonFuelSalesHeaderRow.eachCell((cell) => {
-            cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-            };
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFD3D3D3' }
-            };
+        // Non-Fuel Sales - item-wise grouped by GST rate
+        const nonFuelSalesGrouped = {};
+        nonFuelSalesByItem.forEach(row => {
+            const key = row.gst_rate || '0%';
+            if (!nonFuelSalesGrouped[key]) nonFuelSalesGrouped[key] = [];
+            nonFuelSalesGrouped[key].push(row);
         });
-        currentRow++;
-        
-        // Non-Fuel Sales Data - STORE AS NUMBERS
-        nonFuelSalesByGST.forEach(row => {
-            const dataRow = salesSheet.getRow(currentRow);
-            dataRow.getCell(1).value = row.gst_category; // Text
-            dataRow.getCell(2).value = toNumber(row.total_qty); // Number
-            dataRow.getCell(3).value = toNumber(row.total_amount); // Number
-            dataRow.getCell(4).value = toNumber(row.total_cgst); // Number
-            dataRow.getCell(5).value = toNumber(row.total_sgst); // Number
-            dataRow.getCell(6).value = toNumber(row.total_cgst) + toNumber(row.total_sgst); // Number
-            
-            // Format number columns to 2 decimals
-            for (let i = 2; i <= 6; i++) {
-                dataRow.getCell(i).numFmt = '#,##0.00';
-            }
-            
-            dataRow.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
+
+        Object.keys(nonFuelSalesGrouped).sort().forEach(gstRate => {
+            salesSheet.getCell(`A${currentRow}`).value = `NON-FUEL SALES - GST @ ${gstRate}`;
+            salesSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
+            currentRow++;
+
+            const nonFuelSalesHeaderRow = salesSheet.getRow(currentRow);
+            nonFuelSalesHeaderRow.values = ['Product', 'Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'];
+            nonFuelSalesHeaderRow.font = { bold: true };
+            nonFuelSalesHeaderRow.eachCell((cell) => {
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+            });
+            currentRow++;
+
+            nonFuelSalesGrouped[gstRate].forEach(row => {
+                const dataRow = salesSheet.getRow(currentRow);
+                dataRow.getCell(1).value = row.product_name;
+                dataRow.getCell(2).value = toNumber(row.total_qty);
+                dataRow.getCell(3).value = toNumber(row.total_amount);
+                dataRow.getCell(4).value = toNumber(row.total_cgst);
+                dataRow.getCell(5).value = toNumber(row.total_sgst);
+                dataRow.getCell(6).value = toNumber(row.total_cgst) + toNumber(row.total_sgst);
+                for (let i = 2; i <= 6; i++) dataRow.getCell(i).numFmt = '#,##0.00';
+                dataRow.eachCell((cell) => {
+                    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                });
+                currentRow++;
             });
             currentRow++;
         });
-        
+
         // Set column widths
         salesSheet.columns = [
             { width: 30 },
@@ -365,102 +321,6 @@ module.exports = {
         
         purchaseSheet.getCell(`A${currentRow}`).value = `Period: ${moment(fromDate).format('DD/MM/YYYY')} to ${moment(toDate).format('DD/MM/YYYY')}`;
         currentRow += 2;
-        
-        // Fuel Purchase
-        purchaseSheet.getCell(`A${currentRow}`).value = 'FUEL PURCHASE';
-        purchaseSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
-        currentRow++;
-        
-        const fuelPurchaseHeaderRow = purchaseSheet.getRow(currentRow);
-        fuelPurchaseHeaderRow.values = ['Product', 'Volume (Ltrs)', 'Amount'];
-        fuelPurchaseHeaderRow.font = { bold: true };
-        fuelPurchaseHeaderRow.eachCell((cell) => {
-            cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-            };
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFD3D3D3' }
-            };
-        });
-        currentRow++;
-        
-        // Fuel Purchase Data - STORE AS NUMBERS
-        purchaseConsolData.forEach(row => {
-            const dataRow = purchaseSheet.getRow(currentRow);
-            dataRow.getCell(1).value = row.Product; // Text
-            dataRow.getCell(2).value = toNumber(row.Total_Quantity); // Number
-            dataRow.getCell(3).value = toNumber(row.Total_Amount); // Number
-            
-            dataRow.getCell(2).numFmt = '#,##0.00';
-            dataRow.getCell(3).numFmt = '#,##0.00';
-            
-            dataRow.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-            });
-            currentRow++;
-        });
-        
-        currentRow++;
-        
-        // Non-Fuel Purchase
-        purchaseSheet.getCell(`A${currentRow}`).value = 'NON-FUEL PURCHASE (BY GST %)';
-        purchaseSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
-        currentRow++;
-        
-        const nonFuelPurchaseHeaderRow = purchaseSheet.getRow(currentRow);
-        nonFuelPurchaseHeaderRow.values = ['GST Rate', 'Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'];
-        nonFuelPurchaseHeaderRow.font = { bold: true };
-        nonFuelPurchaseHeaderRow.eachCell((cell) => {
-            cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-            };
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFD3D3D3' }
-            };
-        });
-        currentRow++;
-        
-        // Non-Fuel Purchase Data - STORE AS NUMBERS
-        nonFuelPurchaseByGST.forEach(row => {
-            const dataRow = purchaseSheet.getRow(currentRow);
-            dataRow.getCell(1).value = row.gst_category; // Text
-            dataRow.getCell(2).value = toNumber(row.total_qty); // Number
-            dataRow.getCell(3).value = toNumber(row.total_amount); // Number
-            dataRow.getCell(4).value = toNumber(row.total_cgst); // Number
-            dataRow.getCell(5).value = toNumber(row.total_sgst); // Number
-            dataRow.getCell(6).value = toNumber(row.total_cgst) + toNumber(row.total_sgst); // Number
-            
-            for (let i = 2; i <= 6; i++) {
-                dataRow.getCell(i).numFmt = '#,##0.00';
-            }
-            
-            dataRow.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-            });
-            currentRow++;
-        });
-        
-        currentRow++;
         
         // Fuel Purchase Invoice Details
         purchaseSheet.getCell(`A${currentRow}`).value = 'FUEL PURCHASE INVOICE DETAILS';
