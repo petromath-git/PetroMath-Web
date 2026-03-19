@@ -112,8 +112,20 @@ module.exports = {
         SELECT closing_id, product_id, qty, amount
         FROM t_cashsales
         UNION ALL
-        SELECT closing_id, product_id, (given_qty - returned_qty) AS qty, ((given_qty - returned_qty) * price) AS amount
-        FROM t_2toil
+        SELECT ot.closing_id, ot.product_id,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
+                 CASE
+                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
+                        AND UPPER(p2t.product_name) = '2T LOOSE'
+                   THEN (SELECT dsr.price FROM m_product dsr
+                         WHERE dsr.product_name = 'DSR - OIL'
+                           AND dsr.location_code = :locationCode
+                         LIMIT 1)
+                   ELSE ot.price
+                 END AS amount
+        FROM t_2toil ot
+        JOIN m_product p2t ON ot.product_id = p2t.product_id
       ) s
       JOIN t_closing tc ON s.closing_id = tc.closing_id
       JOIN m_product mp ON s.product_id = mp.product_id
@@ -139,6 +151,60 @@ module.exports = {
   
 
   
+  // Get Non-Fuel Sales item-wise (by product) with GST amounts
+  getNonFuelSalesByItem: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT
+        mp.product_name AS product_name,
+        CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
+        SUM(s.qty) AS total_qty,
+        SUM(s.amount) AS total_amount,
+        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / 100) AS total_cgst,
+        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / 100) AS total_sgst
+      FROM (
+        SELECT closing_id, product_id, qty, amount
+        FROM t_credits
+        UNION ALL
+        SELECT closing_id, product_id, qty, amount
+        FROM t_cashsales
+        UNION ALL
+        SELECT ot.closing_id, ot.product_id,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
+                 CASE
+                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
+                        AND UPPER(p2t.product_name) = '2T LOOSE'
+                   THEN (SELECT dsr.price FROM m_product dsr
+                         WHERE dsr.product_name = 'DSR - OIL'
+                           AND dsr.location_code = :locationCode
+                         LIMIT 1)
+                   ELSE ot.price
+                 END AS amount
+        FROM t_2toil ot
+        JOIN m_product p2t ON ot.product_id = p2t.product_id
+      ) s
+      JOIN t_closing tc ON s.closing_id = tc.closing_id
+      JOIN m_product mp ON s.product_id = mp.product_id
+      WHERE tc.closing_status = 'CLOSED'
+        AND tc.location_code = :locationCode
+        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND mp.product_name NOT IN (
+            SELECT DISTINCT product_code
+            FROM m_pump
+            WHERE location_code = :locationCode
+        )
+      GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
+      ORDER BY mp.product_name;
+    `;
+
+    const result = await db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT,
+    });
+
+    return result;
+  },
+
   // NEW METHOD 1: Get Non-Fuel Sales grouped by GST %
   getNonFuelSalesByGST: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
@@ -155,9 +221,20 @@ module.exports = {
         SELECT closing_id, product_id, qty, amount
         FROM t_cashsales
         UNION ALL
-        SELECT closing_id, product_id, (given_qty - returned_qty) AS qty, 
-               ((given_qty - returned_qty) * price) AS amount
-        FROM t_2toil
+        SELECT ot.closing_id, ot.product_id,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
+               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
+                 CASE
+                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
+                        AND UPPER(p2t.product_name) = '2T LOOSE'
+                   THEN (SELECT dsr.price FROM m_product dsr
+                         WHERE dsr.product_name = 'DSR - OIL'
+                           AND dsr.location_code = :locationCode
+                         LIMIT 1)
+                   ELSE ot.price
+                 END AS amount
+        FROM t_2toil ot
+        JOIN m_product p2t ON ot.product_id = p2t.product_id
       ) s
       JOIN t_closing tc ON s.closing_id = tc.closing_id
       JOIN m_product mp ON s.product_id = mp.product_id
