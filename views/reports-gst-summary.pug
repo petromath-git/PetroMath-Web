@@ -6,11 +6,9 @@ block content
             
             // Javascript that gets table data
             var purchaseTransactionFromServer = !{JSON.stringify(purchaseTransactionlist)}
-            var purchaseSummaryFromServer = !{JSON.stringify(purchaseSummaryList)}
             var salesSummaryFromServer = !{JSON.stringify(salesSummaryList)}
             var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}
-            var nonFuelSalesByGSTFromServer = !{JSON.stringify(nonFuelSalesByGSTList)}
-            var nonFuelPurchaseByGSTFromServer = !{JSON.stringify(nonFuelPurchaseByGSTList)}
+            var groupedNonFuelSalesByGSTFromServer = !{JSON.stringify(groupedNonFuelSalesByGST)}
             var groupedNonFuelPurchaseInvoicesFromServer = !{JSON.stringify(groupedNonFuelPurchaseInvoices)}
 
             function renderTable(array,tabletitle,numberColumns = [],tableWidthClass = '') {
@@ -98,31 +96,20 @@ block content
                     "col-sm-8 mx-auto"
                 );
                 
-                // 2. Non Fuel Sales Summary (Consolidated by GST %)
-                document.getElementById('NonFuelSalesByGST-table-container').innerHTML = renderTable(
-                    nonFuelSalesByGSTFromServer,
-                    'Non Fuel Sales (Consolidated by GST %)',
-                    ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
-                    "col-sm-8 mx-auto"
-                );
+                // 2. Non Fuel Sales - Item Wise (one table per GST rate)
+                let nonFuelSalesHtml = "";
+                Object.keys(groupedNonFuelSalesByGSTFromServer).sort().forEach(gstRate => {
+                    const rows = groupedNonFuelSalesByGSTFromServer[gstRate];
+                    nonFuelSalesHtml += renderTable(
+                        rows,
+                        `Non Fuel Sales - GST @ ${gstRate}`,
+                        ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
+                        "col-sm-10 mx-auto"
+                    );
+                });
+                document.getElementById('NonFuelSalesByItem-table-container').innerHTML = nonFuelSalesHtml;
                 
-                // 3. Fuel Purchase Summary (consolidated)
-                document.getElementById('FuelPurchase-table-container').innerHTML = renderTable(
-                    purchaseSummaryFromServer,
-                    'Fuel Purchase',
-                    ['Volume (Ltrs)', 'Amount'],
-                    "col-sm-8 mx-auto"
-                );
-                
-                // 4. Non Fuel Purchase Summary (Consolidated by GST %)
-                document.getElementById('NonFuelPurchaseByGST-table-container').innerHTML = renderTable(
-                    nonFuelPurchaseByGSTFromServer,
-                    'Non Fuel Purchase (Consolidated by GST %)',
-                    ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
-                    "col-sm-8 mx-auto"
-                );
-                
-                // 5. Fuel Purchase Invoice Details (grouped by product)
+                // 3. Fuel Purchase Invoice Details (grouped by product)
                 let fuelInvoiceHtml = "";
                 Object.keys(purchaseTransactionFromServer).forEach(Product => {
                     const transactions = purchaseTransactionFromServer[Product];
@@ -237,28 +224,18 @@ block content
                 div.row &nbsp;
                 div(id="FuelSales-table-container")
             
-            //- 2. Non Fuel Sales Summary (Consolidated by GST %)
+            //- 2. Non Fuel Sales - Item Wise (grouped by GST rate)
             div.col-md-12
                 div.row &nbsp;
-                div(id="NonFuelSalesByGST-table-container")
+                div(id="NonFuelSalesByItem-table-container")
             
-            //- 3. Fuel Purchase Summary (consolidated)
-            div.col-md-12
-                div.row &nbsp;
-                div(id="FuelPurchase-table-container")
-            
-            //- 4. Non Fuel Purchase Summary (Consolidated by GST %)
-            div.col-md-12
-                div.row &nbsp;
-                div(id="NonFuelPurchaseByGST-table-container")
-            
-            //- 5. Purchase Invoice Details - Fuel (grouped by product)
+            //- 3. Purchase Invoice Details - Fuel (grouped by product)
             div.col-md-12
                 h4.text-center Fuel Purchase Invoice Details
                 div.row &nbsp;
                 div(id="FuelPurchaseInvoice-table-container")
             
-            //- 6. Purchase Invoice Details - Oil/Lubes (grouped by GST %)
+            //- 5. Purchase Invoice Details - Oil/Lubes (grouped by GST %)
             div.col-md-12
                 h4.text-center Oil/Lubricants Purchase Invoice Details
                 div.row &nbsp;
