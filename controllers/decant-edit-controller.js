@@ -8,6 +8,7 @@ const tankreceiptController = require("./tank-receipt-controller");
 const TankDao = require("../dao/tank-dao");
 const TxnStkRcptDtlDao = require("../dao/txn-stkrcpt-dtl-dao");
 const TruckDao = require("../dao/truck-dao");
+const LookupDao = require("../dao/lookup-dao");
 const db = require('../db/db-connection');
 
 module.exports = {
@@ -71,6 +72,7 @@ module.exports = {
             tankCodePromise(locationCode),
             txnDecantLinesPromise(ttank_id),
             truckDataPromise(locationCode),
+            LookupDao.getLookupByType('TANK_QUANTITY', locationCode),
             ])
             .then((values) => {
                 const receiptsData = values[1].value;
@@ -98,6 +100,7 @@ module.exports = {
                     tanks: values[3].value.tanks,
                     decantLines: values[4].value.decantLines,
                     trucks: trucks,
+                    tankQuantities: values[6].value || []
                 });
             }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
