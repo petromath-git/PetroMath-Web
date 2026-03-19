@@ -130,7 +130,10 @@ module.exports = {
             const values = await Lookup.findAll({
                 attributes: ['lookup_id', 'description', 'tag', 'attribute1', 'attribute2', 'attribute3', 'location_code'],
                 where: whereClause,
-                order: [['description', 'ASC']]
+                order: [
+                    [db.Sequelize.literal('CAST(IFNULL(attribute1, 999) AS UNSIGNED)'), 'ASC'],
+                    ['description', 'ASC']
+                ]
             });
 
             // If locationCode provided, remove duplicates (prefer location-specific over global)
