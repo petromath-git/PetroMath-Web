@@ -1,0 +1,556 @@
+extends ../layout
+
+block content
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display:none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    //- ── Header ──────────────────────────────────────────────────────────────
+    .employees-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-between
+                .col-auto
+                    h4.mb-0.text-primary
+                        i.bi.bi-people-fill.me-2
+                        | Employees
+                .col-auto.d-flex.gap-2
+                    if canGenSalary && autoSalary
+                        button.btn.btn-warning.btn-sm(type="button" data-toggle="modal" data-target="#generateSalaryModal")
+                            i.bi.bi-cash-coin.me-1
+                            span.d-none.d-sm-inline Generate Salary
+                            span.d-inline.d-sm-none Salary
+                    if canAdd
+                        button.btn.btn-success.btn-sm(type="button" data-toggle="modal" data-target="#addEmployeeModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Employee
+                            span.d-inline.d-sm-none Add
+
+    .container-fluid.mt-3
+
+        //- ── Filter bar ──────────────────────────────────────────────────────
+        .row.mb-3.align-items-center.g-2
+            .col-auto
+                a.btn.btn-sm(
+                    href='/employees' + (showInactive ? '' : '?show_inactive=1')
+                    class=showInactive ? 'btn-secondary' : 'btn-outline-secondary'
+                )
+                    i.bi(class=showInactive ? 'bi-eye-slash' : 'bi-eye')
+                    |  #{showInactive ? 'Hide Inactive' : 'Show Inactive'}
+            .col
+                .input-group.input-group-sm
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#empSearch(
+                        type="text"
+                        placeholder="Search name, code, mobile, designation..."
+                        autocomplete="off"
+                    )
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button" style="display:none;")
+                            i.bi.bi-x
+
+        if typeof messages !== 'undefined'
+            if messages.success
+                .alert.alert-success.alert-dismissible.fade.show= messages.success[0]
+            if messages.error
+                .alert.alert-danger.alert-dismissible.fade.show= messages.error[0]
+
+        //- ══════════════════════════════════════════════════════════════════
+        //- DESKTOP VIEW  (≥ lg)
+        //- ══════════════════════════════════════════════════════════════════
+        .desktop-view.d-none.d-lg-block
+            .table-responsive
+                table.table.table-hover.table-sm#employeeTable
+                    thead.thead-dark
+                        tr
+                            th(style="width:50px")
+                            th Code
+                            th Name / Alias
+                            th Designation
+                            th Mobile
+                            th Current Salary
+                            th Balance
+                            th Status
+                            th Actions
+                    tbody
+                        if employees && employees.length > 0
+                            each emp in employees
+                                tr.emp-row(data-id=emp.employee_id data-active=emp.is_active)
+                                    //- Photo thumbnail
+                                    td.p-1.text-center
+                                        .emp-avatar-sm.d-inline-block(
+                                            onclick='triggerPhotoUpload(' + emp.employee_id + ')'
+                                            title="Click to change photo"
+                                            style="cursor:pointer;"
+                                        )
+                                            if emp.photo_doc_id
+                                                img.rounded-circle(
+                                                    src='/documents/' + emp.photo_doc_id
+                                                    width="40" height="40"
+                                                    style="object-fit:cover;"
+                                                    id='avatar-' + emp.employee_id
+                                                )
+                                            else
+                                                .emp-avatar-placeholder.rounded-circle.bg-secondary.text-white.d-flex.align-items-center.justify-content-center(
+                                                    id='avatar-' + emp.employee_id
+                                                    style="width:40px;height:40px;font-size:16px;font-weight:bold;"
+                                                )= emp.name.charAt(0).toUpperCase()
+                                        input.photo-input(
+                                            type="file"
+                                            accept="image/*"
+                                            data-id=emp.employee_id
+                                            style="display:none;"
+                                        )
+                                    td
+                                        span.badge.badge-secondary= emp.employee_code
+                                    td
+                                        a.font-weight-bold(href='/employees/' + emp.employee_id)= emp.name
+                                        if emp.nickname
+                                            br
+                                            small.text-muted= emp.nickname
+                                    td
+                                        small= emp.designation || '—'
+                                    td
+                                        small= emp.mobile || '—'
+                                    td.text-right
+                                        if emp.salary_amount
+                                            | ₹#{emp.salary_amount}
+                                            br
+                                            small.text-muted(style="font-size:0.75em") w.e.f #{emp.salary_from}
+                                        else
+                                            span.text-muted —
+                                    td.text-right
+                                        span(class=emp.balance_sign === 'credit' ? 'text-success font-weight-bold' : 'text-danger font-weight-bold')
+                                            = '₹' + Math.abs(parseFloat(emp.balance)).toLocaleString('en-IN', {minimumFractionDigits:2})
+                                        if parseFloat(emp.balance) < 0
+                                            small.text-danger.d-block Adv outstanding
+                                    td
+                                        if emp.is_active === 'Y'
+                                            span.badge.badge-success Active
+                                        else
+                                            span.badge.badge-secondary Inactive
+                                    td.text-nowrap
+                                        a.btn.btn-xs.btn-outline-primary.mr-1(href='/employees/' + emp.employee_id title="Ledger")
+                                            i.bi.bi-journal-text
+                                        if canEdit
+                                            button.btn.btn-xs.btn-outline-secondary.btn-edit.mr-1(
+                                                type="button" title="Edit"
+                                                data-id=emp.employee_id
+                                                data-name=emp.name
+                                                data-nickname=(emp.nickname || '')
+                                                data-mobile=(emp.mobile || '')
+                                                data-designation=(emp.designation || '')
+                                                data-joined=(emp.joined_date || '')
+                                                data-left=(emp.left_date || '')
+                                                data-person=(emp.person_id || '')
+                                                data-notes=(emp.notes || '')
+                                            )
+                                                i.bi.bi-pencil
+                                        if canDisable
+                                            if emp.is_active === 'Y'
+                                                button.btn.btn-xs.btn-outline-danger.btn-deactivate(
+                                                    type="button" title="Deactivate"
+                                                    data-id=emp.employee_id data-name=emp.name)
+                                                    i.bi.bi-person-x
+                                            else
+                                                button.btn.btn-xs.btn-outline-success.btn-reactivate(
+                                                    type="button" title="Reactivate"
+                                                    data-id=emp.employee_id data-name=emp.name)
+                                                    i.bi.bi-person-check
+                        else
+                            tr
+                                td.text-center.text-muted(colspan="9") No employees found.
+
+        //- ══════════════════════════════════════════════════════════════════
+        //- MOBILE VIEW  (< lg) — card grid
+        //- ══════════════════════════════════════════════════════════════════
+        .mobile-view.d-block.d-lg-none
+            if employees && employees.length > 0
+                .row.g-2#mobileCardGrid
+                    each emp in employees
+                        .col-6.emp-card-col(data-name=emp.name data-code=emp.employee_code data-designation=(emp.designation||'') data-mobile=(emp.mobile||''))
+                            .card.h-100(class=emp.is_active !== 'Y' ? 'border-secondary' : '')
+                                //- Photo strip at top — tap to upload
+                                .card-img-top.text-center.pt-3.pb-2(
+                                    onclick='triggerPhotoUpload(' + emp.employee_id + ')'
+                                    style="cursor:pointer; background:#f8f9fa;"
+                                )
+                                    if emp.photo_doc_id
+                                        img.rounded-circle(
+                                            src='/documents/' + emp.photo_doc_id
+                                            width="70" height="70"
+                                            style="object-fit:cover;"
+                                            id='avatar-' + emp.employee_id
+                                        )
+                                    else
+                                        .emp-avatar-placeholder.rounded-circle.bg-secondary.text-white.mx-auto.d-flex.align-items-center.justify-content-center(
+                                            id='avatar-' + emp.employee_id
+                                            style="width:70px;height:70px;font-size:28px;font-weight:bold;"
+                                        )= emp.name.charAt(0).toUpperCase()
+                                    small.text-muted.d-block(style="font-size:0.65rem;") tap to change photo
+                                input.photo-input(
+                                    type="file"
+                                    accept="image/*"
+                                    data-id=emp.employee_id
+                                    style="display:none;"
+                                )
+                                .card-body.p-2
+                                    .d-flex.justify-content-between.align-items-start
+                                        div
+                                            span.badge.badge-secondary(style="font-size:0.65rem;")= emp.employee_code
+                                            if emp.is_active !== 'Y'
+                                                span.badge.badge-danger.ml-1(style="font-size:0.65rem;") Inactive
+                                        a.btn.btn-xs.btn-outline-primary(href='/employees/' + emp.employee_id title="Ledger")
+                                            i.bi.bi-journal-text
+                                    p.mb-1.mt-1
+                                        strong(style="font-size:0.9rem;")= emp.name
+                                        if emp.nickname
+                                            small.text-muted.d-block= emp.nickname
+                                    if emp.designation
+                                        small.text-muted= emp.designation
+                                        br
+                                    if emp.mobile
+                                        small
+                                            i.bi.bi-telephone.me-1
+                                            = emp.mobile
+                                        br
+                                    .mt-2
+                                        small.text-muted Salary:
+                                        |
+                                        small
+                                            if emp.salary_amount
+                                                = '₹' + emp.salary_amount
+                                            else
+                                                | —
+                                    .mt-1
+                                        small.text-muted Balance:
+                                        |
+                                        small(class=emp.balance_sign === 'credit' ? 'text-success font-weight-bold' : 'text-danger font-weight-bold')
+                                            = '₹' + Math.abs(parseFloat(emp.balance)).toLocaleString('en-IN', {minimumFractionDigits:2})
+                                        if parseFloat(emp.balance) < 0
+                                            small.text-danger  (Adv)
+                                .card-footer.p-1.d-flex.justify-content-end.gap-1
+                                    if canEdit
+                                        button.btn.btn-xs.btn-outline-secondary.btn-edit(
+                                            type="button"
+                                            data-id=emp.employee_id
+                                            data-name=emp.name
+                                            data-nickname=(emp.nickname || '')
+                                            data-mobile=(emp.mobile || '')
+                                            data-designation=(emp.designation || '')
+                                            data-joined=(emp.joined_date || '')
+                                            data-left=(emp.left_date || '')
+                                            data-person=(emp.person_id || '')
+                                            data-notes=(emp.notes || '')
+                                        )
+                                            i.bi.bi-pencil
+                                    if canDisable
+                                        if emp.is_active === 'Y'
+                                            button.btn.btn-xs.btn-outline-danger.btn-deactivate(
+                                                type="button"
+                                                data-id=emp.employee_id data-name=emp.name)
+                                                i.bi.bi-person-x
+                                        else
+                                            button.btn.btn-xs.btn-outline-success.btn-reactivate(
+                                                type="button"
+                                                data-id=emp.employee_id data-name=emp.name)
+                                                i.bi.bi-person-check
+            else
+                p.text-center.text-muted No employees found.
+
+    //- ── Add Employee Modal ───────────────────────────────────────────────────
+    .modal.fade#addEmployeeModal(tabindex="-1" role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header.bg-success.text-white
+                    h5.modal-title
+                        i.bi.bi-person-plus.me-2
+                        | Add Employee
+                    button.close.text-white(type="button" data-dismiss="modal"): span &times;
+                form#addEmployeeForm(method="POST" action="/employees")
+                    .modal-body
+                        .form-row
+                            .form-group.col-md-6
+                                label Name *
+                                input.form-control(type="text" name="name" required placeholder="Full name")
+                            .form-group.col-md-6
+                                label Nickname / Alias
+                                input.form-control(type="text" name="nickname" placeholder="e.g. Raju, Bhai")
+                        .form-row
+                            .form-group.col-md-6
+                                label Designation
+                                select.form-control(name="designation")
+                                    option(value="") — Select —
+                                    each d in designations
+                                        option(value=d)= d
+                            .form-group.col-md-6
+                                label Mobile
+                                input.form-control(type="tel" name="mobile" placeholder="Optional")
+                        .form-row
+                            .form-group.col-md-4
+                                label Joined Date
+                                input.form-control(type="date" name="joined_date")
+                            .form-group.col-md-4
+                                label Link to System User
+                                small.text-muted  (optional)
+                                select.form-control(name="person_id")
+                                    option(value="") — None —
+                                    each u in users
+                                        option(value=u.Person_id)= u.Person_Name + ' (' + u.User_Name + ')'
+                            .form-group.col-md-4
+                                label Notes
+                                input.form-control(type="text" name="notes")
+                        hr
+                        p.text-muted.mb-2.small
+                            i.bi.bi-info-circle.me-1
+                            | Initial salary (can be changed on the employee page)
+                        .form-row
+                            .form-group.col-md-5
+                                label Salary Amount (₹)
+                                input.form-control(type="number" name="salary_amount" min="0" step="0.01" placeholder="0.00")
+                            .form-group.col-md-4
+                                label Salary Type
+                                select.form-control(name="salary_type")
+                                    option(value="MONTHLY") Monthly
+                                    option(value="WEEKLY") Weekly
+                            .form-group.col-md-3
+                                label Effective From
+                                input.form-control(type="date" name="salary_effective_from")
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-success(type="submit")
+                            i.bi.bi-save.me-1
+                            | Save Employee
+
+    //- ── Edit Employee Modal ──────────────────────────────────────────────────
+    .modal.fade#editEmployeeModal(tabindex="-1" role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header.bg-primary.text-white
+                    h5.modal-title
+                        i.bi.bi-pencil.me-2
+                        | Edit Employee
+                    button.close.text-white(type="button" data-dismiss="modal"): span &times;
+                .modal-body
+                    p.text-muted.small
+                        i.bi.bi-info-circle.me-1
+                        | For salary changes, go to the employee's detail page.
+                    .form-row
+                        .form-group.col-md-6
+                            label Name *
+                            input.form-control#edit_name(type="text" required)
+                        .form-group.col-md-6
+                            label Nickname / Alias
+                            input.form-control#edit_nickname(type="text")
+                    .form-row
+                        .form-group.col-md-6
+                            label Designation
+                            select.form-control#edit_designation
+                                option(value="") — Select —
+                                each d in designations
+                                    option(value=d)= d
+                        .form-group.col-md-6
+                            label Mobile
+                            input.form-control#edit_mobile(type="tel")
+                    .form-row
+                        .form-group.col-md-4
+                            label Joined Date
+                            input.form-control#edit_joined(type="date")
+                        .form-group.col-md-4
+                            label Left Date
+                            input.form-control#edit_left(type="date")
+                        .form-group.col-md-4
+                            label Link to System User
+                            select.form-control#edit_person
+                                option(value="") — None —
+                                each u in users
+                                    option(value=u.Person_id)= u.Person_Name + ' (' + u.User_Name + ')'
+                    .form-group
+                        label Notes
+                        input.form-control#edit_notes(type="text")
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-primary#btnSaveEdit(type="button")
+                        i.bi.bi-save.me-1
+                        | Save Changes
+
+    //- ── Generate Salary Modal ────────────────────────────────────────────────
+    if canGenSalary
+        .modal.fade#generateSalaryModal(tabindex="-1" role="dialog")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header.bg-warning
+                        h5.modal-title
+                            i.bi.bi-cash-coin.me-2
+                            | Generate Salary
+                        button.close(type="button" data-dismiss="modal"): span &times;
+                    .modal-body
+                        p.text-muted Posts
+                            strong  SALARY CREDIT
+                            |  using each employee's current salary. Skips employees already credited for this period.
+                        .form-group
+                            label Pay Period *
+                            small.text-muted  (e.g. 2026-03 for March, 2026-W12 for week 12)
+                            input.form-control#gen_salary_period(type="text" placeholder="YYYY-MM or YYYY-WNN")
+                        .form-group
+                            label Credit Date *
+                            input.form-control#gen_txn_date(type="date")
+                        div#genSalaryResult.mt-2(style="display:none;")
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-warning#btnGenSalary(type="button")
+                            i.bi.bi-play-fill.me-1
+                            | Generate
+
+block scripts
+    style.
+        .emp-avatar-sm { transition: opacity .15s; }
+        .emp-avatar-sm:hover { opacity: .75; }
+        .card-img-top:hover small { color: #007bff !important; }
+        .btn-xs { padding: .15rem .4rem; font-size: .75rem; }
+
+    script.
+        // ── Search ────────────────────────────────────────────────────────────
+        $('#empSearch').on('input', function() {
+            const term = $(this).val().toLowerCase();
+            $('#clearSearch').toggle(term.length > 0);
+            // Desktop rows
+            $('#employeeTable tbody tr.emp-row').each(function() {
+                $(this).toggle($(this).text().toLowerCase().includes(term));
+            });
+            // Mobile cards
+            $('.emp-card-col').each(function() {
+                const text = ($(this).data('name') + $(this).data('code') + $(this).data('designation') + $(this).data('mobile')).toLowerCase();
+                $(this).toggle(text.includes(term));
+            });
+        });
+        $('#clearSearch').on('click', () => { $('#empSearch').val('').trigger('input'); });
+
+        // ── Photo upload ──────────────────────────────────────────────────────
+        window.triggerPhotoUpload = function(empId) {
+            $('input.photo-input[data-id="' + empId + '"]').first().trigger('click');
+        };
+
+        $(document).on('change', 'input.photo-input', function() {
+            const empId = $(this).data('id');
+            const file  = this.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('photo', file);
+
+            $.ajax({
+                url:         '/employees/api/' + empId + '/photo',
+                type:        'POST',
+                data:        formData,
+                processData: false,
+                contentType: false,
+                success: function(r) {
+                    if (r.success) {
+                        // Update all avatar elements for this employee
+                        $('#avatar-' + empId).replaceWith(
+                            '<img class="rounded-circle" src="' + r.photo_url + '" width="40" height="40" style="object-fit:cover;" id="avatar-' + empId + '">'
+                        );
+                        showAlert('Photo updated', 'success');
+                    } else {
+                        showAlert(r.message, 'danger');
+                    }
+                },
+                error: xhr => showAlert(xhr.responseJSON ? xhr.responseJSON.message : 'Upload failed', 'danger')
+            });
+        });
+
+        // ── Edit modal ────────────────────────────────────────────────────────
+        let editEmployeeId = null;
+
+        $(document).on('click', '.btn-edit', function() {
+            editEmployeeId = $(this).data('id');
+            $('#edit_name').val($(this).data('name'));
+            $('#edit_nickname').val($(this).data('nickname'));
+            $('#edit_mobile').val($(this).data('mobile'));
+            $('#edit_designation').val($(this).data('designation'));
+            $('#edit_joined').val($(this).data('joined'));
+            $('#edit_left').val($(this).data('left'));
+            $('#edit_person').val($(this).data('person'));
+            $('#edit_notes').val($(this).data('notes'));
+            $('#editEmployeeModal').modal('show');
+        });
+
+        $('#btnSaveEdit').on('click', function() {
+            if (!editEmployeeId) return;
+            const payload = {
+                name:        $('#edit_name').val().trim(),
+                nickname:    $('#edit_nickname').val().trim(),
+                mobile:      $('#edit_mobile').val().trim(),
+                designation: $('#edit_designation').val(),
+                joined_date: $('#edit_joined').val(),
+                left_date:   $('#edit_left').val(),
+                person_id:   $('#edit_person').val() || null,
+                notes:       $('#edit_notes').val().trim()
+            };
+            if (!payload.name) { showAlert('Name is required', 'danger'); return; }
+            $.ajax({
+                url: '/employees/api/' + editEmployeeId, type: 'PUT',
+                contentType: 'application/json', data: JSON.stringify(payload),
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger'),
+                error:   xhr => showAlert(xhr.responseJSON?.message || 'Error updating', 'danger')
+            });
+        });
+
+        // ── Deactivate / Reactivate ───────────────────────────────────────────
+        $(document).on('click', '.btn-deactivate', function() {
+            const id = $(this).data('id'), name = $(this).data('name');
+            if (!confirm('Deactivate ' + name + '?')) return;
+            $.ajax({ url: '/employees/api/' + id + '/deactivate', type: 'PUT',
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger') });
+        });
+        $(document).on('click', '.btn-reactivate', function() {
+            const id = $(this).data('id'), name = $(this).data('name');
+            if (!confirm('Reactivate ' + name + '?')) return;
+            $.ajax({ url: '/employees/api/' + id + '/reactivate', type: 'PUT',
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger') });
+        });
+
+        // ── Generate salary ───────────────────────────────────────────────────
+        $('#gen_txn_date').val(new Date().toISOString().slice(0, 10));
+
+        $('#btnGenSalary').on('click', function() {
+            const period = $('#gen_salary_period').val().trim();
+            const date   = $('#gen_txn_date').val();
+            if (!period) { showAlert('Pay period is required', 'warning'); return; }
+            $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+            $.ajax({
+                url: '/employees/api/generate-salary', type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ salary_period: period, txn_date: date }),
+                success: function(r) {
+                    if (r.success) {
+                        let html = '<div class="alert alert-success mb-0"><strong>Done!</strong> Generated: <b>' + r.generated + '</b>, Skipped: <b>' + r.skipped + '</b>';
+                        if (r.detail && r.detail.length) {
+                            html += '<ul class="mt-1 mb-0 small">';
+                            r.detail.forEach(d => {
+                                const cls = d.status === 'GENERATED' ? 'text-success' : 'text-muted';
+                                html += '<li class="' + cls + '">' + d.code + ' — ' + d.name + ' ₹' + parseFloat(d.amount).toFixed(2) + ' (' + d.status + ')</li>';
+                            });
+                            html += '</ul>';
+                        }
+                        html += '</div>';
+                        $('#genSalaryResult').html(html).show();
+                    } else showAlert(r.message, 'danger');
+                },
+                error: xhr => showAlert(xhr.responseJSON?.message || 'Error', 'danger'),
+                complete: () => $('#btnGenSalary').prop('disabled', false).html('<i class="bi bi-play-fill me-1"></i> Generate')
+            });
+        });
+
+        $('#generateSalaryModal').on('show.bs.modal', () => $('#genSalaryResult').hide().html(''));
+
+        // ── Utility ───────────────────────────────────────────────────────────
+        function showAlert(msg, type) {
+            $('#messageText').text(msg);
+            $('#messageAlert').removeClass('alert-success alert-danger alert-warning')
+                .addClass('alert-' + type).addClass('show').show();
+            setTimeout(() => $('#messageAlert').removeClass('show').hide(), 4000);
+        }

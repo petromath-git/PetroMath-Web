@@ -1,0 +1,413 @@
+extends ../layout
+
+block content
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display:none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    //- ── Sticky header ───────────────────────────────────────────────────────
+    .employee-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-between
+                .col-auto
+                    a.btn.btn-sm.btn-outline-secondary.mr-2(href="/employees")
+                        i.bi.bi-arrow-left
+                    strong= employee.name
+                    span.badge.badge-secondary.ml-2= employee.employee_code
+                    if employee.is_active !== 'Y'
+                        span.badge.badge-danger.ml-1 Inactive
+                .col-auto.d-flex.gap-2
+                    if canEdit
+                        button.btn.btn-outline-info.btn-sm(type="button" data-toggle="modal" data-target="#salaryRevisionModal")
+                            i.bi.bi-graph-up.me-1
+                            span.d-none.d-sm-inline Salary Revision
+                            span.d-inline.d-sm-none Salary
+                    if canLedger
+                        button.btn.btn-success.btn-sm(type="button" data-toggle="modal" data-target="#addEntryModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Entry
+                            span.d-inline.d-sm-none Entry
+
+    .container-fluid.mt-3
+
+        //- ── Top info section ─────────────────────────────────────────────────
+        .row.mb-3.g-3
+
+            //- Photo column
+            .col-12.col-sm-auto.text-center.text-sm-left
+                .photo-wrapper.d-inline-block.position-relative
+                    //- Photo or initials avatar
+                    if employee.photo_doc_id
+                        img#empPhoto.rounded-circle(
+                            src='/documents/' + employee.photo_doc_id
+                            width="110" height="110"
+                            style="object-fit:cover; border:3px solid #dee2e6;"
+                        )
+                    else
+                        .emp-avatar-lg.rounded-circle.bg-secondary.text-white.mx-auto.d-flex.align-items-center.justify-content-center#empPhoto(
+                            style="width:110px;height:110px;font-size:42px;font-weight:bold;border:3px solid #dee2e6;"
+                        )= employee.name.charAt(0).toUpperCase()
+
+                    //- Camera overlay on hover / tap
+                    if canEdit
+                        label.photo-overlay.rounded-circle(for="photoFileInput" title="Change photo" style="cursor:pointer;")
+                            i.bi.bi-camera-fill
+
+                .mt-1
+                    if canEdit
+                        //- Hidden file input — accept images, no forced capture so mobile shows both camera + gallery
+                        input#photoFileInput(type="file" accept="image/*" style="display:none;")
+                        if employee.photo_doc_id
+                            button.btn.btn-xs.btn-outline-danger.mt-1#btnRemovePhoto(type="button")
+                                i.bi.bi-trash.me-1
+                                | Remove
+
+            //- Profile info column
+            .col
+                .card.h-100
+                    .card-body.py-2
+                        .row.gy-2
+                            .col-6.col-md-3
+                                small.text-muted Designation
+                                div= employee.designation || '—'
+                            .col-6.col-md-3
+                                small.text-muted Mobile
+                                div= employee.mobile || '—'
+                            .col-6.col-md-3
+                                small.text-muted Current Salary
+                                if employee.salary_amount
+                                    div ₹#{employee.salary_amount} / #{employee.salary_type}
+                                    small.text-muted(style="font-size:.75rem;") w.e.f #{employee.salary_from}
+                                else
+                                    div.text-muted —
+                            .col-6.col-md-3
+                                small.text-muted Linked User
+                                div= employee.linked_user_name || '—'
+                            .col-6.col-md-3
+                                small.text-muted Joined
+                                div= employee.joined_date || '—'
+                            .col-6.col-md-3
+                                small.text-muted Left
+                                div= employee.left_date || '—'
+                            if employee.notes
+                                .col-12
+                                    small.text-muted Notes
+                                    div= employee.notes
+
+            //- Balance box
+            .col-12.col-md-auto
+                .card.text-center.py-3.px-4.h-100
+                    .card-body.p-0.d-flex.flex-column.justify-content-center
+                        h6.card-title.text-muted.mb-1 Balance
+                        h2.mb-0(class=employee.balance_sign === 'credit' ? 'text-success' : 'text-danger')
+                            = '₹' + Math.abs(parseFloat(employee.balance)).toLocaleString('en-IN', {minimumFractionDigits:2})
+                        if parseFloat(employee.balance) > 0
+                            small.text-success Station owes employee
+                        else if parseFloat(employee.balance) < 0
+                            small.text-danger Advance outstanding
+                        else
+                            small.text-muted Settled
+
+        //- ── Tabs ────────────────────────────────────────────────────────────
+        ul.nav.nav-tabs#empTabs(role="tablist")
+            li.nav-item
+                a.nav-link.active(id="ledger-tab" data-toggle="tab" href="#ledgerPane" role="tab")
+                    i.bi.bi-journal-text.me-1
+                    | Ledger
+                    span.badge.badge-secondary.ml-1= ledger.length
+            li.nav-item
+                a.nav-link(id="salary-tab" data-toggle="tab" href="#salaryPane" role="tab")
+                    i.bi.bi-graph-up.me-1
+                    | Salary History
+                    span.badge.badge-secondary.ml-1= salaryHistory.length
+
+        .tab-content.mt-2
+
+            //- ── Ledger tab ──────────────────────────────────────────────────
+            #ledgerPane.tab-pane.fade.show.active(role="tabpanel")
+                .table-responsive
+                    table.table.table-sm.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Type
+                                th Description
+                                th.text-right Credit (+)
+                                th.text-right Debit (−)
+                                th.text-right Balance
+                                if canLedger
+                                    th(style="width:40px;")
+                        tbody
+                            if ledger && ledger.length > 0
+                                each entry in ledger
+                                    - const tColors = {SALARY_CREDIT:'success',ADVANCE:'danger',PAYMENT:'info',SHORTAGE_DEDUCTION:'warning',ADJUSTMENT_CR:'success',ADJUSTMENT_DR:'danger'}
+                                    - const tLabels = {SALARY_CREDIT:'Salary',ADVANCE:'Advance',PAYMENT:'Payment',SHORTAGE_DEDUCTION:'Shortage',ADJUSTMENT_CR:'Adj+',ADJUSTMENT_DR:'Adj−'}
+                                    tr
+                                        td: small= entry.txn_date
+                                        td
+                                            span.badge(class='badge-' + (tColors[entry.txn_type] || 'secondary'))
+                                                = tLabels[entry.txn_type] || entry.txn_type
+                                        td
+                                            small= entry.description || '—'
+                                            if entry.salary_period
+                                                small.text-muted.ml-1
+                                                    em (#{entry.salary_period})
+                                        td.text-right
+                                            if parseFloat(entry.credit_amount) > 0
+                                                span.text-success= '₹' + parseFloat(entry.credit_amount).toLocaleString('en-IN',{minimumFractionDigits:2})
+                                        td.text-right
+                                            if parseFloat(entry.debit_amount) > 0
+                                                span.text-danger= '₹' + parseFloat(entry.debit_amount).toLocaleString('en-IN',{minimumFractionDigits:2})
+                                        td.text-right
+                                            span(class=parseFloat(entry.running_balance) >= 0 ? 'text-success' : 'text-danger')
+                                                = '₹' + parseFloat(entry.running_balance).toLocaleString('en-IN',{minimumFractionDigits:2})
+                                        if canLedger
+                                            td.text-center
+                                                button.btn.btn-xs.btn-outline-danger.btn-del-entry(
+                                                    type="button" title="Delete"
+                                                    data-id=entry.ledger_id)
+                                                    i.bi.bi-trash
+                            else
+                                tr
+                                    td.text-center.text-muted(colspan="7") No ledger entries yet.
+
+            //- ── Salary History tab ──────────────────────────────────────────
+            #salaryPane.tab-pane.fade(role="tabpanel")
+                .table-responsive
+                    table.table.table-sm.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Salary Amount
+                                th Type
+                                th Effective From
+                                th Effective To
+                                th Notes
+                        tbody
+                            if salaryHistory && salaryHistory.length > 0
+                                each s in salaryHistory
+                                    tr(class=!s.effective_to ? 'table-success' : '')
+                                        td.font-weight-bold ₹#{s.salary_amount}
+                                        td: small= s.salary_type
+                                        td= s.effective_from
+                                        td
+                                            if s.effective_to
+                                                = s.effective_to
+                                            else
+                                                span.badge.badge-success Current
+                                        td: small= s.notes || '—'
+                            else
+                                tr
+                                    td.text-center.text-muted(colspan="5") No salary records yet.
+
+    //- ── Add Ledger Entry Modal ───────────────────────────────────────────────
+    if canLedger
+        .modal.fade#addEntryModal(tabindex="-1" role="dialog")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header.bg-success.text-white
+                        h5.modal-title
+                            i.bi.bi-plus-circle.me-2
+                            | Add Ledger Entry
+                        button.close.text-white(type="button" data-dismiss="modal"): span &times;
+                    .modal-body
+                        .form-group
+                            label Transaction Type *
+                            select.form-control#entry_type
+                                option(value="ADVANCE") Advance (cash given to employee)
+                                option(value="PAYMENT") Payment (salary paid out in cash)
+                                option(value="SALARY_CREDIT") Salary Credit (salary earned)
+                                option(value="SHORTAGE_DEDUCTION") Shortage Deduction
+                                option(value="ADJUSTMENT_CR") Adjustment Credit (+)
+                                option(value="ADJUSTMENT_DR") Adjustment Debit (−)
+                        .form-group
+                            label Date *
+                            input.form-control#entry_date(type="date" required)
+                        .form-group
+                            label Amount (₹) *
+                            input.form-control#entry_amount(type="number" min="0.01" step="0.01" required)
+                        .form-group#salaryPeriodGroup(style="display:none;")
+                            label Pay Period
+                            input.form-control#entry_salary_period(type="text" placeholder="e.g. 2026-03 or 2026-W12")
+                            small.text-muted Tags this entry with the period it covers (informational).
+                        .form-group
+                            label Description
+                            input.form-control#entry_description(type="text" placeholder="e.g. Festival advance")
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-success#btnSaveEntry(type="button")
+                            i.bi.bi-save.me-1
+                            | Save Entry
+
+    //- ── Salary Revision Modal ────────────────────────────────────────────────
+    if canEdit
+        .modal.fade#salaryRevisionModal(tabindex="-1" role="dialog")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header.bg-info.text-white
+                        h5.modal-title
+                            i.bi.bi-graph-up.me-2
+                            | Add Salary Revision
+                        button.close.text-white(type="button" data-dismiss="modal"): span &times;
+                    .modal-body
+                        p.text-muted.small The current salary will be closed one day before this revision takes effect.
+                        .form-group
+                            label New Amount (₹) *
+                            input.form-control#rev_amount(type="number" min="0.01" step="0.01" required)
+                        .form-group
+                            label Type
+                            select.form-control#rev_type
+                                option(value="MONTHLY") Monthly
+                                option(value="WEEKLY") Weekly
+                        .form-group
+                            label Effective From *
+                            input.form-control#rev_from(type="date" required)
+                        .form-group
+                            label Notes
+                            input.form-control#rev_notes(type="text" placeholder="e.g. Annual increment 2026")
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-info.text-white#btnSaveRevision(type="button")
+                            i.bi.bi-save.me-1
+                            | Save Revision
+
+block scripts
+    style.
+        .photo-wrapper { display: inline-block; }
+        .photo-overlay {
+            position: absolute; bottom: 4px; right: 4px;
+            width: 32px; height: 32px;
+            background: rgba(0,0,0,.55); color: #fff;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+        .photo-wrapper:hover .photo-overlay,
+        .photo-wrapper:active .photo-overlay { opacity: 1; }
+        /* Always visible on touch devices */
+        @media (pointer: coarse) {
+            .photo-overlay { opacity: .8; }
+        }
+        .btn-xs { padding: .15rem .4rem; font-size: .75rem; }
+
+    script.
+        const EMPLOYEE_ID = !{employee.employee_id};
+
+        const today = new Date().toISOString().slice(0, 10);
+        $('#entry_date').val(today);
+        $('#rev_from').val(today);
+
+        // ── Photo upload ──────────────────────────────────────────────────────
+        $('#photoFileInput').on('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('photo', file);
+
+            $.ajax({
+                url: '/employees/api/' + EMPLOYEE_ID + '/photo',
+                type: 'POST', data: formData,
+                processData: false, contentType: false,
+                success: function(r) {
+                    if (r.success) {
+                        const img = '<img id="empPhoto" class="rounded-circle" src="' + r.photo_url + '" width="110" height="110" style="object-fit:cover;border:3px solid #dee2e6;">';
+                        $('#empPhoto').replaceWith(img);
+                        $('#btnRemovePhoto').show();
+                        showAlert('Photo updated', 'success');
+                    } else showAlert(r.message, 'danger');
+                },
+                error: xhr => showAlert(xhr.responseJSON ? xhr.responseJSON.message : 'Upload failed', 'danger')
+            });
+        });
+
+        $('#btnRemovePhoto').on('click', function() {
+            if (!confirm('Remove this photo?')) return;
+            $.ajax({
+                url: '/employees/api/' + EMPLOYEE_ID + '/photo', type: 'DELETE',
+                success: function(r) {
+                    if (r.success) {
+                        const initial = '!{employee.name.charAt(0).toUpperCase()}';
+                        const placeholder = '<div id="empPhoto" class="emp-avatar-lg rounded-circle bg-secondary text-white mx-auto d-flex align-items-center justify-content-center" style="width:110px;height:110px;font-size:42px;font-weight:bold;border:3px solid #dee2e6;">' + initial + '</div>';
+                        $('#empPhoto').replaceWith(placeholder);
+                        $('#btnRemovePhoto').hide();
+                        showAlert('Photo removed', 'success');
+                    } else showAlert(r.message, 'danger');
+                },
+                error: xhr => showAlert(xhr.responseJSON?.message || 'Failed to remove photo', 'danger')
+            });
+        });
+
+        // ── Ledger entry ──────────────────────────────────────────────────────
+        $('#entry_type').on('change', function() {
+            $('#salaryPeriodGroup').toggle($(this).val() === 'SALARY_CREDIT');
+        });
+
+        $('#btnSaveEntry').on('click', function() {
+            const txnType = $('#entry_type').val();
+            const amount  = parseFloat($('#entry_amount').val());
+            const date    = $('#entry_date').val();
+            if (!date)               { showAlert('Date is required', 'danger'); return; }
+            if (!amount || amount <= 0) { showAlert('Amount must be > 0', 'danger'); return; }
+
+            $('#btnSaveEntry').prop('disabled', true);
+            $.ajax({
+                url: '/employees/api/ledger', type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    employee_id:   EMPLOYEE_ID,
+                    txn_type:      txnType,
+                    txn_date:      date,
+                    amount:        amount,
+                    description:   $('#entry_description').val().trim(),
+                    salary_period: txnType === 'SALARY_CREDIT' ? $('#entry_salary_period').val().trim() : null
+                }),
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger'),
+                error:   xhr => showAlert(xhr.responseJSON?.message || 'Failed to save', 'danger'),
+                complete: () => $('#btnSaveEntry').prop('disabled', false)
+            });
+        });
+
+        // ── Delete ledger entry ───────────────────────────────────────────────
+        $(document).on('click', '.btn-del-entry', function() {
+            if (!confirm('Delete this entry? Cannot be undone.')) return;
+            const ledgerId = $(this).data('id');
+            $.ajax({
+                url: '/employees/api/' + EMPLOYEE_ID + '/ledger/' + ledgerId, type: 'DELETE',
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger'),
+                error:   xhr => showAlert(xhr.responseJSON?.message || 'Failed to delete', 'danger')
+            });
+        });
+
+        // ── Salary revision ───────────────────────────────────────────────────
+        $('#btnSaveRevision').on('click', function() {
+            const amount = parseFloat($('#rev_amount').val());
+            const from   = $('#rev_from').val();
+            if (!amount || amount <= 0) { showAlert('Amount must be > 0', 'danger'); return; }
+            if (!from)                  { showAlert('Effective from is required', 'danger'); return; }
+
+            $('#btnSaveRevision').prop('disabled', true);
+            $.ajax({
+                url: '/employees/api/' + EMPLOYEE_ID + '/salary', type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    salary_amount:  amount,
+                    salary_type:    $('#rev_type').val(),
+                    effective_from: from,
+                    notes:          $('#rev_notes').val().trim()
+                }),
+                success: r => r.success ? location.reload() : showAlert(r.message, 'danger'),
+                error:   xhr => showAlert(xhr.responseJSON?.message || 'Failed to save revision', 'danger'),
+                complete: () => $('#btnSaveRevision').prop('disabled', false)
+            });
+        });
+
+        // ── Utility ───────────────────────────────────────────────────────────
+        function showAlert(msg, type) {
+            $('#messageText').text(msg);
+            $('#messageAlert').removeClass('alert-success alert-danger alert-warning')
+                .addClass('alert-' + type).addClass('show').show();
+            setTimeout(() => $('#messageAlert').removeClass('show').hide(), 4000);
+        }
