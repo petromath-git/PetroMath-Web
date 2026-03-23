@@ -57,6 +57,7 @@ module.exports.getListPage = async (req, res) => {
 
         res.render('employee/employee-list', {
             title:        'Employees',
+            user:         req.user,
             employees:    mapped,
             designations,
             users,
@@ -107,6 +108,7 @@ module.exports.getDetailPage = async (req, res) => {
 
         res.render('employee/employee-detail', {
             title:    `${employee.name} (${employee.employee_code})`,
+            user:     req.user,
             employee: {
                 ...employee,
                 joined_date:   fmtDate(employee.joined_date),
