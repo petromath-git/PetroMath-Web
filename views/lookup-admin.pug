@@ -1,0 +1,383 @@
+extends layout
+
+block content
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .lookup-header-sticky
+        .container-fluid
+            .row.align-items-center.py-2.justify-content-between
+                .col-auto
+                    h4.mb-0.text-primary Lookup Admin
+                .col-auto
+                    if isSuperUser
+                        button.btn.btn-success.btn-sm(type="button" data-toggle="modal" data-target="#addTypeModal")
+                            i.bi.bi-plus-circle.me-1
+                            span.d-none.d-sm-inline Add Type
+                            span.d-inline.d-sm-none Add
+
+    .lookup-container
+        .row
+            //- Left panel: type list
+            .col-md-3.col-12
+                .card.h-100
+                    .card-header.p-2
+                        strong Lookup Types
+                        span.badge.badge-secondary.ml-2= lookupTypes.length
+                    .list-group.list-group-flush#typeList(style="max-height: calc(100vh - 180px); overflow-y: auto;")
+                        each t in lookupTypes
+                            a.list-group-item.list-group-item-action.d-flex.justify-content-between.align-items-center.py-2(
+                                href="#"
+                                data-type=t.lookup_type
+                                onclick="loadValues('" + t.lookup_type + "'); return false;"
+                            )
+                                span.lookup-type-label= t.lookup_type
+                                span.badge.badge-pill.badge-primary= t.active_count + '/' + t.total_count
+
+            //- Right panel: values
+            .col-md-9.col-12.mt-3.mt-md-0
+                .card
+                    .card-header.d-flex.justify-content-between.align-items-center.p-2
+                        span#selectedTypeLabel.font-weight-bold.text-muted Select a type
+                        button.btn.btn-success.btn-sm#addValueBtn(
+                            type="button"
+                            data-toggle="modal"
+                            data-target="#addValueModal"
+                            style="display:none;"
+                        )
+                            i.bi.bi-plus.me-1
+                            | Add Value
+                    .card-body.p-0
+                        .px-2.pt-2(id="valuesFilterBar" style="display:none;")
+                            select.form-control.form-control-sm#locationFilter(style="max-width:200px;" onchange="applyLocationFilter()")
+                                option(value="") All Locations
+                                option(value="__global__") Global
+                        .table-responsive(style="max-height: calc(100vh - 230px); overflow-y: auto;")
+                            table.table.table-sm.table-hover.mb-0#valuesTable
+                                thead.thead-dark.sticky-top
+                                    tr
+                                        th Description
+                                        th Scope
+                                        th Sort
+                                        th Tag
+                                        th Status
+                                        th Actions
+                                tbody#valuesBody
+                                    tr#noTypeSelected
+                                        td.text-center.text-muted(colspan="6") Select a lookup type from the left
+
+    //- Add Value Modal
+    .modal.fade#addValueModal(tabindex="-1" role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Add Lookup Value
+                    button.close(type="button" data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    input(type="hidden" id="modal_lookup_type")
+                    .form-group
+                        label Description *
+                        input.form-control#val_description(type="text" required maxlength="200" placeholder="e.g. 15")
+                    .row
+                        .col-md-6
+                            .form-group
+                                label Sort Order
+                                input.form-control#val_attribute1(type="number" min="1" placeholder="e.g. 6")
+                        .col-md-6
+                            .form-group
+                                label Tag
+                                input.form-control#val_tag(type="text" maxlength="100" placeholder="optional")
+                    .row
+                        .col-md-6
+                            .form-group
+                                label Attribute 2
+                                input.form-control#val_attribute2(type="text" maxlength="200")
+                        .col-md-6
+                            .form-group
+                                label Attribute 3
+                                input.form-control#val_attribute3(type="text" maxlength="200")
+                    if isSuperUser
+                        .form-group
+                            label Scope *
+                            select.form-control#val_scope
+                                option(value="global") Global (all locations)
+                                each loc in allLocations
+                                    option(value=loc.location_code)= loc.location_code + ' — ' + loc.location_name
+                    else
+                        p.text-muted.small.mb-2 Scope: <strong>#{userLocationCode}</strong> (your location)
+                    .row
+                        .col-md-6
+                            .form-group
+                                label Start Date
+                                input.form-control#val_start_date(type="date")
+                        .col-md-6
+                            .form-group
+                                label End Date
+                                input.form-control#val_end_date(type="date" value="2099-12-31")
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-success(type="button" onclick="saveValue()") Add Value
+
+    //- Add Type Modal (SuperUser only)
+    if isSuperUser
+        .modal.fade#addTypeModal(tabindex="-1" role="dialog")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header
+                        h5.modal-title Add New Lookup Type
+                        button.close(type="button" data-dismiss="modal")
+                            span &times;
+                    .modal-body
+                        .form-group
+                            label Lookup Type Code *
+                            input.form-control.text-uppercase#new_type_code(
+                                type="text"
+                                required
+                                maxlength="50"
+                                placeholder="e.g. PAYMENT_MODE"
+                                style="text-transform: uppercase;"
+                            )
+                            small.form-text.text-muted Uppercase, underscores only (e.g. TANK_QUANTITY)
+                        .form-group
+                            label First Value — Description *
+                            input.form-control#new_type_first_value(type="text" required maxlength="200" placeholder="First value for this type")
+                        .form-group
+                            label Scope
+                            select.form-control#new_type_scope
+                                option(value="global") Global (all locations)
+                                option(value="location") My Location
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-success(type="button" onclick="saveNewType()") Create Type
+
+    style.
+        .lookup-header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background: white;
+            border-bottom: 2px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .lookup-container {
+            padding: 15px;
+        }
+        .list-group-item.active-type {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .list-group-item.active-type .badge {
+            background-color: white;
+            color: #007bff;
+        }
+        .lookup-type-label {
+            font-size: 13px;
+            font-family: monospace;
+        }
+        .badge-global {
+            background-color: #6c757d;
+        }
+        .badge-location {
+            background-color: #17a2b8;
+        }
+
+    script.
+        let currentType = null;
+        let allValues = [];
+
+        function loadValues(lookupType) {
+            // Highlight selected type
+            document.querySelectorAll('#typeList .list-group-item').forEach(el => el.classList.remove('active-type'));
+            const activeEl = document.querySelector(`[data-type="${lookupType}"]`);
+            if (activeEl) activeEl.classList.add('active-type');
+
+            currentType = lookupType;
+            document.getElementById('selectedTypeLabel').textContent = lookupType;
+            document.getElementById('modal_lookup_type').value = lookupType;
+            document.getElementById('addValueBtn').style.display = '';
+            document.getElementById('valuesBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Loading...</td></tr>';
+
+            fetch(`/masters/lookup-admin/values?type=${encodeURIComponent(lookupType)}`)
+                .then(r => r.json())
+                .then(data => {
+                    allValues = data.values || [];
+                    populateLocationFilter(allValues);
+                    document.getElementById('locationFilter').value = '';
+                    renderValues(allValues);
+                    document.getElementById('valuesFilterBar').style.display = '';
+                })
+                .catch(() => showMessage('Failed to load values', 'danger'));
+        }
+
+        function populateLocationFilter(values) {
+            const select = document.getElementById('locationFilter');
+            // Remove all options except the first two (All / Global)
+            while (select.options.length > 2) select.remove(2);
+            const locationCodes = [...new Set(values.filter(v => !v.is_global).map(v => v.location_code))].sort();
+            locationCodes.forEach(code => {
+                const opt = document.createElement('option');
+                opt.value = code;
+                opt.textContent = code;
+                select.appendChild(opt);
+            });
+        }
+
+        function applyLocationFilter() {
+            const filter = document.getElementById('locationFilter').value;
+            let filtered = allValues;
+            if (filter === '__global__') filtered = allValues.filter(v => v.is_global);
+            else if (filter) filtered = allValues.filter(v => v.location_code === filter);
+            renderValues(filtered);
+        }
+
+        function renderValues(values) {
+            const tbody = document.getElementById('valuesBody');
+            if (!values || !values.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No values found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = values.map(v => {
+                const scopeBadge = v.is_global
+                    ? '<span class="badge badge-global badge-pill">Global</span>'
+                    : `<span class="badge badge-location badge-pill">${v.location_code}</span>`;
+                const statusBadge = v.is_active
+                    ? '<span class="badge badge-success">Active</span>'
+                    : '<span class="badge badge-secondary">Inactive</span>';
+                const canEdit = !v.is_global; // location admin cannot touch global rows
+                const actionBtn = v.is_active
+                    ? `<button class="btn btn-warning btn-sm" onclick="toggleValue(${v.lookup_id}, 'deactivate')" ${canEdit ? '' : 'disabled title="Global values can only be managed by SuperUser"'}>
+                           <i class="bi bi-x-circle"></i>
+                       </button>`
+                    : `<button class="btn btn-success btn-sm" onclick="toggleValue(${v.lookup_id}, 'reactivate')" ${canEdit ? '' : 'disabled title="Global values can only be managed by SuperUser"'}>
+                           <i class="bi bi-check-circle"></i>
+                       </button>`;
+
+                return `<tr class="${v.is_active ? '' : 'table-secondary'}">
+                    <td>${escHtml(v.description)}</td>
+                    <td>${scopeBadge}</td>
+                    <td>${v.attribute1 || ''}</td>
+                    <td>${v.tag ? escHtml(v.tag) : ''}</td>
+                    <td>${statusBadge}</td>
+                    <td>${actionBtn}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function toggleValue(lookupId, action) {
+            const label = action === 'deactivate' ? 'Deactivate' : 'Reactivate';
+            if (!confirm(`${label} this value?`)) return;
+
+            fetch(`/masters/lookup-admin/values/${lookupId}/${action}?_method=PUT`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        loadValues(currentType);
+                    } else {
+                        showMessage(data.error, 'danger');
+                    }
+                })
+                .catch(() => showMessage('Request failed', 'danger'));
+        }
+
+        function saveValue() {
+            const lookupType = document.getElementById('modal_lookup_type').value;
+            const description = document.getElementById('val_description').value.trim();
+            if (!description) { showMessage('Description is required', 'danger'); return; }
+
+            const scopeEl = document.getElementById('val_scope');
+            const payload = {
+                lookup_type: lookupType,
+                description,
+                attribute1: document.getElementById('val_attribute1').value || null,
+                tag: document.getElementById('val_tag').value || null,
+                attribute2: document.getElementById('val_attribute2').value || null,
+                attribute3: document.getElementById('val_attribute3').value || null,
+                scope: scopeEl ? scopeEl.value : 'location',
+                start_date_active: document.getElementById('val_start_date').value || null,
+                end_date_active: document.getElementById('val_end_date').value || '2099-12-31'
+            };
+
+            fetch('/masters/lookup-admin/values', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    $('#addValueModal').modal('hide');
+                    clearAddValueForm();
+                    showMessage(data.message, 'success');
+                    loadValues(currentType);
+                } else {
+                    showMessage(data.error, 'danger');
+                }
+            })
+            .catch(() => showMessage('Request failed', 'danger'));
+        }
+
+        function saveNewType() {
+            const typeCode = document.getElementById('new_type_code').value.trim().toUpperCase();
+            const firstValue = document.getElementById('new_type_first_value').value.trim();
+            const scope = document.getElementById('new_type_scope').value;
+
+            if (!typeCode || !firstValue) { showMessage('Type code and first value are required', 'danger'); return; }
+            if (!/^[A-Z0-9_]+$/.test(typeCode)) { showMessage('Type code must be uppercase letters, numbers and underscores only', 'danger'); return; }
+
+            fetch('/masters/lookup-admin/values', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lookup_type: typeCode, description: firstValue, scope, end_date_active: '2099-12-31' })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    $('#addTypeModal').modal('hide');
+                    document.getElementById('new_type_code').value = '';
+                    document.getElementById('new_type_first_value').value = '';
+                    showMessage('Type created. Refreshing...', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'danger');
+                }
+            })
+            .catch(() => showMessage('Request failed', 'danger'));
+        }
+
+        function clearAddValueForm() {
+            ['val_description','val_attribute1','val_tag','val_attribute2','val_attribute3'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            const endDate = document.getElementById('val_end_date');
+            if (endDate) endDate.value = '2099-12-31';
+        }
+
+        function escHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function showMessage(message, type) {
+            const alertDiv = document.getElementById('messageAlert');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            document.getElementById('messageText').textContent = message;
+            alertDiv.style.display = 'block';
+            setTimeout(() => { alertDiv.classList.remove('show'); setTimeout(() => alertDiv.style.display = 'none', 150); }, 3000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('new_type_code') && document.getElementById('new_type_code').addEventListener('input', function() {
+                this.value = this.value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+            });
+
+            // Set today as default start date
+            const today = new Date().toISOString().split('T')[0];
+            const startEl = document.getElementById('val_start_date');
+            if (startEl) startEl.value = today;
+        });

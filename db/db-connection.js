@@ -81,6 +81,10 @@ db.gst_filing_log = require("./gst-filing-log")(sequelize, Sequelize);
 db.day_bill = require("./day-bill")(sequelize, Sequelize);
 db.day_bill_header = require("./day-bill-header")(sequelize, Sequelize);
 db.day_bill_items = require("./day-bill-items")(sequelize, Sequelize);
+db.document_store = require("./document-store")(sequelize, Sequelize);
+db.employee = require("./employee")(sequelize, Sequelize);
+db.employee_salary = require("./employee-salary")(sequelize, Sequelize);
+db.employee_ledger = require("./employee-ledger")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -304,6 +308,14 @@ db.day_bill_header.hasMany(db.day_bill_items, {foreignKey: 'header_id', as: 'ite
 db.day_bill_items.belongsTo(db.day_bill_header, {foreignKey: 'header_id'});
 db.day_bill_header.belongsTo(db.credit, {foreignKey: 'vendor_id', targetKey: 'creditlist_id', as: 'vendor'});
 db.day_bill_items.belongsTo(db.product, {foreignKey: 'product_id', targetKey: 'product_id'});
+
+// Employee relations
+db.employee.hasMany(db.employee_ledger, {foreignKey: 'employee_id', as: 'ledgerEntries'});
+db.employee_ledger.belongsTo(db.employee, {foreignKey: 'employee_id'});
+db.employee.hasMany(db.employee_salary, {foreignKey: 'employee_id', as: 'salaryHistory'});
+db.employee_salary.belongsTo(db.employee, {foreignKey: 'employee_id'});
+db.employee.belongsTo(db.person, {foreignKey: 'person_id', targetKey: 'Person_id', as: 'linkedUser', constraints: false});
+db.employee.belongsTo(db.document_store, {foreignKey: 'photo_doc_id', as: 'photo', constraints: false});
 
 module.exports = db;
 

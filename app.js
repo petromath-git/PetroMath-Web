@@ -198,6 +198,7 @@ const customerDashboardRoutes = require('./routes/customer-dashboard-routes');
 const adjustmentRoutes = require('./routes/adjustment-routes');
 const productsRoutes = require('./routes/products-routes');
 const pumpTankRoutes = require('./routes/pump-tank-routes');
+const lookupAdminRoutes = require('./routes/lookup-admin-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
@@ -226,6 +227,8 @@ const campaignPublicRoutes = require('./routes/campaign-public-routes');
 const gstRoutes = require('./routes/gst-routes');
 const transactionUploadRoutes = require('./routes/transaction-upload-routes');
 const dayBillRoutes = require('./routes/day-bill-routes');
+const employeeRoutes  = require('./routes/employee-routes');
+const documentRoutes  = require('./routes/document-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -370,6 +373,7 @@ app.use('/reports/stock', stockReportsRoutes);
 app.use('/credit-master', creditMasterRoutes);
 app.use('/location-master', locationMasterRoutes);
 app.use('/masters/pump-tank',pumpTankRoutes);
+app.use('/masters/lookup-admin', lookupAdminRoutes);
 app.use('/stock-adjustment', stockAdjustmentRoutes);
 app.use('/api', apiRoutes);
 app.use('/reports-cashflow-detailed', cashflowDetailedRoutes);
@@ -390,6 +394,8 @@ app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/day-bill', dayBillRoutes);
+app.use('/employees', employeeRoutes);
+app.use('/documents', documentRoutes);
 
 
 
