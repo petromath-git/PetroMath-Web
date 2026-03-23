@@ -159,8 +159,8 @@ module.exports = {
         CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
         SUM(s.qty) AS total_qty,
         SUM(s.amount) AS total_amount,
-        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / 100) AS total_cgst,
-        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / 100) AS total_sgst
+        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
       FROM (
         SELECT closing_id, product_id, qty, amount
         FROM t_credits
@@ -212,8 +212,8 @@ module.exports = {
         CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_category,
         SUM(s.qty) AS total_qty,
         SUM(s.amount) AS total_amount,
-        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / 100) AS total_cgst,
-        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / 100) AS total_sgst
+        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
       FROM (
         SELECT closing_id, product_id, qty, amount
         FROM t_credits
@@ -242,8 +242,8 @@ module.exports = {
         AND tc.location_code = :locationCode
         AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
         AND mp.product_name NOT IN (
-            SELECT DISTINCT product_code 
-            FROM m_pump 
+            SELECT DISTINCT product_code
+            FROM m_pump
             WHERE location_code = :locationCode
         )
       GROUP BY gst_category
