@@ -94,7 +94,7 @@ module.exports = {
                         inactiveCreditIds.add(creditlist.creditlist_id);
                     }                   
     
-                    isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null;
+                    isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null && receipt.dataValues.pending_cashflow_id === null;
     
                     
 
@@ -110,7 +110,7 @@ module.exports = {
                         amount: receipt.amount,
                         notes: receipt.notes,
                         receipt_date: receipt.receipt_date_fmt,
-                        showEditOrDelete: receipt.dataValues.cashflow_date === null,
+                        showEditOrDelete: receipt.dataValues.cashflow_date === null && receipt.dataValues.pending_cashflow_id === null,
                         creditType: type
                     });
                 } else {
@@ -227,17 +227,27 @@ module.exports = {
 
     // Delete credit receipt
     deleteReceipts: (req, res, next) => {
-        if (req.query.id) {
-            CreditReceiptsDao.delete(req.query.id)
-                .then(data => {
-                    if (data == 1) {
-                        res.status(200).send({ message: 'Receipt successfully deleted.' });
-                    } else {
-                        res.status(500).send({ error: 'Receipt deletion failed or not available to delete.' });
-                    }
-                });
-        } else {
-            res.status(500).send({ error: 'Receipt deletion failed or not available to delete.' });
+        if (!req.query.id) {
+            return res.status(400).send({ error: 'Receipt deletion failed or not available to delete.' });
         }
+        CreditReceiptsDao.findById(req.query.id)
+            .then(receipt => {
+                if (!receipt) {
+                    return res.status(404).send({ error: 'Receipt not found.' });
+                }
+                if (receipt.cashflow_date !== null || receipt.pending_cashflow_id !== null) {
+                    return res.status(400).send({ error: 'Receipt is part of a cashflow and cannot be deleted.' });
+                }
+                return CreditReceiptsDao.delete(req.query.id);
+            })
+            .then(data => {
+                if (data === undefined) return; // already responded above
+                if (data == 1) {
+                    res.status(200).send({ message: 'Receipt successfully deleted.' });
+                } else {
+                    res.status(500).send({ error: 'Receipt deletion failed or not available to delete.' });
+                }
+            })
+            .catch(next);
     }
 }

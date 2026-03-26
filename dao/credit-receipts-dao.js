@@ -22,6 +22,7 @@ module.exports = {
                 [Sequelize.fn('date_format', Sequelize.col('receipt_date'), '%d-%m-%Y'), 'receipt_date_fmt'],
                 'location_code',
                 'cashflow_date',
+                'pending_cashflow_id',
             ],
           where: { [Op.and]: [
                   { location_code: locationCode },
@@ -79,6 +80,13 @@ module.exports = {
             where: {'treceipt_id': receipt.treceipt_id},
         });
     },
+    findById: (receiptId) => {
+        return CashReceipts.findOne({
+            attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id'],
+            where: { treceipt_id: receiptId },
+        });
+    },
+
     delete: (receiptId) => {
         const deleteStatus = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
         return deleteStatus;
