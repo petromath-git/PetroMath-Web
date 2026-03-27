@@ -44,6 +44,23 @@ router.post('/',
     ctrl.createEmployee
 );
 
+// ── Report page ───────────────────────────────────────────────────────────────
+router.get('/report',
+    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    ctrl.getReportPage
+);
+
+// ── Report APIs ───────────────────────────────────────────────────────────────
+router.get('/api/report/statement',
+    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    ctrl.getStatementData
+);
+
+router.get('/api/report/summary',
+    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    ctrl.getSummaryData
+);
+
 // ── Generate salary for a period (AJAX POST) ──────────────────────────────────
 router.post('/api/generate-salary',
     [isLoginEnsured, security.hasPermission('GENERATE_EMPLOYEE_SALARY')],
