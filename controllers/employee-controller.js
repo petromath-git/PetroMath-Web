@@ -81,10 +81,16 @@ module.exports.getListPage = async (req, res) => {
 module.exports.getDetailPage = async (req, res) => {
     try {
         const employeeId = parseInt(req.params.id);
-        const [employee, rawLedger, salaryHistory] = await Promise.all([
+        const [employee, rawLedger, salaryHistory, banks] = await Promise.all([
             EmployeeDao.findById(employeeId),
             EmployeeDao.getLedger(employeeId),
-            EmployeeDao.getSalaryHistory(employeeId)
+            EmployeeDao.getSalaryHistory(employeeId),
+            db.sequelize.query(
+                `SELECT bank_id, bank_name, account_nickname FROM m_bank
+                 WHERE location_code = :locationCode AND active_flag = 'Y'
+                 ORDER BY bank_name`,
+                { replacements: { locationCode: req.user.location_code }, type: db.Sequelize.QueryTypes.SELECT }
+            )
         ]);
 
         if (!employee) {
@@ -120,6 +126,7 @@ module.exports.getDetailPage = async (req, res) => {
             },
             ledger,
             salaryHistory: salaryHistoryMapped,
+            banks,
             canLedger:  req.user.isAdmin,
             canEdit:    req.user.isAdmin
         });
@@ -248,9 +255,13 @@ module.exports.addLedgerEntry = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
-        const validTypes = ['SALARY_CREDIT', 'ADVANCE', 'PAYMENT', 'SHORTAGE_DEDUCTION', 'ADJUSTMENT_CR', 'ADJUSTMENT_DR'];
+        const validTypes = ['SALARY_CREDIT', 'ADVANCE', 'PAYMENT', 'BANK_PAYMENT', 'ADVANCE_RECOVERY', 'DEDUCTION', 'ADJUSTMENT_CR', 'ADJUSTMENT_DR'];
         if (!validTypes.includes(req.body.txn_type)) {
             return res.status(400).json({ success: false, message: 'Invalid transaction type' });
+        }
+
+        if (req.body.txn_type === 'BANK_PAYMENT' && !req.body.bank_id) {
+            return res.status(400).json({ success: false, message: 'Bank is required for bank payments' });
         }
 
         const amount = parseFloat(req.body.amount);
@@ -265,8 +276,9 @@ module.exports.addLedgerEntry = async (req, res) => {
             txn_type:      req.body.txn_type,
             amount,
             description:   req.body.description,
-            reference_id:  req.body.reference_id  || null,
-            salary_period: req.body.salary_period  || null,
+            reference_id:  req.body.reference_id || null,
+            salary_period: req.body.salary_period || null,
+            bank_id:       req.body.bank_id       || null,
             created_by:    req.user.User_Name
         });
 
@@ -281,7 +293,33 @@ module.exports.addLedgerEntry = async (req, res) => {
 
 module.exports.deleteLedgerEntry = async (req, res) => {
     try {
-        await EmployeeDao.deleteLedgerEntry(parseInt(req.params.ledger_id), parseInt(req.params.id));
+        const ledgerId   = parseInt(req.params.ledger_id);
+        const employeeId = parseInt(req.params.id);
+
+        const entry = await EmployeeDao.findLedgerEntry(ledgerId, employeeId);
+        if (!entry) {
+            return res.status(404).json({ success: false, message: 'Entry not found' });
+        }
+
+        const cashflowEligible = ['ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY'].includes(entry.txn_type);
+        if (cashflowEligible) {
+            if (entry.cashflow_date) {
+                return res.status(400).json({ success: false, message: 'This entry has been closed in a cashflow and cannot be deleted.' });
+            }
+            if (entry.pending_cashflow_id) {
+                return res.status(400).json({ success: false, message: 'This entry is currently claimed by an open cashflow. Delete or regenerate the cashflow first.' });
+            }
+        }
+
+        const allowedDays = parseInt(
+            await getLocationConfigValue(req.user.location_code, 'EMPLOYEE_LEDGER_DELETE_DAYS', '1')
+        );
+        const ageInDays = Math.floor((Date.now() - new Date(entry.creation_date).getTime()) / 86400000);
+        if (ageInDays > allowedDays) {
+            return res.status(400).json({ success: false, message: `Entries can only be deleted within ${allowedDays} day(s) of creation.` });
+        }
+
+        await EmployeeDao.deleteLedgerEntry(ledgerId, employeeId, req.user.User_Name);
         res.json({ success: true, message: 'Entry deleted' });
     } catch (err) {
         console.error('deleteLedgerEntry error:', err);
@@ -307,6 +345,100 @@ module.exports.generateSalary = async (req, res) => {
     } catch (err) {
         console.error('generateSalary error:', err);
         res.status(500).json({ success: false, message: 'Failed to generate salary' });
+    }
+};
+
+// ─── Report page ──────────────────────────────────────────────────────────────
+
+module.exports.getReportPage = async (req, res) => {
+    try {
+        const locationCode = req.user.location_code;
+        const employees    = await EmployeeDao.findAll(locationCode, false);
+
+        const today    = new Date();
+        const fromDate = new Date(today.getFullYear(), today.getMonth(), 1)
+                            .toISOString().slice(0, 10);
+        const toDate   = today.toISOString().slice(0, 10);
+
+        res.render('employee/employee-report', {
+            title:     'Employee Report',
+            user:      req.user,
+            employees: employees.map(e => ({ employee_id: e.employee_id, name: e.name, employee_code: e.employee_code })),
+            fromDate,
+            toDate
+        });
+    } catch (err) {
+        console.error('employee getReportPage error:', err);
+        req.flash('error', 'Failed to load report');
+        res.redirect('/employees');
+    }
+};
+
+// ─── Report API: employee statement ───────────────────────────────────────────
+
+module.exports.getStatementData = async (req, res) => {
+    try {
+        const employeeId = parseInt(req.query.employee_id);
+        const fromDate   = req.query.from;
+        const toDate     = req.query.to;
+
+        if (!employeeId || !fromDate || !toDate) {
+            return res.status(400).json({ success: false, message: 'employee_id, from and to are required' });
+        }
+
+        const employee = await EmployeeDao.findById(employeeId);
+        if (!employee || employee.location_code !== req.user.location_code) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        const rawEntries = await EmployeeDao.getStatement(employeeId, fromDate, toDate);
+
+        let running = 0;
+        const entries = rawEntries.map(e => {
+            running += parseFloat(e.credit_amount || 0) - parseFloat(e.debit_amount || 0);
+            return {
+                ...e,
+                txn_date:        fmtDate(e.txn_date),
+                credit_amount:   parseFloat(e.credit_amount || 0).toFixed(2),
+                debit_amount:    parseFloat(e.debit_amount  || 0).toFixed(2),
+                running_balance: running.toFixed(2)
+            };
+        });
+
+        res.json({ success: true, employee: employee.name, entries, closing_balance: running.toFixed(2) });
+    } catch (err) {
+        console.error('getStatementData error:', err);
+        res.status(500).json({ success: false, message: 'Failed to load statement' });
+    }
+};
+
+// ─── Report API: spending summary ─────────────────────────────────────────────
+
+module.exports.getSummaryData = async (req, res) => {
+    try {
+        const fromDate = req.query.from;
+        const toDate   = req.query.to;
+
+        if (!fromDate || !toDate) {
+            return res.status(400).json({ success: false, message: 'from and to are required' });
+        }
+
+        const rows = await EmployeeDao.getSpendingSummary(req.user.location_code, fromDate, toDate);
+
+        const summary = rows.map(r => ({
+            ...r,
+            salary_credited: parseFloat(r.salary_credited || 0).toFixed(2),
+            cash_paid:       parseFloat(r.cash_paid       || 0).toFixed(2),
+            bank_paid:       parseFloat(r.bank_paid       || 0).toFixed(2),
+            recovered:       parseFloat(r.recovered       || 0).toFixed(2),
+            deductions:      parseFloat(r.deductions      || 0).toFixed(2),
+            net_balance:     parseFloat(r.net_balance     || 0).toFixed(2)
+        }));
+
+        res.json({ success: true, summary });
+    } catch (err) {
+        console.error('getSummaryData error:', err);
+        res.status(500).json({ success: false, message: 'Failed to load summary' });
     }
 };
 
