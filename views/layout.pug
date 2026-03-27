@@ -27,6 +27,10 @@ html
     script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`, defer)
     script(src=`/javascripts/app-report-table-generator.js?v=${CACHE_BUST}`)
     
+    if desktopZoom
+      style.
+        @media (max-width: 1440px) { body { zoom: #{desktopZoom}; } }
+
     style.
       @media print {
         table.table-bordered {
@@ -263,3 +267,5 @@ html
           icon.style.transform = 'rotate(0deg)';
         }
       }
+
+block scripts

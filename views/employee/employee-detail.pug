@@ -215,11 +215,19 @@ block content
                             label Transaction Type *
                             select.form-control#entry_type
                                 option(value="ADVANCE") Advance (cash given to employee)
-                                option(value="PAYMENT") Payment (salary paid out in cash)
+                                option(value="PAYMENT") Payment (salary paid in cash)
+                                option(value="BANK_PAYMENT") Bank Payment (salary paid via bank)
+                                option(value="ADVANCE_RECOVERY") Advance Recovery (cash returned)
                                 option(value="SALARY_CREDIT") Salary Credit (salary earned)
-                                option(value="SHORTAGE_DEDUCTION") Shortage Deduction
+                                option(value="DEDUCTION") Deduction (shortage / other)
                                 option(value="ADJUSTMENT_CR") Adjustment Credit (+)
                                 option(value="ADJUSTMENT_DR") Adjustment Debit (−)
+                        .form-group#bankGroup(style="display:none;")
+                            label Bank *
+                            select.form-control#entry_bank
+                                option(value="") — Select Bank —
+                                each b in banks
+                                    option(value=b.bank_id)= b.bank_name + (b.account_nickname ? ' (' + b.account_nickname + ')' : '')
                         .form-group
                             label Date *
                             input.form-control#entry_date(type="date" required)
@@ -342,15 +350,19 @@ block scripts
 
         // ── Ledger entry ──────────────────────────────────────────────────────
         $('#entry_type').on('change', function() {
-            $('#salaryPeriodGroup').toggle($(this).val() === 'SALARY_CREDIT');
+            const t = $(this).val();
+            $('#salaryPeriodGroup').toggle(t === 'SALARY_CREDIT');
+            $('#bankGroup').toggle(t === 'BANK_PAYMENT');
         });
 
         $('#btnSaveEntry').on('click', function() {
             const txnType = $('#entry_type').val();
             const amount  = parseFloat($('#entry_amount').val());
             const date    = $('#entry_date').val();
-            if (!date)               { showAlert('Date is required', 'danger'); return; }
+            const bankId  = $('#entry_bank').val();
+            if (!date)                  { showAlert('Date is required', 'danger'); return; }
             if (!amount || amount <= 0) { showAlert('Amount must be > 0', 'danger'); return; }
+            if (txnType === 'BANK_PAYMENT' && !bankId) { showAlert('Please select a bank', 'danger'); return; }
 
             $('#btnSaveEntry').prop('disabled', true);
             $.ajax({
@@ -362,7 +374,8 @@ block scripts
                     txn_date:      date,
                     amount:        amount,
                     description:   $('#entry_description').val().trim(),
-                    salary_period: txnType === 'SALARY_CREDIT' ? $('#entry_salary_period').val().trim() : null
+                    salary_period: txnType === 'SALARY_CREDIT' ? $('#entry_salary_period').val().trim() : null,
+                    bank_id:       txnType === 'BANK_PAYMENT'  ? bankId : null
                 }),
                 success: r => r.success ? location.reload() : showAlert(r.message, 'danger'),
                 error:   xhr => showAlert(xhr.responseJSON?.message || 'Failed to save', 'danger'),

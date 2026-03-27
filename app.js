@@ -407,6 +407,20 @@ app.use((req, res, next) => {
     next();
 });
 
+// Load DESKTOP_ZOOM from m_location_config (setting_name='DESKTOP_ZOOM', location_code='*' or per-location)
+// Remove this middleware once zoom is finalized and baked into style.css
+const { getLocationConfigValue } = require('./utils/location-config');
+app.use(async (req, res, next) => {
+    try {
+        const locationCode = (req.user && req.user.location_code) ? req.user.location_code : '*';
+        const zoom = await getLocationConfigValue(locationCode, 'DESKTOP_ZOOM', null);
+        res.locals.desktopZoom = zoom; // e.g. '0.85' or null to disable
+    } catch (e) {
+        res.locals.desktopZoom = null;
+    }
+    next();
+});
+
 
 
 

@@ -1,0 +1,242 @@
+extends ../layout
+
+block content
+    .container-fluid
+        .row.mb-3
+            .col
+                h4
+                    i.bi.bi-people.me-2
+                    | Employee Report
+                nav(aria-label="breadcrumb")
+                    ol.breadcrumb.mb-0
+                        li.breadcrumb-item: a(href="/employees") Employees
+                        li.breadcrumb-item.active Employee Report
+
+        //- ── Tabs ────────────────────────────────────────────────────────────
+        ul.nav.nav-tabs.mb-3#reportTabs(role="tablist")
+            li.nav-item
+                a.nav-link.active(id="stmt-tab" data-toggle="tab" href="#stmtPane" role="tab") Employee Statement
+            li.nav-item
+                a.nav-link(id="sum-tab" data-toggle="tab" href="#sumPane" role="tab") Spending Summary
+
+        .tab-content
+
+            //- ── Tab 1: Employee Statement ───────────────────────────────────
+            #stmtPane.tab-pane.fade.show.active(role="tabpanel")
+                .card.mb-3
+                    .card-body
+                        .form-row.align-items-end
+                            .col-md-4.mb-2
+                                label Employee
+                                select.form-control#stmt_employee
+                                    option(value="") — Select Employee —
+                                    each e in employees
+                                        option(value=e.employee_id)= e.name + ' (' + e.employee_code + ')'
+                            .col-md-3.mb-2
+                                label From
+                                input.form-control#stmt_from(type="date" value=fromDate)
+                            .col-md-3.mb-2
+                                label To
+                                input.form-control#stmt_to(type="date" value=toDate)
+                            .col-md-2.mb-2
+                                button.btn.btn-primary.btn-block#btnLoadStmt(type="button")
+                                    i.bi.bi-search.me-1
+                                    | Load
+
+                .card#stmtCard(style="display:none;")
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        span#stmtTitle Statement
+                        .d-flex.align-items-center.gap-2
+                            span.mr-3 Balance:&nbsp;
+                                strong#stmtBalance —
+                    .card-body.p-0
+                        .table-responsive
+                            table.table.table-sm.table-hover.mb-0
+                                thead.thead-light
+                                    tr
+                                        th Date
+                                        th Type
+                                        th Description
+                                        th.text-right Debit (₹)
+                                        th.text-right Credit (₹)
+                                        th.text-right Balance (₹)
+                                        th Cashflow
+                                tbody#stmtBody
+                                tfoot
+                                    tr.font-weight-bold.table-secondary
+                                        td(colspan="3") Totals
+                                        td.text-right#stmtTotalDebit —
+                                        td.text-right#stmtTotalCredit —
+                                        td(colspan="2")
+
+            //- ── Tab 2: Spending Summary ──────────────────────────────────────
+            #sumPane.tab-pane.fade(role="tabpanel")
+                .card.mb-3
+                    .card-body
+                        .form-row.align-items-end
+                            .col-md-4.mb-2
+                                label From
+                                input.form-control#sum_from(type="date" value=fromDate)
+                            .col-md-4.mb-2
+                                label To
+                                input.form-control#sum_to(type="date" value=toDate)
+                            .col-md-4.mb-2
+                                button.btn.btn-primary.btn-block#btnLoadSum(type="button")
+                                    i.bi.bi-search.me-1
+                                    | Load
+
+                .card#sumCard(style="display:none;")
+                    .card-header Spending Summary
+                    .card-body.p-0
+                        .table-responsive
+                            table.table.table-sm.table-hover.mb-0
+                                thead.thead-light
+                                    tr
+                                        th Employee
+                                        th Designation
+                                        th.text-right Salary Credited (₹)
+                                        th.text-right Cash Paid (₹)
+                                        th.text-right Bank Paid (₹)
+                                        th.text-right Recovered (₹)
+                                        th.text-right Deductions (₹)
+                                        th.text-right Net Balance (₹)
+                                tbody#sumBody
+                                tfoot
+                                    tr.font-weight-bold.table-secondary#sumTotals(style="display:none;")
+                                        td(colspan="2") Totals
+                                        td.text-right#sumTotSalary —
+                                        td.text-right#sumTotCash —
+                                        td.text-right#sumTotBank —
+                                        td.text-right#sumTotRecovered —
+                                        td.text-right#sumTotDeductions —
+                                        td.text-right#sumTotNet —
+
+block scripts
+    script.
+        const TXN_LABELS = {
+            SALARY_CREDIT:    'Salary Credit',
+            ADVANCE:          'Advance',
+            PAYMENT:          'Cash Payment',
+            BANK_PAYMENT:     'Bank Payment',
+            ADVANCE_RECOVERY: 'Recovery',
+            DEDUCTION:        'Deduction',
+            ADJUSTMENT_CR:    'Adj (+)',
+            ADJUSTMENT_DR:    'Adj (−)'
+        };
+        const TXN_COLORS = {
+            SALARY_CREDIT:    'success',
+            ADVANCE:          'warning',
+            PAYMENT:          'warning',
+            BANK_PAYMENT:     'info',
+            ADVANCE_RECOVERY: 'primary',
+            DEDUCTION:        'danger',
+            ADJUSTMENT_CR:    'secondary',
+            ADJUSTMENT_DR:    'secondary'
+        };
+
+        function fmt(v) {
+            return parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // ── Statement ──────────────────────────────────────────────────────────
+        $('#btnLoadStmt').on('click', function() {
+            const empId = $('#stmt_employee').val();
+            const from  = $('#stmt_from').val();
+            const to    = $('#stmt_to').val();
+            if (!empId) { alert('Please select an employee'); return; }
+            if (!from || !to) { alert('Please select a date range'); return; }
+
+            $(this).prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Loading...');
+            $.ajax({
+                url: '/employees/api/report/statement',
+                data: { employee_id: empId, from, to },
+                success: function(r) {
+                    if (!r.success) { alert(r.message); return; }
+                    $('#stmtTitle').text('Statement — ' + r.employee);
+                    $('#stmtBalance').text('₹' + fmt(r.closing_balance));
+
+                    let totalDebit = 0, totalCredit = 0;
+                    const tbody = $('#stmtBody').empty();
+                    if (r.entries.length === 0) {
+                        tbody.append('<tr><td colspan="7" class="text-center text-muted">No entries in this period</td></tr>');
+                    } else {
+                        r.entries.forEach(function(e) {
+                            totalDebit  += parseFloat(e.debit_amount);
+                            totalCredit += parseFloat(e.credit_amount);
+                            const balClass = parseFloat(e.running_balance) >= 0 ? 'text-success' : 'text-danger';
+                            tbody.append(
+                                '<tr>' +
+                                '<td>' + e.txn_date + '</td>' +
+                                '<td><span class="badge badge-' + (TXN_COLORS[e.txn_type] || 'secondary') + '">' + (TXN_LABELS[e.txn_type] || e.txn_type) + '</span></td>' +
+                                '<td>' + (e.description || '') + (e.bank_name ? ' <small class="text-muted">(' + e.bank_name + ')</small>' : '') + '</td>' +
+                                '<td class="text-right">' + (parseFloat(e.debit_amount)  > 0 ? fmt(e.debit_amount)  : '') + '</td>' +
+                                '<td class="text-right">' + (parseFloat(e.credit_amount) > 0 ? fmt(e.credit_amount) : '') + '</td>' +
+                                '<td class="text-right ' + balClass + '">' + fmt(e.running_balance) + '</td>' +
+                                '<td>' + (e.cashflow_date ? '<span class="badge badge-light">' + e.cashflow_date + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
+                                '</tr>'
+                            );
+                        });
+                    }
+                    $('#stmtTotalDebit').text(fmt(totalDebit));
+                    $('#stmtTotalCredit').text(fmt(totalCredit));
+                    $('#stmtCard').show();
+                },
+                error: function() { alert('Failed to load statement'); },
+                complete: () => $('#btnLoadStmt').prop('disabled', false).html('<i class="bi bi-search me-1"></i>Load')
+            });
+        });
+
+        // ── Summary ────────────────────────────────────────────────────────────
+        $('#btnLoadSum').on('click', function() {
+            const from = $('#sum_from').val();
+            const to   = $('#sum_to').val();
+            if (!from || !to) { alert('Please select a date range'); return; }
+
+            $(this).prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Loading...');
+            $.ajax({
+                url: '/employees/api/report/summary',
+                data: { from, to },
+                success: function(r) {
+                    if (!r.success) { alert(r.message); return; }
+
+                    let totSalary = 0, totCash = 0, totBank = 0, totRec = 0, totDed = 0, totNet = 0;
+                    const tbody = $('#sumBody').empty();
+
+                    if (r.summary.length === 0) {
+                        tbody.append('<tr><td colspan="8" class="text-center text-muted">No data in this period</td></tr>');
+                    } else {
+                        r.summary.forEach(function(e) {
+                            totSalary += parseFloat(e.salary_credited);
+                            totCash   += parseFloat(e.cash_paid);
+                            totBank   += parseFloat(e.bank_paid);
+                            totRec    += parseFloat(e.recovered);
+                            totDed    += parseFloat(e.deductions);
+                            totNet    += parseFloat(e.net_balance);
+                            const netClass = parseFloat(e.net_balance) >= 0 ? 'text-success' : 'text-danger';
+                            tbody.append(
+                                '<tr>' +
+                                '<td>' + e.name + ' <small class="text-muted">(' + e.employee_code + ')</small></td>' +
+                                '<td>' + (e.designation || '') + '</td>' +
+                                '<td class="text-right">' + fmt(e.salary_credited) + '</td>' +
+                                '<td class="text-right">' + fmt(e.cash_paid)       + '</td>' +
+                                '<td class="text-right">' + fmt(e.bank_paid)       + '</td>' +
+                                '<td class="text-right">' + fmt(e.recovered)       + '</td>' +
+                                '<td class="text-right">' + fmt(e.deductions)      + '</td>' +
+                                '<td class="text-right ' + netClass + '">' + fmt(e.net_balance) + '</td>' +
+                                '</tr>'
+                            );
+                        });
+                        $('#sumTotSalary').text(fmt(totSalary));
+                        $('#sumTotCash').text(fmt(totCash));
+                        $('#sumTotBank').text(fmt(totBank));
+                        $('#sumTotRecovered').text(fmt(totRec));
+                        $('#sumTotDeductions').text(fmt(totDed));
+                        $('#sumTotNet').text(fmt(totNet));
+                        $('#sumTotals').show();
+                    }
+                    $('#sumCard').show();
+                },
+                error: function() { alert('Failed to load summary'); },
+                complete: () => $('#btnLoadSum').prop('disabled', false).html('<i class="bi bi-search me-1"></i>Load')
+            });
+        });

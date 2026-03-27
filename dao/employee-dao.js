@@ -225,25 +225,30 @@ module.exports = {
     getLedger: async (employeeId) => {
         return db.sequelize.query(
             `SELECT
-                ledger_id,
-                txn_date,
-                txn_type,
-                credit_amount,
-                debit_amount,
-                description,
-                reference_id,
-                salary_period,
-                created_by,
-                creation_date
-             FROM t_employee_ledger
-             WHERE employee_id = :employeeId
-             ORDER BY txn_date ASC, ledger_id ASC`,
+                el.ledger_id,
+                el.txn_date,
+                el.txn_type,
+                el.credit_amount,
+                el.debit_amount,
+                el.description,
+                el.reference_id,
+                el.salary_period,
+                el.bank_id,
+                mb.bank_name,
+                el.cashflow_date,
+                el.created_by,
+                el.creation_date
+             FROM t_employee_ledger el
+             LEFT JOIN m_bank mb ON el.bank_id = mb.bank_id
+             WHERE el.employee_id = :employeeId
+               AND el.deleted_flag = 'N'
+             ORDER BY el.txn_date ASC, el.ledger_id ASC`,
             { replacements: { employeeId }, type: db.Sequelize.QueryTypes.SELECT }
         );
     },
 
     addLedgerEntry: async (data) => {
-        const isCredit = ['SALARY_CREDIT', 'ADJUSTMENT_CR'].includes(data.txn_type);
+        const isCredit = ['SALARY_CREDIT', 'ADJUSTMENT_CR', 'ADVANCE_RECOVERY'].includes(data.txn_type);
         return EmployeeLedger.create({
             employee_id:   data.employee_id,
             location_code: data.location_code,
@@ -251,9 +256,10 @@ module.exports = {
             txn_type:      data.txn_type,
             credit_amount: isCredit ? parseFloat(data.amount) : 0,
             debit_amount:  isCredit ? 0 : parseFloat(data.amount),
-            description:   data.description   || null,
-            reference_id:  data.reference_id  || null,
+            description:   data.description  || null,
+            reference_id:  data.reference_id || null,
             salary_period: data.txn_type === 'SALARY_CREDIT' ? (data.salary_period || null) : null,
+            bank_id:       data.txn_type === 'BANK_PAYMENT'  ? (data.bank_id || null) : null,
             created_by:    data.created_by,
             creation_date: new Date()
         });
@@ -320,7 +326,55 @@ module.exports = {
         return { generated, skipped, total: employees.length, detail };
     },
 
-    deleteLedgerEntry: async (ledgerId, employeeId) => {
+    getStatement: async (employeeId, fromDate, toDate) => {
+        return db.sequelize.query(
+            `SELECT
+                el.ledger_id, el.txn_date, el.txn_type,
+                el.credit_amount, el.debit_amount, el.description,
+                el.salary_period, el.cashflow_date,
+                mb.bank_name, el.created_by
+             FROM t_employee_ledger el
+             LEFT JOIN m_bank mb ON el.bank_id = mb.bank_id
+             WHERE el.employee_id = :employeeId
+               AND el.txn_date BETWEEN :fromDate AND :toDate
+             ORDER BY el.txn_date ASC, el.ledger_id ASC`,
+            { replacements: { employeeId, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+    },
+
+    getSpendingSummary: async (locationCode, fromDate, toDate) => {
+        return db.sequelize.query(
+            `SELECT
+                e.employee_id, e.employee_code, e.name, e.designation,
+                COALESCE(SUM(CASE WHEN el.txn_type = 'SALARY_CREDIT'                         THEN el.credit_amount ELSE 0 END), 0) AS salary_credited,
+                COALESCE(SUM(CASE WHEN el.txn_type IN ('ADVANCE','PAYMENT')                   THEN el.debit_amount  ELSE 0 END), 0) AS cash_paid,
+                COALESCE(SUM(CASE WHEN el.txn_type = 'BANK_PAYMENT'                           THEN el.debit_amount  ELSE 0 END), 0) AS bank_paid,
+                COALESCE(SUM(CASE WHEN el.txn_type = 'ADVANCE_RECOVERY'                       THEN el.credit_amount ELSE 0 END), 0) AS recovered,
+                COALESCE(SUM(CASE WHEN el.txn_type = 'DEDUCTION'                              THEN el.debit_amount  ELSE 0 END), 0) AS deductions,
+                COALESCE(SUM(el.credit_amount), 0) - COALESCE(SUM(el.debit_amount), 0)        AS net_balance
+             FROM m_employee e
+             LEFT JOIN t_employee_ledger el
+                ON el.employee_id = e.employee_id
+               AND el.txn_date BETWEEN :fromDate AND :toDate
+             WHERE e.location_code = :locationCode
+               AND e.is_active = 'Y'
+             GROUP BY e.employee_id, e.employee_code, e.name, e.designation
+             ORDER BY e.name`,
+            { replacements: { locationCode, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+    },
+
+    findLedgerEntry: async (ledgerId, employeeId) => {
+        return EmployeeLedger.findOne({
+            where: { ledger_id: ledgerId, employee_id: employeeId }
+        });
+    },
+
+    deleteLedgerEntry: async (ledgerId, employeeId, deletedBy) => {
+        await db.sequelize.query(
+            'SET @ledger_action_by = :user',
+            { replacements: { user: deletedBy } }
+        );
         return EmployeeLedger.destroy({
             where: { ledger_id: ledgerId, employee_id: employeeId }
         });
