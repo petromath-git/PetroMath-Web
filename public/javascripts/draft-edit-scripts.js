@@ -462,12 +462,17 @@ function setDigitalSalesDateRestrictions() {
     const maxDateStr = maxDate.toISOString().split('T')[0];
     
     // Apply to all digital transaction date fields
+    const closingDateStr = closingDateField.value;
     const txnDateFields = document.querySelectorAll('.digital-txn-date');
     txnDateFields.forEach(field => {
         field.setAttribute('min', minDateStr);
         field.setAttribute('max', maxDateStr);
+        // Only default empty fields — do not overwrite existing entries
+        if (!field.value) {
+            field.value = closingDateStr;
+        }
     });
-    
+
     console.log(`Digital sales date restrictions set: min=${minDateStr}, max=${maxDateStr}`);
 }
 
