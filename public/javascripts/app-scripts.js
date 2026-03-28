@@ -2639,6 +2639,9 @@ function quickSaveVehicle() {
 
 function showAddedDigitalSalesRow(prefix) {
     showAddedRow(prefix, calculateDigitalSalesTotal);
+    if (typeof setDigitalSalesDateRestrictions === 'function') {
+        setDigitalSalesDateRestrictions();
+    }
 }
 
 // Create a wrapper function that calls showAddedRow and then initializes vehicle select2
