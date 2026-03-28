@@ -241,7 +241,6 @@ module.exports = {
              FROM t_employee_ledger el
              LEFT JOIN m_bank mb ON el.bank_id = mb.bank_id
              WHERE el.employee_id = :employeeId
-               AND el.deleted_flag = 'N'
              ORDER BY el.txn_date ASC, el.ledger_id ASC`,
             { replacements: { employeeId }, type: db.Sequelize.QueryTypes.SELECT }
         );

@@ -137,6 +137,13 @@ block scripts
         function fmt(v) {
             return parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
+        function fmtDate(v) {
+            if (!v) return '—';
+            const d = new Date(v);
+            if (isNaN(d)) return v;
+            const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return String(d.getUTCDate()).padStart(2,'0') + '-' + m[d.getUTCMonth()] + '-' + d.getUTCFullYear();
+        }
 
         // ── Statement ──────────────────────────────────────────────────────────
         $('#btnLoadStmt').on('click', function() {
@@ -166,13 +173,13 @@ block scripts
                             const balClass = parseFloat(e.running_balance) >= 0 ? 'text-success' : 'text-danger';
                             tbody.append(
                                 '<tr>' +
-                                '<td>' + e.txn_date + '</td>' +
+                                '<td>' + fmtDate(e.txn_date) + '</td>' +
                                 '<td><span class="badge badge-' + (TXN_COLORS[e.txn_type] || 'secondary') + '">' + (TXN_LABELS[e.txn_type] || e.txn_type) + '</span></td>' +
                                 '<td>' + (e.description || '') + (e.bank_name ? ' <small class="text-muted">(' + e.bank_name + ')</small>' : '') + '</td>' +
                                 '<td class="text-right">' + (parseFloat(e.debit_amount)  > 0 ? fmt(e.debit_amount)  : '') + '</td>' +
                                 '<td class="text-right">' + (parseFloat(e.credit_amount) > 0 ? fmt(e.credit_amount) : '') + '</td>' +
                                 '<td class="text-right ' + balClass + '">' + fmt(e.running_balance) + '</td>' +
-                                '<td>' + (e.cashflow_date ? '<span class="badge badge-light">' + e.cashflow_date + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
+                                '<td>' + (e.cashflow_date ? '<span class="badge badge-light">' + fmtDate(e.cashflow_date) + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
                                 '</tr>'
                             );
                         });
