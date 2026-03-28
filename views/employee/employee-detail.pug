@@ -1,6 +1,7 @@
 extends ../layout
 
 block content
+    - function dd(v) { if (!v) return '—'; const d = new Date(v); if (isNaN(d)) return String(v); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return String(d.getUTCDate()).padStart(2,'0') + '-' + m[d.getUTCMonth()] + '-' + d.getUTCFullYear(); }
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display:none;")
         span#messageText
         button.close(type="button" data-dismiss="alert" aria-label="Close")
@@ -78,7 +79,7 @@ block content
                                 small.text-muted Current Salary
                                 if employee.salary_amount
                                     div ₹#{employee.salary_amount} / #{employee.salary_type}
-                                    small.text-muted(style="font-size:.75rem;") w.e.f #{employee.salary_from}
+                                    small.text-muted(style="font-size:.75rem;") w.e.f #{dd(employee.salary_from)}
                                 else
                                     div.text-muted —
                             .col-6.col-md-3
@@ -86,10 +87,10 @@ block content
                                 div= employee.linked_user_name || '—'
                             .col-6.col-md-3
                                 small.text-muted Joined
-                                div= employee.joined_date || '—'
+                                div= dd(employee.joined_date)
                             .col-6.col-md-3
                                 small.text-muted Left
-                                div= employee.left_date || '—'
+                                div= dd(employee.left_date)
                             if employee.notes
                                 .col-12
                                     small.text-muted Notes
@@ -141,10 +142,10 @@ block content
                         tbody
                             if ledger && ledger.length > 0
                                 each entry in ledger
-                                    - const tColors = {SALARY_CREDIT:'success',ADVANCE:'danger',PAYMENT:'info',SHORTAGE_DEDUCTION:'warning',ADJUSTMENT_CR:'success',ADJUSTMENT_DR:'danger'}
-                                    - const tLabels = {SALARY_CREDIT:'Salary',ADVANCE:'Advance',PAYMENT:'Payment',SHORTAGE_DEDUCTION:'Shortage',ADJUSTMENT_CR:'Adj+',ADJUSTMENT_DR:'Adj−'}
+                                    - const tColors = {SALARY_CREDIT:'success',ADVANCE:'danger',PAYMENT:'warning',BANK_PAYMENT:'info',ADVANCE_RECOVERY:'primary',DEDUCTION:'warning',ADJUSTMENT_CR:'success',ADJUSTMENT_DR:'danger'}
+                                    - const tLabels = {SALARY_CREDIT:'Salary',ADVANCE:'Advance',PAYMENT:'Cash Pay',BANK_PAYMENT:'Bank Pay',ADVANCE_RECOVERY:'Recovery',DEDUCTION:'Deduction',ADJUSTMENT_CR:'Adj+',ADJUSTMENT_DR:'Adj−'}
                                     tr
-                                        td: small= entry.txn_date
+                                        td: small= dd(entry.txn_date)
                                         td
                                             span.badge(class='badge-' + (tColors[entry.txn_type] || 'secondary'))
                                                 = tLabels[entry.txn_type] || entry.txn_type
@@ -189,10 +190,10 @@ block content
                                     tr(class=!s.effective_to ? 'table-success' : '')
                                         td.font-weight-bold ₹#{s.salary_amount}
                                         td: small= s.salary_type
-                                        td= s.effective_from
+                                        td= dd(s.effective_from)
                                         td
                                             if s.effective_to
-                                                = s.effective_to
+                                                = dd(s.effective_to)
                                             else
                                                 span.badge.badge-success Current
                                         td: small= s.notes || '—'
