@@ -155,12 +155,7 @@ module.exports = {
         return Product.findAll({
             where: {
                 location_code: locationCode,
-                [Sequelize.Op.and]: [
-                    Sequelize.literal(`product_name NOT IN (
-                        SELECT DISTINCT product_code 
-                        FROM m_pump 
-                        WHERE location_code = '${locationCode}')`)
-                ]
+                is_lube_product: 1
             },
             order: [['product_name', 'ASC']]
         });

@@ -15,16 +15,12 @@ module.exports = {
                     get_closing_product_stock_balance(p.product_id, ?, ?) as closing_stock
                 FROM m_product p
                 WHERE p.location_code = ?
-                AND p.product_name NOT IN (
-                    SELECT DISTINCT product_code 
-                    FROM m_pump 
-                    WHERE location_code = ?
-                )
+                AND p.is_lube_product = 1
                 ORDER BY p.product_name
             `;
-            
+
             return await db.sequelize.query(query, {
-                replacements: [locationCode, reportDate, locationCode, locationCode],
+                replacements: [locationCode, reportDate, locationCode],
                 type: Sequelize.QueryTypes.SELECT
             });
         } catch (error) {
@@ -139,9 +135,32 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 AND (o.given_qty - o.returned_qty) > 0
                 
                 UNION ALL
-                
+
+                -- Meter Sales (metered lube products like 2T LOOSE and MAK ADBLUE - LOOSE)
+                -- Returns no rows for regular lube products (no m_pump row will match)
+                SELECT
+                    c.closing_date as txn_date,
+                    'METER SALE' as txn_type,
+                    CAST(c.closing_id AS CHAR) as reference_no,
+                    SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as quantity,
+                    SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as out_qty,
+                    0 as in_qty,
+                    'Meter Sale' as party_name,
+                    MAX(r.price) as rate,
+                    SUM((r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) * r.price) as amount
+                FROM t_reading r
+                JOIN t_closing c ON r.closing_id = c.closing_id
+                JOIN m_pump mp ON r.pump_id = mp.pump_id
+                JOIN m_product p ON mp.product_code = p.product_name AND p.product_id = ?
+                WHERE c.location_code = ?
+                AND DATE(c.closing_date) BETWEEN ? AND ?
+                AND (r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) > 0
+                GROUP BY c.closing_date, c.closing_id
+
+                UNION ALL
+
                 -- Stock Adjustments
-                SELECT 
+                SELECT
                     sa.adjustment_date as txn_date,
                     CONCAT('ADJUSTMENT ', sa.adjustment_type) as txn_type,
                     '' as reference_no,
@@ -166,6 +185,7 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 productId, locationCode, fromDate, toDate,  // Cash Sales
                 productId, locationCode, fromDate, toDate,  // Credit Sales
                 productId, locationCode, fromDate, toDate,  // 2T Oil
+                productId, locationCode, fromDate, toDate,  // Meter Sales
                 productId, locationCode, fromDate, toDate   // Adjustments
             ],
             type: Sequelize.QueryTypes.SELECT
