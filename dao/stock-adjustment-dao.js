@@ -61,26 +61,22 @@ getStockAdjustmentsList: async (locationCode, filters = {}) => {
     }
 },
 
-    // Get products not linked to pumps
+    // Get all lube products (including metered lubes like 2T LOOSE and MAK ADBLUE - LOOSE)
     getProductsNotLinkedToPumps: async (locationCode) => {
         try {
             const query = `
-                SELECT 
+                SELECT
                     p.product_id,
                     p.product_name,
                     p.unit
                 FROM m_product p
                 WHERE p.location_code = ?
-                AND p.product_name NOT IN (
-                    SELECT DISTINCT product_code 
-                    FROM m_pump 
-                    WHERE location_code = ?
-                )
+                AND p.is_lube_product = 1
                 ORDER BY p.product_name
             `;
-            
+
             return await db.sequelize.query(query, {
-                replacements: [locationCode, locationCode],
+                replacements: [locationCode],
                 type: Sequelize.QueryTypes.SELECT
             });
         } catch (error) {

@@ -80,6 +80,12 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: true,
             defaultValue: 0,
             field: 'is_tank_product'
+        },
+        is_lube_product: {
+            type: DataTypes.TINYINT(1),
+            allowNull: false,
+            defaultValue: 0,
+            field: 'is_lube_product'
         }
     }, {
         timestamps: false,
