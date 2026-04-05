@@ -1,0 +1,130 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+
+        .row.mb-3
+            .col
+                h4 Bowser Master
+            .col-auto
+                button.btn.btn-dark(type='button' data-toggle='modal' data-target='#bowserModal' onclick='openAddBowser()') + Add Bowser
+
+        if bowsers && bowsers.length > 0
+            .table-responsive
+                table.table.table-sm.table-bordered
+                    thead.thead-dark
+                        tr
+                            th Bowser Name
+                            th Product
+                            th Capacity (L)
+                            th Status
+                            th
+                    tbody
+                        each b in bowsers
+                            tr
+                                td= b.bowser_name
+                                td= b.product_name
+                                td= b.capacity_litres
+                                td
+                                    if b.is_active === 'Y'
+                                        span.badge.badge-success Active
+                                    else
+                                        span.badge.badge-secondary Inactive
+                                td
+                                    button.btn.btn-sm.btn-outline-secondary.mr-1(
+                                        type='button'
+                                        onclick=`openEditBowser(${b.bowser_id}, '${b.bowser_name}', ${b.capacity_litres}, ${b.product_id})`
+                                    ) Edit
+                                    if b.is_active === 'Y'
+                                        button.btn.btn-sm.btn-outline-danger(
+                                            type='button'
+                                            onclick=`toggleActive(${b.bowser_id}, 'N')`
+                                        ) Deactivate
+                                    else
+                                        button.btn.btn-sm.btn-outline-success(
+                                            type='button'
+                                            onclick=`toggleActive(${b.bowser_id}, 'Y')`
+                                        ) Activate
+        else
+            .alert.alert-info No bowsers configured yet.
+
+    //- Modal
+    #bowserModal.modal.fade(tabindex='-1' role='dialog')
+        .modal-dialog(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title#bowserModalTitle Add Bowser
+                    button.close(type='button' data-dismiss='modal')
+                        span &times;
+                .modal-body
+                    input(type='hidden' id='edit_bowser_id')
+                    .form-group
+                        label Bowser Name
+                        input#bowser_name.form-control(type='text' placeholder='e.g., BASHYAM BOWSER 1' required)
+                    .form-group
+                        label Product
+                        select#bowser_product_id.form-control(required)
+                            option(value='') -- Select Product --
+                            each p in products
+                                option(value=p.product_id)= p.product_name
+                    .form-group
+                        label Capacity (Litres)
+                        input#bowser_capacity.form-control(type='number' min='0' step='0.001' placeholder='e.g., 6000')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-dark(type='button' onclick='saveBowser()') Save
+
+    script.
+        function openAddBowser() {
+            document.getElementById('bowserModalTitle').innerText = 'Add Bowser';
+            document.getElementById('edit_bowser_id').value = '';
+            document.getElementById('bowser_name').value = '';
+            document.getElementById('bowser_product_id').value = '';
+            document.getElementById('bowser_capacity').value = '';
+        }
+
+        function openEditBowser(id, name, capacity, productId) {
+            document.getElementById('bowserModalTitle').innerText = 'Edit Bowser';
+            document.getElementById('edit_bowser_id').value = id;
+            document.getElementById('bowser_name').value = name;
+            document.getElementById('bowser_product_id').value = productId;
+            document.getElementById('bowser_capacity').value = capacity;
+            $('#bowserModal').modal('show');
+        }
+
+        function saveBowser() {
+            const id       = document.getElementById('edit_bowser_id').value;
+            const name     = document.getElementById('bowser_name').value.trim();
+            const product  = document.getElementById('bowser_product_id').value;
+            const capacity = document.getElementById('bowser_capacity').value;
+
+            if (!name || !product) {
+                alert('Bowser name and product are required.');
+                return;
+            }
+
+            const url    = id ? `/bowser/master/${id}` : '/bowser/master';
+            const method = id ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bowser_name: name, product_id: product, capacity_litres: capacity })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) { location.reload(); }
+                else { alert(data.error || 'Error saving bowser.'); }
+            });
+        }
+
+        function toggleActive(id, flag) {
+            if (!confirm(flag === 'Y' ? 'Activate this bowser?' : 'Deactivate this bowser?')) return;
+            fetch(`/bowser/master/${id}/toggle-active`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: flag })
+            })
+            .then(r => r.json())
+            .then(data => { if (data.success) location.reload(); });
+        }

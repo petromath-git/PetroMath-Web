@@ -35,6 +35,9 @@ block content
                     a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
                 li.nav-item.col-md
                     a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`trackMenu(this)`) Expenses
+                if bowserValues && bowserValues.length > 0
+                    li.nav-item.col-md
+                        a.nav-link#intercompany_tab(data-toggle="tab" href="#new_intercompany" onclick=`trackMenu(this)`) Intercompany
                 li.nav-item.col-md
                     a.nav-link#summary_tab(data-toggle="tab" href="#summary" onclick="populateSummary(this)") Summary
 
@@ -492,6 +495,35 @@ block content
                     div.row(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick=`trackMenuWithName('summary_tab')`) Next &raquo;
+
+                // ----------------------- Intercompany (Bowser Fill) --------
+                if bowserValues && bowserValues.length > 0
+                    div.tab-pane.fade#new_intercompany
+                        div
+                            div.col-16
+                                div.table-responsive
+                                    table.table#intercompany-table
+                                        tbody.w-100
+                                            thead(class="thead-light")
+                                                tr
+                                                    th(scope="col") Bowser
+                                                    th(scope="col") Product
+                                                    th(scope="col") Qty (L)
+                                                    th(scope="col")
+                                            tbody#intercompany-tbody
+                        div.row
+                            div.col &nbsp;
+                        div.row
+                            div.col(align="center")
+                                button.btn.btn-info(type="button" onclick="addIntercompanyRow()") Add Bowser Fill
+                        div.row
+                            div.col &nbsp;
+                        div.row(align="center")
+                            div.col
+                                button.btn.btn-primary(type="button" onclick="saveAndNextIntercompany()") Next &raquo;
+                        script.
+                            window.bowserIntercompanyData = !{JSON.stringify(bowserValues)};
+                        script(src="/javascripts/bowser-intercompany.js")
 
                 // ----------------------- Summary ----------------------------
                 div.tab-pane.fade#summary

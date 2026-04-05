@@ -1,6 +1,7 @@
 //closing-edit-controller.js
 
 const TxnReadDao = require("../dao/txn-read-dao");
+const BowserDao  = require("../dao/bowser-dao");
 const TxnWriteDao = require("../dao/txn-write-dao");
 const ProductDao = require("../dao/product-dao");
 const txnController = require("./txn-common-controller");
@@ -128,7 +129,9 @@ module.exports = {
                 vehicleDataPromise(locationCode),
                 homeController.pumpProductDataPromise(locationCode),
                 txnController.txnDigitalSalesPromise(closingId),
-                txnController.shiftProductsPromise(closingId)])
+                txnController.shiftProductsPromise(closingId),
+                BowserDao.getActiveBowsersByLocation(locationCode),
+                BowserDao.getIntercompanyByClosingId(closingId)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -159,7 +162,9 @@ module.exports = {
                         vehicleData: values[15].value,
                         pumpProductValues: values[16].value.products, 
                         digitalSalesData: values[17].value,
-                        shiftProducts: values[18].value || []
+                        shiftProducts: values[18].value || [],
+                        bowserValues: values[19].value || [],
+                        t_intercompany: values[20].value || []
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
