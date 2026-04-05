@@ -43,10 +43,11 @@ block content
                             th(scope="col") SGST%
                             if user.Role === 'SuperUser'
                                 th(scope="col").text-center Tank Product
+                            th(scope="col").text-center Non-Fuel Product
                             th(scope="col") Edit
                     tbody
                         each val, index in products
-                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                             tr(id=`product-row-${index}`)
                                 th(scope="row")= index + 1
                                 td(scope="row")
@@ -75,6 +76,19 @@ block content
                                                     span.badge.badge-success Tank
                                                 else
                                                     span.badge.badge-secondary -
+                                td(scope="row").text-center
+                                    .form-check.d-inline-block
+                                        input.form-check-input(
+                                            type="checkbox",
+                                            id=`is-lube-product-${index}`,
+                                            checked=val.is_lube_product ? true : false,
+                                            disabled
+                                        )
+                                        label.form-check-label(for=`is-lube-product-${index}`)
+                                            if val.is_lube_product
+                                                span.badge.badge-info Non-Fuel
+                                            else
+                                                span.badge.badge-secondary -
                                 td(scope="row")
                                     .btn-group
                                         button.btn.btn-outline-secondary.btn-sm(
@@ -92,7 +106,7 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             .row
                 each val, index in products
-                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                     .col-12.mb-3
                         .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
@@ -209,7 +223,7 @@ block content
                                                 .input-group-append
                                                     span.input-group-text %
                                     if user.Role === 'SuperUser'
-                                        .col-12
+                                        .col-6
                                             .product-detail
                                                 .form-check
                                                     input.form-check-input(
@@ -220,6 +234,17 @@ block content
                                                     )
                                                     label.form-check-label(for=`mobile-is-tank-product-${index}`)
                                                         strong Tank Product
+                                    .col-6
+                                        .product-detail
+                                            .form-check
+                                                input.form-check-input(
+                                                    type="checkbox",
+                                                    id=`mobile-is-lube-product-${index}`,
+                                                    checked=val.is_lube_product ? true : false,
+                                                    disabled
+                                                )
+                                                label.form-check-label(for=`mobile-is-lube-product-${index}`)
+                                                    strong Non-Fuel Product
 
     // Add Product Modal
     .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
@@ -262,6 +287,19 @@ block content
                             .col-md-6.mb-3
                                 label.form-label SGST %
                                 input.form-control(type="number", name="sgst_percent", step="0.01", min="0", max="100")
+                            .col-md-12.mb-3
+                                .form-check
+                                    input.form-check-input#is_lube_product(
+                                        type="checkbox",
+                                        name="is_lube_product",
+                                        value="1",
+                                        checked,
+                                        disabled=user.Role !== 'SuperUser' ? true : undefined
+                                    )
+                                    label.form-check-label(for="is_lube_product")
+                                        strong Non-Fuel Product
+                                        br
+                                        small.text-muted Check this for lubes, additives, and other non-fuel products (enables stock tracking)
                             if user.Role === 'SuperUser'
                                 .col-md-12.mb-3
                                     .alert.alert-warning.mb-2
@@ -269,7 +307,7 @@ block content
                                         strong Critical Flag
                                     .form-check
                                         input.form-check-input#is_tank_product(type="checkbox", name="is_tank_product", value="1")
-                                        label.form-check-label(for="is_tank_product") 
+                                        label.form-check-label(for="is_tank_product")
                                             strong Mark as Tank Product
                                             br
                                             small.text-muted Check this only if this product is used in storage tanks
@@ -317,6 +355,14 @@ block content
                             .col-md-6.mb-3
                                 label.form-label SGST %
                                 input#edit-sgst.form-control(type="number", step="0.01", min="0", max="100")
+                            .col-md-12.mb-3
+                                .form-check
+                                    input.form-check-input#edit-is-lube-product(
+                                        type="checkbox",
+                                        disabled=user.Role !== 'SuperUser' ? true : undefined
+                                    )
+                                    label.form-check-label(for="edit-is-lube-product")
+                                        strong Non-Fuel Product
                             if user.Role === 'SuperUser'
                                 .col-md-12.mb-3
                                     .form-check
@@ -529,6 +575,10 @@ block content
                 if (tankCheckbox) {
                     tankCheckbox.checked = !!product.is_tank_product;
                 }
+                const lubeCheckbox = document.getElementById('edit-is-lube-product');
+                if (lubeCheckbox) {
+                    lubeCheckbox.checked = !!product.is_lube_product;
+                }
             }
 
             $('#editProductModal').modal('show');
@@ -560,6 +610,11 @@ block content
                 if (isTankProductCheckbox) {
                     updateData.m_product_is_tank_product = isTankProductCheckbox.checked ? 1 : 0;
                 }
+            }
+            // Non-Fuel flag: always send (visible to all, but only SuperUser can change it)
+            const isLubeProductCheckbox = document.getElementById('edit-is-lube-product');
+            if (isLubeProductCheckbox) {
+                updateData.m_product_is_lube_product = isLubeProductCheckbox.checked ? 1 : 0;
             }
 
             fetch(`/products/api/${productId}`, {
@@ -633,8 +688,10 @@ block content
                     }
                 }
                 
-                // Handle checkbox explicitly
+                // Handle checkboxes explicitly (read DOM directly so disabled state doesn't suppress the value)
                 jsonData['is_tank_product'] = formData.get('is_tank_product') ? 1 : 0;
+                const lubeCheckboxEl = document.getElementById('is_lube_product');
+                jsonData['is_lube_product'] = lubeCheckboxEl && lubeCheckboxEl.checked ? 1 : 0;
                 
                 fetch('/products/api', {
                     method: 'POST',
