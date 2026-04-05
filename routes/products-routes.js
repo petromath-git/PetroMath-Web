@@ -45,6 +45,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 sku_number: product.sku_number,
                 hsn_code: product.hsn_code,
                 is_tank_product: product.is_tank_product,
+                is_lube_product: product.is_lube_product,
                 can_edit_name: canEditNameForRow
             });
         });
@@ -82,7 +83,8 @@ router.get('/api/data', [isLoginEnsured, security.isAdmin()], function (req, res
                 sku_name: product.sku_name,
                 sku_number: product.sku_number,
                 hsn_code: product.hsn_code,
-                is_tank_product: product.is_tank_product                   
+                is_tank_product: product.is_tank_product,
+                is_lube_product: product.is_lube_product
             }));
             
             res.json({
@@ -118,7 +120,8 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, ne
                 m_product_sku_name_0: req.body.sku_name || '',
                 m_product_sku_number_0: req.body.sku_number || '',
                 m_product_hsn_code_0: req.body.hsn_code || '',
-                m_product_is_tank_product_0: req.body.is_tank_product || 0
+                m_product_is_tank_product_0: req.body.is_tank_product || 0,
+                m_product_is_lube_product_0: req.body.is_lube_product || 0
             },
             user: req.user
         };
@@ -198,7 +201,8 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             ledger_name: req.body.m_product_ledger_name,
             cgst_percent: req.body.m_product_cgst,
             sgst_percent: req.body.m_product_sgst,
-            is_tank_product: req.body.m_product_is_tank_product
+            is_tank_product: req.body.m_product_is_tank_product,
+            is_lube_product: req.body.m_product_is_lube_product
         });
 
         if (data == 1 || data == 0) {
