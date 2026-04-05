@@ -1,0 +1,59 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+
+        .row.mb-3.align-items-center
+            .col
+                h4 Bowser Closings
+            .col-auto
+                a.btn.btn-dark(href='/bowser/closing/new') + New Closing
+
+        //- Date filter
+        form.form-inline.mb-3(method='get' action='/bowser/closing')
+            .form-group.mr-2
+                label.mr-1(for='fromDate') From
+                input#fromDate.form-control.form-control-sm(type='date' name='fromDate' value=fromDate)
+            .form-group.mr-2
+                label.mr-1(for='toDate') To
+                input#toDate.form-control.form-control-sm(type='date' name='toDate' value=toDate)
+            button.btn.btn-outline-secondary.btn-sm(type='submit') Filter
+
+        if closings && closings.length > 0
+            .table-responsive
+                table.table.table-sm.table-bordered
+                    thead.thead-dark
+                        tr
+                            th Date
+                            th Bowser
+                            th Open Meter
+                            th Close Meter
+                            th Meter Diff (L)
+                            th Fills Rec. (L)
+                            th Delivered (L)
+                            th Close Stock (L)
+                            th Status
+                            th
+                    tbody
+                        each c in closings
+                            - const meterDiff = (parseFloat(c.closing_meter) - parseFloat(c.opening_meter)).toFixed(3)
+                            - const closeStock = (parseFloat(c.opening_stock) + parseFloat(c.fills_received) - parseFloat(meterDiff)).toFixed(3)
+                            tr
+                                td= new Date(c.closing_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td= c.bowser_name
+                                td= parseFloat(c.opening_meter).toFixed(3)
+                                td= parseFloat(c.closing_meter).toFixed(3)
+                                td= meterDiff
+                                td= parseFloat(c.fills_received).toFixed(3)
+                                td= parseFloat(c.total_delivered).toFixed(3)
+                                td= closeStock
+                                td
+                                    if c.status === 'CLOSED'
+                                        span.badge.badge-success Closed
+                                    else
+                                        span.badge.badge-warning Draft
+                                td
+                                    a.btn.btn-sm.btn-outline-secondary(href=`/bowser/closing/${c.bowser_closing_id}`)
+                                        | View
+        else
+            .alert.alert-info No bowser closings found for the selected period.

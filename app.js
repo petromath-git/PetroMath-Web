@@ -213,6 +213,7 @@ const locationMasterRoutes = require('./routes/location-master-routes');
 const apiRoutes = require('./api/apiRoutes');
 const cashflowDetailedRoutes = require('./routes/cashflow-detailed-routes');
 const creditReceiptsRoutes = require('./routes/credit-receipts-routes');
+const bowserRoutes = require('./routes/bowser-routes');
 const personLocationRoutes = require('./routes/person-location-routes');
 const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes');
 const bankStatementRoutes = require('./routes/bank-statement-routes');
@@ -396,6 +397,7 @@ app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/day-bill', dayBillRoutes);
 app.use('/employees', employeeRoutes);
 app.use('/documents', documentRoutes);
+app.use('/bowser', bowserRoutes);
 
 
 
