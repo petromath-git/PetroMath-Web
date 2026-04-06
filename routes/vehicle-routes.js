@@ -189,7 +189,7 @@ router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('
 });
 
 // Quick-add vehicle from closing page (returns JSON)
-router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')], async function(req, res) {
+router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD_VEHICLE')], async function(req, res) {
     try {
         const { creditlist_id, vehicle_number, vehicle_type } = req.body;
         const cleanNumber = (vehicle_number || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
