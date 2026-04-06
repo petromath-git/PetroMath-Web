@@ -10,6 +10,7 @@ const TxnStkRcptDtlDao = require("../dao/txn-stkrcpt-dtl-dao");
 const TankDao = require("../dao/tank-dao");
 const TruckDao = require("../dao/truck-dao");
 const LookupDao = require("../dao/lookup-dao");
+const locationConfig = require("../utils/location-config");
 
 
 module.exports = {
@@ -34,8 +35,11 @@ module.exports = {
     },
 
     //function to load the decant header
-    getNewData: (req, res, next) => {
+    getNewData: async (req, res, next) => {
         const locationCode = req.user.location_code;
+        const maxDecantLines = Number(await locationConfig.getLocationConfigValue(
+            locationCode, 'MAX_DECANT_LINES', 3
+        ));
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -54,7 +58,8 @@ module.exports = {
                             tanks: values[2].value.tanks,
                             trucks: values[3].value.trucks,
                             location: values[4].value.location_id,
-                            tankQuantities: values[5].value || []
+                            tankQuantities: values[5].value || [],
+                            maxDecantLines: maxDecantLines
                         });
                     }).catch((err) => {
                         console.warn("Error while getting data using promises " + err.toString());

@@ -131,7 +131,7 @@ block content
                                                 th(scope="col") Amount
                                            
                                             - var rowCnt = 0
-                                            while rowCnt < 3
+                                            while rowCnt < maxDecantLines
                                                 +addDecantLines(rowCnt, decantLines[rowCnt++])
                         div.row
                             div.col &nbsp;
@@ -197,7 +197,7 @@ block content
                                                         th(scope="col") Notes
                                                         th(scope="col") Amount
                                                 - var rowCnt = 0
-                                                while rowCnt < 3                 
+                                                while rowCnt < maxDecantLines
                                                     +summaryDecantLinesData(rowCnt++)
                     if(!freezedRecord)            
                         div.row
