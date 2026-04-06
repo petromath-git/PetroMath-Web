@@ -691,7 +691,7 @@ function showAddedRow(prefix, funToRecalculateTotal) {
         funToRecalculateTotal();
     }
     if (!isEnabled) {
-        window.alert("Max allowed is reached, configure the max value in future.")
+        window.alert("Maximum decant lines reached. Contact your administrator to increase the limit.")
     }
 }
 
