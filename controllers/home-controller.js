@@ -1,4 +1,5 @@
 const PersonDao = require("../dao/person-dao");
+const BowserDao = require("../dao/bowser-dao");
 const ProductDao = require("../dao/product-dao");
 const PumpDao = require("../dao/pump-dao");
 const TxnReadDao = require("../dao/txn-read-dao");
@@ -85,7 +86,7 @@ module.exports = {
                     expenseDataPromise(locationCode),
                     personAttendanceDataPromise(locationCode),
                     vehicleDataPromise(locationCode),
-                //    digitalCompanyDataPromise(locationCode)
+                    BowserDao.getActiveBowsersByLocation(locationCode),
                 ])
                     .then((values) => {
                         res.render('new-closing', {
@@ -105,6 +106,7 @@ module.exports = {
                             expenseValues: values[6].value.expenses,
                             usersList: values[7].value.allUsers,
                             vehicleData: values[8].value,
+                            bowserValues: values[9].value || [],
                             isOpeningReadonly: openingReadonlyConfig === 'Y',
                             allowSecondaryPump: allowSecondaryPump === 'true',
                             digitalSalesBackdateDays: digitalSalesBackdateDays,

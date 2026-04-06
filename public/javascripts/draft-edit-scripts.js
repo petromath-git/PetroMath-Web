@@ -222,6 +222,7 @@ function getSaveFunction(clickedTab) {
             case 'decantheader_tab':
             case 'decantlines_tab':
             case 'attendance_tab':
+            case 'intercompany_tab':
                 saveFunctionName = 'NoSaveClick';   // dummy value
                 break;
         }
@@ -259,6 +260,9 @@ function getSaveFunction(clickedTab) {
                 break;
             case 'attendance_tab':
                 saveFunctionName = 'saveAttendance';   // dummy value
+                break;
+            case 'intercompany_tab':
+                saveFunctionName = 'NoSaveClick';   // user saves explicitly via Save button
                 break;
         }
     }
