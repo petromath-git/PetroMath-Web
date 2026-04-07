@@ -634,8 +634,25 @@ block content
                                                         td
                                                             span
                                                                 b#val-digital-sales-total= 0
-                                                        td                                           
-                                    div.col-6
+                                                        td
+                                    if bowserValues && bowserValues.length > 0
+                                        div.col-6#v-intercompany
+                                            h6.sub-header Intercompany Fills
+                                            div.table-responsive
+                                                table.table.table-sm#summary-intercompany-table
+                                                    thead.thead-light
+                                                        tr
+                                                            th(scope="col") Bowser
+                                                            th(scope="col") Product
+                                                            th(scope="col") Qty (L)
+                                                    tbody#summary-intercompany-tbody
+                                                    tr
+                                                        td(colspan=2)
+                                                            b Total
+                                                        td
+                                                            b#val-intercompany-total 0.000
+                                    else
+                                        div.col-6
                                 div.row
                                     if show2TSalesTab
                                         // 2T loose details

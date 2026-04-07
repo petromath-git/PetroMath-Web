@@ -884,6 +884,11 @@ function populateSummary(obj) {
         } else {
             console.warn('loadShiftProducts function not available');
         }
+
+        // Populate intercompany summary section (only present on SFS with bowsers)
+        if (typeof populateIntercompanySummary === 'function') {
+            populateIntercompanySummary();
+        }
     });
 }
 

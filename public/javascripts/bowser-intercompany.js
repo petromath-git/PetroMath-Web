@@ -116,6 +116,36 @@
         });
     };
 
+    // ── Summary section population ────────────────────────────────
+
+    window.populateIntercompanySummary = function () {
+        const tbody = document.getElementById('summary-intercompany-tbody');
+        const totalEl = document.getElementById('val-intercompany-total');
+        if (!tbody || !totalEl) return;
+
+        const rows = document.querySelectorAll('#intercompany-tbody tr');
+        let totalQty = 0;
+        const summaryRows = [];
+
+        rows.forEach(row => {
+            const bowserSel  = row.querySelector('.ic-bowser');
+            const productEl  = row.querySelector('.ic-product-name');
+            const qtyEl      = row.querySelector('.ic-qty');
+            if (!bowserSel || !qtyEl) return;
+
+            const qty = parseFloat(qtyEl.value) || 0;
+            if (qty <= 0) return;
+
+            const bowserName  = bowserSel.options[bowserSel.selectedIndex]?.text || '—';
+            const productName = productEl ? (productEl.value || '—') : '—';
+            totalQty += qty;
+            summaryRows.push(`<tr><td>${bowserName}</td><td>${productName}</td><td>${qty.toFixed(3)}</td></tr>`);
+        });
+
+        tbody.innerHTML = summaryRows.join('');
+        totalEl.textContent = totalQty.toFixed(3);
+    };
+
     // ── Load existing entries (edit screen) ───────────────────────
 
     window.loadIntercompanyEntries = function (entries) {
