@@ -206,14 +206,40 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
           AND ta.location_code = :locationCode
           AND DATE(ta.adjustment_date) BETWEEN :closingQueryFromDate AND :closingQueryToDate
 
+        UNION ALL
+
+        -- Bowser credit sales
+        SELECT
+            bcl.closing_date                                          AS tran_date,
+            bcl.location_code,
+            CONCAT('Bowser Bill No: ', COALESCE(bc.bill_no, '—'))     AS bill_no,
+            mcl.Company_Name                                          AS company_name,
+            mp.product_name,
+            bc.rate                                                   AS price,
+            NULL                                                      AS price_discount,
+            bc.quantity                                               AS qty,
+            bc.amount,
+            NULL                                                      AS notes,
+            mcl.creditlist_id,
+            NULL                                                      AS odometer_reading,
+            NULL                                                      AS vehicle_number,
+            'BOWSER_SALE'                                             AS transaction_type
+        FROM t_bowser_credits bc
+        JOIN t_bowser_closing  bcl ON bcl.bowser_closing_id = bc.bowser_closing_id
+        JOIN m_credit_list     mcl ON mcl.creditlist_id     = bc.creditlist_id
+        JOIN m_product         mp  ON mp.product_id         = bc.product_id
+        WHERE bcl.location_code = :locationCode
+          AND mcl.creditlist_id = :creditId
+          AND bcl.closing_date BETWEEN :closingQueryFromDate AND :closingQueryToDate
+
         ORDER BY tran_date, bill_no`,
         {
-            replacements: { 
+            replacements: {
                 locationCode: locationCode,
                 creditId: creditId,
                 closingQueryFromDate: closingQueryFromDate,
                 closingQueryToDate: closingQueryToDate
-            }, 
+            },
             type: db.Sequelize.QueryTypes.SELECT
         }
     );
@@ -396,9 +422,46 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
           )
 
 
+        UNION ALL
+
+        -- DEBIT: Bowser digital sales
+        SELECT
+            DATE_FORMAT(bcl.closing_date, '%d-%m-%Y')   AS tran_date,
+            CONCAT('BDS-', bds.digital_id)              AS bill_no,
+            bds.digital_ref                             AS notes,
+            mcl.company_name,
+            'Bowser Digital Sale'                       AS product_name,
+            bds.amount,
+            bcl.closing_date                            AS sort_date,
+            'DEBIT'                                     AS entry_type,
+            't_bowser_digital_sales'                    AS source_table,
+            bds.digital_id                              AS source_id,
+            bds.recon_match_id,
+            bds.manual_recon_flag,
+            bds.manual_recon_by,
+            bds.manual_recon_date
+        FROM t_bowser_digital_sales bds
+        JOIN t_bowser_closing bcl ON bcl.bowser_closing_id = bds.bowser_closing_id
+        JOIN m_credit_list    mcl ON mcl.creditlist_id     = bds.digital_vendor_id
+        WHERE bcl.location_code = :locationCode
+          AND DATE(bcl.closing_date) BETWEEN :fromDate AND :toDate
+          AND (
+              bds.digital_vendor_id = :vendorId
+              OR bds.digital_vendor_id IN (
+                  SELECT creditlist_id
+                  FROM m_credit_list
+                  WHERE recon_group_id = (
+                      SELECT recon_group_id
+                      FROM m_credit_list
+                      WHERE creditlist_id = :vendorId
+                  )
+                  AND recon_group_id IS NOT NULL
+              )
+          )
+
         ORDER BY sort_date, entry_type DESC, bill_no`,
         {
-            replacements: { 
+            replacements: {
                 locationCode,
                 vendorId,
                 fromDate,
@@ -412,8 +475,8 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
 
     getLocationDetails: (location_code) => {
         return db.sequelize.query(
-            `SELECT location_name, address,location_id,location_code
-             FROM m_location 
+            `SELECT location_name, address, location_id, location_code, gst_number, tin_number, company_name
+             FROM m_location
              WHERE location_code = :location_code`,
             {
                 replacements: { location_code: location_code },
