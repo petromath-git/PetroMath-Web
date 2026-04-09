@@ -132,6 +132,7 @@ block content
                             table.table#credit-table
                                 thead.thead-light
                                     tr
+                                        th Bill No
                                         th Customer
                                         th Vehicle
                                         th Qty (L)
@@ -144,12 +145,18 @@ block content
                                         each item in creditItems
                                             tr(
                                                 data-item_id=item.credit_id
+                                                data-bill_no=item.bill_no || ''
                                                 data-qty=item.quantity
                                                 data-rate=item.rate
                                                 data-amount=item.amount
                                                 data-customer= item.customer_name || ''
                                                 data-vehicle= item.vehicle_number || ''
                                             )
+                                                td
+                                                    if isClosed
+                                                        span= item.bill_no || '-'
+                                                    else
+                                                        input.form-control.form-control-sm.cred-bill-no(type='text' value=item.bill_no || '' placeholder='Bill No')
                                                 td
                                                     if isClosed
                                                         span= item.customer_name || '—'
@@ -541,6 +548,7 @@ block content
             const rate        = document.getElementById('bc_rate')?.value || '';
             const tr          = document.createElement('tr');
             tr.innerHTML = `
+                <td><input class="form-control form-control-sm cred-bill-no" type="text" placeholder="Bill No"></td>
                 <td>
                     <select class="form-control form-control-sm cred-customer" onchange="loadCreditVehicles(this)">
                         <option value="">-- Customer --</option>${custOptions}
@@ -644,6 +652,7 @@ block content
                 if (qty <= 0) return;
                 items.push({
                     sale_type:     'CREDIT',
+                    bill_no:       row.querySelector('.cred-bill-no')?.value?.trim() || null,
                     creditlist_id: row.querySelector('.cred-customer')?.value || null,
                     vehicle_id:    row.querySelector('.cred-vehicle')?.value  || null,
                     product_id:    bc_productId,

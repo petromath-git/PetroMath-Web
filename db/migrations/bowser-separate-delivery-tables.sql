@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS t_bowser_credits (
     credit_id         INT           NOT NULL AUTO_INCREMENT,
     bowser_closing_id INT           NOT NULL,
+    bill_no           VARCHAR(50)   NULL,
     creditlist_id     INT           NOT NULL,
     vehicle_id        INT           NULL,
     product_id        INT           NOT NULL,
@@ -55,8 +56,8 @@ CREATE TABLE IF NOT EXISTS t_bowser_cashsales (
 
 -- ── Migrate existing data from t_bowser_delivery_items ────────
 INSERT IGNORE INTO t_bowser_credits
-    (bowser_closing_id, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by, creation_date)
-SELECT bowser_closing_id, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by, creation_date
+    (bowser_closing_id, bill_no, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by, creation_date)
+SELECT bowser_closing_id, NULL, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by, creation_date
 FROM t_bowser_delivery_items
 WHERE sale_type = 'CREDIT';
 
