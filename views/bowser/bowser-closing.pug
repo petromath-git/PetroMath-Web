@@ -366,9 +366,11 @@ block content
                             div.col(align='right')
                                 button.btn.btn-dark(type='button' onclick='finalizeClosing()') Close Bowser &raquo;
                     else
-                        div.row.mt-3
-                            div.col(align='right')
-                                button.btn.btn-outline-warning(type='button' onclick='reopenClosing()') Reopen
+                        - const canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowBowserReopen === 'Y')
+                        if canReopen
+                            div.row.mt-3
+                                div.col(align='right')
+                                    button.btn.btn-outline-warning(type='button' onclick='reopenClosing()') Reopen
 
     script.
         // ── Page data ──────────────────────────────────────────────────────────

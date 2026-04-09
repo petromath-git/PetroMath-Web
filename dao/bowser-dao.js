@@ -205,9 +205,24 @@ module.exports = {
     reopenBowserClosing: (bowserClosingId, updatedBy) => {
         return db.sequelize.query(`
             UPDATE t_bowser_closing
-            SET status = 'DRAFT', updated_by = :updatedBy, updation_date = NOW()
+            SET status = 'DRAFT', ex_shortage = NULL, updated_by = :updatedBy, updation_date = NOW()
             WHERE bowser_closing_id = :bowserClosingId AND status = 'CLOSED'
         `, { replacements: { bowserClosingId, updatedBy }, type: db.Sequelize.QueryTypes.UPDATE });
+    },
+
+    deleteBowserClosing: async (bowserClosingId) => {
+        // Guard: only DRAFT may be deleted
+        const [closing] = await db.sequelize.query(
+            `SELECT status FROM t_bowser_closing WHERE bowser_closing_id = :bowserClosingId`,
+            { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!closing) throw Object.assign(new Error('Bowser closing not found.'), { statusCode: 404 });
+        if (closing.status !== 'DRAFT') throw Object.assign(new Error('Only DRAFT closings can be deleted.'), { statusCode: 400 });
+
+        await db.sequelize.query(`DELETE FROM t_bowser_credits       WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
+        await db.sequelize.query(`DELETE FROM t_bowser_digital_sales  WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
+        await db.sequelize.query(`DELETE FROM t_bowser_cashsales      WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
+        await db.sequelize.query(`DELETE FROM t_bowser_closing        WHERE bowser_closing_id = :bowserClosingId AND status = 'DRAFT'`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
     },
 
     // ── Delivery Items ────────────────────────────────────────
