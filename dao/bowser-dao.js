@@ -130,11 +130,7 @@ module.exports = {
                    (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter)) AS closing_stock,
                    b.bowser_name, b.capacity_litres,
                    COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_credits       WHERE bowser_closing_id = bc.bowser_closing_id), 0) +
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_digital_sales WHERE bowser_closing_id = bc.bowser_closing_id), 0) +
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_cashsales     WHERE bowser_closing_id = bc.bowser_closing_id), 0)
+                       (SELECT SUM(quantity) FROM t_bowser_credits WHERE bowser_closing_id = bc.bowser_closing_id), 0)
                    AS total_delivered
             FROM t_bowser_closing bc
             JOIN m_bowser b ON b.bowser_id = bc.bowser_id
