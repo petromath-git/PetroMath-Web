@@ -212,7 +212,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         SELECT
             bcl.closing_date                                          AS tran_date,
             bcl.location_code,
-            CONCAT('Bowser Bill No: ', COALESCE(bc.bill_no, '—'))     AS bill_no,
+            CONCAT('Bowser Bill No: ', COALESCE(bc.bill_no, '-'))      AS bill_no,
             mcl.Company_Name                                          AS company_name,
             mp.product_name,
             bc.rate                                                   AS price,

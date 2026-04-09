@@ -214,7 +214,7 @@ module.exports = {
 
     getCreditItems: (bowserClosingId) => {
         return db.sequelize.query(`
-            SELECT bc.credit_id, bc.creditlist_id, bc.vehicle_id, bc.product_id,
+            SELECT bc.credit_id, bc.bill_no, bc.creditlist_id, bc.vehicle_id, bc.product_id,
                    bc.quantity, bc.rate, bc.amount,
                    cl.Company_Name AS customer_name,
                    cv.vehicle_number
@@ -254,11 +254,12 @@ module.exports = {
         for (const item of items) {
             await db.sequelize.query(`
                 INSERT INTO t_bowser_credits
-                    (bowser_closing_id, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by)
-                VALUES (:bowserClosingId, :creditlistId, :vehicleId, :productId, :quantity, :rate, :amount, :createdBy)
+                    (bowser_closing_id, bill_no, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by)
+                VALUES (:bowserClosingId, :billNo, :creditlistId, :vehicleId, :productId, :quantity, :rate, :amount, :createdBy)
             `, {
                 replacements: {
                     bowserClosingId,
+                    billNo:       item.bill_no || null,
                     creditlistId: item.creditlist_id || null,
                     vehicleId:    item.vehicle_id    || null,
                     productId:    item.product_id,
