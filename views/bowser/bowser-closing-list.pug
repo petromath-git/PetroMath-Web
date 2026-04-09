@@ -28,25 +28,24 @@ block content
                             th Bowser
                             th Open Meter
                             th Close Meter
-                            th Meter Diff (L)
-                            th Fills Rec. (L)
-                            th Delivered (L)
-                            th Close Stock (L)
+                            th Bowser Sales (L)
+                            th Rate (₹/L)
+                            th Ex / Shortage (₹)
                             th Status
                             th
                     tbody
                         each c in closings
                             - const meterDiff = (parseFloat(c.closing_meter) - parseFloat(c.opening_meter)).toFixed(3)
-                            - const closeStock = (parseFloat(c.opening_stock) + parseFloat(c.fills_received) - parseFloat(meterDiff)).toFixed(3)
+                            - const exShortage = c.ex_shortage != null ? parseFloat(c.ex_shortage).toFixed(2) : '—'
+                            - const exClass = c.ex_shortage != null ? (parseFloat(c.ex_shortage) >= 0 ? 'text-danger' : 'text-success') : ''
                             tr
                                 td= new Date(c.closing_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
                                 td= c.bowser_name
                                 td= parseFloat(c.opening_meter).toFixed(3)
                                 td= parseFloat(c.closing_meter).toFixed(3)
                                 td= meterDiff
-                                td= parseFloat(c.fills_received).toFixed(3)
-                                td= parseFloat(c.total_delivered).toFixed(3)
-                                td= closeStock
+                                td= c.rate ? parseFloat(c.rate).toFixed(4) : '—'
+                                td(class=exClass)= exShortage
                                 td
                                     if c.status === 'CLOSED'
                                         span.badge.badge-success Closed

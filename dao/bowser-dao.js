@@ -126,12 +126,8 @@ module.exports = {
             SELECT bc.bowser_closing_id, bc.closing_date, bc.status,
                    bc.opening_meter, bc.closing_meter,
                    (bc.closing_meter - bc.opening_meter) AS meter_diff,
-                   bc.fills_received, bc.opening_stock,
-                   (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter)) AS closing_stock,
-                   b.bowser_name, b.capacity_litres,
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_credits WHERE bowser_closing_id = bc.bowser_closing_id), 0)
-                   AS total_delivered
+                   bc.rate, bc.ex_shortage,
+                   b.bowser_name, b.capacity_litres
             FROM t_bowser_closing bc
             JOIN m_bowser b ON b.bowser_id = bc.bowser_id
             WHERE bc.location_code = :locationCode
@@ -193,7 +189,15 @@ module.exports = {
     finalizeBowserClosing: (bowserClosingId, updatedBy) => {
         return db.sequelize.query(`
             UPDATE t_bowser_closing
-            SET status = 'CLOSED', updated_by = :updatedBy, updation_date = NOW()
+            SET status     = 'CLOSED',
+                ex_shortage = (
+                    COALESCE((SELECT SUM(amount) FROM t_bowser_credits       WHERE bowser_closing_id = :bowserClosingId), 0) +
+                    COALESCE((SELECT SUM(amount) FROM t_bowser_digital_sales  WHERE bowser_closing_id = :bowserClosingId), 0) +
+                    COALESCE((SELECT SUM(amount) FROM t_bowser_cashsales      WHERE bowser_closing_id = :bowserClosingId), 0) -
+                    (closing_meter - opening_meter) * rate
+                ),
+                updated_by  = :updatedBy,
+                updation_date = NOW()
             WHERE bowser_closing_id = :bowserClosingId AND status = 'DRAFT'
         `, { replacements: { bowserClosingId, updatedBy }, type: db.Sequelize.QueryTypes.UPDATE });
     },
@@ -342,7 +346,7 @@ module.exports = {
                 credit_amount:   credit,
                 digital_amount:  digital,
                 cash_amount:     cash,
-                ex_shortage:     reading - credit - digital - cash
+                ex_shortage:     credit + digital + cash - reading
             };
         });
     },
