@@ -129,17 +129,13 @@ module.exports = {
                    bc.fills_received, bc.opening_stock,
                    (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter)) AS closing_stock,
                    b.bowser_name, b.capacity_litres,
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_credits       WHERE bowser_closing_id = bc.bowser_closing_id), 0) +
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_digital_sales WHERE bowser_closing_id = bc.bowser_closing_id), 0) +
-                   COALESCE(
-                       (SELECT SUM(quantity) FROM t_bowser_cashsales     WHERE bowser_closing_id = bc.bowser_closing_id), 0)
-                   AS total_delivered
+                   COALESCE(SUM(di.quantity), 0) AS total_delivered
             FROM t_bowser_closing bc
             JOIN m_bowser b ON b.bowser_id = bc.bowser_id
+            LEFT JOIN t_bowser_delivery_items di ON di.bowser_closing_id = bc.bowser_closing_id
             WHERE bc.location_code = :locationCode
               AND bc.closing_date BETWEEN :fromDate AND :toDate
+            GROUP BY bc.bowser_closing_id
             ORDER BY bc.closing_date DESC, b.bowser_name
         `, { replacements: { locationCode, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT });
     },
@@ -213,48 +209,48 @@ module.exports = {
 
     getCreditItems: (bowserClosingId) => {
         return db.sequelize.query(`
-            SELECT bc.credit_id, bc.creditlist_id, bc.vehicle_id, bc.product_id,
-                   bc.quantity, bc.rate, bc.amount,
+            SELECT di.item_id AS credit_id, di.creditlist_id, di.vehicle_id, di.product_id,
+                   di.quantity, di.rate, di.amount,
                    cl.Company_Name AS customer_name,
                    cv.vehicle_number
-            FROM t_bowser_credits bc
-            LEFT JOIN m_credit_list         cl ON cl.creditlist_id = bc.creditlist_id
-            LEFT JOIN m_creditlist_vehicles cv ON cv.vehicle_id    = bc.vehicle_id
-            WHERE bc.bowser_closing_id = :bowserClosingId
-            ORDER BY bc.credit_id
+            FROM t_bowser_delivery_items di
+            LEFT JOIN m_credit_list         cl ON cl.creditlist_id = di.creditlist_id
+            LEFT JOIN m_creditlist_vehicles cv ON cv.vehicle_id    = di.vehicle_id
+            WHERE di.bowser_closing_id = :bowserClosingId AND di.sale_type = 'CREDIT'
+            ORDER BY di.item_id
         `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT });
     },
 
     getDigitalItems: (bowserClosingId) => {
         return db.sequelize.query(`
-            SELECT bd.digital_id, bd.digital_vendor_id, bd.amount, bd.digital_ref,
+            SELECT di.item_id AS digital_id, di.digital_vendor_id, di.amount, di.digital_ref,
                    dv.Company_Name AS digital_vendor_name
-            FROM t_bowser_digital_sales bd
-            LEFT JOIN m_credit_list dv ON dv.creditlist_id = bd.digital_vendor_id
-            WHERE bd.bowser_closing_id = :bowserClosingId
-            ORDER BY bd.digital_id
+            FROM t_bowser_delivery_items di
+            LEFT JOIN m_credit_list dv ON dv.creditlist_id = di.digital_vendor_id
+            WHERE di.bowser_closing_id = :bowserClosingId AND di.sale_type = 'DIGITAL'
+            ORDER BY di.item_id
         `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT });
     },
 
     getCashItems: (bowserClosingId) => {
         return db.sequelize.query(`
-            SELECT cashsale_id, product_id, amount
-            FROM t_bowser_cashsales
-            WHERE bowser_closing_id = :bowserClosingId
-            ORDER BY cashsale_id
+            SELECT item_id AS cashsale_id, product_id, amount
+            FROM t_bowser_delivery_items
+            WHERE bowser_closing_id = :bowserClosingId AND sale_type = 'CASH'
+            ORDER BY item_id
         `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT });
     },
 
     saveCreditItems: async (bowserClosingId, items, createdBy) => {
         await db.sequelize.query(
-            `DELETE FROM t_bowser_credits WHERE bowser_closing_id = :bowserClosingId`,
+            `DELETE FROM t_bowser_delivery_items WHERE bowser_closing_id = :bowserClosingId AND sale_type = 'CREDIT'`,
             { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE }
         );
         for (const item of items) {
             await db.sequelize.query(`
-                INSERT INTO t_bowser_credits
-                    (bowser_closing_id, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by)
-                VALUES (:bowserClosingId, :creditlistId, :vehicleId, :productId, :quantity, :rate, :amount, :createdBy)
+                INSERT INTO t_bowser_delivery_items
+                    (bowser_closing_id, sale_type, creditlist_id, vehicle_id, product_id, quantity, rate, amount, created_by)
+                VALUES (:bowserClosingId, 'CREDIT', :creditlistId, :vehicleId, :productId, :quantity, :rate, :amount, :createdBy)
             `, {
                 replacements: {
                     bowserClosingId,
@@ -274,18 +270,19 @@ module.exports = {
 
     saveDigitalItems: async (bowserClosingId, items, createdBy) => {
         await db.sequelize.query(
-            `DELETE FROM t_bowser_digital_sales WHERE bowser_closing_id = :bowserClosingId`,
+            `DELETE FROM t_bowser_delivery_items WHERE bowser_closing_id = :bowserClosingId AND sale_type = 'DIGITAL'`,
             { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE }
         );
         for (const item of items) {
             await db.sequelize.query(`
-                INSERT INTO t_bowser_digital_sales
-                    (bowser_closing_id, digital_vendor_id, amount, digital_ref, created_by)
-                VALUES (:bowserClosingId, :digitalVendorId, :amount, :digitalRef, :createdBy)
+                INSERT INTO t_bowser_delivery_items
+                    (bowser_closing_id, sale_type, digital_vendor_id, product_id, quantity, rate, amount, digital_ref, created_by)
+                VALUES (:bowserClosingId, 'DIGITAL', :digitalVendorId, :productId, 0, 0, :amount, :digitalRef, :createdBy)
             `, {
                 replacements: {
                     bowserClosingId,
                     digitalVendorId: item.digital_vendor_id || null,
+                    productId:       item.product_id || 0,
                     amount:          item.amount,
                     digitalRef:      item.digital_ref || null,
                     createdBy
@@ -298,18 +295,18 @@ module.exports = {
 
     saveCashItems: async (bowserClosingId, items, createdBy) => {
         await db.sequelize.query(
-            `DELETE FROM t_bowser_cashsales WHERE bowser_closing_id = :bowserClosingId`,
+            `DELETE FROM t_bowser_delivery_items WHERE bowser_closing_id = :bowserClosingId AND sale_type = 'CASH'`,
             { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE }
         );
         for (const item of items) {
             await db.sequelize.query(`
-                INSERT INTO t_bowser_cashsales
-                    (bowser_closing_id, product_id, amount, created_by)
-                VALUES (:bowserClosingId, :productId, :amount, :createdBy)
+                INSERT INTO t_bowser_delivery_items
+                    (bowser_closing_id, sale_type, product_id, quantity, rate, amount, created_by)
+                VALUES (:bowserClosingId, 'CASH', :productId, 0, 0, :amount, :createdBy)
             `, {
                 replacements: {
                     bowserClosingId,
-                    productId: item.product_id,
+                    productId: item.product_id || 0,
                     amount:    item.amount,
                     createdBy
                 },
