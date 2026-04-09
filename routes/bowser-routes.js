@@ -74,6 +74,10 @@ router.post('/closing/:id/reopen',
     [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],
     bowserController.reopenClosing);
 
+router.delete('/closing/:id',
+    [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],
+    bowserController.deleteClosing);
+
 router.post('/closing/items',
     [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],
     bowserController.saveDeliveryItems);
