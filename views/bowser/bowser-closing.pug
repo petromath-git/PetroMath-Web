@@ -311,7 +311,7 @@ block content
                 div.container-fluid.mt-3
 
                     div.row
-                        div.col-md-4
+                        div.col-md-5
                             h6.sub-header Readings
                             table.table.table-sm.table-borderless
                                 tbody
@@ -325,24 +325,16 @@ block content
                                         th Meter Diff (L)
                                         td#sum_meter_diff —
                                     tr
-                                        th Fills Received (L)
-                                        td#sum_fills —
-                                    tr
-                                        th Opening Stock (L)
-                                        td#sum_opening_stock —
-                                    tr
-                                        th Closing Stock (L)
-                                        td#sum_closing_stock —
+                                        th Credit Qty (L)
+                                        td#sum_credit_qty —
 
-                        div.col-md-8
-                            h6.sub-header Deliveries by Type
-                            table.table.table-sm
-                                thead.thead-light
-                                    tr
-                                        th Type
-                                        th Qty (L)
-                                        th Amount (₹)
-                                tbody#sum_type_rows
+                    div.row.mt-2
+                        div.col
+                            div.table-success.row.py-2(align='center')
+                                div.col
+                                    span Excess / Shortage:&nbsp;
+                                    span#sum_ex_shortage_color
+                                        b#sum_ex_shortage —
 
                     div.row.mt-3
                         div.col-md-12
@@ -470,6 +462,7 @@ block content
                 body:    JSON.stringify({
                     bowser_id:      bowserId,
                     closing_date:   date,
+                    rate:           parseFloat(document.getElementById('bc_rate')?.value) || 0,
                     opening_meter:  0,
                     closing_meter:  0,
                     fills_received: 0,
@@ -521,6 +514,7 @@ block content
                     bowser_closing_id: hiddenId,
                     opening_meter:     document.getElementById('bc_opening_meter').value,
                     closing_meter:     document.getElementById('bc_closing_meter').value,
+                    rate:              parseFloat(document.getElementById('bc_rate')?.value) || 0,
                     fills_received:    document.getElementById('bc_fills_received').value,
                     opening_stock:     document.getElementById('bc_opening_stock').value
                 })
@@ -709,14 +703,8 @@ block content
                     ? (bowserEl.options[bowserEl.selectedIndex]?.text || '—')
                     : (bowserEl?.value || '—');
 
-            const diff    = parseFloat(document.getElementById('bc_meter_diff').value)    || 0;
-            const fills   = parseFloat(document.getElementById('bc_fills_received').value) || 0;
-            const opening = parseFloat(document.getElementById('bc_opening_stock').value)  || 0;
-            const stock   = parseFloat(document.getElementById('bc_closing_stock').value)  || 0;
-            document.getElementById('sum_meter_diff').innerText    = diff.toFixed(3)    + ' L';
-            document.getElementById('sum_fills').innerText         = fills.toFixed(3)   + ' L';
-            document.getElementById('sum_opening_stock').innerText = opening.toFixed(3) + ' L';
-            document.getElementById('sum_closing_stock').innerText = stock.toFixed(3)   + ' L';
+            const diff = parseFloat(document.getElementById('bc_meter_diff').value) || 0;
+            document.getElementById('sum_meter_diff').innerText = diff.toFixed(3) + ' L';
 
             function readAmt(row, inputClass, dataKey) {
                 const input = row.querySelector(`.${inputClass}`);
@@ -756,11 +744,23 @@ block content
                 lineRows.push(`<tr><td>CASH</td><td>—</td><td>—</td><td>—</td><td>${amt.toFixed(2)}</td><td>—</td></tr>`);
             });
 
-            document.getElementById('sum_type_rows').innerHTML = [
-                `<tr><td><strong>CREDIT</strong></td><td>${totals.CREDIT.qty.toFixed(3)}</td><td>${totals.CREDIT.amt.toFixed(2)}</td></tr>`,
-                `<tr><td><strong>DIGITAL</strong></td><td>—</td><td>${totals.DIGITAL.amt.toFixed(2)}</td></tr>`,
-                `<tr><td><strong>CASH</strong></td><td>—</td><td>${totals.CASH.amt.toFixed(2)}</td></tr>`
-            ].join('');
+            const credQty = totals.CREDIT.qty;
+            document.getElementById('sum_credit_qty').innerText = credQty.toFixed(3) + ' L';
+
+            // Fetch ex/shortage from server (amount-based: reading_amount - credit - digital - cash)
+            const closingId = document.getElementById('bowser_closing_id_hidden').value;
+            if (closingId) {
+                fetch(`/bowser/api/ex-shortage/${closingId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) return;
+                        const exEl      = document.getElementById('sum_ex_shortage');
+                        const exColorEl = document.getElementById('sum_ex_shortage_color');
+                        const val       = Number(data.ex_shortage) || 0;
+                        exEl.innerText        = (val >= 0 ? '+' : '') + val.toFixed(2);
+                        exColorEl.style.color = val >= 0 ? 'green' : 'red';
+                    });
+            }
 
             document.getElementById('sum_lines_tbody').innerHTML =
                 lineRows.join('') || '<tr><td colspan="6" class="text-muted text-center">No deliveries</td></tr>';

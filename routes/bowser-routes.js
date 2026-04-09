@@ -37,6 +37,10 @@ router.get('/api/fills-received',
     [ensureLoggedIn],
     bowserController.getFillsSuggestion);
 
+router.get('/api/ex-shortage/:id',
+    [ensureLoggedIn],
+    bowserController.getExShortage);
+
 router.get('/api/vehicles/:creditlistId',
     [ensureLoggedIn],
     bowserController.getVehiclesByCustomer);
