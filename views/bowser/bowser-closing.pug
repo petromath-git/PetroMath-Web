@@ -1,317 +1,442 @@
 extends ../layout
 
 block content
-    - const isNew    = !closing
-    - const isClosed = closing && closing.status === 'CLOSED'
+    - const isNew         = !closing
+    - const isClosed      = closing && closing.status === 'CLOSED'
+    - const allItems      = [...creditItems, ...digitalItems, ...cashItems]
+    - const defaultRate   = allItems.length > 0 ? allItems[0].rate : ''
 
     div
         input(type='hidden' id='bowser_closing_id_hidden' value= closing ? closing.bowser_closing_id : '')
 
-        //- ── Tab navigation ──────────────────────────────────────────────────
+        //- ── Tab navigation ─────────────────────────────────────────────────
         ul.nav.nav-tabs
-            li.nav-item
-                a.nav-link.active#readings_tab(data-toggle='tab' href='#tab-readings') Readings
-            li.nav-item
-                a.nav-link#deliveries_tab(data-toggle='tab' href='#tab-deliveries') Deliveries
-            li.nav-item
-                a.nav-link#summary_tab(data-toggle='tab' href='#tab-summary' onclick='refreshSummary()') Summary
+            li.nav-item.col-md
+                a.nav-link.active#closing_tab(href='#tab-closing' onclick='event.preventDefault(); bowserNav("closing_tab")') Closing
+            li.nav-item.col-md
+                a.nav-link#readings_tab(href='#tab-readings' onclick='event.preventDefault(); bowserNav("readings_tab")') Readings
+            li.nav-item.col-md
+                a.nav-link#credit_tab(href='#tab-credit' onclick='event.preventDefault(); bowserNav("credit_tab")') Credit
+            li.nav-item.col-md
+                a.nav-link#digital_tab(href='#tab-digital' onclick='event.preventDefault(); bowserNav("digital_tab")') Digital
+            li.nav-item.col-md
+                a.nav-link#cash_tab(href='#tab-cash' onclick='event.preventDefault(); bowserNav("cash_tab")') Cash
+            li.nav-item.col-md
+                a.nav-link#summary_tab(href='#tab-summary' onclick='event.preventDefault(); bowserNav("summary_tab")') Summary
 
         div.tab-content
 
-            //- ── TAB 1: READINGS ─────────────────────────────────────────────
-            div.tab-pane.fade.show.active#tab-readings
-                div
-                    div.container-fluid
+            //- ── TAB 1: CLOSING ──────────────────────────────────────────────
+            div.tab-pane.fade.show.active#tab-closing
+                div.container-fluid
+                    div.row.mt-3.mb-3.align-items-center
+                        div.col
+                            h5= title
+                            if closing
+                                |
+                                span.badge.badge-pill(class= isClosed ? 'badge-success' : 'badge-warning')= closing.status
+                        div.col-auto
+                            a.btn.btn-outline-secondary.btn-sm(href='/bowser/closing') &laquo; Back
+
+                    div.row
+                        div.col
+                            div.form-group
+                                label Date
+                                input#bc_date.form-control(
+                                    type='date'
+                                    value= closing ? closing.closing_date : currentDate
+                                    max=currentDate
+                                    onchange='suggestFills()'
+                                    disabled= (!isNew || isClosed) ? true : false
+                                )
+                        div.col
+                            div.form-group
+                                label Bowser
+                                if isNew
+                                    select#bc_bowser_id.form-control(onchange='onBowserChange()')
+                                        option(value='') -- Select --
+                                        each b in bowsers
+                                            option(value=b.bowser_id data-product_id=b.product_id data-product_name=b.product_name)= b.bowser_name
+                                else
+                                    input.form-control(type='text' value=closing.bowser_name disabled)
+                                    input(type='hidden' id='bc_bowser_id' value=closing.bowser_id)
+                        div.col
+                            div.form-group
+                                label Rate (₹/L)
+                                input#bc_rate.form-control(
+                                    type='number' min='0' step='0.0001'
+                                    placeholder='Enter rate'
+                                    value= defaultRate
+                                    disabled= isClosed ? true : false
+                                )
+
+                    if !isClosed
                         div.row.mt-3
-                            div.col-md-4
+                            div.col(align='right')
+                                button.btn.btn-primary(type='button' onclick='bowserNav("readings_tab")') Next &raquo;
 
-                                //- Header info row
-                                div.row.mb-3.align-items-center
-                                    div.col
-                                        h5= title
-                                        if closing
-                                            span.badge.badge-pill(class= isClosed ? 'badge-success' : 'badge-warning')= closing.status
-                                    div.col-auto
-                                        a.btn.btn-outline-secondary.btn-sm(href='/bowser/closing') &laquo; Back
-
-                                div.form-group
-                                    label Date
-                                    input#bc_date.form-control(
-                                        type='date'
-                                        value= closing ? closing.closing_date : currentDate
-                                        max=currentDate
-                                        onchange='suggestFills()'
-                                        disabled= (!isNew || isClosed) ? true : false
-                                    )
-                                div.form-group
-                                    label Bowser
-                                    if isNew
-                                        select#bc_bowser_id.form-control(onchange='suggestFills()')
-                                            option(value='') -- Select --
-                                            each b in bowsers
-                                                option(value=b.bowser_id data-product_id=b.product_id data-product_name=b.product_name)= b.bowser_name
-                                    else
-                                        input.form-control(type='text' value=closing.bowser_name disabled)
-                                        input(type='hidden' id='bc_bowser_id' value=closing.bowser_id)
-
-                                h6.sub-header Meter Readings
-
-                                div.form-group
-                                    label Opening Meter (L)
-                                    input#bc_opening_meter.form-control(
-                                        type='number' min='0' step='0.001'
-                                        value= closing ? closing.opening_meter : ''
-                                        disabled= isClosed ? true : false
-                                    )
-                                div.form-group
-                                    label Closing Meter (L)
-                                    input#bc_closing_meter.form-control(
-                                        type='number' min='0' step='0.001'
-                                        value= closing ? closing.closing_meter : ''
-                                        oninput='computeMeterDiff()'
-                                        disabled= isClosed ? true : false
-                                    )
-                                div.form-group
-                                    label Meter Difference (L)
-                                    input#bc_meter_diff.form-control(type='text' readonly)
-
-                                h6.sub-header Stock
-
-                                div.form-group
-                                    label
-                                        | Fills Received (L)
-                                        small.text-muted.ml-2#fills_suggestion
-                                    input#bc_fills_received.form-control(
-                                        type='number' min='0' step='0.001'
-                                        value= closing ? closing.fills_received : '0'
-                                        oninput='computeClosingStock()'
-                                        disabled= isClosed ? true : false
-                                    )
-                                div.form-group
-                                    label Opening Stock (L)
-                                    input#bc_opening_stock.form-control(
-                                        type='number' min='0' step='0.001'
-                                        value= closing ? closing.opening_stock : '0'
-                                        oninput='computeClosingStock()'
-                                        disabled= isClosed ? true : false
-                                    )
-                                div.form-group
-                                    label Closing Stock (L)
-                                    input#bc_closing_stock.form-control(type='text' readonly)
-
-                if !isClosed
+            //- ── TAB 2: READINGS ─────────────────────────────────────────────
+            div.tab-pane.fade#tab-readings
+                div.container-fluid
                     div.row.mt-3
-                        div.col(align='right')
-                            button.btn.btn-primary(type='button' onclick='saveReadingsAndNext()') Save &amp; Next &raquo;
-
-            //- ── TAB 2: DELIVERIES ───────────────────────────────────────────
-            div.tab-pane.fade#tab-deliveries
-                div
-                    div.container-fluid.mt-3
-
-                        //- Reconciliation header
-                        div.row.mb-2.align-items-center
-                            div.col
-                                span.text-muted Meter Diff:&nbsp;
-                                strong#del_meter_diff_display —
-                                span.text-muted.ml-3 Total Accounted:&nbsp;
-                                strong#del_total_accounted 0.000
-                                span.ml-3(id='del_reconcile_msg')
-
-                        div.row
-                            div.col-16
-                                div.table-responsive
-                                    table.table.table-sm#deliveries-table
-                                        thead.thead-light
-                                            tr
-                                                th Type
-                                                th Customer / Vendor
-                                                th Vehicle
-                                                th(scope="col") Qty (L)
-                                                th Rate
-                                                th Amount
-                                                th Ref #
-                                                if !isClosed
-                                                    th
-
-                                        tbody#deliveries-tbody.w-100
-                                            if deliveryItems && deliveryItems.length > 0
-                                                each item in deliveryItems
-                                                    tr(data-item_id=item.item_id)
-                                                        td
-                                                            if isClosed
-                                                                span= item.sale_type
-                                                            else
-                                                                select.form-control.form-control-sm.del-type(onchange='onTypeChange(this)')
-                                                                    option(value='CREDIT'  selected= item.sale_type==='CREDIT')  CREDIT
-                                                                    option(value='DIGITAL' selected= item.sale_type==='DIGITAL') DIGITAL
-                                                                    option(value='CASH'    selected= item.sale_type==='CASH')    CASH
-                                                        td
-                                                            if isClosed
-                                                                span= item.sale_type === 'CREDIT' ? (item.customer_name || '—') : (item.digital_vendor_name || '—')
-                                                            else
-                                                                select.form-control.form-control-sm.del-customer(
-                                                                    style= item.sale_type !== 'CREDIT' ? 'display:none' : ''
-                                                                    onchange='loadVehicles(this)'
-                                                                )
-                                                                    option(value='') -- Customer --
-                                                                    each c in customers
-                                                                        option(value=c.creditlist_id selected= c.creditlist_id===item.creditlist_id)= c.customer_name
-                                                                select.form-control.form-control-sm.del-digital-vendor(
-                                                                    style= item.sale_type !== 'DIGITAL' ? 'display:none' : ''
-                                                                )
-                                                                    option(value='') -- Vendor --
-                                                                    each dv in digitalVendors
-                                                                        option(value=dv.creditlist_id selected= dv.creditlist_id===item.digital_vendor_id)= dv.vendor_name
-                                                        td
-                                                            if isClosed
-                                                                span= item.vehicle_number || '—'
-                                                            else
-                                                                select.form-control.form-control-sm.del-vehicle(
-                                                                    style= item.sale_type !== 'CREDIT' ? 'display:none' : ''
-                                                                )
-                                                                    option(value='') -- Vehicle --
-                                                                    if item.vehicle_id
-                                                                        option(value=item.vehicle_id selected)= item.vehicle_number
-                                                        td
-                                                            if isClosed
-                                                                span= item.quantity
-                                                            else
-                                                                input.form-control.form-control-sm.del-qty(
-                                                                    type='number' min='0' step='0.001'
-                                                                    value=item.quantity
-                                                                    oninput='computeRow(this); updateTotals()'
-                                                                )
-                                                        td
-                                                            if isClosed
-                                                                span= item.rate
-                                                            else
-                                                                input.form-control.form-control-sm.del-rate(
-                                                                    type='number' min='0' step='0.0001'
-                                                                    value=item.rate
-                                                                    oninput='computeRow(this)'
-                                                                )
-                                                        td
-                                                            if isClosed
-                                                                span= item.amount
-                                                            else
-                                                                input.form-control.form-control-sm.del-amount(type='text' readonly value=item.amount)
-                                                        td
-                                                            if isClosed
-                                                                span= item.digital_ref || '—'
-                                                            else
-                                                                input.form-control.form-control-sm.del-ref(
-                                                                    type='text' placeholder='UPI/ref'
-                                                                    style= item.sale_type !== 'DIGITAL' ? 'display:none' : ''
-                                                                    value= item.digital_ref || ''
-                                                                )
-                                                        if !isClosed
-                                                            td
-                                                                button.btn.btn-sm.btn-outline-danger(type='button' onclick='removeRow(this)') &times;
-
-                        if !isClosed
-                            div.row.mt-2
-                                div.col
-                                    button.btn.btn-info.btn-sm(type='button' onclick='addDeliveryRow()') + Add Row
-                                div.col(align='right')
-                                    button.btn.btn-primary(type='button' onclick='saveDeliveriesAndNext()') Save &amp; Next &raquo;
-
-            //- ── TAB 3: SUMMARY ──────────────────────────────────────────────
-            div.tab-pane.fade#tab-summary
-                div
-                    div.container-fluid.mt-3
-
-                        div.row
-                            //- Readings summary
-                            div.col-md-4
-                                h6.sub-header Readings
-                                table.table.table-sm.table-borderless
+                        div.col-md-6
+                            div.table-responsive
+                                table.table.table-sm(style='background: linear-gradient(to bottom, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.1) 50%, rgba(0,0,0,0.15) 100%), rgb(180,210,255); border-radius: 12px; overflow: hidden; box-shadow: 0 6px 12px rgba(0,0,0,0.25), inset 0 2px 4px rgba(255,255,255,0.8), inset 0 -2px 4px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.3);')
+                                    thead
+                                        tr
+                                            th(colspan='2') Meter Readings
                                     tbody
                                         tr
-                                            th(width='55%') Date
-                                            td#sum_date —
+                                            td Closing Meter (L)
+                                            td
+                                                input#bc_closing_meter.form-control(
+                                                    type='number' min='0' step='0.001'
+                                                    value= closing ? closing.closing_meter : ''
+                                                    oninput='computeMeterDiff()'
+                                                    disabled= isClosed ? true : false
+                                                )
                                         tr
-                                            th Bowser
-                                            td#sum_bowser —
+                                            td Opening Meter (L)
+                                            td
+                                                input#bc_opening_meter.form-control(
+                                                    type='number' min='0' step='0.001'
+                                                    value= closing ? closing.opening_meter : ''
+                                                    oninput='computeMeterDiff()'
+                                                    disabled= isClosed ? true : false
+                                                )
                                         tr
-                                            th Meter Diff (L)
-                                            td#sum_meter_diff —
-                                        tr
-                                            th Fills Received (L)
-                                            td#sum_fills —
-                                        tr
-                                            th Opening Stock (L)
-                                            td#sum_opening_stock —
-                                        tr
-                                            th Closing Stock (L)
-                                            td#sum_closing_stock —
+                                            td Meter Difference (L)
+                                            td
+                                                input#bc_meter_diff.form-control(type='text' readonly tabindex='-1')
 
-                            //- Deliveries summary by type
-                            div.col-md-8
-                                h6.sub-header Deliveries
-                                table.table.table-sm
+                    //- Hidden stock inputs — values preserved for save/summary but not shown
+                    input#bc_fills_received(type='hidden' value= closing ? closing.fills_received : '0')
+                    input#bc_opening_stock(type='hidden' value= closing ? closing.opening_stock : '0')
+                    input#bc_closing_stock(type='hidden' value='0')
+
+                    if !isClosed
+                        div.row.mt-3
+                            div.col(align='right')
+                                button.btn.btn-primary(type='button' onclick='bowserNav("credit_tab")') Next &raquo;
+
+            //- ── TAB 3: CREDIT ───────────────────────────────────────────────
+            div.tab-pane.fade#tab-credit
+                div.mt-2.mb-1.px-3
+                    span.text-muted Meter Diff:&nbsp;
+                    strong#cred_meter_diff_display —
+                    span.text-muted.ml-3 Total Accounted (all):&nbsp;
+                    strong#cred_total_display 0.000
+                div
+                    div.col-16
+                        div.table-responsive
+                            table.table#credit-table
+                                thead.thead-light
+                                    tr
+                                        th Customer
+                                        th Vehicle
+                                        th Qty (L)
+                                        th Rate (₹)
+                                        th Amount (₹)
+                                        if !isClosed
+                                            th
+                                tbody#credit-tbody
+                                    if creditItems.length > 0
+                                        each item in creditItems
+                                            tr(
+                                                data-item_id=item.credit_id
+                                                data-qty=item.quantity
+                                                data-rate=item.rate
+                                                data-amount=item.amount
+                                                data-customer= item.customer_name || ''
+                                                data-vehicle= item.vehicle_number || ''
+                                            )
+                                                td
+                                                    if isClosed
+                                                        span= item.customer_name || '—'
+                                                    else
+                                                        select.form-control.form-control-sm.cred-customer(onchange='loadCreditVehicles(this)')
+                                                            option(value='') -- Customer --
+                                                            each c in customers
+                                                                option(value=c.creditlist_id selected= c.creditlist_id===item.creditlist_id)= c.customer_name
+                                                td
+                                                    if isClosed
+                                                        span= item.vehicle_number || '—'
+                                                    else
+                                                        select.form-control.form-control-sm.cred-vehicle
+                                                            option(value='') -- Vehicle --
+                                                            if item.vehicle_id
+                                                                option(value=item.vehicle_id selected)= item.vehicle_number
+                                                td
+                                                    if isClosed
+                                                        span= item.quantity
+                                                    else
+                                                        input.form-control.form-control-sm.cred-qty(
+                                                            type='number' min='0' step='0.001'
+                                                            value=item.quantity
+                                                            oninput='computeDeliveryRow(this,"cred"); updateAllTotals()'
+                                                        )
+                                                td
+                                                    if isClosed
+                                                        span= item.rate
+                                                    else
+                                                        input.form-control.form-control-sm.cred-rate(
+                                                            type='number' min='0' step='0.0001'
+                                                            value=item.rate
+                                                            oninput='computeDeliveryRow(this,"cred")'
+                                                        )
+                                                td
+                                                    if isClosed
+                                                        span= item.amount
+                                                    else
+                                                        input.form-control.form-control-sm.cred-amount(type='text' readonly value=item.amount)
+                                                if !isClosed
+                                                    td
+                                                        button.btn.btn-sm.btn-outline-danger(type='button' onclick='removeDeliveryRow(this)') &times;
+
+                if !isClosed
+                    div.row.mt-2.px-3
+                        div.col
+                            button.btn.btn-info.btn-sm(type='button' onclick='addCreditRow()') + Add Row
+                        div.col(align='right')
+                            button.btn.btn-primary(type='button' onclick='bowserNav("digital_tab")') Next &raquo;
+
+            //- ── TAB 4: DIGITAL ──────────────────────────────────────────────
+            div.tab-pane.fade#tab-digital
+                div.mt-2.mb-1.px-3
+                    span.text-muted Meter Diff:&nbsp;
+                    strong#digi_meter_diff_display —
+                    span.text-muted.ml-3 Total Accounted (all):&nbsp;
+                    strong#digi_total_display 0.000
+                div
+                    div.col-16
+                        div.table-responsive
+                            table.table#digital-table
+                                thead.thead-light
+                                    tr
+                                        th Vendor
+                                        th Amount (₹)
+                                        th Ref #
+                                        if !isClosed
+                                            th
+                                tbody#digital-tbody
+                                    if digitalItems.length > 0
+                                        each item in digitalItems
+                                            tr(
+                                                data-item_id=item.digital_id
+                                                data-amount=item.amount
+                                                data-vendor= item.digital_vendor_name || ''
+                                                data-ref= item.digital_ref || ''
+                                            )
+                                                td
+                                                    if isClosed
+                                                        span= item.digital_vendor_name || '—'
+                                                    else
+                                                        select.form-control.form-control-sm.digi-vendor
+                                                            option(value='') -- Vendor --
+                                                            each dv in digitalVendors
+                                                                option(value=dv.creditlist_id selected= dv.creditlist_id===item.digital_vendor_id)= dv.vendor_name
+                                                td
+                                                    if isClosed
+                                                        span= item.amount
+                                                    else
+                                                        input.form-control.form-control-sm.digi-amount(
+                                                            type='number' min='0' step='0.01'
+                                                            value=item.amount
+                                                            oninput='updateAllTotals()'
+                                                        )
+                                                td
+                                                    if isClosed
+                                                        span= item.digital_ref || '—'
+                                                    else
+                                                        input.form-control.form-control-sm.digi-ref(
+                                                            type='text' placeholder='UPI/ref'
+                                                            value= item.digital_ref || ''
+                                                        )
+                                                if !isClosed
+                                                    td
+                                                        button.btn.btn-sm.btn-outline-danger(type='button' onclick='removeDeliveryRow(this)') &times;
+
+                if !isClosed
+                    div.row.mt-2.px-3
+                        div.col
+                            button.btn.btn-info.btn-sm(type='button' onclick='addDigitalRow()') + Add Row
+                        div.col(align='right')
+                            button.btn.btn-primary(type='button' onclick='bowserNav("cash_tab")') Next &raquo;
+
+            //- ── TAB 5: CASH ─────────────────────────────────────────────────
+            div.tab-pane.fade#tab-cash
+                div.mt-2.mb-1.px-3
+                    span.text-muted Meter Diff:&nbsp;
+                    strong#cash_meter_diff_display —
+                    span.text-muted.ml-3 Total Accounted (all):&nbsp;
+                    strong#cash_total_display 0.000
+                div
+                    div.col-16
+                        div.table-responsive
+                            table.table#cash-table
+                                thead.thead-light
+                                    tr
+                                        th Amount (₹)
+                                        if !isClosed
+                                            th
+                                tbody#cash-tbody
+                                    if cashItems.length > 0
+                                        each item in cashItems
+                                            tr(
+                                                data-item_id=item.cashsale_id
+                                                data-amount=item.amount
+                                            )
+                                                td
+                                                    if isClosed
+                                                        span= item.amount
+                                                    else
+                                                        input.form-control.form-control-sm.cash-amount(
+                                                            type='number' min='0' step='0.01'
+                                                            value=item.amount
+                                                            oninput='updateAllTotals()'
+                                                        )
+                                                if !isClosed
+                                                    td
+                                                        button.btn.btn-sm.btn-outline-danger(type='button' onclick='removeDeliveryRow(this)') &times;
+
+                if !isClosed
+                    div.row.mt-2.px-3
+                        div.col
+                            button.btn.btn-info.btn-sm(type='button' onclick='addCashRow()') + Add Row
+                        div.col(align='right')
+                            button.btn.btn-primary(type='button' onclick='bowserNav("summary_tab")') Next &raquo;
+
+            //- ── TAB 6: SUMMARY ──────────────────────────────────────────────
+            div.tab-pane.fade#tab-summary
+                div.container-fluid.mt-3
+
+                    div.row
+                        div.col-md-4
+                            h6.sub-header Readings
+                            table.table.table-sm.table-borderless
+                                tbody
+                                    tr
+                                        th(width='55%') Date
+                                        td#sum_date —
+                                    tr
+                                        th Bowser
+                                        td#sum_bowser —
+                                    tr
+                                        th Meter Diff (L)
+                                        td#sum_meter_diff —
+                                    tr
+                                        th Fills Received (L)
+                                        td#sum_fills —
+                                    tr
+                                        th Opening Stock (L)
+                                        td#sum_opening_stock —
+                                    tr
+                                        th Closing Stock (L)
+                                        td#sum_closing_stock —
+
+                        div.col-md-8
+                            h6.sub-header Deliveries by Type
+                            table.table.table-sm
+                                thead.thead-light
+                                    tr
+                                        th Type
+                                        th Qty (L)
+                                        th Amount (₹)
+                                tbody#sum_type_rows
+
+                    div.row.mt-3
+                        div.col-md-12
+                            h6.sub-header Delivery Lines
+                            div.table-responsive
+                                table.table.table-sm#sum_lines_table
                                     thead.thead-light
                                         tr
                                             th Type
+                                            th Customer / Vendor
+                                            th Vehicle
                                             th Qty (L)
-                                            th Amount
-                                    tbody#sum_type_rows
+                                            th Amount (₹)
+                                            th Ref #
+                                    tbody#sum_lines_tbody
 
+                    if !isClosed
                         div.row.mt-3
-                            div.col-md-12
-                                h6.sub-header Delivery Lines
-                                div.table-responsive
-                                    table.table.table-sm#sum_lines_table
-                                        thead.thead-light
-                                            tr
-                                                th Type
-                                                th Customer / Vendor
-                                                th Vehicle
-                                                th Qty (L)
-                                                th Rate
-                                                th Amount
-                                                th Ref #
-                                        tbody#sum_lines_tbody
-
-                        if !isClosed
-                            div.row.mt-3
-                                div.col(align='right')
-                                    button.btn.btn-dark(type='button' onclick='finalizeClosing()') Close Bowser &raquo;
-                        else
-                            div.row.mt-3
-                                div.col(align='right')
-                                    button.btn.btn-outline-warning(type='button' onclick='reopenClosing()') Reopen
+                            div.col(align='right')
+                                button.btn.btn-dark(type='button' onclick='finalizeClosing()') Close Bowser &raquo;
+                    else
+                        div.row.mt-3
+                            div.col(align='right')
+                                button.btn.btn-outline-warning(type='button' onclick='reopenClosing()') Reopen
 
     script.
-        // ── Page data ─────────────────────────────────────────────────────────
+        // ── Page data ──────────────────────────────────────────────────────────
         const bc_customers      = !{JSON.stringify(customers.map(c => ({ id: c.creditlist_id, name: c.customer_name })))};
         const bc_digitalVendors = !{JSON.stringify(digitalVendors.map(d => ({ id: d.creditlist_id, name: d.vendor_name })))};
-        const bc_productId      = !{JSON.stringify(closing ? closing.product_id : (bowsers[0] ? bowsers[0].product_id : 0))};
+        let   bc_productId      = !{JSON.stringify(closing ? closing.product_id : (bowsers[0] ? bowsers[0].product_id : 0))};
+        const bc_isClosed       = !{JSON.stringify(!!isClosed)};
 
         // ── Init ──────────────────────────────────────────────────────────────
         window.addEventListener('DOMContentLoaded', () => {
             computeMeterDiff();
             computeClosingStock();
-            updateTotals();
+            updateAllTotals();
         });
 
-        // ── Readings tab ──────────────────────────────────────────────────────
-        function computeMeterDiff() {
-            const open  = parseFloat(document.getElementById('bc_opening_meter').value) || 0;
-            const close = parseFloat(document.getElementById('bc_closing_meter').value) || 0;
-            const diff  = Math.max(0, close - open);
-            document.getElementById('bc_meter_diff').value = diff.toFixed(3);
-            const dispEl = document.getElementById('del_meter_diff_display');
-            if (dispEl) dispEl.innerText = diff.toFixed(3) + ' L';
-            computeClosingStock();
+        // ── Tab navigation ─────────────────────────────────────────────────────
+        function bowserNav(targetTabId) {
+            const activeLink  = document.querySelector('.nav-link.active');
+            const currentTabId = activeLink ? activeLink.id : null;
+            if (currentTabId === targetTabId) return;
+
+            const saveFn = getBowserSaveFn(currentTabId);
+            if (!saveFn) {
+                if (targetTabId === 'summary_tab') refreshSummary();
+                activateBowserTab(targetTabId);
+                return;
+            }
+
+            ajaxLoading('d-md-block');
+            saveFn().then(ok => {
+                ajaxLoading('d-md-none');
+                if (ok !== false) {
+                    if (targetTabId === 'summary_tab') refreshSummary();
+                    activateBowserTab(targetTabId);
+                }
+            });
         }
 
-        function computeClosingStock() {
-            const opening = parseFloat(document.getElementById('bc_opening_stock').value) || 0;
-            const fills   = parseFloat(document.getElementById('bc_fills_received').value) || 0;
-            const diff    = parseFloat(document.getElementById('bc_meter_diff').value) || 0;
-            const stock   = opening + fills - diff;
-            document.getElementById('bc_closing_stock').value = stock.toFixed(3);
+        function getBowserSaveFn(tabId) {
+            if (bc_isClosed) return null;
+            switch (tabId) {
+                case 'closing_tab':  return saveClosingInfo;
+                case 'readings_tab': return saveReadings;
+                case 'credit_tab':
+                case 'digital_tab':
+                case 'cash_tab':     return saveDeliveries;
+                default:             return null;
+            }
+        }
+
+        function activateBowserTab(tabId) {
+            // Manually switch active link and pane (Bootstrap tab() requires data-toggle to auto-init)
+            document.querySelectorAll('ul.nav-tabs .nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.tab-content .tab-pane').forEach(p => p.classList.remove('show', 'active'));
+            const link = document.getElementById(tabId);
+            if (link) {
+                link.classList.add('active');
+                const paneId = link.getAttribute('href'); // e.g. "#tab-closing"
+                const pane   = paneId ? document.querySelector(paneId) : null;
+                if (pane) pane.classList.add('show', 'active');
+            }
+        }
+
+        // ── Closing tab ────────────────────────────────────────────────────────
+        function onBowserChange() {
+            const sel = document.getElementById('bc_bowser_id');
+            if (!sel) return;
+            const opt = sel.options[sel.selectedIndex];
+            bc_productId = parseInt(opt.dataset.product_id) || 0;
+            suggestFills();
         }
 
         function suggestFills() {
@@ -322,114 +447,124 @@ block content
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        document.getElementById('fills_suggestion').innerText =
-                            data.total_fills > 0 ? `(SFS fills: ${data.total_fills} L)` : '';
+                        const el = document.getElementById('fills_suggestion');
+                        if (el) el.innerText = data.total_fills > 0 ? `(SFS fills: ${data.total_fills} L)` : '';
                     }
                 });
         }
 
-        function saveReadings() {
+        function saveClosingInfo() {
+            const hiddenId = document.getElementById('bowser_closing_id_hidden').value;
+            if (hiddenId) return Promise.resolve(true); // edit mode — header already saved
+
             const bowserId = document.getElementById('bc_bowser_id').value;
             const date     = document.getElementById('bc_date').value;
-            if (!bowserId || !date) { alert('Select a bowser and date.'); return Promise.resolve(false); }
+            if (!bowserId || !date) {
+                alert('Select a bowser and date.');
+                return Promise.resolve(false);
+            }
 
-            const hiddenId = document.getElementById('bowser_closing_id_hidden').value;
-            const payload  = {
-                bowser_closing_id: hiddenId || null,
-                bowser_id:      bowserId,
-                closing_date:   date,
-                opening_meter:  document.getElementById('bc_opening_meter').value,
-                closing_meter:  document.getElementById('bc_closing_meter').value,
-                fills_received: document.getElementById('bc_fills_received').value,
-                opening_stock:  document.getElementById('bc_opening_stock').value
-            };
-
-            const method = hiddenId ? 'PUT' : 'POST';
-            const url    = hiddenId ? `/bowser/closing/${hiddenId}` : '/bowser/closing';
-
-            return fetch(url, {
-                method,
+            return fetch('/bowser/closing', {
+                method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body:    JSON.stringify({
+                    bowser_id:      bowserId,
+                    closing_date:   date,
+                    opening_meter:  0,
+                    closing_meter:  0,
+                    fills_received: 0,
+                    opening_stock:  0
+                })
             })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     document.getElementById('bowser_closing_id_hidden').value = data.bowser_closing_id;
-                    if (!hiddenId) window.history.replaceState({}, '', `/bowser/closing/${data.bowser_closing_id}`);
+                    window.history.replaceState({}, '', `/bowser/closing/${data.bowser_closing_id}`);
                     if (typeof showSnackbar === 'function') showSnackbar(data.message, 'success');
                     return true;
-                } else {
-                    alert(data.error || 'Error saving readings.');
-                    return false;
                 }
+                alert(data.error || 'Error saving closing info.');
+                return false;
             })
-            .catch(() => { alert('Network error saving readings.'); return false; });
+            .catch(() => { alert('Network error.'); return false; });
         }
 
-        function saveReadingsAndNext() {
-            ajaxLoading('d-md-block');
-            saveReadings().then(ok => {
-                ajaxLoading('d-md-none');
-                if (ok) activateBowserTab('deliveries_tab');
-            });
+        // ── Readings tab ───────────────────────────────────────────────────────
+        function computeMeterDiff() {
+            const open  = parseFloat(document.getElementById('bc_opening_meter').value) || 0;
+            const close = parseFloat(document.getElementById('bc_closing_meter').value) || 0;
+            const diff  = Math.max(0, close - open);
+            document.getElementById('bc_meter_diff').value = diff.toFixed(3);
+            computeClosingStock();
+            updateAllTotals();
         }
 
-        // ── Deliveries tab ────────────────────────────────────────────────────
-        function addDeliveryRow() {
-            const tbody       = document.getElementById('deliveries-tbody');
+        function computeClosingStock() {
+            const opening = parseFloat(document.getElementById('bc_opening_stock').value)  || 0;
+            const fills   = parseFloat(document.getElementById('bc_fills_received').value) || 0;
+            const diff    = parseFloat(document.getElementById('bc_meter_diff').value)     || 0;
+            document.getElementById('bc_closing_stock').value = (opening + fills - diff).toFixed(3);
+        }
+
+        function saveReadings() {
+            const hiddenId = document.getElementById('bowser_closing_id_hidden').value;
+            if (!hiddenId) {
+                alert('Save the Closing tab first.');
+                return Promise.resolve(false);
+            }
+
+            return fetch(`/bowser/closing/${hiddenId}`, {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    bowser_closing_id: hiddenId,
+                    opening_meter:     document.getElementById('bc_opening_meter').value,
+                    closing_meter:     document.getElementById('bc_closing_meter').value,
+                    fills_received:    document.getElementById('bc_fills_received').value,
+                    opening_stock:     document.getElementById('bc_opening_stock').value
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (typeof showSnackbar === 'function') showSnackbar(data.message, 'success');
+                    return true;
+                }
+                alert(data.error || 'Error saving readings.');
+                return false;
+            })
+            .catch(() => { alert('Network error.'); return false; });
+        }
+
+        // ── Credit tab ─────────────────────────────────────────────────────────
+        function addCreditRow() {
+            const tbody      = document.getElementById('credit-tbody');
             const custOptions = bc_customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            const vendOptions = bc_digitalVendors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-
-            const tr = document.createElement('tr');
+            const rate        = document.getElementById('bc_rate')?.value || '';
+            const tr          = document.createElement('tr');
             tr.innerHTML = `
                 <td>
-                    <select class="form-control form-control-sm del-type" onchange="onTypeChange(this)">
-                        <option value="CREDIT">CREDIT</option>
-                        <option value="DIGITAL">DIGITAL</option>
-                        <option value="CASH">CASH</option>
-                    </select>
-                </td>
-                <td>
-                    <select class="form-control form-control-sm del-customer" onchange="loadVehicles(this)">
+                    <select class="form-control form-control-sm cred-customer" onchange="loadCreditVehicles(this)">
                         <option value="">-- Customer --</option>${custOptions}
                     </select>
-                    <select class="form-control form-control-sm del-digital-vendor" style="display:none">
-                        <option value="">-- Vendor --</option>${vendOptions}
-                    </select>
                 </td>
                 <td>
-                    <select class="form-control form-control-sm del-vehicle" style="display:none">
+                    <select class="form-control form-control-sm cred-vehicle">
                         <option value="">-- Vehicle --</option>
                     </select>
                 </td>
-                <td><input class="form-control form-control-sm del-qty" type="number" min="0" step="0.001" oninput="computeRow(this); updateTotals()"></td>
-                <td><input class="form-control form-control-sm del-rate" type="number" min="0" step="0.0001" oninput="computeRow(this)"></td>
-                <td><input class="form-control form-control-sm del-amount" type="text" readonly></td>
-                <td><input class="form-control form-control-sm del-ref" type="text" placeholder="UPI/ref" style="display:none"></td>
-                <td><button class="btn btn-sm btn-outline-danger" type="button" onclick="removeRow(this)">&times;</button></td>
+                <td><input class="form-control form-control-sm cred-qty" type="number" min="0" step="0.001" oninput="computeDeliveryRow(this,'cred'); updateAllTotals()"></td>
+                <td><input class="form-control form-control-sm cred-rate" type="number" min="0" step="0.0001" value="${rate}" oninput="computeDeliveryRow(this,'cred')"></td>
+                <td><input class="form-control form-control-sm cred-amount" type="text" readonly></td>
+                <td><button class="btn btn-sm btn-outline-danger" type="button" onclick="removeDeliveryRow(this)">&times;</button></td>
             `;
             tbody.appendChild(tr);
         }
 
-        function removeRow(btn) {
-            btn.closest('tr').remove();
-            updateTotals();
-        }
-
-        function onTypeChange(sel) {
-            const row       = sel.closest('tr');
-            const isCredit  = sel.value === 'CREDIT';
-            const isDigital = sel.value === 'DIGITAL';
-            row.querySelector('.del-customer').style.display       = isCredit  ? '' : 'none';
-            row.querySelector('.del-digital-vendor').style.display = isDigital ? '' : 'none';
-            row.querySelector('.del-vehicle').style.display        = isCredit  ? '' : 'none';
-            row.querySelector('.del-ref').style.display            = isDigital ? '' : 'none';
-        }
-
-        function loadVehicles(sel) {
+        function loadCreditVehicles(sel) {
             const row      = sel.closest('tr');
-            const vehSel   = row.querySelector('.del-vehicle');
+            const vehSel   = row.querySelector('.cred-vehicle');
             const creditId = sel.value;
             if (!creditId) { vehSel.innerHTML = '<option value="">-- Vehicle --</option>'; return; }
             fetch(`/bowser/api/vehicles/${creditId}`)
@@ -442,91 +577,137 @@ block content
                 });
         }
 
-        function computeRow(el) {
+        // ── Digital tab ────────────────────────────────────────────────────────
+        function addDigitalRow() {
+            const tbody       = document.getElementById('digital-tbody');
+            const vendOptions = bc_digitalVendors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+            const tr          = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <select class="form-control form-control-sm digi-vendor">
+                        <option value="">-- Vendor --</option>${vendOptions}
+                    </select>
+                </td>
+                <td><input class="form-control form-control-sm digi-amount" type="number" min="0" step="0.01" oninput="updateAllTotals()"></td>
+                <td><input class="form-control form-control-sm digi-ref" type="text" placeholder="UPI/ref"></td>
+                <td><button class="btn btn-sm btn-outline-danger" type="button" onclick="removeDeliveryRow(this)">&times;</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // ── Cash tab ───────────────────────────────────────────────────────────
+        function addCashRow() {
+            const tbody = document.getElementById('cash-tbody');
+            const tr    = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm cash-amount" type="number" min="0" step="0.01" oninput="updateAllTotals()"></td>
+                <td><button class="btn btn-sm btn-outline-danger" type="button" onclick="removeDeliveryRow(this)">&times;</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        // ── Shared delivery helpers ────────────────────────────────────────────
+        function removeDeliveryRow(btn) {
+            btn.closest('tr').remove();
+            updateAllTotals();
+        }
+
+        // Credit only: qty × rate → amount
+        function computeDeliveryRow(el, prefix) {
             const row   = el.closest('tr');
-            const qty   = parseFloat(row.querySelector('.del-qty')?.value)  || 0;
-            const rate  = parseFloat(row.querySelector('.del-rate')?.value) || 0;
-            const amtEl = row.querySelector('.del-amount');
+            const qty   = parseFloat(row.querySelector(`.${prefix}-qty`)?.value)  || 0;
+            const rate  = parseFloat(row.querySelector(`.${prefix}-rate`)?.value) || 0;
+            const amtEl = row.querySelector(`.${prefix}-amount`);
             if (amtEl) amtEl.value = (qty * rate).toFixed(2);
         }
 
-        function updateTotals() {
-            let total = 0;
-            document.querySelectorAll('.del-qty').forEach(el => { total += parseFloat(el.value) || 0; });
-            document.getElementById('del_total_accounted').innerText = total.toFixed(3);
+        function updateAllTotals() {
             const diff = parseFloat(document.getElementById('bc_meter_diff').value) || 0;
-            const gap  = diff - total;
-            const msg  = document.getElementById('del_reconcile_msg');
-            if (Math.abs(gap) < 0.001) {
-                msg.innerHTML = '<span class="badge badge-success">Reconciled</span>';
-            } else {
-                msg.innerHTML = `<span class="badge badge-warning">Gap: ${gap.toFixed(3)} L</span>`;
-            }
+            // Credit: total by qty; Digital/Cash: total by amount (no qty stored)
+            let credQty = 0;
+            document.querySelectorAll('.cred-qty').forEach(el => { credQty += parseFloat(el.value) || 0; });
+
+            ['cred', 'digi', 'cash'].forEach(p => {
+                const diffEl = document.getElementById(`${p}_meter_diff_display`);
+                const totEl  = document.getElementById(`${p}_total_display`);
+                if (diffEl) diffEl.innerText = diff.toFixed(3) + ' L';
+                if (totEl)  totEl.innerText  = credQty.toFixed(3);
+            });
         }
 
+        // ── Save deliveries (collects from all three tabs) ─────────────────────
         function saveDeliveries() {
             const closingId = document.getElementById('bowser_closing_id_hidden').value;
             if (!closingId) { alert('Save readings first.'); return Promise.resolve(false); }
 
-            const rows  = document.querySelectorAll('#deliveries-tbody tr');
             const items = [];
-            rows.forEach(row => {
-                const qty = parseFloat(row.querySelector('.del-qty')?.value) || 0;
+
+            document.querySelectorAll('#credit-tbody tr').forEach(row => {
+                const qty = parseFloat(row.querySelector('.cred-qty')?.value) || 0;
                 if (qty <= 0) return;
                 items.push({
-                    sale_type:         row.querySelector('.del-type')?.value,
-                    creditlist_id:     row.querySelector('.del-customer')?.value    || null,
-                    vehicle_id:        row.querySelector('.del-vehicle')?.value     || null,
-                    digital_vendor_id: row.querySelector('.del-digital-vendor')?.value || null,
-                    digital_ref:       row.querySelector('.del-ref')?.value         || null,
-                    product_id:        bc_productId,
-                    quantity:          qty,
-                    rate:              parseFloat(row.querySelector('.del-rate')?.value)   || 0,
-                    amount:            parseFloat(row.querySelector('.del-amount')?.value) || 0
+                    sale_type:     'CREDIT',
+                    creditlist_id: row.querySelector('.cred-customer')?.value || null,
+                    vehicle_id:    row.querySelector('.cred-vehicle')?.value  || null,
+                    product_id:    bc_productId,
+                    quantity:      qty,
+                    rate:          parseFloat(row.querySelector('.cred-rate')?.value)   || 0,
+                    amount:        parseFloat(row.querySelector('.cred-amount')?.value) || 0
+                });
+            });
+
+            document.querySelectorAll('#digital-tbody tr').forEach(row => {
+                const amt = parseFloat(row.querySelector('.digi-amount')?.value) || 0;
+                if (amt <= 0) return;
+                items.push({
+                    sale_type:         'DIGITAL',
+                    digital_vendor_id: row.querySelector('.digi-vendor')?.value || null,
+                    digital_ref:       row.querySelector('.digi-ref')?.value    || null,
+                    amount:            amt
+                });
+            });
+
+            document.querySelectorAll('#cash-tbody tr').forEach(row => {
+                const amt = parseFloat(row.querySelector('.cash-amount')?.value) || 0;
+                if (amt <= 0) return;
+                items.push({
+                    sale_type:  'CASH',
+                    product_id: bc_productId,
+                    amount:     amt
                 });
             });
 
             return fetch('/bowser/closing/items', {
-                method: 'POST',
+                method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bowser_closing_id: closingId, items })
+                body:    JSON.stringify({ bowser_closing_id: closingId, items })
             })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     if (typeof showSnackbar === 'function') showSnackbar(data.message, 'success');
                     return true;
-                } else {
-                    alert(data.error || 'Error saving deliveries.');
-                    return false;
                 }
+                alert(data.error || 'Error saving deliveries.');
+                return false;
             })
-            .catch(() => { alert('Network error saving deliveries.'); return false; });
+            .catch(() => { alert('Network error.'); return false; });
         }
 
-        function saveDeliveriesAndNext() {
-            ajaxLoading('d-md-block');
-            saveDeliveries().then(ok => {
-                ajaxLoading('d-md-none');
-                if (ok) {
-                    refreshSummary();
-                    activateBowserTab('summary_tab');
-                }
-            });
-        }
-
-        // ── Summary tab ───────────────────────────────────────────────────────
+        // ── Summary tab ────────────────────────────────────────────────────────
         function refreshSummary() {
             computeMeterDiff();
             computeClosingStock();
 
-            // Header info
+            // Header
             const dateEl   = document.getElementById('bc_date');
             const bowserEl = document.getElementById('bc_bowser_id');
             document.getElementById('sum_date').innerText =
                 dateEl ? dateEl.value : '—';
             document.getElementById('sum_bowser').innerText =
-                bowserEl?.options[bowserEl.selectedIndex]?.text || (document.querySelector('input[id="bc_bowser_id"]')?.value ? '—' : '—');
+                bowserEl?.tagName === 'SELECT'
+                    ? (bowserEl.options[bowserEl.selectedIndex]?.text || '—')
+                    : (bowserEl?.value || '—');
 
             const diff    = parseFloat(document.getElementById('bc_meter_diff').value)    || 0;
             const fills   = parseFloat(document.getElementById('bc_fills_received').value) || 0;
@@ -537,60 +718,55 @@ block content
             document.getElementById('sum_opening_stock').innerText = opening.toFixed(3) + ' L';
             document.getElementById('sum_closing_stock').innerText = stock.toFixed(3)   + ' L';
 
+            function readAmt(row, inputClass, dataKey) {
+                const input = row.querySelector(`.${inputClass}`);
+                return parseFloat(input ? input.value : (row.dataset[dataKey] || 0)) || 0;
+            }
+
             // Totals by type
-            const rows   = document.querySelectorAll('#deliveries-tbody tr');
-            const totals = { CREDIT: { qty: 0, amt: 0 }, DIGITAL: { qty: 0, amt: 0 }, CASH: { qty: 0, amt: 0 } };
-            rows.forEach(row => {
-                const typeSel = row.querySelector('.del-type');
-                const type    = typeSel ? typeSel.value
-                                        : (row.querySelector('td:first-child span')?.innerText || '');
-                const qty  = parseFloat(row.querySelector('.del-qty')?.value)    || 0;
-                const amt  = parseFloat(row.querySelector('.del-amount')?.value) || 0;
-                if (totals[type]) { totals[type].qty += qty; totals[type].amt += amt; }
-            });
-
-            document.getElementById('sum_type_rows').innerHTML =
-                Object.entries(totals)
-                    .map(([type, v]) => `<tr><td><strong>${type}</strong></td><td>${v.qty.toFixed(3)}</td><td>${v.amt.toFixed(2)}</td></tr>`)
-                    .join('');
-
-            // Detail lines
-            const linesTbody = document.getElementById('sum_lines_tbody');
+            const totals   = { CREDIT: { qty: 0, amt: 0 }, DIGITAL: { amt: 0 }, CASH: { amt: 0 } };
             const lineRows = [];
-            rows.forEach(row => {
-                const typeSel   = row.querySelector('.del-type');
-                const type      = typeSel ? typeSel.value : (row.querySelector('td:first-child span')?.innerText || '');
-                const custSel   = row.querySelector('.del-customer');
-                const vendSel   = row.querySelector('.del-digital-vendor');
-                const vehSel    = row.querySelector('.del-vehicle');
-                const qty       = row.querySelector('.del-qty')?.value    || row.querySelectorAll('td')[3]?.innerText || '—';
-                const rate      = row.querySelector('.del-rate')?.value   || row.querySelectorAll('td')[4]?.innerText || '—';
-                const amount    = row.querySelector('.del-amount')?.value || row.querySelectorAll('td')[5]?.innerText || '—';
-                const ref       = row.querySelector('.del-ref')?.value    || row.querySelectorAll('td')[6]?.innerText || '—';
 
-                let partyName = '—';
-                if (type === 'CREDIT' && custSel) {
-                    partyName = custSel.options[custSel.selectedIndex]?.text || '—';
-                } else if (type === 'DIGITAL' && vendSel) {
-                    partyName = vendSel.options[vendSel.selectedIndex]?.text || '—';
-                }
-                const vehName = (type === 'CREDIT' && vehSel)
-                    ? (vehSel.options[vehSel.selectedIndex]?.text || '—') : '—';
-
-                lineRows.push(`<tr>
-                    <td>${type}</td>
-                    <td>${partyName}</td>
-                    <td>${vehName}</td>
-                    <td>${parseFloat(qty).toFixed(3)}</td>
-                    <td>${parseFloat(rate).toFixed(4)}</td>
-                    <td>${parseFloat(amount).toFixed(2)}</td>
-                    <td>${ref !== '—' && ref ? ref : '—'}</td>
-                </tr>`);
+            document.querySelectorAll('#credit-tbody tr').forEach(row => {
+                const qty  = readAmt(row, 'cred-qty',    'qty');
+                const amt  = readAmt(row, 'cred-amount', 'amount');
+                const rate = readAmt(row, 'cred-rate',   'rate');
+                totals.CREDIT.qty += qty;
+                totals.CREDIT.amt += amt;
+                const custSel = row.querySelector('.cred-customer');
+                const vehSel  = row.querySelector('.cred-vehicle');
+                const party   = custSel ? (custSel.options[custSel.selectedIndex]?.text || '—') : (row.dataset.customer || '—');
+                const veh     = vehSel  ? (vehSel.options[vehSel.selectedIndex]?.text   || '—') : (row.dataset.vehicle  || '—');
+                lineRows.push(`<tr><td>CREDIT</td><td>${party}</td><td>${veh}</td><td>${qty.toFixed(3)}</td><td>${amt.toFixed(2)}</td><td>—</td></tr>`);
             });
-            linesTbody.innerHTML = lineRows.join('') || '<tr><td colspan="7" class="text-muted text-center">No deliveries</td></tr>';
+
+            document.querySelectorAll('#digital-tbody tr').forEach(row => {
+                const amt     = readAmt(row, 'digi-amount', 'amount');
+                totals.DIGITAL.amt += amt;
+                const vendSel = row.querySelector('.digi-vendor');
+                const refEl   = row.querySelector('.digi-ref');
+                const party   = vendSel ? (vendSel.options[vendSel.selectedIndex]?.text || '—') : (row.dataset.vendor || '—');
+                const ref     = refEl   ? (refEl.value || '—') : (row.dataset.ref || '—');
+                lineRows.push(`<tr><td>DIGITAL</td><td>${party}</td><td>—</td><td>—</td><td>${amt.toFixed(2)}</td><td>${ref}</td></tr>`);
+            });
+
+            document.querySelectorAll('#cash-tbody tr').forEach(row => {
+                const amt = readAmt(row, 'cash-amount', 'amount');
+                totals.CASH.amt += amt;
+                lineRows.push(`<tr><td>CASH</td><td>—</td><td>—</td><td>—</td><td>${amt.toFixed(2)}</td><td>—</td></tr>`);
+            });
+
+            document.getElementById('sum_type_rows').innerHTML = [
+                `<tr><td><strong>CREDIT</strong></td><td>${totals.CREDIT.qty.toFixed(3)}</td><td>${totals.CREDIT.amt.toFixed(2)}</td></tr>`,
+                `<tr><td><strong>DIGITAL</strong></td><td>—</td><td>${totals.DIGITAL.amt.toFixed(2)}</td></tr>`,
+                `<tr><td><strong>CASH</strong></td><td>—</td><td>${totals.CASH.amt.toFixed(2)}</td></tr>`
+            ].join('');
+
+            document.getElementById('sum_lines_tbody').innerHTML =
+                lineRows.join('') || '<tr><td colspan="6" class="text-muted text-center">No deliveries</td></tr>';
         }
 
-        // ── Finalize / Reopen ─────────────────────────────────────────────────
+        // ── Finalize / Reopen ──────────────────────────────────────────────────
         function finalizeClosing() {
             const id = document.getElementById('bowser_closing_id_hidden').value;
             if (!id) { alert('Save readings first.'); return; }
@@ -606,12 +782,4 @@ block content
             fetch(`/bowser/closing/${id}/reopen`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => { if (data.success) location.reload(); else alert(data.error); });
-        }
-
-        // ── Tab navigation helper ─────────────────────────────────────────────
-        function activateBowserTab(tabId) {
-            const tabEl = document.getElementById(tabId);
-            if (!tabEl) return;
-            // Bootstrap 4 tab activation
-            $(tabEl).tab('show');
         }

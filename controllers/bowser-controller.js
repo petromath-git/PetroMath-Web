@@ -142,12 +142,14 @@ module.exports = {
                 BowserDao.getDigitalVendors(locationCode)
             ]);
 
-            let closing = null, deliveryItems = [], suggestedFills = 0;
+            let closing = null, creditItems = [], digitalItems = [], cashItems = [];
 
             if (bowserClosingId) {
-                [closing, deliveryItems] = await Promise.all([
+                [closing, creditItems, digitalItems, cashItems] = await Promise.all([
                     BowserDao.getBowserClosingById(bowserClosingId),
-                    BowserDao.getDeliveryItems(bowserClosingId)
+                    BowserDao.getCreditItems(bowserClosingId),
+                    BowserDao.getDigitalItems(bowserClosingId),
+                    BowserDao.getCashItems(bowserClosingId)
                 ]);
                 if (!closing) return res.status(404).send('Bowser closing not found.');
             }
@@ -156,7 +158,9 @@ module.exports = {
                 title: bowserClosingId ? 'Edit Bowser Closing' : 'New Bowser Closing',
                 user: req.user,
                 closing,
-                deliveryItems,
+                creditItems,
+                digitalItems,
+                cashItems,
                 bowsers,
                 customers,
                 digitalVendors,
@@ -222,10 +226,17 @@ module.exports = {
             if (!bowser_closing_id) {
                 return res.status(400).json({ success: false, error: 'Save readings first.' });
             }
-            const result = await BowserDao.saveDeliveryItems(
-                bowser_closing_id, items || [], String(req.user.Person_id)
-            );
-            res.json({ success: true, message: 'Delivery items saved.', ...result });
+            const createdBy     = String(req.user.Person_id);
+            const creditItems   = (items || []).filter(i => i.sale_type === 'CREDIT');
+            const digitalItems  = (items || []).filter(i => i.sale_type === 'DIGITAL');
+            const cashItems     = (items || []).filter(i => i.sale_type === 'CASH');
+
+            await Promise.all([
+                BowserDao.saveCreditItems(bowser_closing_id, creditItems, createdBy),
+                BowserDao.saveDigitalItems(bowser_closing_id, digitalItems, createdBy),
+                BowserDao.saveCashItems(bowser_closing_id, cashItems, createdBy)
+            ]);
+            res.json({ success: true, message: 'Delivery items saved.', inserted: (items || []).length });
         } catch (err) {
             console.error('saveDeliveryItems error:', err);
             res.status(500).json({ success: false, error: err.message });
