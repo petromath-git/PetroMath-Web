@@ -169,9 +169,9 @@ module.exports = {
     createBowserClosing: (data) => {
         return db.sequelize.query(`
             INSERT INTO t_bowser_closing
-                (bowser_id, location_code, closing_date, opening_meter, closing_meter,
+                (bowser_id, location_code, closing_date, opening_meter, closing_meter, rate,
                  fills_received, opening_stock, status, created_by)
-            VALUES (:bowserId, :locationCode, :closingDate, :openingMeter, :closingMeter,
+            VALUES (:bowserId, :locationCode, :closingDate, :openingMeter, :closingMeter, :rate,
                     :fillsReceived, :openingStock, 'DRAFT', :createdBy)
         `, { replacements: data, type: db.Sequelize.QueryTypes.INSERT });
     },
@@ -181,6 +181,7 @@ module.exports = {
             UPDATE t_bowser_closing
             SET opening_meter  = :openingMeter,
                 closing_meter  = :closingMeter,
+                rate           = :rate,
                 fills_received = :fillsReceived,
                 opening_stock  = :openingStock,
                 updated_by     = :updatedBy,
@@ -313,6 +314,37 @@ module.exports = {
             });
         }
         return { inserted: items.length };
+    },
+
+    // ── Excess / Shortage ─────────────────────────────────────
+
+    getExShortage: (bowserClosingId) => {
+        return db.sequelize.query(`
+            SELECT
+                (bc.closing_meter - bc.opening_meter) * bc.rate          AS reading_amount,
+                COALESCE(SUM(cr.amount), 0)                              AS credit_amount,
+                COALESCE((SELECT SUM(amount) FROM t_bowser_digital_sales WHERE bowser_closing_id = :bowserClosingId), 0) AS digital_amount,
+                COALESCE((SELECT SUM(amount) FROM t_bowser_cashsales     WHERE bowser_closing_id = :bowserClosingId), 0) AS cash_amount
+            FROM t_bowser_closing bc
+            LEFT JOIN t_bowser_credits cr ON cr.bowser_closing_id = bc.bowser_closing_id
+            WHERE bc.bowser_closing_id = :bowserClosingId
+            GROUP BY bc.bowser_closing_id, bc.closing_meter, bc.opening_meter, bc.rate
+        `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT })
+        .then(rows => {
+            if (!rows[0]) return { reading_amount: 0, credit_amount: 0, digital_amount: 0, cash_amount: 0, ex_shortage: 0 };
+            const r = rows[0];
+            const reading  = Number(r.reading_amount)  || 0;
+            const credit   = Number(r.credit_amount)   || 0;
+            const digital  = Number(r.digital_amount)  || 0;
+            const cash     = Number(r.cash_amount)     || 0;
+            return {
+                reading_amount:  reading,
+                credit_amount:   credit,
+                digital_amount:  digital,
+                cash_amount:     cash,
+                ex_shortage:     reading - credit - digital - cash
+            };
+        });
     },
 
     // ── Products for dropdown ─────────────────────────────────

@@ -194,13 +194,14 @@ module.exports = {
     saveDraft: async (req, res) => {
         try {
             const { bowser_closing_id, bowser_id, closing_date,
-                    opening_meter, closing_meter, fills_received, opening_stock } = req.body;
+                    opening_meter, closing_meter, rate, fills_received, opening_stock } = req.body;
             const locationCode = req.user.location_code;
             const createdBy = String(req.user.Person_id);
 
             if (bowser_closing_id) {
                 await BowserDao.updateBowserClosing(bowser_closing_id, {
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    rate: rate || 0,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     updatedBy: createdBy
                 });
@@ -209,6 +210,7 @@ module.exports = {
                 const [, meta] = await BowserDao.createBowserClosing({
                     bowserId: bowser_id, locationCode, closingDate: closing_date,
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    rate: rate || 0,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     createdBy
                 });
@@ -216,6 +218,16 @@ module.exports = {
             }
         } catch (err) {
             console.error('saveDraft error:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
+    getExShortage: async (req, res) => {
+        try {
+            const result = await BowserDao.getExShortage(req.params.id);
+            res.json({ success: true, ...result });
+        } catch (err) {
+            console.error('getExShortage error:', err);
             res.status(500).json({ success: false, error: err.message });
         }
     },
