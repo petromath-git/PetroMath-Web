@@ -21,6 +21,11 @@ generate_day_bill_sp: BEGIN
     DECLARE v_pump_count        INT           DEFAULT 0;
     DECLARE v_oil_count         INT           DEFAULT 0;
 
+    -- Consolidation threshold (read from config; default 20000)
+    DECLARE v_threshold         DECIMAL(15,2) DEFAULT 20000;
+    DECLARE v_primary_vendor_id INT           DEFAULT NULL;
+    DECLARE v_is_consolidated   TINYINT(1)    DEFAULT 0;
+
     -- Cursor variables for digital vendor loop
     DECLARE v_vendor_id         INT;
     DECLARE v_vendor_name       VARCHAR(255);
@@ -36,10 +41,14 @@ generate_day_bill_sp: BEGIN
     DROP TEMPORARY TABLE IF EXISTS tmp_db_pump;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_oil;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_cashsale;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_intercompany;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_credit;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_digital;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_dig_items;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_bill_numbers;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_cons_dominant;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_cons_assign;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_primary_items;
 
     -- ── 1. Reading-product pump quantities for the day ───────────────────────
     --    Weighted-average price across all shifts closed on p_bill_date.
@@ -131,11 +140,29 @@ generate_day_bill_sp: BEGIN
       AND cs.product_id IN (SELECT product_id FROM tmp_db_pump)
     GROUP BY cs.product_id;
 
-    -- ── 5. Compute net_qty = pumped - cashsales (floor at 0) ─────────────────
+    -- ── 4b. Intercompany fill quantities (bowser fills — excluded from billable qty) ──
+    --     Bowser fills at the SFS nozzle appear in pumped_qty but are NOT
+    --     sold to any retail customer; they must be subtracted like cashsales.
+    CREATE TEMPORARY TABLE tmp_db_intercompany
+    SELECT
+        tci.product_id,
+        CAST(SUM(tci.quantity) AS DECIMAL(12,3)) AS intercompany_qty
+    FROM t_closing_intercompany tci
+    JOIN t_closing c ON tci.closing_id = c.closing_id
+    WHERE c.location_code = p_location_code
+      AND DATE(c.closing_date) = p_bill_date
+      AND c.closing_status = 'CLOSED'
+      AND tci.product_id IN (SELECT product_id FROM tmp_db_pump)
+    GROUP BY tci.product_id;
+
+    -- ── 5. Compute net_qty = pumped - cashsales - intercompany (floor at 0) ─────
     UPDATE tmp_db_pump p
-    LEFT  JOIN tmp_db_cashsale cs ON p.product_id = cs.product_id
+    LEFT  JOIN tmp_db_cashsale cs     ON p.product_id = cs.product_id
+    LEFT  JOIN tmp_db_intercompany ic ON p.product_id = ic.product_id
     SET   p.cashsale_qty = COALESCE(cs.cashsale_qty, 0),
-          p.net_qty      = GREATEST(0, p.pumped_qty - COALESCE(cs.cashsale_qty, 0));
+          p.net_qty      = GREATEST(0, p.pumped_qty
+                                       - COALESCE(cs.cashsale_qty, 0)
+                                       - COALESCE(ic.intercompany_qty, 0));
 
     -- ── 6. Total net revenue (denominator for digital split) ─────────────────
     SELECT COALESCE(SUM(net_qty * price), 0)
@@ -156,6 +183,25 @@ generate_day_bill_sp: BEGIN
       AND DATE(c.closing_date) = p_bill_date
       AND c.closing_status = 'CLOSED'
     GROUP BY ds.vendor_id, cl.Company_Name;
+
+    -- ── 7b. Read consolidation threshold from location config ─────────────────
+    --    DAY_BILL_CONSOLIDATE_THRESHOLD: vendors at or below this amount get a
+    --    single-product (dominant product) bill. Default 20000.
+    SELECT CAST(setting_value AS DECIMAL(15,2)) INTO v_threshold
+    FROM m_location_config
+    WHERE setting_name = 'DAY_BILL_CONSOLIDATE_THRESHOLD'
+      AND location_code IN (p_location_code, '*')
+      AND CURDATE() BETWEEN effective_start_date AND effective_end_date
+    ORDER BY CASE WHEN location_code = p_location_code THEN 0 ELSE 1 END
+    LIMIT 1;
+
+    -- Primary vendor: largest above threshold; if none above threshold, just the largest.
+    -- Primary gets the full multi-product breakdown and absorbs redistribution.
+    SELECT vendor_id INTO v_primary_vendor_id
+    FROM tmp_db_digital
+    ORDER BY CASE WHEN digital_amount > v_threshold THEN 0 ELSE 1 END ASC,
+             digital_amount DESC
+    LIMIT 1;
 
     -- ── 8. Credit quantities for the day ────────────────────────────────────
     CREATE TEMPORARY TABLE tmp_db_credit
@@ -184,6 +230,58 @@ generate_day_bill_sp: BEGIN
         AS DECIMAL(12,6)) AS digital_qty
     FROM tmp_db_digital  d
     CROSS JOIN tmp_db_pump p;
+
+    -- ── 9b. Build consolidated-vendor tables ─────────────────────────────────
+    --    For each vendor ≤ threshold (and not the primary), find their dominant
+    --    product (highest proportionate value) — they will be billed on that
+    --    product only.
+    CREATE TEMPORARY TABLE tmp_db_cons_dominant
+    SELECT ranked.vendor_id, ranked.product_id AS dom_product_id, ranked.price AS dom_price
+    FROM (
+        SELECT
+            di.vendor_id,
+            di.product_id,
+            p.price,
+            ROW_NUMBER() OVER (PARTITION BY di.vendor_id
+                               ORDER BY (di.digital_qty * p.price) DESC) AS rn
+        FROM tmp_db_dig_items di
+        JOIN tmp_db_pump p     ON di.product_id = p.product_id
+        JOIN tmp_db_digital d  ON di.vendor_id  = d.vendor_id
+        WHERE d.digital_amount <= v_threshold
+          AND di.vendor_id <> v_primary_vendor_id
+    ) ranked
+    WHERE rn = 1;
+
+    -- Single-product assignment for each consolidated vendor:
+    --   qty = vendor_amount / dominant_price  (so qty × price = vendor_amount exactly)
+    CREATE TEMPORARY TABLE tmp_db_cons_assign
+    SELECT
+        cd.vendor_id,
+        cd.dom_product_id AS product_id,
+        CAST(d.digital_amount / cd.dom_price AS DECIMAL(12,6)) AS qty
+    FROM tmp_db_cons_dominant cd
+    JOIN tmp_db_digital d ON cd.vendor_id = d.vendor_id;
+
+    -- Pre-calculate primary vendor adjusted quantities.
+    -- MySQL cannot open the same temp table twice in one query (error 1137),
+    -- so we materialise the result here before the vendor loop.
+    CREATE TEMPORARY TABLE tmp_db_primary_items
+    SELECT
+        p2.product_id,
+        p2.price,
+        p2.cgst_rate,
+        p2.sgst_rate,
+        GREATEST(0,
+            COALESCE(SUM(CASE WHEN di.vendor_id = v_primary_vendor_id THEN di.digital_qty ELSE 0 END), 0)
+            + COALESCE(SUM(CASE WHEN di.vendor_id IN (SELECT vendor_id FROM tmp_db_cons_dominant)
+                                THEN di.digital_qty ELSE 0 END), 0)
+            - COALESCE(
+                (SELECT SUM(ca.qty) FROM tmp_db_cons_assign ca WHERE ca.product_id = p2.product_id),
+                0)
+        ) AS adjusted_qty
+    FROM tmp_db_pump p2
+    LEFT JOIN tmp_db_dig_items di ON di.product_id = p2.product_id
+    GROUP BY p2.product_id, p2.price, p2.cgst_rate, p2.sgst_rate;
 
     -- ── 10. Upsert t_day_bill parent row ────────────────────────────────────
     INSERT INTO t_day_bill (location_code, bill_date, status,
@@ -291,10 +389,20 @@ generate_day_bill_sp: BEGIN
     WHERE  header_id = v_header_id;
 
     -- ── 17. DIGITAL headers + items (one per vendor) ─────────────────────────
+    --
+    --  Three cases per vendor:
+    --    A. Consolidated (≤ threshold, not primary): single dominant-product line,
+    --       qty = vendor_amount / dom_price, total = vendor_amount (exact).
+    --    B. Primary (largest / highest above threshold): absorbs residual quantities
+    --       from consolidated vendors while keeping all products.
+    --    C. Normal above-threshold (not primary): unchanged proportionate split.
+    --
     OPEN cur_vendors;
     vendor_loop: LOOP
         FETCH cur_vendors INTO v_vendor_id, v_vendor_name, v_digital_amount;
         IF v_done THEN LEAVE vendor_loop; END IF;
+
+        SET v_is_consolidated = IF(v_digital_amount <= v_threshold AND v_vendor_id <> v_primary_vendor_id, 1, 0);
 
         INSERT INTO t_day_bill_header (day_bill_id, bill_type, vendor_id, bill_number,
                                        total_amount, created_by, creation_date, updated_by, updation_date)
@@ -305,33 +413,98 @@ generate_day_bill_sp: BEGIN
 
         SET v_dig_header_id = LAST_INSERT_ID();
 
-        INSERT INTO t_day_bill_items (header_id, product_id, quantity, rate,
-                                      taxable_amount, cgst_rate, cgst_amount,
-                                      sgst_rate, sgst_amount, total_amount)
-        SELECT
-            v_dig_header_id,
-            di.product_id,
-            ROUND(di.digital_qty, 3),
-            ROUND(p.price, 3),
-            ROUND(
-                CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
-                     THEN di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)
-                     ELSE di.digital_qty * p.price END, 3),
-            p.cgst_rate,
-            ROUND(
-                CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
-                     THEN (di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.cgst_rate / 100
-                     ELSE 0 END, 3),
-            p.sgst_rate,
-            ROUND(
-                CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
-                     THEN (di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.sgst_rate / 100
-                     ELSE 0 END, 3),
-            ROUND(di.digital_qty * p.price, 3)
-        FROM tmp_db_dig_items di
-        JOIN tmp_db_pump p ON di.product_id = p.product_id
-        WHERE di.vendor_id  = v_vendor_id
-          AND di.digital_qty > 0;
+        IF v_is_consolidated THEN
+            -- ── A. Consolidated: single dominant-product line ────────────────
+            INSERT INTO t_day_bill_items (header_id, product_id, quantity, rate,
+                                          taxable_amount, cgst_rate, cgst_amount,
+                                          sgst_rate, sgst_amount, total_amount)
+            SELECT
+                v_dig_header_id,
+                ca.product_id,
+                ROUND(ca.qty, 3)                                                             AS quantity,
+                ROUND(p.price, 3)                                                            AS rate,
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN v_digital_amount / (1 + (p.cgst_rate + p.sgst_rate) / 100)
+                         ELSE v_digital_amount END, 3)                                       AS taxable_amount,
+                p.cgst_rate,
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN (v_digital_amount / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.cgst_rate / 100
+                         ELSE 0 END, 3)                                                      AS cgst_amount,
+                p.sgst_rate,
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN (v_digital_amount / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.sgst_rate / 100
+                         ELSE 0 END, 3)                                                      AS sgst_amount,
+                ROUND(v_digital_amount, 3)                                                   AS total_amount
+            FROM tmp_db_cons_assign ca
+            JOIN tmp_db_pump p ON ca.product_id = p.product_id
+            WHERE ca.vendor_id = v_vendor_id;
+
+        ELSEIF v_vendor_id = v_primary_vendor_id THEN
+            -- ── B. Primary: adjusted quantities absorbing consolidated residuals ──
+            --    adjusted_qty[P] = primary_proportionate[P]
+            --                    + consolidated_proportionate[P]   (what they would have got)
+            --                    - consolidated_actual[P]          (what they actually get)
+            --    Uses pre-calculated tmp_db_primary_items (avoids MySQL 1137 temp-table reopen error)
+            INSERT INTO t_day_bill_items (header_id, product_id, quantity, rate,
+                                          taxable_amount, cgst_rate, cgst_amount,
+                                          sgst_rate, sgst_amount, total_amount)
+            SELECT
+                v_dig_header_id,
+                pi.product_id,
+                ROUND(pi.adjusted_qty, 3),
+                ROUND(pi.price, 3),
+                ROUND(
+                    CASE WHEN (pi.cgst_rate + pi.sgst_rate) > 0
+                         THEN pi.adjusted_qty * pi.price / (1 + (pi.cgst_rate + pi.sgst_rate) / 100)
+                         ELSE pi.adjusted_qty * pi.price END, 3),
+                pi.cgst_rate,
+                ROUND(
+                    CASE WHEN (pi.cgst_rate + pi.sgst_rate) > 0
+                         THEN (pi.adjusted_qty * pi.price / (1 + (pi.cgst_rate + pi.sgst_rate) / 100)) * pi.cgst_rate / 100
+                         ELSE 0 END, 3),
+                pi.sgst_rate,
+                ROUND(
+                    CASE WHEN (pi.cgst_rate + pi.sgst_rate) > 0
+                         THEN (pi.adjusted_qty * pi.price / (1 + (pi.cgst_rate + pi.sgst_rate) / 100)) * pi.sgst_rate / 100
+                         ELSE 0 END, 3),
+                ROUND(pi.adjusted_qty * pi.price, 3)
+            FROM tmp_db_primary_items pi
+            WHERE pi.adjusted_qty > 0;
+
+        ELSE
+            -- ── C. Normal above-threshold vendor: unchanged proportionate split ──
+            INSERT INTO t_day_bill_items (header_id, product_id, quantity, rate,
+                                          taxable_amount, cgst_rate, cgst_amount,
+                                          sgst_rate, sgst_amount, total_amount)
+            SELECT
+                v_dig_header_id,
+                di.product_id,
+                ROUND(di.digital_qty, 3),
+                ROUND(p.price, 3),
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)
+                         ELSE di.digital_qty * p.price END, 3),
+                p.cgst_rate,
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN (di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.cgst_rate / 100
+                         ELSE 0 END, 3),
+                p.sgst_rate,
+                ROUND(
+                    CASE WHEN (p.cgst_rate + p.sgst_rate) > 0
+                         THEN (di.digital_qty * p.price / (1 + (p.cgst_rate + p.sgst_rate) / 100)) * p.sgst_rate / 100
+                         ELSE 0 END, 3),
+                ROUND(di.digital_qty * p.price, 3)
+            FROM tmp_db_dig_items di
+            JOIN tmp_db_pump p ON di.product_id = p.product_id
+            WHERE di.vendor_id  = v_vendor_id
+              AND di.digital_qty > 0;
+
+        END IF;
 
         UPDATE t_day_bill_header
         SET    total_amount = (SELECT COALESCE(SUM(total_amount), 0)
@@ -346,10 +519,14 @@ generate_day_bill_sp: BEGIN
     DROP TEMPORARY TABLE IF EXISTS tmp_db_pump;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_oil;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_cashsale;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_intercompany;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_credit;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_digital;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_dig_items;
     DROP TEMPORARY TABLE IF EXISTS tmp_db_bill_numbers;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_cons_dominant;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_cons_assign;
+    DROP TEMPORARY TABLE IF EXISTS tmp_db_primary_items;
 
 END generate_day_bill_sp //
 

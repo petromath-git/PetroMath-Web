@@ -97,19 +97,20 @@ module.exports = {
                      // Use transaction_type field for clean, explicit logic
                       switch(creditstmtData.transaction_type) {
                           case 'SALE':
+                          case 'BOWSER_SALE':
                           case 'ADJUSTMENT_DEBIT':
                               // Debit transactions - increase balance (like sales)
                               runningBalance += transactionAmount;
                               totalDebits += transactionAmount;
                               break;
-                              
+
                           case 'RECEIPT':
                           case 'ADJUSTMENT_CREDIT':
                               // Credit transactions - decrease balance (like payments)
                               runningBalance -= transactionAmount;
                               totalCredits += transactionAmount;
                               break;
-                              
+
                           default:
                               // Handle unexpected transaction types (fallback)
                               console.warn('Unknown transaction type:', creditstmtData.transaction_type);
@@ -117,13 +118,13 @@ module.exports = {
                               break;
                       }
 
-                  
-              
+
+
                   Creditstmtlist.push({
                     Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
                     Particulars: creditstmtData.bill_no,
                     companyName: creditstmtData.company_name,
-                    Debit: (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
+                    Debit: (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'BOWSER_SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
                     Credit: (creditstmtData.transaction_type === 'RECEIPT' || creditstmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,
                     Narration: creditstmtData.notes,
                     Balance: runningBalance, // Updated balance calculation
@@ -151,36 +152,37 @@ module.exports = {
                                     // Use transaction_type field for clean, explicit logic
                         switch(creditstmtData.transaction_type) {
                             case 'SALE':
+                            case 'BOWSER_SALE':
                             case 'ADJUSTMENT_DEBIT':
                                 // Debit transactions - increase balance (like sales)
                                 runningBalance += transactionAmount;
                                 totalDebits += transactionAmount;
                                 break;
-                                
+
                             case 'RECEIPT':
                             case 'ADJUSTMENT_CREDIT':
                                 // Credit transactions - decrease balance (like payments)
                                 runningBalance -= transactionAmount;
                                 totalCredits += transactionAmount;
                                 break;
-                                
+
                             default:
                                 // Handle unexpected transaction types (fallback)
                                 console.warn('Unknown transaction type:', creditstmtData.transaction_type);
                                 // You could add logic here or treat as one type
                                 break;
                         }
-              
+
                   Creditstmtlist.push({
-                    Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),                                
+                    Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
                     Particulars: creditstmtData.bill_no,
                     companyName: creditstmtData.company_name,
                     Product: creditstmtData.product_name,
                     Price: creditstmtData.price,
                     "Price Discount": creditstmtData.price_discount,
                     Qty: creditstmtData.qty,
-                    Debit: (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
-                    Credit: (creditstmtData.transaction_type === 'RECEIPT' || creditstmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,                
+                    Debit: (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'BOWSER_SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
+                    Credit: (creditstmtData.transaction_type === 'RECEIPT' || creditstmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,
                     Narration: creditstmtData.notes,
                     Balance: runningBalance,
                     'Odometer Reading': formatOdometerReading(creditstmtData.odometer_reading),

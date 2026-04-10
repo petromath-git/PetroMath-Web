@@ -1,6 +1,7 @@
 'use strict';
-const BowserDao = require('../dao/bowser-dao');
-const utils = require('../utils/app-utils');
+const BowserDao      = require('../dao/bowser-dao');
+const utils          = require('../utils/app-utils');
+const locationConfig = require('../utils/location-config');
 
 module.exports = {
 
@@ -111,9 +112,10 @@ module.exports = {
             const locationCode = req.user.location_code;
             const toDate   = req.query.toDate   || utils.currentDate();
             const fromDate = req.query.fromDate  || utils.currentDate();
-            const [closings, bowsers] = await Promise.all([
+            const [closings, bowsers, allowBowserReopen] = await Promise.all([
                 BowserDao.getBowserClosings(locationCode, fromDate, toDate),
-                BowserDao.getActiveBowsersByLocation(locationCode)
+                BowserDao.getActiveBowsersByLocation(locationCode),
+                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N')
             ]);
             res.render('bowser/bowser-closing-list', {
                 title: 'Bowser Closings',
@@ -121,7 +123,8 @@ module.exports = {
                 closings,
                 bowsers,
                 fromDate,
-                toDate
+                toDate,
+                allowBowserReopen
             });
         } catch (err) {
             console.error('getClosingList error:', err);
@@ -136,18 +139,21 @@ module.exports = {
             const locationCode = req.user.location_code;
             const bowserClosingId = req.params.id || null;
 
-            const [bowsers, customers, digitalVendors] = await Promise.all([
+            const [bowsers, customers, digitalVendors, allowBowserReopen] = await Promise.all([
                 BowserDao.getActiveBowsersByLocation(locationCode),
                 BowserDao.getCreditCustomers(locationCode),
-                BowserDao.getDigitalVendors(locationCode)
+                BowserDao.getDigitalVendors(locationCode),
+                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N')
             ]);
 
-            let closing = null, deliveryItems = [], suggestedFills = 0;
+            let closing = null, creditItems = [], digitalItems = [], cashItems = [];
 
             if (bowserClosingId) {
-                [closing, deliveryItems] = await Promise.all([
+                [closing, creditItems, digitalItems, cashItems] = await Promise.all([
                     BowserDao.getBowserClosingById(bowserClosingId),
-                    BowserDao.getDeliveryItems(bowserClosingId)
+                    BowserDao.getCreditItems(bowserClosingId),
+                    BowserDao.getDigitalItems(bowserClosingId),
+                    BowserDao.getCashItems(bowserClosingId)
                 ]);
                 if (!closing) return res.status(404).send('Bowser closing not found.');
             }
@@ -156,10 +162,13 @@ module.exports = {
                 title: bowserClosingId ? 'Edit Bowser Closing' : 'New Bowser Closing',
                 user: req.user,
                 closing,
-                deliveryItems,
+                creditItems,
+                digitalItems,
+                cashItems,
                 bowsers,
                 customers,
                 digitalVendors,
+                allowBowserReopen,
                 currentDate: utils.currentDate()
             });
         } catch (err) {
@@ -190,28 +199,40 @@ module.exports = {
     saveDraft: async (req, res) => {
         try {
             const { bowser_closing_id, bowser_id, closing_date,
-                    opening_meter, closing_meter, fills_received, opening_stock } = req.body;
+                    opening_meter, closing_meter, rate, fills_received, opening_stock } = req.body;
             const locationCode = req.user.location_code;
             const createdBy = String(req.user.Person_id);
 
             if (bowser_closing_id) {
                 await BowserDao.updateBowserClosing(bowser_closing_id, {
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    rate: rate || 0,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     updatedBy: createdBy
                 });
                 res.json({ success: true, bowser_closing_id, message: 'Readings saved.' });
             } else {
-                const [, meta] = await BowserDao.createBowserClosing({
+                const [insertId] = await BowserDao.createBowserClosing({
                     bowserId: bowser_id, locationCode, closingDate: closing_date,
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    rate: rate || 0,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     createdBy
                 });
-                res.json({ success: true, bowser_closing_id: meta, message: 'Bowser closing created.' });
+                res.json({ success: true, bowser_closing_id: insertId, message: 'Bowser closing created.' });
             }
         } catch (err) {
             console.error('saveDraft error:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
+    getExShortage: async (req, res) => {
+        try {
+            const result = await BowserDao.getExShortage(req.params.id);
+            res.json({ success: true, ...result });
+        } catch (err) {
+            console.error('getExShortage error:', err);
             res.status(500).json({ success: false, error: err.message });
         }
     },
@@ -222,10 +243,17 @@ module.exports = {
             if (!bowser_closing_id) {
                 return res.status(400).json({ success: false, error: 'Save readings first.' });
             }
-            const result = await BowserDao.saveDeliveryItems(
-                bowser_closing_id, items || [], String(req.user.Person_id)
-            );
-            res.json({ success: true, message: 'Delivery items saved.', ...result });
+            const createdBy     = String(req.user.Person_id);
+            const creditItems   = (items || []).filter(i => i.sale_type === 'CREDIT');
+            const digitalItems  = (items || []).filter(i => i.sale_type === 'DIGITAL');
+            const cashItems     = (items || []).filter(i => i.sale_type === 'CASH');
+
+            await Promise.all([
+                BowserDao.saveCreditItems(bowser_closing_id, creditItems, createdBy),
+                BowserDao.saveDigitalItems(bowser_closing_id, digitalItems, createdBy),
+                BowserDao.saveCashItems(bowser_closing_id, cashItems, createdBy)
+            ]);
+            res.json({ success: true, message: 'Delivery items saved.', inserted: (items || []).length });
         } catch (err) {
             console.error('saveDeliveryItems error:', err);
             res.status(500).json({ success: false, error: err.message });
@@ -244,11 +272,34 @@ module.exports = {
 
     reopenClosing: async (req, res) => {
         try {
+            const locationCode = req.user.location_code;
+            const userRole     = req.user.Role;
+
+            let hasPermission = userRole === 'SuperUser';
+            if (!hasPermission && userRole === 'Admin') {
+                const allow = await locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N');
+                hasPermission = allow === 'Y';
+            }
+            if (!hasPermission) {
+                return res.status(403).json({ success: false, error: 'You do not have permission to reopen bowser closings.' });
+            }
+
             await BowserDao.reopenBowserClosing(req.params.id, String(req.user.Person_id));
             res.json({ success: true, message: 'Bowser closing reopened.' });
         } catch (err) {
             console.error('reopenClosing error:', err);
             res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
+    deleteClosing: async (req, res) => {
+        try {
+            await BowserDao.deleteBowserClosing(req.params.id);
+            res.json({ success: true, message: 'Bowser closing deleted.' });
+        } catch (err) {
+            const status = err.statusCode || 500;
+            console.error('deleteClosing error:', err);
+            res.status(status).json({ success: false, error: err.message });
         }
     }
 };

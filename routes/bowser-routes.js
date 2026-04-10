@@ -37,6 +37,10 @@ router.get('/api/fills-received',
     [ensureLoggedIn],
     bowserController.getFillsSuggestion);
 
+router.get('/api/ex-shortage/:id',
+    [ensureLoggedIn],
+    bowserController.getExShortage);
+
 router.get('/api/vehicles/:creditlistId',
     [ensureLoggedIn],
     bowserController.getVehiclesByCustomer);
@@ -69,6 +73,10 @@ router.post('/closing/:id/finalize',
 router.post('/closing/:id/reopen',
     [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],
     bowserController.reopenClosing);
+
+router.delete('/closing/:id',
+    [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],
+    bowserController.deleteClosing);
 
 router.post('/closing/items',
     [ensureLoggedIn, security.hasPermission('MANAGE_BOWSER_CLOSING')],

@@ -28,32 +28,59 @@ block content
                             th Bowser
                             th Open Meter
                             th Close Meter
-                            th Meter Diff (L)
-                            th Fills Rec. (L)
-                            th Delivered (L)
-                            th Close Stock (L)
+                            th Bowser Sales (L)
+                            th Rate (₹/L)
+                            th Ex / Shortage (₹)
                             th Status
                             th
                     tbody
                         each c in closings
                             - const meterDiff = (parseFloat(c.closing_meter) - parseFloat(c.opening_meter)).toFixed(3)
-                            - const closeStock = (parseFloat(c.opening_stock) + parseFloat(c.fills_received) - parseFloat(meterDiff)).toFixed(3)
+                            - const exShortage = c.ex_shortage != null ? parseFloat(c.ex_shortage).toFixed(2) : '—'
+                            - const exClass = c.ex_shortage != null ? (parseFloat(c.ex_shortage) >= 0 ? 'text-danger' : 'text-success') : ''
                             tr
                                 td= new Date(c.closing_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
                                 td= c.bowser_name
                                 td= parseFloat(c.opening_meter).toFixed(3)
                                 td= parseFloat(c.closing_meter).toFixed(3)
                                 td= meterDiff
-                                td= parseFloat(c.fills_received).toFixed(3)
-                                td= parseFloat(c.total_delivered).toFixed(3)
-                                td= closeStock
+                                td= c.rate ? parseFloat(c.rate).toFixed(4) : '—'
+                                td(class=exClass)= exShortage
                                 td
                                     if c.status === 'CLOSED'
                                         span.badge.badge-success Closed
                                     else
                                         span.badge.badge-warning Draft
                                 td
-                                    a.btn.btn-sm.btn-outline-secondary(href=`/bowser/closing/${c.bowser_closing_id}`)
-                                        | View
+                                    a.btn.btn-sm.btn-outline-secondary.mr-1(href=`/bowser/closing/${c.bowser_closing_id}`) View
+                                    if c.status === 'DRAFT'
+                                        button.btn.btn-sm.btn-outline-danger(onclick=`deleteBowserClosing(${c.bowser_closing_id})`) Delete
+                                    else if c.status === 'CLOSED'
+                                        - const canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowBowserReopen === 'Y')
+                                        if canReopen
+                                            button.btn.btn-sm.btn-outline-warning.ml-1(onclick=`reopenBowserClosing(${c.bowser_closing_id})`) Reopen
         else
             .alert.alert-info No bowser closings found for the selected period.
+
+    script.
+        function deleteBowserClosing(id) {
+            if (!confirm('Delete this draft bowser closing? This cannot be undone.')) return;
+            fetch(`/bowser/closing/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) location.reload();
+                    else alert(data.error || 'Error deleting closing.');
+                })
+                .catch(() => alert('Network error.'));
+        }
+
+        function reopenBowserClosing(id) {
+            if (!confirm('Reopen this bowser closing? Status will change back to Draft.')) return;
+            fetch(`/bowser/closing/${id}/reopen`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) location.reload();
+                    else alert(data.error || 'Error reopening closing.');
+                })
+                .catch(() => alert('Network error.'));
+        }

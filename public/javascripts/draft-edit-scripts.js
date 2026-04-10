@@ -262,7 +262,7 @@ function getSaveFunction(clickedTab) {
                 saveFunctionName = 'saveAttendance';   // dummy value
                 break;
             case 'intercompany_tab':
-                saveFunctionName = 'NoSaveClick';   // user saves explicitly via Save button
+                saveFunctionName = 'saveIntercompany';
                 break;
         }
     }

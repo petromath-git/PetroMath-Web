@@ -623,6 +623,7 @@ function fifthPassShiftOffsetReconciliation(
 // ============================
 const PK_MAP = {
     t_digital_sales: "digital_sales_id",
+    t_bowser_digital_sales: "digital_id",
     t_receipts: "treceipt_id",
     t_adjustments: "adjustment_id",
     t_bank_transaction: "transaction_id",
