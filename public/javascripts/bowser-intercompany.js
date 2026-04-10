@@ -119,30 +119,33 @@
     // ── Summary section population ────────────────────────────────
 
     window.populateIntercompanySummary = function () {
-        const tbody = document.getElementById('summary-intercompany-tbody');
-        const totalEl = document.getElementById('val-intercompany-total');
-        if (!tbody || !totalEl) return;
+        const summaryTbody = document.getElementById('summary-intercompany-tbody');
+        const totalEl      = document.getElementById('val-intercompany-total');
+        if (!summaryTbody || !totalEl) return;
 
-        const rows = document.querySelectorAll('#intercompany-tbody tr');
+        // Query by class inside the whole table to avoid nested-tbody DOM issues
+        const qtyInputs = document.querySelectorAll('#intercompany-table .ic-qty');
         let totalQty = 0;
         const summaryRows = [];
 
-        rows.forEach(row => {
+        qtyInputs.forEach(qtyEl => {
+            const row = qtyEl.closest('tr');
+            if (!row) return;
+
             const bowserSel  = row.querySelector('.ic-bowser');
             const productEl  = row.querySelector('.ic-product-name');
-            const qtyEl      = row.querySelector('.ic-qty');
-            if (!bowserSel || !qtyEl) return;
-
-            const qty = parseFloat(qtyEl.value) || 0;
+            const qty        = parseFloat(qtyEl.value) || 0;
             if (qty <= 0) return;
 
-            const bowserName  = bowserSel.options[bowserSel.selectedIndex]?.text || '—';
+            const bowserName  = bowserSel
+                ? (bowserSel.options[bowserSel.selectedIndex]?.text || '—')
+                : '—';
             const productName = productEl ? (productEl.value || '—') : '—';
             totalQty += qty;
             summaryRows.push(`<tr><td>${bowserName}</td><td>${productName}</td><td>${qty.toFixed(3)}</td></tr>`);
         });
 
-        tbody.innerHTML = summaryRows.join('');
+        summaryTbody.innerHTML = summaryRows.join('');
         totalEl.textContent = totalQty.toFixed(3);
     };
 
@@ -174,5 +177,15 @@
             alert(msg);
         }
     }
+
+    // ── Auto-load existing entries set by the Pug template ───────
+    // window.existingIntercompanyEntries is set before this script runs,
+    // so we can read it directly here without waiting for DOMContentLoaded.
+    (function autoLoad() {
+        const entries = window.existingIntercompanyEntries;
+        if (entries && entries.length > 0) {
+            window.loadIntercompanyEntries(entries);
+        }
+    })();
 
 })();
