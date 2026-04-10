@@ -684,25 +684,43 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
     let locationCode = req.user.location_code;
     req.body.reportType = 'CreditDetails';
     let credits = [];
-    CreditDao.findAll(locationCode)
-        .then(data => {
-            data.forEach((credit) => {
-                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
-                    credits.push({
-                        id: credit.creditlist_id,
-                        name: credit.Company_Name
+    getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')
+        .then(enableCreditExcelDownload => {
+            CreditDao.findAll(locationCode)
+                .then(data => {
+                    data.forEach((credit) => {
+                        if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                            credits.push({
+                                id: credit.creditlist_id,
+                                name: credit.Company_Name
+                            });
+                        }
                     });
-                }
-            });
 
-            res.render('reports', { title: 'Reports', user: req.user, credits: credits });
+                    res.render('reports', {
+                        title: 'Reports',
+                        user: req.user,
+                        credits: credits,
+                        enableCreditExcelDownload: enableCreditExcelDownload === 'Y'
+                    });
 
+                });
         });
 });
 
 app.post('/reports', isLoginEnsured, function (req, res, next) {
     req.body.reportType = 'CreditDetails';
     reportsController.getCreditReport(req, res, next);
+});
+
+app.post('/reports/excel', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'CreditDetails';
+    reportsController.exportCreditReportExcel(req, res, next);
+});
+
+app.post('/reports-credit-ledger/excel', isLoginEnsured, function (req, res, next) {
+    req.body.reportType = 'Creditledger';
+    reportsController.exportCreditReportExcel(req, res, next);
 });
 
 
@@ -712,19 +730,27 @@ app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
     req.body.caller = 'notpdf';
     req.body.reportType = 'Creditledger';
 
-    CreditDao.findAll(locationCode)
-        .then(data => {
-            data.forEach((credit) => {
-                if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
-                    credits.push({
-                        id: credit.creditlist_id,
-                        name: credit.Company_Name
+    getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')
+        .then(enableCreditExcelDownload => {
+            CreditDao.findAll(locationCode)
+                .then(data => {
+                    data.forEach((credit) => {
+                        if (!(credit.card_flag === 'Y')) {  // condition to ignore Digital.
+                            credits.push({
+                                id: credit.creditlist_id,
+                                name: credit.Company_Name
+                            });
+                        }
                     });
-                }
-            });
 
-            res.render('reports-credit-ledger', { title: 'Reports', user: req.user, credits: credits });
+                    res.render('reports-credit-ledger', {
+                        title: 'Reports',
+                        user: req.user,
+                        credits: credits,
+                        enableCreditExcelDownload: enableCreditExcelDownload === 'Y'
+                    });
 
+                });
         });
 });
 
