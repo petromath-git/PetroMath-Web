@@ -2,6 +2,30 @@ extends layout
 
 block content
     form(method='POST' action='/reports')
+        script.
+            function exportExcel() {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports/excel';
+
+                const fields = {
+                    fromClosingDate: document.getElementById('fromclosingDate').value,
+                    toClosingDate: document.getElementById('toclosingDate').value,
+                    company_id: document.getElementById('company_id').value
+                };
+
+                Object.keys(fields).forEach(function(name) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = fields[name];
+                    form.appendChild(input);
+                });
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
         table.center
             tr
                 td Date Range:
@@ -29,6 +53,10 @@ block content
                             each val in credits
                                 option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 include report-print-download.pug
+                if enableCreditExcelDownload
+                    td
+                        button.btn.btn-success.mr-2(type='button', onClick='exportExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
+                            i.bi.bi-file-earmark-spreadsheet
     div &nbsp;
     div
         if creditstmt && creditstmt.length > 0

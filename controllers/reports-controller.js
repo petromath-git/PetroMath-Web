@@ -213,6 +213,7 @@ module.exports = {
                         totalDebits: totalDebits,
                         totalCredits: totalCredits,
                         showVehicleBreakup: showVehicleBreakup,
+                        enableCreditExcelDownload: (await locationConfig.getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')) === 'Y',
                       }
 
                     if(caller=='notpdf') {
@@ -239,6 +240,300 @@ module.exports = {
     
     
               },
+    exportCreditReportExcel: async(req, res) => {
+        try {
+          const ExcelJS = require('exceljs');
+
+          let locationCode = req.user.location_code;
+          let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
+          let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+          let cid;
+
+          if(req.user.Role === 'Customer'){
+            cid = req.user.creditlist_id;
+          }
+          else{
+            cid = req.body.company_id;
+          }
+
+          if(req.body.fromClosingDate) {
+            fromDate = req.body.fromClosingDate;
+          }
+          if(req.body.toClosingDate) {
+            toDate = req.body.toClosingDate;
+          }
+
+          const enableCreditExcelDownload = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD',
+            'N'
+          );
+
+          if (enableCreditExcelDownload !== 'Y') {
+            return res.status(403).send('Excel download is disabled for this location.');
+          }
+
+          const reportType = req.body.reportType || 'CreditDetails';
+
+          const balanceData = await ReportDao.getBalance(cid, fromDate, toDate);
+          const openingBal = Number(balanceData[0].OpeningData || 0);
+          const closingBal = Number(balanceData[0].ClosingData || 0);
+          const statementRows = await ReportDao.getCreditStmt(locationCode, fromDate, toDate, cid);
+
+          let totalDebits = 0;
+          let totalCredits = 0;
+          let runningBalance = openingBal;
+          const creditstmt = [];
+          let customerName = 'All Companies';
+
+          const formatOdometerReading = (reading) => {
+            if (!reading || reading === null) return '';
+            const formatted = new Intl.NumberFormat('en-IN', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(reading);
+            return formatted + ' km';
+          };
+
+          const formatIndianNumber = (value) => new Intl.NumberFormat('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(Number(value || 0));
+
+          const roundToTwo = (value) => {
+            if (value === null || value === undefined || value === '') {
+              return null;
+            }
+            return Number(Number(value).toFixed(2));
+          };
+
+          const sanitizeFilenamePart = (value, fallback = 'Customer') => {
+            const sanitized = String(value || fallback)
+              .replace(/[<>:"/\\|?*]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .replace(/ /g, '_')
+              .replace(/\.+$/g, '');
+
+            return (sanitized || fallback).slice(0, 50);
+          };
+
+          const getExcelColumnName = (columnNumber) => {
+            let dividend = columnNumber;
+            let columnName = '';
+
+            while (dividend > 0) {
+              const modulo = (dividend - 1) % 26;
+              columnName = String.fromCharCode(65 + modulo) + columnName;
+              dividend = Math.floor((dividend - modulo) / 26);
+            }
+
+            return columnName;
+          };
+
+          if (cid != -1) {
+            const credits = await CreditDao.findAll(locationCode);
+            const selectedCredit = credits.find((credit) => String(credit.creditlist_id) === String(cid));
+
+            if (selectedCredit && selectedCredit.Company_Name) {
+              customerName = selectedCredit.Company_Name;
+            } else if (statementRows.length > 0 && statementRows[0].company_name) {
+              customerName = statementRows[0].company_name;
+            }
+          }
+
+          statementRows.forEach((creditstmtData) => {
+            const transactionAmount = Number(creditstmtData.amount || 0);
+
+            switch(creditstmtData.transaction_type) {
+              case 'SALE':
+              case 'BOWSER_SALE':
+              case 'ADJUSTMENT_DEBIT':
+                runningBalance += transactionAmount;
+                totalDebits += transactionAmount;
+                break;
+
+              case 'RECEIPT':
+              case 'ADJUSTMENT_CREDIT':
+                runningBalance -= transactionAmount;
+                totalCredits += transactionAmount;
+                break;
+
+              default:
+                break;
+            }
+
+            if (reportType === 'Creditledger') {
+              creditstmt.push({
+                Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
+                Particulars: creditstmtData.bill_no,
+                'Debit (Rs.)': (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'BOWSER_SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
+                'Credit (Rs.)': (creditstmtData.transaction_type === 'RECEIPT' || creditstmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,
+                'Balance (Rs.)': runningBalance,
+                Narration: creditstmtData.notes || ''
+              });
+            } else {
+              creditstmt.push({
+                Date: dateFormat(creditstmtData.tran_date, "dd-mm-yyyy"),
+                Particulars: creditstmtData.bill_no,
+                Product: creditstmtData.product_name,
+                'Vehicle Number': creditstmtData.vehicle_number || '',
+                'Odometer Reading': formatOdometerReading(creditstmtData.odometer_reading),
+                'Price (Rs.)': roundToTwo(creditstmtData.price),
+                'Price Discount (Rs.)': roundToTwo(creditstmtData.price_discount),
+                Quantity: roundToTwo(creditstmtData.qty),
+                'Debit (Rs.)': (creditstmtData.transaction_type === 'SALE' || creditstmtData.transaction_type === 'BOWSER_SALE' || creditstmtData.transaction_type === 'ADJUSTMENT_DEBIT') ? transactionAmount : null,
+                'Credit (Rs.)': (creditstmtData.transaction_type === 'RECEIPT' || creditstmtData.transaction_type === 'ADJUSTMENT_CREDIT') ? transactionAmount : null,
+                'Balance (Rs.)': runningBalance,
+                Narration: creditstmtData.notes || ''
+              });
+            }
+          });
+
+          const showPriceDiscountColumn = reportType !== 'Creditledger' && creditstmt.some(val => val['Price Discount (Rs.)'] != null && val['Price Discount (Rs.)'] !== '' && val['Price Discount (Rs.)'] != 0);
+          const showVehicleColumn = reportType !== 'Creditledger' && creditstmt.some(val => val['Vehicle Number']);
+          const showOdometerColumn = reportType !== 'Creditledger' && creditstmt.some(val => val['Odometer Reading']);
+
+          const workbook = new ExcelJS.Workbook();
+          const sheet = workbook.addWorksheet('Credit Detail');
+          let currentRow = 1;
+
+          const columns = [
+            { header: 'Date', key: 'Date', width: 14 },
+            { header: 'Particulars', key: 'Particulars', width: 24 }
+          ];
+
+          if (reportType !== 'Creditledger') {
+            columns.push({ header: 'Product Name', key: 'Product', width: 22 });
+          }
+
+          if (showVehicleColumn) {
+            columns.push({ header: 'Vehicle Number', key: 'Vehicle Number', width: 18 });
+          }
+          if (showOdometerColumn) {
+            columns.push({ header: 'Odometer Reading', key: 'Odometer Reading', width: 18 });
+          }
+
+          columns.push({ header: 'Price (Rs.)', key: 'Price (Rs.)', width: 14 });
+
+          if (showPriceDiscountColumn) {
+            columns.push({ header: 'Price Discount (Rs.)', key: 'Price Discount (Rs.)', width: 18 });
+          }
+
+          columns.push(
+            { header: 'Quantity', key: 'Quantity', width: 14 },
+            { header: 'Debit (Rs.)', key: 'Debit (Rs.)', width: 14 },
+            { header: 'Credit (Rs.)', key: 'Credit (Rs.)', width: 14 },
+            { header: 'Balance (Rs.)', key: 'Balance (Rs.)', width: 14 },
+            { header: 'Narration', key: 'Narration', width: 30 }
+          );
+
+          const lastColumnName = getExcelColumnName(columns.length);
+
+          sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+          sheet.getCell(`A${currentRow}`).value = reportType === 'Creditledger' ? 'CREDIT LEDGER' : 'CREDIT DETAIL REPORT';
+          sheet.getCell(`A${currentRow}`).font = { bold: true, size: 14 };
+          sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+          currentRow++;
+
+          sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+          sheet.getCell(`A${currentRow}`).value = customerName;
+          sheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
+          sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+          currentRow++;
+
+          sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+          sheet.getCell(`A${currentRow}`).value = `Period: ${moment(fromDate).format('DD/MM/YYYY')} to ${moment(toDate).format('DD/MM/YYYY')}`;
+          sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+          currentRow += 2;
+
+          const headerRow = sheet.getRow(currentRow);
+          headerRow.values = columns.map(col => col.header);
+          headerRow.font = { bold: true };
+          headerRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFD3D3D3' }
+            };
+          });
+          currentRow++;
+
+          if(cid != -1) {
+            const openingRow = sheet.getRow(currentRow);
+            columns.forEach((col, index) => {
+              if (col.key === 'Particulars') {
+                openingRow.getCell(index + 1).value = 'Opening Balance';
+              }
+              if (col.key === 'Balance (Rs.)') {
+                openingRow.getCell(index + 1).value = openingBal;
+                openingRow.getCell(index + 1).numFmt = '#,##,##0.00';
+              }
+            });
+            openingRow.font = { bold: true };
+            currentRow++;
+          }
+
+          creditstmt.forEach((entry) => {
+            const dataRow = sheet.getRow(currentRow);
+            columns.forEach((col, index) => {
+              dataRow.getCell(index + 1).value = entry[col.key] ?? '';
+            });
+
+            columns.forEach((col, index) => {
+              if (['Price (Rs.)', 'Price Discount (Rs.)', 'Quantity', 'Debit (Rs.)', 'Credit (Rs.)', 'Balance (Rs.)'].includes(col.key)) {
+                dataRow.getCell(index + 1).numFmt = '#,##,##0.00';
+              }
+            });
+
+            dataRow.eachCell((cell) => {
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+              };
+            });
+            currentRow++;
+          });
+
+          if(cid != -1) {
+            const closingRow = sheet.getRow(currentRow);
+            columns.forEach((col, index) => {
+              if (col.key === 'Particulars') {
+                closingRow.getCell(index + 1).value = 'Closing Balance';
+              }
+              if (col.key === 'Balance (Rs.)') {
+                closingRow.getCell(index + 1).value = closingBal;
+                closingRow.getCell(index + 1).numFmt = '#,##,##0.00';
+              }
+            });
+            closingRow.font = { bold: true };
+          }
+
+          columns.forEach((col, index) => {
+            sheet.getColumn(index + 1).width = col.width;
+          });
+
+          const buffer = await workbook.xlsx.writeBuffer();
+          const safeCustomerName = sanitizeFilenamePart(customerName, 'All_Companies');
+          const reportPrefix = reportType === 'Creditledger' ? 'CreditLedger' : 'CreditDetail';
+          const filename = `${reportPrefix}_${safeCustomerName}_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.send(buffer);
+        } catch (error) {
+          console.error('Error generating Credit Detail Excel export:', error);
+          res.status(500).send('An error occurred while generating the Excel file.');
+        }
+    },
     getApiCreditReport: async(req, res) => {
                 console.log(req);
 
