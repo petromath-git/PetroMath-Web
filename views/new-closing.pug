@@ -523,7 +523,7 @@ block content
                                 button.btn.btn-primary(type="button" onclick="saveAndNextIntercompany()") Next &raquo;
                         script.
                             window.bowserIntercompanyData = !{JSON.stringify(bowserValues)};
-                        script(src="/javascripts/bowser-intercompany.js")
+                        script(src=`/javascripts/bowser-intercompany.js?v=${CACHE_BUST}`)
 
                 // ----------------------- Summary ----------------------------
                 div.tab-pane.fade#summary
