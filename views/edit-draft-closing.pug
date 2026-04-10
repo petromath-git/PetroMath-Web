@@ -560,7 +560,7 @@ block content
                         script.
                             window.bowserIntercompanyData     = !{JSON.stringify(bowserValues)};
                             window.existingIntercompanyEntries = !{JSON.stringify(t_intercompany || [])};
-                        script(src="/javascripts/bowser-intercompany.js")
+                        script(src=`/javascripts/bowser-intercompany.js?v=${CACHE_BUST}`)
 
                 // ----------------------- Summary ----------------------------
                 if(user.isAdmin)
