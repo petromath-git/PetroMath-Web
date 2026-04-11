@@ -72,7 +72,7 @@ module.exports = {
             const whereClause = whereConditions.join(' AND ');
             
             const transactions = await db.sequelize.query(`
-                SELECT 
+                SELECT
                     tds.digital_sales_id,
                     tds.closing_id,
                     tds.vendor_id,
@@ -81,12 +81,15 @@ module.exports = {
                     tds.notes,
                     tc.closing_date,
                     tc.closing_status,
+                    tc.cashier_id,
+                    mp.Person_Name as cashier_name,
                     mcl.company_name as vendor_name,
                     mcl.short_name as vendor_short_name,
                     COALESCE(tds.transaction_date, tc.closing_date) as display_date
                 FROM t_digital_sales tds
                 INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
                 INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
+                LEFT JOIN m_persons mp ON tc.cashier_id = mp.Person_id
                 WHERE ${whereClause}
                 ORDER BY COALESCE(tds.transaction_date, tc.closing_date) DESC, tds.digital_sales_id DESC
                 LIMIT 500
