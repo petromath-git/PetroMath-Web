@@ -13,6 +13,9 @@ router.get('/search', digitalSalesCorrectionsController.searchTransactions);
 // Get digital vendors for dropdown
 router.get('/vendors', digitalSalesCorrectionsController.getVendors);
 
+// Get cashiers for filter dropdown
+router.get('/cashiers', digitalSalesCorrectionsController.getCashiers);
+
 // Update vendor for a digital sales transaction
 router.put('/digital-sales/:digitalSalesId/vendor', 
     appSecurity.hasPermission('EDIT_DIGITAL_VENDOR_POST_CLOSING'),

@@ -35,30 +35,40 @@ module.exports = {
     // Search digital sales transactions
     searchTransactions: async (req, res) => {
         try {
-            const { fromDate, toDate, vendorFilter, minAmount, maxAmount } = req.query;
+            const { fromDate, toDate, vendorFilter, minAmount, maxAmount, cashierFilter } = req.query;
             const user = req.session.user || req.user;
             const userRole = user?.Role || user?.role;
             const userLocation = user?.location_code || user?.location;
-            
+
             // Build WHERE conditions
             let whereConditions = [];
             let replacements = { fromDate, toDate, userLocation };
-            
+
             // Date range filter (mandatory)
             whereConditions.push('DATE(COALESCE(tds.transaction_date, tc.closing_date)) BETWEEN :fromDate AND :toDate');
-            
+
             // Location filter
             whereConditions.push('tc.location_code = :userLocation');
-            
+
             // Only show closed transactions
             whereConditions.push('tc.closing_status = "CLOSED"');
-            
+
             // Vendor filter (optional)
             if (vendorFilter) {
                 whereConditions.push('tds.vendor_id = :vendorFilter');
                 replacements.vendorFilter = vendorFilter;
             }
-            
+
+            // Cashier filter — supports multiple IDs (comma-separated or array)
+            if (cashierFilter) {
+                const cashierIds = (Array.isArray(cashierFilter) ? cashierFilter : cashierFilter.split(','))
+                    .map(id => parseInt(id, 10))
+                    .filter(id => !isNaN(id));
+                if (cashierIds.length > 0) {
+                    whereConditions.push(`tc.cashier_id IN (${cashierIds.join(',')})`);
+                }
+            }
+
             // Amount range filter (optional)
             if (minAmount) {
                 whereConditions.push('tds.amount >= :minAmount');
@@ -68,7 +78,7 @@ module.exports = {
                 whereConditions.push('tds.amount <= :maxAmount');
                 replacements.maxAmount = maxAmount;
             }
-            
+
             const whereClause = whereConditions.join(' AND ');
             
             const transactions = await db.sequelize.query(`
@@ -145,6 +155,31 @@ module.exports = {
                 success: false, 
                 error: 'Internal server error' 
             });
+        }
+    },
+
+    // Get cashiers who have closings with digital sales for this location
+    getCashiers: async (req, res) => {
+        try {
+            const user = req.session.user || req.user;
+            const userLocation = user?.location_code || user?.location;
+
+            const cashiers = await db.sequelize.query(`
+                SELECT DISTINCT mp.Person_id as cashier_id, mp.Person_Name as cashier_name
+                FROM t_closing tc
+                INNER JOIN m_persons mp ON tc.cashier_id = mp.Person_id
+                INNER JOIN t_digital_sales tds ON tds.closing_id = tc.closing_id
+                WHERE tc.location_code = :userLocation
+                ORDER BY mp.Person_Name
+            `, {
+                replacements: { userLocation },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+
+            res.json({ success: true, cashiers });
+        } catch (error) {
+            console.error('Error fetching cashiers:', error);
+            res.status(500).json({ success: false, error: 'Internal server error' });
         }
     },
 
