@@ -45,6 +45,10 @@ router.get('/api/vehicles/:creditlistId',
     [ensureLoggedIn],
     bowserController.getVehiclesByCustomer);
 
+router.get('/api/vehicles',
+    [ensureLoggedIn],
+    bowserController.getAllVehicles);
+
 // ── Bowser Closing ────────────────────────────────────────────
 router.get('/closing',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],
