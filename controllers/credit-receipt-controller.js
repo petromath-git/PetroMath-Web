@@ -3,21 +3,68 @@ const dbMapping = require("../db/ui-db-field-mapping")
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
+const locationConfig = require("../utils/location-config");
 const txnController = require("../controllers/txn-common-controller");
 const cashFlowController = require("../controllers/cash-flow-controller");
 const CreditsDao = require("../dao/credits-dao");
 const lookupDao = require('../dao/lookup-dao');
 
+const CREDIT_RECEIPT_BACKDATE_CONFIG = 'CREDIT_RECEIPT_BACKDATE_DAYS';
+const DEFAULT_CREDIT_RECEIPT_BACKDATE_DAYS = 1;
+
+function getReceiptDateLimits(backdateDays) {
+    const safeBackdateDays = Number.isFinite(backdateDays) && backdateDays >= 0
+        ? backdateDays
+        : DEFAULT_CREDIT_RECEIPT_BACKDATE_DAYS;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const minAllowedDate = new Date(today);
+    minAllowedDate.setDate(minAllowedDate.getDate() - safeBackdateDays);
+
+    return {
+        backdateDays: safeBackdateDays,
+        minAllowedDate,
+        today
+    };
+}
+
 module.exports = {
 
     // Create credit receipt - one at a time
-    saveReceipts: (req, res) => {
+    saveReceipts: async (req, res) => {
         const txnReceiptDate = req.body.txn_receipt_date_0;
         let locationCode = req.user.location_code;
 
         console.log('Saving receipt data:', req.body);
 
+        const configuredBackdateDays = Number(await locationConfig.getLocationConfigValue(
+            locationCode,
+            CREDIT_RECEIPT_BACKDATE_CONFIG,
+            DEFAULT_CREDIT_RECEIPT_BACKDATE_DAYS
+        ));
+
+        const { minAllowedDate, today } = getReceiptDateLimits(configuredBackdateDays);
+        const receiptDate = new Date(txnReceiptDate);
+        receiptDate.setHours(0, 0, 0, 0);
+
         // Validation
+            if (
+                !txnReceiptDate ||
+                Number.isNaN(receiptDate.getTime()) ||
+                receiptDate < minAllowedDate ||
+                receiptDate > today
+            ) {
+                req.flash(
+                    'error',
+                    `Receipt date must be between ${dateFormat(minAllowedDate, 'yyyy-mm-dd')} and ${dateFormat(today, 'yyyy-mm-dd')}.`
+                );
+                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                return;
+            }
+
             if (!req.body.cr_companyId_0 || req.body.cr_companyId_0 === '') {
                 req.flash('error', 'Please select a Credit Party.');
                 res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
@@ -66,6 +113,13 @@ module.exports = {
         }
     
         try {
+            const configuredBackdateDays = Number(await locationConfig.getLocationConfigValue(
+                locationCode,
+                CREDIT_RECEIPT_BACKDATE_CONFIG,
+                DEFAULT_CREDIT_RECEIPT_BACKDATE_DAYS
+            ));
+            const { backdateDays, minAllowedDate } = getReceiptDateLimits(configuredBackdateDays);
+
             const [receiptResult, activeCreditResult, suspenseResult,receiptTypes, creditTypes] = await Promise.all([
                 CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
                 txnController.creditCompanyDataPromise(locationCode),  // active credit companies
@@ -193,7 +247,8 @@ module.exports = {
                         digActiveCreditCompanyValues: digitalCreditCompanyValues,
                         suspenseValues: suspenseResult,
                         currentDate: utils.currentDate(),
-                        minDateForNewReceipts: utils.restrictToPastDate(config.APP_CONFIGS.receiptEditOrDeleteAllowedDays),
+                        minDateForNewReceipts: dateFormat(minAllowedDate, "yyyy-mm-dd"),
+                        receiptBackdateDays: backdateDays,
                         fromDate: fromDate,
                         toDate: toDate
                     });

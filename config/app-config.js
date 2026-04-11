@@ -63,7 +63,6 @@ const CASH_FLOW_DENOMINATION_VALUES = [
 
 const MAX_ALLOWED_DRAFTS_PER_LOCATION = 10;
 const MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION = 5;
-const CREDIT_RECEIPT_EDIT_DELETE_ALLOWED_DAYS = 1;
 const RECEIPT_TYPES = [ 
   { id: 'cash', label: 'Cash', allow_manual_entry: true },
   { id: 'cheque', label: 'Cheque', allow_manual_entry: false },
@@ -210,7 +209,6 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
       cashFlowDenominationValuesJson: JSON.stringify(CASH_FLOW_DENOMINATION_VALUES),
       maxAllowedDrafts: MAX_ALLOWED_DRAFTS_PER_LOCATION,
       maxAllowedDraftsDays: MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION + 1,
-      receiptEditOrDeleteAllowedDays: CREDIT_RECEIPT_EDIT_DELETE_ALLOWED_DAYS,
       maxDaysAllowedToGoBackForNewClosing : MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION,
       creditTypes: ['Credit', 'Suspense'],
       cashSaleTypes: cashSaleTypes,

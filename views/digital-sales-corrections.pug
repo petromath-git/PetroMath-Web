@@ -51,6 +51,8 @@ block content
                                         tr
                                             th(scope="col") Date
                                             th(scope="col") DS ID
+                                            th(scope="col") Closing ID
+                                            th(scope="col") Cashier
                                             th(scope="col") Vendor
                                             th(scope="col") Amount
                                             th(scope="col") Notes
@@ -241,6 +243,8 @@ block content
                 row.innerHTML = `
                     <td>${date}</td>
                     <td>DS-${transaction.digital_sales_id}</td>
+                    <td>${transaction.closing_id}</td>
+                    <td>${transaction.cashier_name || '-'}</td>
                     <td>${transaction.vendor_name || '-'}</td>
                     <td class="text-end">₹${amount}</td>
                     <td><small>${transaction.notes || '-'}</small></td>
@@ -263,6 +267,11 @@ block content
                                 <small class="text-muted">${date}</small>
                             </div>
                             <span class="badge bg-primary">₹${amount}</span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Closing ID:</small> <small>${transaction.closing_id}</small>
+                            &nbsp;|&nbsp;
+                            <small class="text-muted">Cashier:</small> <small>${transaction.cashier_name || '-'}</small>
                         </div>
                         <div class="mb-2">
                             <small class="text-muted">Vendor:</small><br>
