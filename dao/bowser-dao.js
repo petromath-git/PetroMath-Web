@@ -150,16 +150,15 @@ module.exports = {
         .then(rows => rows[0] || null);
     },
 
-    getLastClosingForBowser: (bowserId) => {
+    getLastClosingForBowser: (bowserId, asOfDate) => {
         return db.sequelize.query(`
-            SELECT closing_meter,
-                   (opening_stock + fills_received - (closing_meter - opening_meter)) AS closing_stock
+            SELECT MAX(closing_meter) AS closing_meter
             FROM t_bowser_closing
-            WHERE bowser_id = :bowserId AND status = 'CLOSED'
-            ORDER BY closing_date DESC
-            LIMIT 1
-        `, { replacements: { bowserId }, type: db.Sequelize.QueryTypes.SELECT })
-        .then(rows => rows[0] || null);
+            WHERE bowser_id = :bowserId
+              AND status = 'CLOSED'
+              AND closing_date <= :asOfDate
+        `, { replacements: { bowserId, asOfDate }, type: db.Sequelize.QueryTypes.SELECT })
+        .then(rows => (rows[0]?.closing_meter != null ? rows[0] : null));
     },
 
     createBowserClosing: (data) => {
@@ -412,6 +411,7 @@ module.exports = {
             SELECT creditlist_id, Company_Name AS customer_name
             FROM m_credit_list
             WHERE location_code = :locationCode
+              AND (card_flag IS NULL OR card_flag <> 'Y')
               AND (effective_end_date IS NULL OR effective_end_date > CURDATE())
             ORDER BY Company_Name
         `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });

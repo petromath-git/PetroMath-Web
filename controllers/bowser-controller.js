@@ -144,13 +144,23 @@ module.exports = {
             const locationCode = req.user.location_code;
             const bowserClosingId = req.params.id || null;
 
-            const [bowsers, customers, digitalVendors, allVehicles, allowBowserReopen] = await Promise.all([
+            const [bowsers, customers, digitalVendors, allVehicles, allowBowserReopen, backdateDaysStr] = await Promise.all([
                 BowserDao.getActiveBowsersByLocation(locationCode),
                 BowserDao.getCreditCustomers(locationCode),
                 BowserDao.getDigitalVendors(locationCode),
                 BowserDao.getAllVehiclesByLocation(locationCode),
-                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N')
+                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N'),
+                locationConfig.getLocationConfigValue(locationCode, 'BOWSER_CLOSING_BACKDATE_DAYS', '0')
             ]);
+
+            const today = utils.currentDate();
+            const backdateDays = parseInt(backdateDaysStr) || 0;
+            let minClosingDate = today;
+            if (backdateDays > 0) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - backdateDays);
+                minClosingDate = d.toISOString().slice(0, 10);
+            }
 
             let closing = null, creditItems = [], digitalItems = [], cashItems = [];
 
@@ -176,11 +186,23 @@ module.exports = {
                 digitalVendors,
                 allVehicles,
                 allowBowserReopen,
-                currentDate: utils.currentDate()
+                currentDate: today,
+                minClosingDate
             });
         } catch (err) {
             console.error('getClosingForm error:', err);
             res.status(500).send('Error loading bowser closing form');
+        }
+    },
+
+    getLastClosing: async (req, res) => {
+        try {
+            const { date } = req.query;
+            const asOfDate = date || require('../utils/app-utils').currentDate();
+            const result = await BowserDao.getLastClosingForBowser(req.params.bowserId, asOfDate);
+            res.json({ success: true, closing_meter: result ? Number(result.closing_meter) : null });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
         }
     },
 
