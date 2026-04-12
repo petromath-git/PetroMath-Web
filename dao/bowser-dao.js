@@ -161,6 +161,16 @@ module.exports = {
         .then(rows => (rows[0]?.closing_meter != null ? rows[0] : null));
     },
 
+    getDraftByBowserAndDate: (bowserId, closingDate) => {
+        return db.sequelize.query(`
+            SELECT bowser_closing_id
+            FROM t_bowser_closing
+            WHERE bowser_id = :bowserId AND closing_date = :closingDate AND status = 'DRAFT'
+            LIMIT 1
+        `, { replacements: { bowserId, closingDate }, type: db.Sequelize.QueryTypes.SELECT })
+        .then(rows => rows[0] || null);
+    },
+
     createBowserClosing: (data) => {
         return db.sequelize.query(`
             INSERT INTO t_bowser_closing

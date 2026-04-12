@@ -121,6 +121,7 @@ module.exports = {
                 max_amount:           req.body.max_amount            || null,
                 effective_start_date: req.body.effective_start_date  || null,
                 effective_end_date:   req.body.effective_end_date    || null,
+                allow_split_flag:     req.body.allow_split_flag      === 'Y' ? 'Y' : 'N',
                 created_by:           req.user.username || req.user.Person_id
             };
 
@@ -149,6 +150,7 @@ module.exports = {
                 max_amount:           req.body.max_amount            || null,
                 effective_start_date: req.body.effective_start_date  || null,
                 effective_end_date:   req.body.effective_end_date    || null,
+                allow_split_flag:     req.body.allow_split_flag      === 'Y' ? 'Y' : 'N',
                 updated_by:           req.user.username || req.user.Person_id
             };
 
@@ -173,6 +175,24 @@ module.exports = {
         } catch (err) {
             console.error("Error deleting ledger rule:", err);
             req.flash("error", "Error deleting ledger rule");
+            res.redirect("/account-heads?tab=rules");
+        }
+    },
+
+    // ── Allow Split flag — all rule types ────────────────────────────────
+
+    updateSplitFlag: async (req, res, next) => {
+        try {
+            await LedgerRulesDao.updateSplitFlag({
+                rule_id:         req.params.id,
+                allow_split_flag: req.body.allow_split_flag === 'Y' ? 'Y' : 'N',
+                updated_by:      req.user.username || req.user.Person_id
+            });
+            req.flash("success", "Split flag updated");
+            res.redirect("/account-heads?tab=rules");
+        } catch (err) {
+            console.error("Error updating split flag:", err);
+            req.flash("error", "Error updating split flag");
             res.redirect("/account-heads?tab=rules");
         }
     },

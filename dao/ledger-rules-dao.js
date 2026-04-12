@@ -33,6 +33,7 @@ module.exports = {
                 r.max_amount,
                 r.effective_start_date,
                 r.effective_end_date,
+                r.allow_split_flag,
                 r.created_by,
                 r.updated_by
             FROM m_ledger_rules r
@@ -57,11 +58,13 @@ module.exports = {
             INSERT INTO m_ledger_rules (
                 location_code, bank_id, source_type, external_id,
                 ledger_name, allowed_entry_type, notes_required_flag,
-                max_amount, effective_start_date, effective_end_date, created_by
+                max_amount, effective_start_date, effective_end_date,
+                allow_split_flag, created_by
             ) VALUES (
                 :location_code, :bank_id, 'Static', :external_id,
                 :ledger_name, :allowed_entry_type, :notes_required_flag,
-                :max_amount, :effective_start_date, :effective_end_date, :created_by
+                :max_amount, :effective_start_date, :effective_end_date,
+                :allow_split_flag, :created_by
             )
         `;
         return await db.sequelize.query(query, {
@@ -82,6 +85,7 @@ module.exports = {
                 max_amount           = :max_amount,
                 effective_start_date = :effective_start_date,
                 effective_end_date   = :effective_end_date,
+                allow_split_flag     = :allow_split_flag,
                 updated_by           = :updated_by,
                 updation_date        = NOW()
             WHERE rule_id = :rule_id
@@ -102,6 +106,22 @@ module.exports = {
         return await db.sequelize.query(query, {
             replacements: { id },
             type: QueryTypes.DELETE
+        });
+    },
+
+    // ── Allow Split flag — editable on all rule types ───────────────────────
+
+    updateSplitFlag: async ({ rule_id, allow_split_flag, updated_by }) => {
+        const query = `
+            UPDATE m_ledger_rules
+            SET allow_split_flag = :allow_split_flag,
+                updated_by       = :updated_by,
+                updation_date    = NOW()
+            WHERE rule_id = :rule_id
+        `;
+        return await db.sequelize.query(query, {
+            replacements: { rule_id, allow_split_flag, updated_by },
+            type: QueryTypes.UPDATE
         });
     },
 

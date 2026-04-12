@@ -14,12 +14,15 @@ module.exports = {
             let bankId = req.query.bank_id || 0;
 
             // Get configuration for manual transactions (default: true if not configured)
-            const [allowManualSetting, allowReclassifySetting] = await Promise.all([
+            const [allowManualSetting, allowReclassifySetting, allowSplitSetting] = await Promise.all([
                 locationConfigDao.getSetting(locationCode, 'ALLOW_MANUAL_BANK_TRANSACTIONS'),
-                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_RECLASSIFY')
+                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_RECLASSIFY'),
+                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_SPLIT')
             ]);
             const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
             const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
+            // Split is disabled by default — must be explicitly enabled per location
+            const allowSplit = allowSplitSetting === 'true' ? 'true' : 'false';
 
             const [accountList, locationData, transactionList, transactionTypes, accountingTypes, ledgerList] = await Promise.all([
                 BankStatementDao.getBankAccounts(locationCode),
@@ -36,6 +39,7 @@ module.exports = {
                 config: config.APP_CONFIGS,
                 allowManualBankTransactions: allowManual,
                 allowBankReclassify: allowReclassify,
+                allowBankSplit: allowSplit,
                 fromDate: fromDate,
                 toDate: toDate,
                 bankId: bankId,
@@ -159,7 +163,13 @@ module.exports = {
             // Block if the transaction already has downstream dependencies:
             //   'Credit'   → auto-receipt created; would leave dangling receipt
             //   'Supplier' → supplier reconciliation may reference external_id
+            //   is_split   → allocations live in splits table; use DELETE /splits then re-split
             const txn = await BankStatementDao.getTransactionById(tBankId);
+            if (txn && txn.is_split === 'Y') {
+                return res.status(400).json({
+                    error: 'Cannot reclassify: this transaction has been split. Remove the split first, then reclassify.'
+                });
+            }
             if (txn && ['Credit', 'Supplier'].includes(txn.external_source)) {
                 return res.status(400).json({
                     error: `Cannot reclassify: this transaction is already linked to a ${txn.external_source} ledger with downstream records. Delete and re-enter it with the correct ledger.`
@@ -284,6 +294,94 @@ module.exports = {
         } catch (error) {
             console.error('Error bulk reclassifying transactions:', error);
             res.status(500).json({ error: 'Failed to bulk reclassify transactions.' });
+        }
+    },
+
+    // ── Split transaction handlers ─────────────────────────────────────────────
+
+    // GET /bank-statement/:id/splits
+    // Returns split-eligible ledgers for this transaction AND any existing splits.
+    getSplits: async (req, res, next) => {
+        try {
+            const tBankId     = req.params.id;
+            const locationCode = req.user.location_code;
+
+            const txn = await BankStatementDao.getTransactionById(tBankId);
+            if (!txn) return res.status(404).json({ error: 'Transaction not found.' });
+
+            const entryType = parseFloat(txn.credit_amount) > 0 ? 'CREDIT' : 'DEBIT';
+
+            const [eligibleLedgers, existingSplits] = await Promise.all([
+                BankStatementDao.getSplitEligibleLedgers(txn.bank_id, locationCode, entryType),
+                BankStatementDao.getSplitsForTransaction(tBankId)
+            ]);
+
+            res.status(200).json({
+                success: true,
+                transaction: {
+                    t_bank_id:     txn.t_bank_id,
+                    trans_date:    txn.trans_date,
+                    credit_amount: txn.credit_amount,
+                    debit_amount:  txn.debit_amount,
+                    remarks:       txn.remarks,
+                    is_split:      txn.is_split
+                },
+                eligible_ledgers: eligibleLedgers,
+                existing_splits:  existingSplits
+            });
+        } catch (error) {
+            console.error('Error fetching splits:', error);
+            res.status(500).json({ error: 'Failed to fetch splits.' });
+        }
+    },
+
+    // POST /bank-statement/:id/splits
+    // Body: { splits: [{ ledger_name, external_id, external_source, amount, remarks }] }
+    // Replaces any prior split for this transaction (idempotent re-split).
+    saveSplits: async (req, res, next) => {
+        try {
+            const tBankId      = req.params.id;
+            const locationCode  = req.user.location_code;
+            const createdBy     = req.user.Person_id || req.user.username;
+            const { splits }    = req.body;
+
+            if (!Array.isArray(splits) || splits.length === 0) {
+                return res.status(400).json({ error: 'splits array is required and must not be empty.' });
+            }
+
+            const txn = await BankStatementDao.getTransactionById(tBankId);
+            if (!txn) return res.status(404).json({ error: 'Transaction not found.' });
+
+            await BankStatementDao.saveSplits(tBankId, splits, txn.bank_id, locationCode, createdBy);
+
+            res.status(200).json({ success: true, split_count: splits.length });
+        } catch (error) {
+            console.error('Error saving splits:', error);
+            // Expose validation errors (amount mismatch, ineligible ledger) as 400
+            const isValidationError = error.message &&
+                (error.message.includes('does not match') || error.message.includes('not eligible'));
+            res.status(isValidationError ? 400 : 500).json({ error: error.message || 'Failed to save splits.' });
+        }
+    },
+
+    // DELETE /bank-statement/:id/splits
+    // Removes all splits and resets the transaction to unclassified.
+    deleteSplits: async (req, res, next) => {
+        try {
+            const tBankId = req.params.id;
+
+            const txn = await BankStatementDao.getTransactionById(tBankId);
+            if (!txn) return res.status(404).json({ error: 'Transaction not found.' });
+            if (txn.is_split !== 'Y') {
+                return res.status(400).json({ error: 'Transaction is not split.' });
+            }
+
+            await BankStatementDao.deleteSplits(tBankId);
+
+            res.status(200).json({ success: true });
+        } catch (error) {
+            console.error('Error deleting splits:', error);
+            res.status(500).json({ error: 'Failed to delete splits.' });
         }
     },
 
