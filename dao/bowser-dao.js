@@ -412,6 +412,7 @@ module.exports = {
             SELECT creditlist_id, Company_Name AS customer_name
             FROM m_credit_list
             WHERE location_code = :locationCode
+              AND (card_flag IS NULL OR card_flag <> 'Y')
               AND (effective_end_date IS NULL OR effective_end_date > CURDATE())
             ORDER BY Company_Name
         `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });

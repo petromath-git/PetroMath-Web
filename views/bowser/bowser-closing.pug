@@ -5,9 +5,7 @@ block content
     - const isClosed      = closing && closing.status === 'CLOSED'
     - const allItems      = [...creditItems, ...digitalItems, ...cashItems]
     - const singleBowser  = !closing && bowsers.length === 1 ? bowsers[0] : null
-    - const defaultRate   = closing
-    -     ? (Number(closing.rate) > 0 ? closing.rate : (Number(closing.product_price) > 0 ? closing.product_price : ''))
-    -     : (singleBowser && Number(singleBowser.product_price) > 0 ? singleBowser.product_price : '')
+    - const defaultRate = closing ? (Number(closing.rate) > 0 ? closing.rate : (Number(closing.product_price) > 0 ? closing.product_price : '')) : (singleBowser && Number(singleBowser.product_price) > 0 ? singleBowser.product_price : '')
 
     div
         input(type='hidden' id='bowser_closing_id_hidden' value= closing ? closing.bowser_closing_id : '')
@@ -48,6 +46,7 @@ block content
                                 input#bc_date.form-control(
                                     type='date'
                                     value= closing ? closing.closing_date : currentDate
+                                    min= isNew ? minClosingDate : undefined
                                     max=currentDate
                                     onchange='suggestFills()'
                                     disabled= (!isNew || isClosed) ? true : false
@@ -56,7 +55,7 @@ block content
                             div.form-group
                                 label Bowser
                                 if isNew
-                                    select#bc_bowser_id.form-control(onchange='onBowserChange()' required)
+                                    select#bc_bowser_id.form-control(onchange='onBowserChange()' required disabled=singleBowser ? true : false)
                                         option(value='') -- Select --
                                         each b in bowsers
                                             option(
@@ -528,6 +527,13 @@ block content
             });
         }
 
+        function formatDateDMY(isoDate) {
+            if (!isoDate) return '—';
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const [y, m, d] = isoDate.split('-');
+            return d + '-' + months[parseInt(m, 10) - 1] + '-' + y;
+        }
+
         function getCustomerName(customerId) {
             return bc_customers.find(c => String(c.id) === String(customerId))?.name || '';
         }
@@ -883,7 +889,7 @@ block content
             const dateEl   = document.getElementById('bc_date');
             const bowserEl = document.getElementById('bc_bowser_id');
             document.getElementById('sum_date').innerText =
-                dateEl ? dateEl.value : '—';
+                dateEl ? formatDateDMY(dateEl.value) : '—';
             document.getElementById('sum_bowser').innerText =
                 bowserEl?.tagName === 'SELECT'
                     ? (bowserEl.options[bowserEl.selectedIndex]?.text || '—')
