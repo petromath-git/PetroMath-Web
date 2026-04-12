@@ -256,6 +256,14 @@ module.exports = {
                 await BowserDao.syncDraftCreditRates(bowser_closing_id, parsedRate);
                 res.json({ success: true, bowser_closing_id, message: 'Readings saved.' });
             } else {
+                // Check for an existing record for same bowser+date before inserting
+                const existingDraft = await BowserDao.getDraftByBowserAndDate(bowser_id, closing_date);
+                if (existingDraft) {
+                    return res.status(409).json({
+                        success: false,
+                        error: `A closing already exists for this bowser on ${closing_date}. Please open the existing record from the list instead of creating a new one.`
+                    });
+                }
                 const [insertId] = await BowserDao.createBowserClosing({
                     bowserId: bowser_id, locationCode, closingDate: closing_date,
                     openingMeter: opening_meter, closingMeter: closing_meter,
