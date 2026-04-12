@@ -3,6 +3,11 @@ const BowserDao      = require('../dao/bowser-dao');
 const utils          = require('../utils/app-utils');
 const locationConfig = require('../utils/location-config');
 
+const parsePositiveRate = (value) => {
+    const rate = Number.parseFloat(value);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+};
+
 module.exports = {
 
     // ── Bowser Master ─────────────────────────────────────────
@@ -139,10 +144,11 @@ module.exports = {
             const locationCode = req.user.location_code;
             const bowserClosingId = req.params.id || null;
 
-            const [bowsers, customers, digitalVendors, allowBowserReopen] = await Promise.all([
+            const [bowsers, customers, digitalVendors, allVehicles, allowBowserReopen] = await Promise.all([
                 BowserDao.getActiveBowsersByLocation(locationCode),
                 BowserDao.getCreditCustomers(locationCode),
                 BowserDao.getDigitalVendors(locationCode),
+                BowserDao.getAllVehiclesByLocation(locationCode),
                 locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N')
             ]);
 
@@ -168,6 +174,7 @@ module.exports = {
                 bowsers,
                 customers,
                 digitalVendors,
+                allVehicles,
                 allowBowserReopen,
                 currentDate: utils.currentDate()
             });
@@ -196,26 +203,41 @@ module.exports = {
         }
     },
 
+    getAllVehicles: async (req, res) => {
+        try {
+            const vehicles = await BowserDao.getAllVehiclesByLocation(req.user.location_code);
+            res.json({ success: true, vehicles });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
     saveDraft: async (req, res) => {
         try {
             const { bowser_closing_id, bowser_id, closing_date,
                     opening_meter, closing_meter, rate, fills_received, opening_stock } = req.body;
             const locationCode = req.user.location_code;
             const createdBy = String(req.user.Person_id);
+            const parsedRate = parsePositiveRate(rate);
+
+            if (parsedRate === null) {
+                return res.status(400).json({ success: false, error: 'Rate is mandatory and must be greater than 0.' });
+            }
 
             if (bowser_closing_id) {
                 await BowserDao.updateBowserClosing(bowser_closing_id, {
                     openingMeter: opening_meter, closingMeter: closing_meter,
-                    rate: rate || 0,
+                    rate: parsedRate,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     updatedBy: createdBy
                 });
+                await BowserDao.syncDraftCreditRates(bowser_closing_id, parsedRate);
                 res.json({ success: true, bowser_closing_id, message: 'Readings saved.' });
             } else {
                 const [insertId] = await BowserDao.createBowserClosing({
                     bowserId: bowser_id, locationCode, closingDate: closing_date,
                     openingMeter: opening_meter, closingMeter: closing_meter,
-                    rate: rate || 0,
+                    rate: parsedRate,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     createdBy
                 });
@@ -243,13 +265,21 @@ module.exports = {
             if (!bowser_closing_id) {
                 return res.status(400).json({ success: false, error: 'Save readings first.' });
             }
+            const closing = await BowserDao.getBowserClosingById(bowser_closing_id);
+            if (!closing) {
+                return res.status(404).json({ success: false, error: 'Bowser closing not found.' });
+            }
+            const closingRate = parsePositiveRate(closing.rate);
+            if (closingRate === null) {
+                return res.status(400).json({ success: false, error: 'Save a valid bowser rate before adding deliveries.' });
+            }
             const createdBy     = String(req.user.Person_id);
             const creditItems   = (items || []).filter(i => i.sale_type === 'CREDIT');
             const digitalItems  = (items || []).filter(i => i.sale_type === 'DIGITAL');
             const cashItems     = (items || []).filter(i => i.sale_type === 'CASH');
 
             await Promise.all([
-                BowserDao.saveCreditItems(bowser_closing_id, creditItems, createdBy),
+                BowserDao.saveCreditItems(bowser_closing_id, creditItems, closingRate, createdBy),
                 BowserDao.saveDigitalItems(bowser_closing_id, digitalItems, createdBy),
                 BowserDao.saveCashItems(bowser_closing_id, cashItems, createdBy)
             ]);

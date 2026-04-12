@@ -24,6 +24,9 @@ block content
                                     label.form-label To Date:
                                     input#toDate.form-control(type='date' name='toDate' required)
                                 .col-md-3.col-sm-6
+                                    label.form-label Cashier:
+                                    select#cashierFilter.form-control(name='cashierFilter' multiple)
+                                .col-md-3.col-sm-6
                                     label.form-label Vendor:
                                     select#vendorFilter.form-control(name='vendorFilter')
                                         option(value='') All Vendors
@@ -138,7 +141,8 @@ block content
             document.getElementById('fromDate').value = thirtyDaysAgo.toISOString().split('T')[0];
             document.getElementById('toDate').value = today.toISOString().split('T')[0];
             
-            // Load vendors dropdown
+            // Load dropdowns
+            loadCashiers();
             loadVendors();
             
             // Search form handler
@@ -147,6 +151,34 @@ block content
                 searchTransactions();
             });
         });
+
+        // Load cashiers for multi-select filter
+        async function loadCashiers() {
+            try {
+                const response = await fetch('/digital-sales-corrections/cashiers');
+                const data = await response.json();
+
+                const select = document.getElementById('cashierFilter');
+                select.innerHTML = '';
+
+                if (data.success && data.cashiers) {
+                    data.cashiers.forEach(c => {
+                        const option = document.createElement('option');
+                        option.value = c.cashier_id;
+                        option.textContent = c.cashier_name;
+                        select.appendChild(option);
+                    });
+                }
+
+                $('#cashierFilter').select2({
+                    placeholder: 'All Cashiers',
+                    allowClear: true,
+                    width: '100%'
+                });
+            } catch (error) {
+                console.error('Error loading cashiers:', error);
+            }
+        }
 
         // Load vendors for dropdown
         async function loadVendors() {
@@ -177,14 +209,15 @@ block content
             const vendorFilter = document.getElementById('vendorFilter')?.value || '';
             const minAmount = document.getElementById('minAmount')?.value || '';
             const maxAmount = document.getElementById('maxAmount')?.value || '';
-            
+            const cashierIds = $('#cashierFilter').val() || [];
+
             if (!fromDate || !toDate) {
                 showAlert('warning', 'Please select both from and to dates');
                 return;
             }
-            
+
             showLoading(true);
-            
+
             try {
                 const params = new URLSearchParams({
                     fromDate: fromDate,
@@ -193,6 +226,9 @@ block content
                     minAmount: minAmount,
                     maxAmount: maxAmount
                 });
+                if (cashierIds.length > 0) {
+                    params.set('cashierFilter', cashierIds.join(','));
+                }
                 
                 const response = await fetch(`/digital-sales-corrections/search?${params}`);
                 const data = await response.json();

@@ -19,7 +19,7 @@ module.exports = {
     getActiveBowsersByLocation: (locationCode) => {
         return db.sequelize.query(`
             SELECT b.bowser_id, b.bowser_name, b.capacity_litres, b.product_id,
-                   p.product_name
+                   p.product_name, p.price AS product_price
             FROM m_bowser b
             JOIN m_product p ON p.product_id = b.product_id
             WHERE b.location_code = :locationCode AND b.is_active = 'Y'
@@ -139,7 +139,7 @@ module.exports = {
     getBowserClosingById: (bowserClosingId) => {
         return db.sequelize.query(`
             SELECT bc.*, b.bowser_name, b.capacity_litres, b.product_id,
-                   p.product_name,
+                   p.product_name, p.price AS product_price,
                    (bc.closing_meter - bc.opening_meter) AS meter_diff,
                    (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter)) AS closing_stock
             FROM t_bowser_closing bc
@@ -261,7 +261,7 @@ module.exports = {
         `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT });
     },
 
-    saveCreditItems: async (bowserClosingId, items, createdBy) => {
+    saveCreditItems: async (bowserClosingId, items, closingRate, createdBy) => {
         await db.sequelize.query(
             `DELETE FROM t_bowser_credits WHERE bowser_closing_id = :bowserClosingId`,
             { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE }
@@ -279,14 +279,29 @@ module.exports = {
                     vehicleId:    item.vehicle_id    || null,
                     productId:    item.product_id,
                     quantity:     item.quantity,
-                    rate:         item.rate,
-                    amount:       item.amount,
+                    rate:         closingRate,
+                    amount:       Number(item.quantity || 0) * closingRate,
                     createdBy
                 },
                 type: db.Sequelize.QueryTypes.INSERT
             });
         }
         return { inserted: items.length };
+    },
+
+    syncDraftCreditRates: (bowserClosingId, rate) => {
+        return db.sequelize.query(`
+            UPDATE t_bowser_credits bc
+            JOIN t_bowser_closing bcl
+              ON bcl.bowser_closing_id = bc.bowser_closing_id
+            SET bc.rate = :rate,
+                bc.amount = ROUND(COALESCE(bc.quantity, 0) * :rate, 2)
+            WHERE bc.bowser_closing_id = :bowserClosingId
+              AND bcl.status = 'DRAFT'
+        `, {
+            replacements: { bowserClosingId, rate },
+            type: db.Sequelize.QueryTypes.UPDATE
+        });
     },
 
     saveDigitalItems: async (bowserClosingId, items, createdBy) => {
@@ -410,5 +425,18 @@ module.exports = {
               AND (effective_end_date IS NULL OR effective_end_date > CURDATE())
             ORDER BY vehicle_number
         `, { replacements: { creditlistId }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
+    getAllVehiclesByLocation: (locationCode) => {
+        return db.sequelize.query(`
+            SELECT v.vehicle_id, v.vehicle_number, v.vehicle_type, v.creditlist_id,
+                   cl.Company_Name AS customer_name
+            FROM m_creditlist_vehicles v
+            JOIN m_credit_list cl ON cl.creditlist_id = v.creditlist_id
+            WHERE cl.location_code = :locationCode
+              AND (cl.effective_end_date IS NULL OR cl.effective_end_date > CURDATE())
+              AND (v.effective_end_date IS NULL OR v.effective_end_date > CURDATE())
+            ORDER BY v.vehicle_number
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
     }
 };

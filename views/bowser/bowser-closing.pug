@@ -4,7 +4,10 @@ block content
     - const isNew         = !closing
     - const isClosed      = closing && closing.status === 'CLOSED'
     - const allItems      = [...creditItems, ...digitalItems, ...cashItems]
-    - const defaultRate   = allItems.length > 0 ? allItems[0].rate : ''
+    - const singleBowser  = !closing && bowsers.length === 1 ? bowsers[0] : null
+    - const defaultRate   = closing
+    -     ? (Number(closing.rate) > 0 ? closing.rate : (Number(closing.product_price) > 0 ? closing.product_price : ''))
+    -     : (singleBowser && Number(singleBowser.product_price) > 0 ? singleBowser.product_price : '')
 
     div
         input(type='hidden' id='bowser_closing_id_hidden' value= closing ? closing.bowser_closing_id : '')
@@ -53,10 +56,16 @@ block content
                             div.form-group
                                 label Bowser
                                 if isNew
-                                    select#bc_bowser_id.form-control(onchange='onBowserChange()')
+                                    select#bc_bowser_id.form-control(onchange='onBowserChange()' required)
                                         option(value='') -- Select --
                                         each b in bowsers
-                                            option(value=b.bowser_id data-product_id=b.product_id data-product_name=b.product_name)= b.bowser_name
+                                            option(
+                                                value=b.bowser_id
+                                                selected= singleBowser && singleBowser.bowser_id === b.bowser_id
+                                                data-product_id=b.product_id
+                                                data-product_name=b.product_name
+                                                data-product_price=b.product_price
+                                            )= b.bowser_name
                                 else
                                     input.form-control(type='text' value=closing.bowser_name disabled)
                                     input(type='hidden' id='bc_bowser_id' value=closing.bowser_id)
@@ -64,9 +73,10 @@ block content
                             div.form-group
                                 label Rate (₹/L)
                                 input#bc_rate.form-control(
-                                    type='number' min='0' step='0.0001'
+                                    type='number' min='0.0001' step='0.0001' required
                                     placeholder='Enter rate'
                                     value= defaultRate
+                                    onchange='syncCreditRatesFromClosing()'
                                     disabled= isClosed ? true : false
                                 )
 
@@ -161,7 +171,7 @@ block content
                                                     if isClosed
                                                         span= item.customer_name || '—'
                                                     else
-                                                        select.form-control.form-control-sm.cred-customer(onchange='loadCreditVehicles(this)')
+                                                        select.form-control.form-control-sm.cred-customer
                                                             option(value='') -- Customer --
                                                             each c in customers
                                                                 option(value=c.creditlist_id selected= c.creditlist_id===item.creditlist_id)= c.customer_name
@@ -170,7 +180,7 @@ block content
                                                         span= item.vehicle_number || '—'
                                                     else
                                                         select.form-control.form-control-sm.cred-vehicle
-                                                            option(value='') -- Vehicle --
+                                                            option(value='')
                                                             if item.vehicle_id
                                                                 option(value=item.vehicle_id selected)= item.vehicle_number
                                                 td
@@ -376,11 +386,25 @@ block content
         // ── Page data ──────────────────────────────────────────────────────────
         const bc_customers      = !{JSON.stringify(customers.map(c => ({ id: c.creditlist_id, name: c.customer_name })))};
         const bc_digitalVendors = !{JSON.stringify(digitalVendors.map(d => ({ id: d.creditlist_id, name: d.vendor_name })))};
-        let   bc_productId      = !{JSON.stringify(closing ? closing.product_id : (bowsers[0] ? bowsers[0].product_id : 0))};
+        const bc_allVehiclesData = !{JSON.stringify(allVehicles || [])};
+        let   bc_productId      = !{JSON.stringify(closing ? closing.product_id : (singleBowser ? singleBowser.product_id : 0))};
         const bc_isClosed       = !{JSON.stringify(!!isClosed)};
+        const bc_vehicleCache   = {};
 
         // ── Init ──────────────────────────────────────────────────────────────
         window.addEventListener('DOMContentLoaded', () => {
+            bc_allVehiclesData.forEach(v => {
+                const customerId = String(v.creditlist_id || '');
+                if (!customerId) return;
+                if (!bc_vehicleCache[customerId]) bc_vehicleCache[customerId] = [];
+                bc_vehicleCache[customerId].push(v);
+            });
+            if (!bc_isClosed) {
+                const bowserEl = document.getElementById('bc_bowser_id');
+                if (bowserEl && bowserEl.tagName === 'SELECT' && bowserEl.value) onBowserChange();
+                initBowserVehicleSelect2();
+                preloadExistingCreditVehicles();
+            }
             computeMeterDiff();
             computeClosingStock();
             updateAllTotals();
@@ -391,6 +415,9 @@ block content
             const activeLink  = document.querySelector('.nav-link.active');
             const currentTabId = activeLink ? activeLink.id : null;
             if (currentTabId === targetTabId) return;
+            if (!bc_isClosed && currentTabId === 'closing_tab' && targetTabId !== 'closing_tab') {
+                if (!validateClosingTab()) return;
+            }
 
             const saveFn = getBowserSaveFn(currentTabId);
             if (!saveFn) {
@@ -437,10 +464,158 @@ block content
         // ── Closing tab ────────────────────────────────────────────────────────
         function onBowserChange() {
             const sel = document.getElementById('bc_bowser_id');
-            if (!sel) return;
+            if (!sel || sel.tagName !== 'SELECT') return;
             const opt = sel.options[sel.selectedIndex];
             bc_productId = parseInt(opt.dataset.product_id) || 0;
+            const productRate = parseFloat(opt.dataset.product_price || '');
+            const rateEl = document.getElementById('bc_rate');
+            if (rateEl && !(parseFloat(rateEl.value) > 0 && document.getElementById('bowser_closing_id_hidden').value)) {
+                rateEl.value = productRate > 0 ? productRate.toFixed(4) : '';
+            }
+            syncCreditRatesFromClosing(false);
             suggestFills();
+        }
+
+        function validateClosingTab(showAlert = true) {
+            const bowserEl = document.getElementById('bc_bowser_id');
+            if (bowserEl && !bowserEl.value) {
+                if (showAlert) {
+                    alert('Bowser is mandatory.');
+                    bowserEl.focus();
+                }
+                return false;
+            }
+            return getValidatedClosingRate(showAlert) !== null;
+        }
+
+        function getValidatedClosingRate(showAlert = true) {
+            const rateEl = document.getElementById('bc_rate');
+            const rate = parseFloat(rateEl?.value);
+            if (!(rate > 0)) {
+                if (showAlert) {
+                    alert('Rate is mandatory and must be greater than 0.');
+                    rateEl?.focus();
+                }
+                return null;
+            }
+            return Number(rate.toFixed(4));
+        }
+
+        function syncCreditRatesFromClosing(showAlert = true) {
+            const rate = getValidatedClosingRate(showAlert);
+            if (rate === null) return false;
+            document.querySelectorAll('.cred-rate').forEach((el) => {
+                el.value = rate.toFixed(4);
+                computeDeliveryRow(el, 'cred');
+            });
+            return true;
+        }
+
+        function initBowserVehicleSelect2(scope) {
+            const root = scope || document;
+            if (typeof $ === 'undefined' || !$.fn.select2) return;
+            $(root).find('.cred-vehicle').each(function() {
+                if ($(this).data('select2')) {
+                    $(this).select2('destroy');
+                }
+                $(this).select2({
+                    placeholder: 'Search vehicle number...',
+                    allowClear: true,
+                    width: '100%',
+                    minimumInputLength: 0,
+                    theme: 'default'
+                });
+            });
+        }
+
+        function getCustomerName(customerId) {
+            return bc_customers.find(c => String(c.id) === String(customerId))?.name || '';
+        }
+
+        function getAllVehiclesFlat() {
+            return Object.values(bc_vehicleCache).flat();
+        }
+
+        function getVehicleOptionLabel(vehicle, includeCustomer) {
+            const vehicleType = vehicle.vehicle_type ? ` (${vehicle.vehicle_type})` : '';
+            const customer = includeCustomer && vehicle.customer_name ? ` - ${vehicle.customer_name}` : '';
+            return `${vehicle.vehicle_number}${vehicleType}${customer}`;
+        }
+
+        function populateVehicleOptions(row, vehicles, selectedVehicleId) {
+            const vehSel = row.querySelector('.cred-vehicle');
+            if (!vehSel) return;
+            const includeCustomer = !row.querySelector('.cred-customer')?.value;
+            vehSel.innerHTML = '<option value=""></option>' +
+                (vehicles || []).map(v => `<option value="${v.vehicle_id}" ${String(selectedVehicleId || '') === String(v.vehicle_id) ? 'selected' : ''}>${getVehicleOptionLabel(v, includeCustomer)}</option>`).join('');
+            initBowserVehicleSelect2(row);
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $(vehSel).val(selectedVehicleId ? String(selectedVehicleId) : '').trigger('change.select2');
+            }
+        }
+
+        function setCustomerFromVehicle(row, vehicleId) {
+            if (!vehicleId) return;
+            const customerSel = row.querySelector('.cred-customer');
+            const vehicle = getAllVehiclesFlat().find(v => String(v.vehicle_id) === String(vehicleId));
+            if (!customerSel || !vehicle || !vehicle.creditlist_id) return;
+            customerSel.value = String(vehicle.creditlist_id);
+        }
+
+        function ensureVehiclesLoaded(creditListId) {
+            if (!creditListId) return Promise.resolve([]);
+            const cacheKey = String(creditListId);
+            if (bc_vehicleCache[cacheKey]) return Promise.resolve(bc_vehicleCache[cacheKey]);
+            return fetch(`/bowser/api/vehicles/${creditListId}`)
+                .then(r => r.json())
+                .then(data => {
+                    bc_vehicleCache[cacheKey] = (data.success ? data.vehicles : []).map(v => ({
+                        ...v,
+                        creditlist_id: creditListId,
+                        customer_name: getCustomerName(creditListId)
+                    }));
+                    return bc_vehicleCache[cacheKey];
+                });
+        }
+
+        function bindVehicleRowEvents(row) {
+            const customerSel = row.querySelector('.cred-customer');
+            const vehicleSel = row.querySelector('.cred-vehicle');
+            if (!customerSel || !vehicleSel || row.dataset.vehicleBound === 'Y') return;
+
+            customerSel.addEventListener('change', function() {
+                ensureVehiclesLoaded(this.value).then(vehicles => {
+                    populateVehicleOptions(row, this.value ? vehicles : getAllVehiclesFlat(), null);
+                });
+            });
+
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $(vehicleSel).on('change', function() {
+                    const vehicleId = this.value;
+                    if (!vehicleId) return;
+                    setCustomerFromVehicle(row, vehicleId);
+                    const customerId = row.querySelector('.cred-customer')?.value;
+                    ensureVehiclesLoaded(customerId).then(vehicles => populateVehicleOptions(row, customerId ? vehicles : getAllVehiclesFlat(), vehicleId));
+                });
+            } else {
+                vehicleSel.addEventListener('change', function() {
+                    const vehicleId = this.value;
+                    if (!vehicleId) return;
+                    setCustomerFromVehicle(row, vehicleId);
+                });
+            }
+
+            row.dataset.vehicleBound = 'Y';
+        }
+
+        function preloadExistingCreditVehicles() {
+            document.querySelectorAll('#credit-tbody tr').forEach(row => {
+                const customerId = row.querySelector('.cred-customer')?.value;
+                const vehicleId = row.querySelector('.cred-vehicle')?.value;
+                const vehicles = customerId ? (bc_vehicleCache[String(customerId)] || []) : getAllVehiclesFlat();
+                populateVehicleOptions(row, vehicles, vehicleId);
+                bindVehicleRowEvents(row);
+            });
         }
 
         function suggestFills() {
@@ -459,26 +634,29 @@ block content
 
         function saveClosingInfo() {
             const hiddenId = document.getElementById('bowser_closing_id_hidden').value;
-            if (hiddenId) return Promise.resolve(true); // edit mode — header already saved
+            const rate     = getValidatedClosingRate();
 
             const bowserId = document.getElementById('bc_bowser_id').value;
             const date     = document.getElementById('bc_date').value;
             if (!bowserId || !date) {
-                alert('Select a bowser and date.');
+                alert('Bowser and date are mandatory.');
                 return Promise.resolve(false);
             }
+            if (rate === null) return Promise.resolve(false);
 
-            return fetch('/bowser/closing', {
-                method:  'POST',
+            const isEdit = !!hiddenId;
+            return fetch(isEdit ? `/bowser/closing/${hiddenId}` : '/bowser/closing', {
+                method:  isEdit ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({
+                    bowser_closing_id: hiddenId || null,
                     bowser_id:      bowserId,
                     closing_date:   date,
-                    rate:           parseFloat(document.getElementById('bc_rate')?.value) || 0,
-                    opening_meter:  0,
-                    closing_meter:  0,
-                    fills_received: 0,
-                    opening_stock:  0
+                    rate:           rate,
+                    opening_meter:  document.getElementById('bc_opening_meter')?.value || 0,
+                    closing_meter:  document.getElementById('bc_closing_meter')?.value || 0,
+                    fills_received: document.getElementById('bc_fills_received')?.value || 0,
+                    opening_stock:  document.getElementById('bc_opening_stock')?.value || 0
                 })
             })
             .then(r => r.json())
@@ -514,10 +692,12 @@ block content
 
         function saveReadings() {
             const hiddenId = document.getElementById('bowser_closing_id_hidden').value;
+            const rate     = getValidatedClosingRate();
             if (!hiddenId) {
                 alert('Save the Closing tab first.');
                 return Promise.resolve(false);
             }
+            if (rate === null) return Promise.resolve(false);
 
             return fetch(`/bowser/closing/${hiddenId}`, {
                 method:  'PUT',
@@ -526,7 +706,7 @@ block content
                     bowser_closing_id: hiddenId,
                     opening_meter:     document.getElementById('bc_opening_meter').value,
                     closing_meter:     document.getElementById('bc_closing_meter').value,
-                    rate:              parseFloat(document.getElementById('bc_rate')?.value) || 0,
+                    rate:              rate,
                     fills_received:    document.getElementById('bc_fills_received').value,
                     opening_stock:     document.getElementById('bc_opening_stock').value
                 })
@@ -547,41 +727,29 @@ block content
         function addCreditRow() {
             const tbody      = document.getElementById('credit-tbody');
             const custOptions = bc_customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            const rate        = document.getElementById('bc_rate')?.value || '';
+            const rate        = getValidatedClosingRate();
+            if (rate === null) return;
             const tr          = document.createElement('tr');
             tr.innerHTML = `
                 <td><input class="form-control form-control-sm cred-bill-no" type="text" placeholder="Bill No"></td>
                 <td>
-                    <select class="form-control form-control-sm cred-customer" onchange="loadCreditVehicles(this)">
+                    <select class="form-control form-control-sm cred-customer">
                         <option value="">-- Customer --</option>${custOptions}
                     </select>
                 </td>
                 <td>
                     <select class="form-control form-control-sm cred-vehicle">
-                        <option value="">-- Vehicle --</option>
+                        <option value=""></option>
                     </select>
                 </td>
                 <td><input class="form-control form-control-sm cred-qty" type="number" min="0" step="0.001" oninput="computeDeliveryRow(this,'cred'); updateAllTotals()"></td>
-                <td><input class="form-control form-control-sm cred-rate" type="number" min="0" step="0.0001" value="${rate}" readonly></td>
+                <td><input class="form-control form-control-sm cred-rate" type="number" min="0.0001" step="0.0001" value="${rate.toFixed(4)}" readonly></td>
                 <td><input class="form-control form-control-sm cred-amount" type="text" readonly></td>
                 <td><button class="btn btn-sm btn-outline-danger" type="button" onclick="removeDeliveryRow(this)">&times;</button></td>
             `;
             tbody.appendChild(tr);
-        }
-
-        function loadCreditVehicles(sel) {
-            const row      = sel.closest('tr');
-            const vehSel   = row.querySelector('.cred-vehicle');
-            const creditId = sel.value;
-            if (!creditId) { vehSel.innerHTML = '<option value="">-- Vehicle --</option>'; return; }
-            fetch(`/bowser/api/vehicles/${creditId}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        vehSel.innerHTML = '<option value="">-- Vehicle --</option>' +
-                            data.vehicles.map(v => `<option value="${v.vehicle_id}">${v.vehicle_number}</option>`).join('');
-                    }
-                });
+            populateVehicleOptions(tr, getAllVehiclesFlat(), null);
+            bindVehicleRowEvents(tr);
         }
 
         // ── Digital tab ────────────────────────────────────────────────────────
@@ -645,7 +813,11 @@ block content
         // ── Save deliveries (collects from all three tabs) ─────────────────────
         function saveDeliveries() {
             const closingId = document.getElementById('bowser_closing_id_hidden').value;
+            const closingRate = getValidatedClosingRate();
             if (!closingId) { alert('Save readings first.'); return Promise.resolve(false); }
+            if (closingRate === null) return Promise.resolve(false);
+
+            syncCreditRatesFromClosing(false);
 
             const items = [];
 
@@ -659,8 +831,8 @@ block content
                     vehicle_id:    row.querySelector('.cred-vehicle')?.value  || null,
                     product_id:    bc_productId,
                     quantity:      qty,
-                    rate:          parseFloat(row.querySelector('.cred-rate')?.value)   || 0,
-                    amount:        parseFloat(row.querySelector('.cred-amount')?.value) || 0
+                    rate:          closingRate,
+                    amount:        Number((qty * closingRate).toFixed(2))
                 });
             });
 
