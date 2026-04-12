@@ -48,7 +48,7 @@ block content
                                     value= closing ? closing.closing_date : currentDate
                                     min= isNew ? minClosingDate : undefined
                                     max=currentDate
-                                    onchange='suggestFills()'
+                                    onchange='suggestFills(); suggestOpeningMeter()'
                                     disabled= (!isNew || isClosed) ? true : false
                                 )
                         div.col
@@ -473,6 +473,24 @@ block content
             }
             syncCreditRatesFromClosing(false);
             suggestFills();
+            suggestOpeningMeter();
+        }
+
+        function suggestOpeningMeter() {
+            const bowserId = document.getElementById('bc_bowser_id')?.value;
+            const date     = document.getElementById('bc_date')?.value;
+            const openEl   = document.getElementById('bc_opening_meter');
+            if (!bowserId || !date || !openEl) return;
+            // Only suggest on new closings (no saved id yet)
+            if (document.getElementById('bowser_closing_id_hidden').value) return;
+            fetch(`/bowser/api/last-closing/${bowserId}?date=${date}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.closing_meter !== null) {
+                        openEl.value = data.closing_meter;
+                        computeMeterDiff();
+                    }
+                });
         }
 
         function validateClosingTab(showAlert = true) {
@@ -826,14 +844,18 @@ block content
             syncCreditRatesFromClosing(false);
 
             const items = [];
+            let validationError = null;
 
             document.querySelectorAll('#credit-tbody tr').forEach(row => {
-                const qty = parseFloat(row.querySelector('.cred-qty')?.value) || 0;
-                if (qty <= 0) return;
+                if (validationError) return;
+                const qty      = parseFloat(row.querySelector('.cred-qty')?.value) || 0;
+                const customer = row.querySelector('.cred-customer')?.value;
+                if (qty <= 0) { validationError = 'Each credit row must have a quantity greater than 0.'; return; }
+                if (!customer) { validationError = 'Each credit row must have a customer selected.'; return; }
                 items.push({
                     sale_type:     'CREDIT',
                     bill_no:       row.querySelector('.cred-bill-no')?.value?.trim() || null,
-                    creditlist_id: row.querySelector('.cred-customer')?.value || null,
+                    creditlist_id: customer,
                     vehicle_id:    row.querySelector('.cred-vehicle')?.value  || null,
                     product_id:    bc_productId,
                     quantity:      qty,
@@ -842,26 +864,34 @@ block content
                 });
             });
 
-            document.querySelectorAll('#digital-tbody tr').forEach(row => {
-                const amt = parseFloat(row.querySelector('.digi-amount')?.value) || 0;
-                if (amt <= 0) return;
+            if (!validationError) document.querySelectorAll('#digital-tbody tr').forEach(row => {
+                if (validationError) return;
+                const amt    = parseFloat(row.querySelector('.digi-amount')?.value) || 0;
+                const vendor = row.querySelector('.digi-vendor')?.value;
+                if (amt <= 0) { validationError = 'Each digital row must have an amount greater than 0.'; return; }
+                if (!vendor) { validationError = 'Each digital row must have a vendor selected.'; return; }
                 items.push({
                     sale_type:         'DIGITAL',
-                    digital_vendor_id: row.querySelector('.digi-vendor')?.value || null,
-                    digital_ref:       row.querySelector('.digi-ref')?.value    || null,
+                    digital_vendor_id: vendor,
+                    digital_ref:       row.querySelector('.digi-ref')?.value || null,
                     amount:            amt
                 });
             });
 
+            if (validationError) { alert(validationError); return Promise.resolve(false); }
+
             document.querySelectorAll('#cash-tbody tr').forEach(row => {
+                if (validationError) return;
                 const amt = parseFloat(row.querySelector('.cash-amount')?.value) || 0;
-                if (amt <= 0) return;
+                if (amt <= 0) { validationError = 'Each cash row must have an amount greater than 0.'; return; }
                 items.push({
                     sale_type:  'CASH',
                     product_id: bc_productId,
                     amount:     amt
                 });
             });
+
+            if (validationError) { alert(validationError); return Promise.resolve(false); }
 
             return fetch('/bowser/closing/items', {
                 method:  'POST',

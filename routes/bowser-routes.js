@@ -33,6 +33,10 @@ router.post('/api/intercompany',
     [ensureLoggedIn],
     bowserController.saveIntercompany);
 
+router.get('/api/last-closing/:bowserId',
+    [ensureLoggedIn],
+    bowserController.getLastClosing);
+
 router.get('/api/fills-received',
     [ensureLoggedIn],
     bowserController.getFillsSuggestion);

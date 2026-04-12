@@ -150,16 +150,15 @@ module.exports = {
         .then(rows => rows[0] || null);
     },
 
-    getLastClosingForBowser: (bowserId) => {
+    getLastClosingForBowser: (bowserId, asOfDate) => {
         return db.sequelize.query(`
-            SELECT closing_meter,
-                   (opening_stock + fills_received - (closing_meter - opening_meter)) AS closing_stock
+            SELECT MAX(closing_meter) AS closing_meter
             FROM t_bowser_closing
-            WHERE bowser_id = :bowserId AND status = 'CLOSED'
-            ORDER BY closing_date DESC
-            LIMIT 1
-        `, { replacements: { bowserId }, type: db.Sequelize.QueryTypes.SELECT })
-        .then(rows => rows[0] || null);
+            WHERE bowser_id = :bowserId
+              AND status = 'CLOSED'
+              AND closing_date <= :asOfDate
+        `, { replacements: { bowserId, asOfDate }, type: db.Sequelize.QueryTypes.SELECT })
+        .then(rows => (rows[0]?.closing_meter != null ? rows[0] : null));
     },
 
     createBowserClosing: (data) => {

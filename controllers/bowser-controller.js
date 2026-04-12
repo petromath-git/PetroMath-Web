@@ -195,6 +195,17 @@ module.exports = {
         }
     },
 
+    getLastClosing: async (req, res) => {
+        try {
+            const { date } = req.query;
+            const asOfDate = date || require('../utils/app-utils').currentDate();
+            const result = await BowserDao.getLastClosingForBowser(req.params.bowserId, asOfDate);
+            res.json({ success: true, closing_meter: result ? Number(result.closing_meter) : null });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
     getFillsSuggestion: async (req, res) => {
         try {
             const { bowserId, date } = req.query;
