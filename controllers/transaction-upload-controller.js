@@ -626,14 +626,17 @@ module.exports = {
             );
         }
         
+        const allowBankSplit = await locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_SPLIT') || 'false';
+
         res.render('transaction-upload', {
             title: 'Upload Transactions',
             user: req.user,
             banks: banksWithLastUpload,
             overlapMode: overlapMode,
-            overlapDays: overlapDays
+            overlapDays: overlapDays,
+            allowBankSplit
         });
-        
+
     } catch (error) {
         console.error('Error in getUploadPage:', error);
         next(error);
@@ -971,22 +974,34 @@ previewTransactions: async (req, res) => {
             // Validate
             for (let i = 0; i < transactions.length; i++) {
                 const txn = transactions[i];
-                
-                if (!txn.ledger_name) {
+                const isSplit = Array.isArray(txn.splits) && txn.splits.length > 0;
+
+                if (!isSplit && !txn.ledger_name) {
                     return res.status(400).json({
                         success: false,
                         error: `Transaction ${i + 1} is missing ledger selection`
                     });
                 }
-                
+
                 const credit = parseFloat(txn.credit_amount) || 0;
-                const debit = parseFloat(txn.debit_amount) || 0;
-                
+                const debit  = parseFloat(txn.debit_amount)  || 0;
+
                 if (credit === 0 && debit === 0) {
                     return res.status(400).json({
                         success: false,
                         error: `Transaction ${i + 1}: Must have either credit or debit amount`
                     });
+                }
+
+                if (isSplit) {
+                    const splitTotal = txn.splits.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+                    const parentAmt  = credit || debit;
+                    if (Math.abs(splitTotal - parentAmt) > 0.01) {
+                        return res.status(400).json({
+                            success: false,
+                            error: `Transaction ${i + 1}: split total ${splitTotal.toFixed(2)} does not match amount ${parentAmt.toFixed(2)}`
+                        });
+                    }
                 }
             }
 
@@ -996,64 +1011,87 @@ previewTransactions: async (req, res) => {
             // Save each transaction
             for (let i = 0; i < transactions.length; i++) {
                 const txn = transactions[i];
-                
+
                 try {
-                    const credit = parseFloat(txn.credit_amount) || 0;
-                    const debit = parseFloat(txn.debit_amount) || 0;
+                    const credit   = parseFloat(txn.credit_amount) || 0;
+                    const debit    = parseFloat(txn.debit_amount)  || 0;
+                    const isSplit  = Array.isArray(txn.splits) && txn.splits.length > 0;
 
-                   // Lookup external_id and external_source from allowed ledgers
-                    let externalId = null;
-                    let externalSource = null;
+                    if (isSplit) {
+                        // ── Split transaction ─────────────────────────────
+                        // Save parent with no ledger, then call saveSplits
+                        const saveResult = await BankStatementDao.saveTransaction({
+                            trans_date:      txn.txn_date,
+                            bank_id:         parseInt(bankId),
+                            ledger_name:     null,
+                            transaction_type: null,
+                            accounting_type:  null,
+                            credit_amount:   credit > 0 ? credit : null,
+                            debit_amount:    debit  > 0 ? debit  : null,
+                            remarks:         txn.remarks || txn.description || '',
+                            user_remark:     txn.user_remark || null,
+                            external_id:     null,
+                            external_source: null,
+                            running_balance: txn.running_balance || null,
+                            created_by:      userName
+                        });
+                        const tBankId = saveResult[0];
 
-                    if (txn.ledger_name && bankId) {
-                        try {
-                            const ledgerDetails = await BankStatementDao.getLedgerDetails(
-                                bankId, 
-                                txn.ledger_name, 
-                                locationCode
-                            );
-                            
-                            if (ledgerDetails) {
-                                externalId = ledgerDetails.external_id;
-                                externalSource = ledgerDetails.source_type;
-                                console.log(`Mapped ledger ${txn.ledger_name} → external_id: ${externalId}, source: ${externalSource}`);
-                            } else {
-                                console.warn(`No ledger details found for ${txn.ledger_name}, bank ${bankId}`);
-                            }
-                        } catch (ledgerError) {
-                            console.error('Error looking up ledger details:', ledgerError);
+                        // Resolve external_id/source for each split allocation
+                        const resolvedSplits = [];
+                        for (const split of txn.splits) {
+                            const details = await BankStatementDao.getLedgerDetails(bankId, split.ledger_name, locationCode);
+                            resolvedSplits.push({
+                                ledger_name:     split.ledger_name,
+                                external_id:     details ? details.external_id : null,
+                                external_source: details ? details.source_type : null,
+                                amount:          parseFloat(split.amount),
+                                remarks:         split.remarks || null
+                            });
                         }
-                    }
 
-                    const transactionData = {
-                        trans_date: txn.txn_date,
-                        bank_id: parseInt(bankId),
-                        ledger_name: txn.ledger_name,
-                        transaction_type: null,
-                        accounting_type: null,
-                        credit_amount: credit > 0 ? credit : null,
-                        debit_amount: debit > 0 ? debit : null,
-                        remarks: txn.remarks || txn.description || '',
-                        user_remark: txn.user_remark || null,
-                        external_id: externalId,  // ✓ Now properly populated
-                        external_source: externalSource || 'upload',  // ✓ Use source_type or fallback to 'upload'
-                        running_balance: txn.running_balance || null,
-                        created_by: userName
-                    };
+                        await BankStatementDao.saveSplits(tBankId, resolvedSplits, bankId, locationCode, userName);
 
-                    await BankStatementDao.saveTransaction(transactionData);
-                    
-                    // Learn pattern
-                    try {
-                        const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
-                        await bankReconDao.learnFromSuggestion(
-                            bankId,
-                            txn.description || '',
-                            txn.ledger_name,
-                            entryType
-                        );
-                    } catch (learningError) {
-                        console.error('Learning error (non-critical):', learningError);
+                    } else {
+                        // ── Normal transaction ────────────────────────────
+                        let externalId = null, externalSource = null;
+                        if (txn.ledger_name && bankId) {
+                            try {
+                                const ledgerDetails = await BankStatementDao.getLedgerDetails(bankId, txn.ledger_name, locationCode);
+                                if (ledgerDetails) {
+                                    externalId     = ledgerDetails.external_id;
+                                    externalSource = ledgerDetails.source_type;
+                                } else {
+                                    console.warn(`No ledger details found for ${txn.ledger_name}, bank ${bankId}`);
+                                }
+                            } catch (ledgerError) {
+                                console.error('Error looking up ledger details:', ledgerError);
+                            }
+                        }
+
+                        await BankStatementDao.saveTransaction({
+                            trans_date:      txn.txn_date,
+                            bank_id:         parseInt(bankId),
+                            ledger_name:     txn.ledger_name,
+                            transaction_type: null,
+                            accounting_type:  null,
+                            credit_amount:   credit > 0 ? credit : null,
+                            debit_amount:    debit  > 0 ? debit  : null,
+                            remarks:         txn.remarks || txn.description || '',
+                            user_remark:     txn.user_remark || null,
+                            external_id:     externalId,
+                            external_source: externalSource || 'upload',
+                            running_balance: txn.running_balance || null,
+                            created_by:      userName
+                        });
+
+                        // Learn pattern
+                        try {
+                            const entryType = credit > 0 ? 'CREDIT' : 'DEBIT';
+                            await bankReconDao.learnFromSuggestion(bankId, txn.description || '', txn.ledger_name, entryType);
+                        } catch (learningError) {
+                            console.error('Learning error (non-critical):', learningError);
+                        }
                     }
 
                     successCount++;

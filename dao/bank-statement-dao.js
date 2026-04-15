@@ -21,7 +21,7 @@ module.exports = {
     // Get allowed ledgers for a specific bank account
     getAllowedLedgers: async (bankId, locationCode) => {
         const query = `
-            SELECT 
+            SELECT
                 rule_id,
                 source_type,
                 external_id,
@@ -29,7 +29,8 @@ module.exports = {
                 ledger_display_name,
                 allowed_entry_type,
                 notes_required_flag,
-                max_amount
+                max_amount,
+                allow_split_flag
             FROM m_bank_allowed_ledgers_v
             WHERE bank_id = :bankId
               AND (location_code = :locationCode OR location_code IS NULL)
@@ -600,20 +601,21 @@ saveTransaction: async (transactionData) => {
 
             // Check whether this location uses cashflow
             const [cfRow] = await db.sequelize.query(
-                `SELECT config_value
+                `SELECT setting_value
                  FROM m_location_config
                  WHERE (location_code = :locationCode OR location_code = '*')
-                   AND config_name = 'CASHFLOW_ENABLED'
+                   AND setting_name = 'CASHFLOW_ENABLED'
                  ORDER BY CASE WHEN location_code = :locationCode THEN 0 ELSE 1 END
                  LIMIT 1`,
                 { replacements: { locationCode }, type: QueryTypes.SELECT, transaction: t }
             );
-            const cashflowEnabled = !cfRow || String(cfRow.config_value).toLowerCase() !== 'false';
+            const cashflowEnabled = !cfRow || String(cfRow.setting_value).toLowerCase() !== 'false';
 
-            // Remove prior splits and their receipts (re-split replaces previous)
+            // Remove the original receipt created at upload time (source_split_id IS NULL),
+            // as well as any receipts from a prior re-split (source_split_id IS NOT NULL).
+            // This prevents double-counting when the full-amount receipt coexists with split receipts.
             await db.sequelize.query(
-                `DELETE FROM t_receipts WHERE source_split_id IN
-                    (SELECT split_id FROM t_bank_transaction_splits WHERE t_bank_id = :tBankId)`,
+                `DELETE FROM t_receipts WHERE source_txn_id = :tBankId`,
                 { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
             );
             await db.sequelize.query(
@@ -696,8 +698,12 @@ saveTransaction: async (transactionData) => {
             // For cashflow locations: leave closed_flag = 'N' — the trigger closes it.
             // For non-cashflow locations: close it now (no trigger will run).
             if (cashflowEnabled) {
+                // Explicitly reset closed_flag — parent may have been inserted as 'Y'
+                // (e.g. split applied at upload time). Trigger needs 'N' to process it.
                 await db.sequelize.query(
-                    `UPDATE t_bank_transaction SET is_split = 'Y' WHERE t_bank_id = :tBankId`,
+                    `UPDATE t_bank_transaction
+                     SET is_split = 'Y', closed_flag = 'N', closed_date = NULL
+                     WHERE t_bank_id = :tBankId`,
                     { replacements: { tBankId }, type: QueryTypes.UPDATE, transaction: t }
                 );
             } else {

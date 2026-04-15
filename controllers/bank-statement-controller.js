@@ -61,64 +61,90 @@ module.exports = {
    saveTransactionData: async (req, res, next) => {
     try {
         const locationCode = req.user.location_code;
-        const transactions = [];
-        const usedIndices = Object.keys(req.body)
+        const createdBy    = req.user.Person_id || req.user.username;
+        const usedIndices  = Object.keys(req.body)
             .filter(key => key.startsWith('trans_date_'))
             .map(key => key.replace('trans_date_', ''));
 
         for (const index of usedIndices) {
             const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
-            const debit = parseFloat(req.body[`debitamount_${index}`] || 0);
-            
+            const debit  = parseFloat(req.body[`debitamount_${index}`]  || 0);
+
             if (credit === 0 && debit === 0) {
-                return res.status(400).send({
-                    error: `Row ${parseInt(index) + 1} must have either credit or debit amount.`
-                });
+                return res.status(400).send({ error: `Row ${parseInt(index) + 1} must have either credit or debit amount.` });
             }
-
             if (credit > 0 && debit > 0) {
-                return res.status(400).send({
-                    error: `Row ${parseInt(index) + 1} cannot have both credit and debit amounts.`
+                return res.status(400).send({ error: `Row ${parseInt(index) + 1} cannot have both credit and debit amounts.` });
+            }
+
+            const bankId  = req.body[`bank_id_${index}`];
+            const isSplit = req.body[`is_split_${index}`] === 'Y';
+
+            if (isSplit) {
+                // ── Split at upload time ──────────────────────────────────
+                // Save parent with no ledger (no receipt created), then call
+                // saveSplits which handles receipt creation + is_split flag.
+                const parentData = {
+                    trans_date:       req.body[`trans_date_${index}`],
+                    bank_id:          bankId,
+                    ledger_name:      null,
+                    transaction_type: req.body[`transaction_type_${index}`] || null,
+                    accounting_type:  req.body[`accounting_type_${index}`]  || null,
+                    credit_amount:    credit || null,
+                    debit_amount:     debit  || null,
+                    remarks:          req.body[`remarks_${index}`]      || '',
+                    user_remark:      req.body[`user_remark_${index}`]  || null,
+                    external_id:      null,
+                    external_source:  null,
+                    running_balance:  null,
+                    created_by:       createdBy
+                };
+                const saveResult = await BankStatementDao.saveTransaction(parentData);
+                const tBankId   = saveResult[0]; // LAST_INSERT_ID
+
+                // Collect split allocations from form fields
+                const splits = [];
+                let splitIdx = 0;
+                while (req.body[`split_ledger_${index}_${splitIdx}`]) {
+                    const ledgerName = req.body[`split_ledger_${index}_${splitIdx}`];
+                    const amount     = parseFloat(req.body[`split_amount_${index}_${splitIdx}`] || 0);
+                    const remarks    = req.body[`split_remarks_${index}_${splitIdx}`] || null;
+                    const details    = await BankStatementDao.getLedgerDetails(bankId, ledgerName, locationCode);
+                    splits.push({
+                        ledger_name:     ledgerName,
+                        external_id:     details ? details.external_id  : null,
+                        external_source: details ? details.source_type  : null,
+                        amount,
+                        remarks
+                    });
+                    splitIdx++;
+                }
+                await BankStatementDao.saveSplits(tBankId, splits, bankId, locationCode, createdBy);
+
+            } else {
+                // ── Normal (non-split) row ────────────────────────────────
+                const ledgerName = req.body[`ledger_name_${index}`] || null;
+                let externalId = null, externalSource = null;
+                if (ledgerName && bankId) {
+                    const details = await BankStatementDao.getLedgerDetails(bankId, ledgerName, locationCode);
+                    if (details) { externalId = details.external_id; externalSource = details.source_type; }
+                }
+                await BankStatementDao.saveTransaction({
+                    trans_date:       req.body[`trans_date_${index}`],
+                    bank_id:          bankId,
+                    ledger_name:      ledgerName,
+                    transaction_type: req.body[`transaction_type_${index}`] || null,
+                    accounting_type:  req.body[`accounting_type_${index}`]  || null,
+                    credit_amount:    credit || null,
+                    debit_amount:     debit  || null,
+                    remarks:          req.body[`remarks_${index}`]      || '',
+                    user_remark:      req.body[`user_remark_${index}`]  || null,
+                    external_id:      externalId,
+                    external_source:  externalSource,
+                    running_balance:  null,
+                    created_by:       createdBy
                 });
             }
-
-            const bankId = req.body[`bank_id_${index}`];
-            const ledgerName = req.body[`ledger_name_${index}`] || null;
-            
-            // Lookup external_id and external_source from allowed ledgers
-            let externalId = null;
-            let externalSource = null;
-            
-            if (ledgerName && bankId) {
-                const ledgerDetails = await BankStatementDao.getLedgerDetails(bankId, ledgerName, locationCode);
-                if (ledgerDetails) {
-                    externalId = ledgerDetails.external_id;
-                    externalSource = ledgerDetails.source_type;
-                }
-            }
-
-            const transactionData = {
-                trans_date: req.body[`trans_date_${index}`],
-                bank_id: bankId,
-                ledger_name: ledgerName,
-                transaction_type: req.body[`transaction_type_${index}`] || null,
-                accounting_type: req.body[`accounting_type_${index}`] || null,
-                credit_amount: credit || null,
-                debit_amount: debit || null,
-                remarks: req.body[`remarks_${index}`] || '',
-                user_remark: req.body[`user_remark_${index}`] || null,
-                external_id: externalId,
-                external_source: externalSource,
-                running_balance: null,
-                created_by: req.user.Person_id || req.user.username
-            };
-
-            transactions.push(transactionData);
-        }
-
-        // Save all transactions
-        for (const transaction of transactions) {
-            await BankStatementDao.saveTransaction(transaction);
         }
 
         res.redirect(`/bank-statement?tbankfromDate=${req.body.tbank_fromDate_hiddenValue}&tbanktoDate=${req.body.tbank_toDate_hiddenValue}&bank_id=${req.body.bank_id || 0}`);

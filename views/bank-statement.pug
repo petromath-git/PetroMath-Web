@@ -182,7 +182,7 @@ block content
                                 - const isUnclassified = !val.ledger_name || val.ledger_name === '' || val.ledger_name.toUpperCase() === 'OTHERS'
                                 - const isSplit = val.is_split === 'Y'
                                 - const canReclassify = !['Credit', 'Supplier'].includes(val.external_source) && !isSplit
-                                - const canSplit = allowBankSplit === 'true' && !['Credit', 'Supplier'].includes(val.external_source)
+                                - const canSplit = allowBankSplit === 'true' && val.closed_flag !== 'Y' && !isSplit
                                 - const searchText = val.trans_date + ' ' + val.account_nickname + ' ' + (isSplit ? 'Split ' : '') + (isUnclassified ? 'Unclassified ' + (val.ledger_name || '') : val.ledger_name) + ' ' + val.remarks
                                 tr(id='transaction_row_'+index data-search-text=searchText data-remarks=(val.remarks || ''))
                                     if allowBankReclassify === 'true'
@@ -256,6 +256,9 @@ block content
                                 td.text-center
                                     button.btn.btn-sm.btn-danger(type='button' onclick='removeRow(0)' disabled)
                                         i.oi.oi-trash
+                                if allowBankSplit === 'true'
+                                    td.text-center
+                                        button.btn.btn-sm.btn-outline-info(type='button' onclick='toggleUploadSplit(0)' id='split-btn-0' title='Split this transaction across multiple ledgers') ⇄
             div(align="center")
                 if allowManualBankTransactions === 'true'
                     button.btn.btn-info(type="button", id="bank-statement-add-new", onclick="addMoreRows()", title="Add new transaction row") Add New
@@ -376,10 +379,13 @@ block content
             console.log('Selected bank:', bankId);
         }
 
+        // Ledgers fetched per row, keyed by rowIndex — used to populate split dropdowns
+        const rowLedgers = {};
+
         window.loadLedgersForNewRow = function() {
             const bankId = document.getElementById('bank_id_0').value;
             const ledgerSelect = document.getElementById('ledger_name_0');
-            
+
             if (!bankId) {
                 ledgerSelect.disabled = true;
                 ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
@@ -387,29 +393,26 @@ block content
                 document.getElementById('creditamount_0').disabled = false;
                 return;
             }
-            
+
             fetch(`/bank-statement/ledgers?bank_id=${bankId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        rowLedgers[0] = data.ledgers;
                         ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                         data.ledgers.forEach(ledger => {
                             const option = document.createElement('option');
                             option.value = ledger.ledger_name;
                             option.textContent = ledger.ledger_display_name;
                             option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                            option.setAttribute('data-allow-split', ledger.allow_split_flag || 'N');
                             ledgerSelect.appendChild(option);
                         });
                         ledgerSelect.disabled = false;
-                        
-                        ledgerSelect.onchange = function() {
-                            handleLedgerChange(0);
-                        };
+                        ledgerSelect.onchange = function() { handleLedgerChange(0); };
                     }
                 })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
+                .catch(error => { console.error('Error:', error); });
         }
 
         window.handleLedgerChange = function(rowIndex) {
@@ -521,6 +524,10 @@ block content
                         <i class="oi oi-trash"></i>
                     </button>
                 </td>
+                ${allowBankSplit ? `
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-info" type="button" id="split-btn-${transactionRowCounter}" onclick="toggleUploadSplit(${transactionRowCounter})" title="Split this transaction across multiple ledgers">⇄</button>
+                </td>` : ''}
             `;
 
             newRow.setAttribute('title', tooltip);
@@ -531,30 +538,28 @@ block content
                     loadLedgersForRow(transactionRowCounter);
                 } else if (accountList && accountList.length === 1 && accountList[0]) {
                     const bankId = accountList[0].bank_id;
-                    const ledgerSelect = document.getElementById(`ledger_name_${transactionRowCounter}`);
-                    
+                    const rc     = transactionRowCounter;
+                    const ledgerSelect = document.getElementById(`ledger_name_${rc}`);
+
                     fetch(`/bank-statement/ledgers?bank_id=${bankId}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
+                                rowLedgers[rc] = data.ledgers;
                                 ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                                 data.ledgers.forEach(ledger => {
                                     const option = document.createElement('option');
                                     option.value = ledger.ledger_name;
                                     option.textContent = ledger.ledger_display_name;
                                     option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                                    option.setAttribute('data-allow-split', ledger.allow_split_flag || 'N');
                                     ledgerSelect.appendChild(option);
                                 });
                                 ledgerSelect.disabled = false;
-                                
-                                ledgerSelect.onchange = function() {
-                                    handleLedgerChange(transactionRowCounter);
-                                };
+                                ledgerSelect.onchange = function() { handleLedgerChange(rc); };
                             }
                         })
-                        .catch(error => {
-                            console.error('Error:', error);
-                        });
+                        .catch(error => { console.error('Error:', error); });
                 }
             }
             
@@ -562,41 +567,37 @@ block content
         }
 
         window.loadLedgersForRow = function(rowIndex) {
-            const bankSelect = document.getElementById(`bank_id_${rowIndex}`);
+            const bankSelect   = document.getElementById(`bank_id_${rowIndex}`);
             const ledgerSelect = document.getElementById(`ledger_name_${rowIndex}`);
-            
+
             if (!bankSelect || !ledgerSelect) return;
-            
+
             const bankId = bankSelect.value;
-            
             if (!bankId) {
                 ledgerSelect.disabled = true;
                 ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                 return;
             }
-            
+
             fetch(`/bank-statement/ledgers?bank_id=${bankId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        rowLedgers[rowIndex] = data.ledgers;
                         ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                         data.ledgers.forEach(ledger => {
                             const option = document.createElement('option');
                             option.value = ledger.ledger_name;
                             option.textContent = ledger.ledger_display_name;
                             option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                            option.setAttribute('data-allow-split', ledger.allow_split_flag || 'N');
                             ledgerSelect.appendChild(option);
                         });
                         ledgerSelect.disabled = false;
-                        
-                        ledgerSelect.onchange = function() {
-                            handleLedgerChange(rowIndex);
-                        };
+                        ledgerSelect.onchange = function() { handleLedgerChange(rowIndex); };
                     }
                 })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
+                .catch(error => { console.error('Error:', error); });
         }
         
         window.removeRow = function(index) {
@@ -616,19 +617,18 @@ block content
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
+                                rowLedgers[0] = data.ledgers;
                                 ledgerSelect.innerHTML = '<option value="">Select Ledger</option>';
                                 data.ledgers.forEach(ledger => {
                                     const option = document.createElement('option');
                                     option.value = ledger.ledger_name;
                                     option.textContent = ledger.ledger_display_name;
                                     option.setAttribute('data-entry-type', ledger.allowed_entry_type);
+                                    option.setAttribute('data-allow-split', ledger.allow_split_flag || 'N');
                                     ledgerSelect.appendChild(option);
                                 });
                                 ledgerSelect.disabled = false;
-                                
-                                ledgerSelect.onchange = function() {
-                                    handleLedgerChange(0);
-                                };
+                                ledgerSelect.onchange = function() { handleLedgerChange(0); };
                             }
                         })
                         .catch(error => {
@@ -636,6 +636,153 @@ block content
                         });
                 }
             }
+        });
+
+        // ── Upload-time split ────────────────────────────────────────────────
+        // Track split allocation counter per row
+        const uploadSplitCounters = {};
+
+        window.toggleUploadSplit = function(rowIndex) {
+            const existing = document.getElementById(`split-builder-${rowIndex}`);
+            if (existing) {
+                // Cancel split mode
+                existing.remove();
+                document.getElementById(`is_split_${rowIndex}`)?.remove();
+                const ledgerSel = document.getElementById(`ledger_name_${rowIndex}`);
+                if (ledgerSel) { ledgerSel.disabled = false; ledgerSel.required = true; }
+                const debit  = document.getElementById(`debitamount_${rowIndex}`);
+                const credit = document.getElementById(`creditamount_${rowIndex}`);
+                if (debit)  { debit.disabled  = false; debit.readOnly  = false; }
+                if (credit) { credit.disabled = false; credit.readOnly = false; }
+                const btn = document.getElementById(`split-btn-${rowIndex}`);
+                if (btn) { btn.classList.remove('btn-info'); btn.classList.add('btn-outline-info'); }
+                return;
+            }
+
+            // Enter split mode
+            const ledgerSel = document.getElementById(`ledger_name_${rowIndex}`);
+            if (ledgerSel) { ledgerSel.disabled = true; ledgerSel.required = false; ledgerSel.value = ''; }
+            const debit  = document.getElementById(`debitamount_${rowIndex}`);
+            const credit = document.getElementById(`creditamount_${rowIndex}`);
+            if (debit)  debit.readOnly  = true;
+            if (credit) credit.readOnly = true;
+
+            const btn = document.getElementById(`split-btn-${rowIndex}`);
+            if (btn) { btn.classList.remove('btn-outline-info'); btn.classList.add('btn-info'); }
+
+            // Hidden field to flag this row as a split on submit
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden'; hidden.name = `is_split_${rowIndex}`; hidden.id = `is_split_${rowIndex}`; hidden.value = 'Y';
+            document.getElementById('transactionForm').appendChild(hidden);
+
+            uploadSplitCounters[rowIndex] = 0;
+
+            // Insert a sub-row spanning all columns below the parent row
+            const parentRow = document.getElementById(`new-transaction-row${rowIndex === 0 ? '' : '-' + rowIndex}`);
+            const builderRow = document.createElement('tr');
+            builderRow.id = `split-builder-${rowIndex}`;
+            builderRow.innerHTML = `
+                <td colspan="10" style="background:#f8f9fa; padding:8px 12px;">
+                    <small class="text-muted d-block mb-1">Split allocations — total must equal the amount entered above</small>
+                    <table class="table table-sm table-bordered mb-1" style="background:#fff;">
+                        <thead class="thead-light">
+                            <tr>
+                                <th style="width:35%">Ledger</th>
+                                <th style="width:20%">Amount</th>
+                                <th>Remarks (optional)</th>
+                                <th style="width:36px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="upload-split-rows-${rowIndex}"></tbody>
+                    </table>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-outline-secondary btn-sm mr-3" type="button" onclick="addUploadSplitRow(${rowIndex})">+ Add Allocation</button>
+                        <span class="small text-muted">Total: <strong id="upload-split-total-${rowIndex}">0.00</strong></span>
+                    </div>
+                </td>`;
+            parentRow.insertAdjacentElement('afterend', builderRow);
+
+            // Add first two allocation rows by default
+            addUploadSplitRow(rowIndex);
+            addUploadSplitRow(rowIndex);
+        };
+
+        window.addUploadSplitRow = function(rowIndex) {
+            const tbody  = document.getElementById(`upload-split-rows-${rowIndex}`);
+            const ledgers = (rowLedgers[rowIndex] || []).filter(l => l.allow_split_flag === 'Y');
+            const idx    = uploadSplitCounters[rowIndex]++;
+
+            const options = ledgers.map(l =>
+                `<option value="${l.ledger_name}">${l.ledger_display_name}</option>`
+            ).join('');
+
+            const tr = document.createElement('tr');
+            tr.id = `upload-split-row-${rowIndex}-${idx}`;
+            tr.innerHTML = `
+                <td>
+                    <select class="form-control form-control-sm" name="split_ledger_${rowIndex}_${idx}" required>
+                        <option value="">— Select Ledger —</option>
+                        ${options}
+                    </select>
+                </td>
+                <td>
+                    <input class="form-control form-control-sm text-right" type="number" name="split_amount_${rowIndex}_${idx}"
+                        step="0.01" min="0.01" placeholder="0.00" required
+                        oninput="updateUploadSplitTotal(${rowIndex})">
+                </td>
+                <td>
+                    <input class="form-control form-control-sm" type="text" name="split_remarks_${rowIndex}_${idx}" maxlength="255">
+                </td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-danger" type="button"
+                        onclick="removeUploadSplitRow(${rowIndex}, ${idx})">✕</button>
+                </td>`;
+            tbody.appendChild(tr);
+        };
+
+        window.removeUploadSplitRow = function(rowIndex, idx) {
+            document.getElementById(`upload-split-row-${rowIndex}-${idx}`)?.remove();
+            updateUploadSplitTotal(rowIndex);
+        };
+
+        window.updateUploadSplitTotal = function(rowIndex) {
+            const tbody = document.getElementById(`upload-split-rows-${rowIndex}`);
+            if (!tbody) return;
+            let total = 0;
+            tbody.querySelectorAll('input[type="number"]').forEach(inp => {
+                total += parseFloat(inp.value || 0);
+            });
+            const el = document.getElementById(`upload-split-total-${rowIndex}`);
+            if (el) el.textContent = total.toFixed(2);
+        };
+
+        // Validate split totals match parent amounts before form submit
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('transactionForm')?.addEventListener('submit', function(e) {
+                const splitFlags = document.querySelectorAll('input[name^="is_split_"]');
+                for (const flag of splitFlags) {
+                    if (flag.value !== 'Y') continue;
+                    const rowIndex = flag.name.replace('is_split_', '');
+                    const credit = parseFloat(document.getElementById(`creditamount_${rowIndex}`)?.value || 0);
+                    const debit  = parseFloat(document.getElementById(`debitamount_${rowIndex}`)?.value  || 0);
+                    const parentAmt = credit || debit;
+
+                    const totalEl = document.getElementById(`upload-split-total-${rowIndex}`);
+                    const splitTotal = parseFloat(totalEl?.textContent || 0);
+
+                    if (Math.abs(splitTotal - parentAmt) > 0.01) {
+                        e.preventDefault();
+                        alert(`Row ${parseInt(rowIndex) + 1}: split total ${splitTotal.toFixed(2)} does not match transaction amount ${parentAmt.toFixed(2)}.`);
+                        return;
+                    }
+                    const rows = document.getElementById(`upload-split-rows-${rowIndex}`)?.querySelectorAll('tr') || [];
+                    if (rows.length < 2) {
+                        e.preventDefault();
+                        alert(`Row ${parseInt(rowIndex) + 1}: a split must have at least 2 allocations.`);
+                        return;
+                    }
+                }
+            });
         });
 
         // ── Bulk reclassify ─────────────────────────────────────────────────
