@@ -222,12 +222,13 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             NULL                                                      AS notes,
             mcl.creditlist_id,
             NULL                                                      AS odometer_reading,
-            NULL                                                      AS vehicle_number,
+            mcv.vehicle_number                                        AS vehicle_number,
             'BOWSER_SALE'                                             AS transaction_type
         FROM t_bowser_credits bc
-        JOIN t_bowser_closing  bcl ON bcl.bowser_closing_id = bc.bowser_closing_id
-        JOIN m_credit_list     mcl ON mcl.creditlist_id     = bc.creditlist_id
-        JOIN m_product         mp  ON mp.product_id         = bc.product_id
+        JOIN t_bowser_closing       bcl ON bcl.bowser_closing_id = bc.bowser_closing_id
+        JOIN m_credit_list          mcl ON mcl.creditlist_id     = bc.creditlist_id
+        JOIN m_product              mp  ON mp.product_id         = bc.product_id
+        LEFT JOIN m_creditlist_vehicles mcv ON mcv.vehicle_id    = bc.vehicle_id
         WHERE bcl.location_code = :locationCode
           AND mcl.creditlist_id = :creditId
           AND bcl.closing_date BETWEEN :closingQueryFromDate AND :closingQueryToDate
