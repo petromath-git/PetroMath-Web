@@ -21,7 +21,7 @@ module.exports = {
     // Get allowed ledgers for a specific bank account
     getAllowedLedgers: async (bankId, locationCode) => {
         const query = `
-            SELECT 
+            SELECT
                 rule_id,
                 source_type,
                 external_id,
@@ -29,7 +29,8 @@ module.exports = {
                 ledger_display_name,
                 allowed_entry_type,
                 notes_required_flag,
-                max_amount
+                max_amount,
+                allow_split_flag
             FROM m_bank_allowed_ledgers_v
             WHERE bank_id = :bankId
               AND (location_code = :locationCode OR location_code IS NULL)
@@ -79,6 +80,8 @@ module.exports = {
                 tbt.accounting_type,
                 tbt.transaction_type,
                 tbt.external_source,
+                tbt.is_split,
+                (SELECT COUNT(*) FROM t_bank_transaction_splits s WHERE s.t_bank_id = tbt.t_bank_id) AS split_count,
                 mb.account_nickname,
                 mb.bank_name
             FROM t_bank_transaction tbt
@@ -303,30 +306,47 @@ saveTransaction: async (transactionData) => {
                 tbt.external_source,
                 tbt.credit_amount,
                 tbt.debit_amount,
-                tbt.remarks
+                tbt.remarks,
+                tbt.is_split
             FROM t_bank_transaction tbt
             WHERE tbt.t_bank_id = :tBankId
         `;
-        
+
         const result = await db.sequelize.query(query, {
             replacements: { tBankId },
             type: QueryTypes.SELECT
         });
-        
+
         return result[0];
     },
 
-    // Delete transaction
+    // Delete transaction — also cleans up splits and their auto-receipts when is_split = 'Y'
     deleteTransaction: async (tBankId) => {
-        const query = `
-            DELETE FROM t_bank_transaction
-            WHERE t_bank_id = :tBankId
-        `;
-        
-        return await db.sequelize.query(query, {
-            replacements: { tBankId },
-            type: QueryTypes.DELETE
-        });
+        const t = await db.sequelize.transaction();
+        try {
+            // Delete receipts linked to this transaction (covers both direct and split-created receipts)
+            await db.sequelize.query(
+                `DELETE FROM t_receipts WHERE source_txn_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            // Splits are removed by ON DELETE CASCADE on the FK, but explicit delete
+            // here keeps the intent clear and guards against engines without FK enforcement.
+            await db.sequelize.query(
+                `DELETE FROM t_bank_transaction_splits WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            await db.sequelize.query(
+                `DELETE FROM t_bank_transaction WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
     },
 
     // Get transaction types (from lookup table)
@@ -462,9 +482,285 @@ saveTransaction: async (transactionData) => {
             AND attribute1 IS NOT NULL
             ORDER BY attribute1
         `;
-        
+
         return await db.sequelize.query(query, {
             type: QueryTypes.SELECT
         });
+    },
+
+    // ── Split transaction support ─────────────────────────────────────────────
+
+    // Get ledgers eligible to be used in a split (allow_split_flag = 'Y').
+    // The entry_type param ('CREDIT' or 'DEBIT') narrows to relevant direction.
+    getSplitEligibleLedgers: async (bankId, locationCode, entryType) => {
+        const query = `
+            SELECT
+                rule_id,
+                source_type,
+                external_id,
+                ledger_name,
+                ledger_display_name,
+                allowed_entry_type,
+                notes_required_flag,
+                max_amount
+            FROM m_bank_allowed_ledgers_v
+            WHERE bank_id        = :bankId
+              AND (location_code = :locationCode OR location_code IS NULL)
+              AND allow_split_flag = 'Y'
+              AND (allowed_entry_type = 'BOTH' OR allowed_entry_type = :entryType)
+            ORDER BY source_type, ledger_display_name
+        `;
+        return await db.sequelize.query(query, {
+            replacements: { bankId, locationCode, entryType },
+            type: QueryTypes.SELECT
+        });
+    },
+
+    // Fetch existing splits for a transaction.
+    getSplitsForTransaction: async (tBankId) => {
+        const query = `
+            SELECT
+                split_id,
+                t_bank_id,
+                amount,
+                ledger_name,
+                external_id,
+                external_source,
+                remarks,
+                created_by,
+                creation_date
+            FROM t_bank_transaction_splits
+            WHERE t_bank_id = :tBankId
+            ORDER BY split_id
+        `;
+        return await db.sequelize.query(query, {
+            replacements: { tBankId },
+            type: QueryTypes.SELECT
+        });
+    },
+
+    // Save splits for a transaction.
+    //   splits: [{ ledger_name, external_id, external_source, amount, remarks }]
+    //
+    //   Validates:
+    //     • each ledger has allow_split_flag = 'Y'
+    //     • split amounts sum to the parent's credit/debit amount
+    //
+    //   Receipt creation strategy mirrors the existing non-split pattern:
+    //     • Non-cashflow location: receipts created immediately here (same as
+    //       saveTransaction does for manually-entered Credit transactions).
+    //       source_split_id is set for precise per-split dedup.
+    //     • Cashflow-enabled location: receipts are NOT created here.
+    //       The after_cashflow_close trigger creates them at cashflow close,
+    //       reading from t_bank_transaction_splits. parent closed_flag stays 'N'
+    //       so the trigger's bulk UPDATE closes it alongside everything else.
+    saveSplits: async (tBankId, splits, bankId, locationCode, createdBy) => {
+        if (!Array.isArray(splits) || splits.length === 0) {
+            throw new Error('At least one split allocation is required.');
+        }
+
+        const t = await db.sequelize.transaction();
+        try {
+            // Fetch parent
+            const [parent] = await db.sequelize.query(
+                `SELECT t_bank_id, credit_amount, debit_amount, trans_date, bank_id
+                 FROM t_bank_transaction WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.SELECT, transaction: t }
+            );
+            if (!parent) throw new Error(`Transaction ${tBankId} not found.`);
+
+            const parentAmount = parseFloat(parent.credit_amount || parent.debit_amount || 0);
+            const splitTotal   = splits.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+
+            if (Math.abs(splitTotal - parentAmount) > 0.01) {
+                throw new Error(
+                    `Split total ${splitTotal.toFixed(2)} does not match transaction amount ${parentAmount.toFixed(2)}.`
+                );
+            }
+
+            // Validate each ledger is split-eligible
+            for (const split of splits) {
+                const [eligible] = await db.sequelize.query(
+                    `SELECT allow_split_flag
+                     FROM m_bank_allowed_ledgers_v
+                     WHERE bank_id        = :bankId
+                       AND (location_code = :locationCode OR location_code IS NULL)
+                       AND external_id   = :externalId
+                       AND allow_split_flag = 'Y'
+                     LIMIT 1`,
+                    {
+                        replacements: { bankId, locationCode, externalId: split.external_id },
+                        type: QueryTypes.SELECT,
+                        transaction: t
+                    }
+                );
+                if (!eligible) {
+                    throw new Error(`Ledger "${split.ledger_name}" is not eligible for split allocation.`);
+                }
+            }
+
+            // Check whether this location uses cashflow
+            const [cfRow] = await db.sequelize.query(
+                `SELECT setting_value
+                 FROM m_location_config
+                 WHERE (location_code = :locationCode OR location_code = '*')
+                   AND setting_name = 'CASHFLOW_ENABLED'
+                 ORDER BY CASE WHEN location_code = :locationCode THEN 0 ELSE 1 END
+                 LIMIT 1`,
+                { replacements: { locationCode }, type: QueryTypes.SELECT, transaction: t }
+            );
+            const cashflowEnabled = !cfRow || String(cfRow.setting_value).toLowerCase() !== 'false';
+
+            // Remove the original receipt created at upload time (source_split_id IS NULL),
+            // as well as any receipts from a prior re-split (source_split_id IS NOT NULL).
+            // This prevents double-counting when the full-amount receipt coexists with split receipts.
+            await db.sequelize.query(
+                `DELETE FROM t_receipts WHERE source_txn_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+            await db.sequelize.query(
+                `DELETE FROM t_bank_transaction_splits WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            // Insert each split row; for non-cashflow Credit splits, create receipt immediately
+            for (const split of splits) {
+                const [splitInsertResult] = await db.sequelize.query(
+                    `INSERT INTO t_bank_transaction_splits
+                        (t_bank_id, amount, ledger_name, external_id, external_source, remarks, created_by, creation_date)
+                     VALUES
+                        (:tBankId, :amount, :ledger_name, :external_id, :external_source, :remarks, :createdBy, NOW())`,
+                    {
+                        replacements: {
+                            tBankId,
+                            amount:          split.amount,
+                            ledger_name:     split.ledger_name,
+                            external_id:     split.external_id    || null,
+                            external_source: split.external_source || null,
+                            remarks:         split.remarks         || null,
+                            createdBy
+                        },
+                        type: QueryTypes.INSERT,
+                        transaction: t
+                    }
+                );
+                const splitId = splitInsertResult; // LAST_INSERT_ID
+
+                // Non-cashflow only: create receipt immediately (same as saveTransaction)
+                if (
+                    !cashflowEnabled &&
+                    split.external_source &&
+                    split.external_source.toUpperCase() === 'CREDIT' &&
+                    parseFloat(split.amount) > 0 &&
+                    split.external_id
+                ) {
+                    const [receiptMax] = await db.sequelize.query(
+                        `SELECT COALESCE(MAX(receipt_no), 0) AS max_no
+                         FROM t_receipts WHERE location_code = :locationCode`,
+                        { replacements: { locationCode }, type: QueryTypes.SELECT, transaction: t }
+                    );
+                    const nextReceiptNo = parseInt(receiptMax.max_no) + 1;
+
+                    await db.sequelize.query(
+                        `INSERT INTO t_receipts (
+                            receipt_no, creditlist_id, amount, receipt_date, receipt_type,
+                            location_code, cashflow_date, notes,
+                            created_by, updated_by, creation_date, updation_date,
+                            source_txn_id, source_split_id
+                         ) VALUES (
+                            :receipt_no, :creditlist_id, :amount, :receipt_date, 'Bank Deposit',
+                            :location_code, CURDATE(), :notes,
+                            :created_by, :created_by, NOW(), NOW(),
+                            :source_txn_id, :source_split_id
+                         )`,
+                        {
+                            replacements: {
+                                receipt_no:      nextReceiptNo,
+                                creditlist_id:   split.external_id,
+                                amount:          split.amount,
+                                receipt_date:    parent.trans_date,
+                                location_code:   locationCode,
+                                notes:           split.remarks
+                                                     ? `Split from Bank - ${split.remarks}`
+                                                     : 'Split from Bank',
+                                created_by:      createdBy,
+                                source_txn_id:   tBankId,
+                                source_split_id: splitId
+                            },
+                            type: QueryTypes.INSERT,
+                            transaction: t
+                        }
+                    );
+                }
+            }
+
+            // Mark parent as split.
+            // For cashflow locations: leave closed_flag = 'N' — the trigger closes it.
+            // For non-cashflow locations: close it now (no trigger will run).
+            if (cashflowEnabled) {
+                // Explicitly reset closed_flag — parent may have been inserted as 'Y'
+                // (e.g. split applied at upload time). Trigger needs 'N' to process it.
+                await db.sequelize.query(
+                    `UPDATE t_bank_transaction
+                     SET is_split = 'Y', closed_flag = 'N', closed_date = NULL
+                     WHERE t_bank_id = :tBankId`,
+                    { replacements: { tBankId }, type: QueryTypes.UPDATE, transaction: t }
+                );
+            } else {
+                await db.sequelize.query(
+                    `UPDATE t_bank_transaction
+                     SET is_split = 'Y', closed_flag = 'Y', closed_date = CURDATE()
+                     WHERE t_bank_id = :tBankId`,
+                    { replacements: { tBankId }, type: QueryTypes.UPDATE, transaction: t }
+                );
+            }
+
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
+    },
+
+    // Remove all splits for a transaction and reset it to unclassified.
+    // Deletes only receipts that carry a source_split_id (i.e. created by saveSplits
+    // for non-cashflow locations). For cashflow locations the trigger creates receipts
+    // at cashflow close; those will have source_split_id set too, so they are removed
+    // here as well — callers should guard against deleting splits after cashflow close.
+    deleteSplits: async (tBankId) => {
+        const t = await db.sequelize.transaction();
+        try {
+            // Remove only split-created receipts (identified by source_split_id)
+            await db.sequelize.query(
+                `DELETE FROM t_receipts
+                 WHERE source_split_id IN (
+                     SELECT split_id FROM t_bank_transaction_splits WHERE t_bank_id = :tBankId
+                 )`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            await db.sequelize.query(
+                `DELETE FROM t_bank_transaction_splits WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
+            );
+
+            // Revert parent to unclassified / unsplit state
+            await db.sequelize.query(
+                `UPDATE t_bank_transaction
+                 SET is_split        = 'N',
+                     closed_flag     = 'N',
+                     closed_date     = NULL,
+                     ledger_name     = NULL,
+                     external_id     = NULL,
+                     external_source = NULL
+                 WHERE t_bank_id = :tBankId`,
+                { replacements: { tBankId }, type: QueryTypes.UPDATE, transaction: t }
+            );
+
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
     }
 };

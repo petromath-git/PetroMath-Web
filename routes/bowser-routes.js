@@ -33,6 +33,10 @@ router.post('/api/intercompany',
     [ensureLoggedIn],
     bowserController.saveIntercompany);
 
+router.get('/api/last-closing/:bowserId',
+    [ensureLoggedIn],
+    bowserController.getLastClosing);
+
 router.get('/api/fills-received',
     [ensureLoggedIn],
     bowserController.getFillsSuggestion);
@@ -44,6 +48,10 @@ router.get('/api/ex-shortage/:id',
 router.get('/api/vehicles/:creditlistId',
     [ensureLoggedIn],
     bowserController.getVehiclesByCustomer);
+
+router.get('/api/vehicles',
+    [ensureLoggedIn],
+    bowserController.getAllVehicles);
 
 // ── Bowser Closing ────────────────────────────────────────────
 router.get('/closing',

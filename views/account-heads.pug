@@ -171,6 +171,7 @@ block content
                                     th Entry Type
                                     th Max Amt
                                     th Effective
+                                    th Allow Split
                                     if canEdit
                                         th Actions
                             tbody#rulesTableBody
@@ -186,6 +187,17 @@ block content
                                             span.badge(class=rule.allowed_entry_type === 'CREDIT' ? 'badge-success' : (rule.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= rule.allowed_entry_type
                                         td= rule.max_amount ? Number(rule.max_amount).toLocaleString('en-IN') : '—'
                                         td= rule.effective_start_date ? new Date(rule.effective_start_date).toLocaleDateString('en-GB') : '—'
+                                        td.text-center
+                                            if canEdit
+                                                button.btn.btn-sm.btn-split-flag(
+                                                    type="button"
+                                                    data-id=rule.rule_id
+                                                    data-value=(rule.allow_split_flag || 'N')
+                                                    class=(rule.allow_split_flag === 'Y' ? 'btn-success' : 'btn-outline-secondary')
+                                                    title=(rule.allow_split_flag === 'Y' ? 'Split allowed — click to disable' : 'Split disabled — click to enable'))
+                                                    = rule.allow_split_flag === 'Y' ? 'Yes' : 'No'
+                                            else
+                                                span= rule.allow_split_flag === 'Y' ? 'Yes' : 'No'
                                         if canEdit
                                             td
                                                 if isStatic
@@ -198,6 +210,7 @@ block content
                                                         data-entry-type=rule.allowed_entry_type,
                                                         data-notes=rule.notes_required_flag,
                                                         data-max-amount=rule.max_amount || '',
+                                                        data-allow-split=(rule.allow_split_flag || 'N'),
                                                         data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
                                                         data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
                                                         i.bi.bi-pencil
@@ -233,6 +246,7 @@ block content
                                                 data-entry-type=rule.allowed_entry_type,
                                                 data-notes=rule.notes_required_flag,
                                                 data-max-amount=rule.max_amount || '',
+                                                data-allow-split=(rule.allow_split_flag || 'N'),
                                                 data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
                                                 data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
                                                 i.bi.bi-pencil
@@ -258,6 +272,17 @@ block content
                                     p.mb-1
                                         b Max Amount:&nbsp;
                                         = Number(rule.max_amount).toLocaleString('en-IN')
+                                p.mb-1
+                                    b Allow Split:&nbsp;
+                                    if canEdit
+                                        button.btn.btn-sm.btn-split-flag(
+                                            type="button"
+                                            data-id=rule.rule_id
+                                            data-value=(rule.allow_split_flag || 'N')
+                                            class=(rule.allow_split_flag === 'Y' ? 'btn-success' : 'btn-outline-secondary'))
+                                            = rule.allow_split_flag === 'Y' ? 'Yes' : 'No'
+                                    else
+                                        = rule.allow_split_flag === 'Y' ? 'Yes' : 'No'
 
     //- ── Account Head Modals ──────────────────────────────────────────────────
 
@@ -376,20 +401,26 @@ block content
                                         each head in accountHeads
                                             option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
                         .form-row
-                            .col-md-4
+                            .col-md-3
                                 .form-group
                                     label Entry Type *
                                     select.form-control(name="allowed_entry_type", required)
                                         option(value="BOTH") BOTH
                                         option(value="DEBIT") DEBIT
                                         option(value="CREDIT") CREDIT
-                            .col-md-4
+                            .col-md-3
                                 .form-group
                                     label Notes Required
                                     select.form-control(name="notes_required_flag")
                                         option(value="N") No
                                         option(value="Y") Yes
-                            .col-md-4
+                            .col-md-3
+                                .form-group
+                                    label Allow Split
+                                    select.form-control(name="allow_split_flag")
+                                        option(value="N") No
+                                        option(value="Y") Yes
+                            .col-md-3
                                 .form-group
                                     label Max Amount
                                     input.form-control(type="number", name="max_amount", step="0.01", placeholder="Blank = unlimited")
@@ -435,20 +466,26 @@ block content
                                         each head in accountHeads
                                             option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
                         .form-row
-                            .col-md-4
+                            .col-md-3
                                 .form-group
                                     label Entry Type *
                                     select.form-control(name="allowed_entry_type", id="edit_rule_entry_type", required)
                                         option(value="BOTH") BOTH
                                         option(value="DEBIT") DEBIT
                                         option(value="CREDIT") CREDIT
-                            .col-md-4
+                            .col-md-3
                                 .form-group
                                     label Notes Required
                                     select.form-control(name="notes_required_flag", id="edit_rule_notes")
                                         option(value="N") No
                                         option(value="Y") Yes
-                            .col-md-4
+                            .col-md-3
+                                .form-group
+                                    label Allow Split
+                                    select.form-control(name="allow_split_flag", id="edit_rule_allow_split")
+                                        option(value="N") No
+                                        option(value="Y") Yes
+                            .col-md-3
                                 .form-group
                                     label Max Amount
                                     input.form-control(type="number", name="max_amount", id="edit_rule_max_amount", step="0.01", placeholder="Blank = unlimited")
@@ -633,6 +670,7 @@ block content
                 document.getElementById('edit_rule_head_select').value = d.accountHeadId;
                 document.getElementById('edit_rule_entry_type').value  = d.entryType;
                 document.getElementById('edit_rule_notes').value       = d.notes;
+                document.getElementById('edit_rule_allow_split').value = d.allowSplit || 'N';
                 document.getElementById('edit_rule_max_amount').value  = d.maxAmount;
                 document.getElementById('edit_rule_start').value       = d.start;
                 document.getElementById('edit_rule_end').value         = d.end;
@@ -654,6 +692,24 @@ block content
                 document.getElementById('et_allowed_entry_type').value   = d.entryType;
                 document.getElementById('editEntryTypeForm').action      = `/account-heads/rules/${d.id}/entry-type`;
                 $('#editEntryTypeModal').modal('show');
+            });
+
+            // ── Allow Split toggle ────────────────────────────────────────
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('.btn-split-flag');
+                if (!btn) return;
+                const id      = btn.dataset.id;
+                const current = btn.dataset.value || 'N';
+                const next    = current === 'Y' ? 'N' : 'Y';
+                if (!confirm(`${next === 'Y' ? 'Enable' : 'Disable'} split for this ledger rule?`)) return;
+                fetch(`/account-heads/rules/${id}/split-flag`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `allow_split_flag=${next}`
+                }).then(r => {
+                    if (r.ok || r.redirected) location.reload();
+                    else showMessage('Failed to update split flag', 'danger');
+                }).catch(() => showMessage('Failed to update split flag', 'danger'));
             });
 
             // ── Refresh ───────────────────────────────────────────────────

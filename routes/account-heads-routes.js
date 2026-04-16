@@ -70,4 +70,12 @@ router.post(
     AccountHeadsController.updateEntryType
 );
 
+// Allow Split flag toggle (all rule types)
+router.post(
+    "/rules/:id/split-flag",
+    isLoggedIn,
+    appSecurity.hasPermission("EDIT_ACCOUNT_HEADS"),
+    AccountHeadsController.updateSplitFlag
+);
+
 module.exports = router;

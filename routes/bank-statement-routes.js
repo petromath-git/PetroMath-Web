@@ -65,6 +65,32 @@ router.patch('/:id/reclassify',
     }
 );
 
+// GET route - Get split-eligible ledgers and existing splits for a transaction
+router.get('/:id/splits',
+    isLoginEnsured,
+    (req, res, next) => {
+        bankStatementController.getSplits(req, res, next);
+    }
+);
+
+// POST route - Save (or replace) splits for a transaction
+router.post('/:id/splits',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    (req, res, next) => {
+        bankStatementController.saveSplits(req, res, next);
+    }
+);
+
+// DELETE route - Remove all splits and reset transaction to unclassified
+router.delete('/:id/splits',
+    isLoginEnsured,
+    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    (req, res, next) => {
+        bankStatementController.deleteSplits(req, res, next);
+    }
+);
+
 // DELETE route - Delete bank transaction
 router.delete('/:id',
     isLoginEnsured,
