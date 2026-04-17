@@ -93,6 +93,21 @@ getStockAdjustmentListPage: async (req, res, next) => {
                 return res.redirect('/stock-adjustment/add');
             }
 
+            // Opening Balance can only be entered once per product,
+            // and only if no IN/OUT adjustments exist before the proposed date.
+            if (adjustment_type === 'OPENING') {
+                const alreadyExists = await stockAdjustmentDao.hasOpeningBalance(product_id, locationCode);
+                if (alreadyExists) {
+                    req.flash('error', 'An Opening Balance entry already exists for this product. Only one Opening Balance is allowed per product.');
+                    return res.redirect('/stock-adjustment/add');
+                }
+                const hasPrior = await stockAdjustmentDao.hasAdjustmentsBeforeDate(product_id, locationCode, adjustment_date);
+                if (hasPrior) {
+                    req.flash('error', 'Cannot add Opening Balance — stock IN/OUT entries already exist before this date. Opening Balance must be the earliest entry for the product.');
+                    return res.redirect('/stock-adjustment/add');
+                }
+            }
+
             // Prepare adjustment data
             const adjustmentData = {
                 adjustment_date: adjustment_date,
