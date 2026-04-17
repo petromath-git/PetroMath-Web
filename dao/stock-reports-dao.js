@@ -29,6 +29,32 @@ module.exports = {
         }
     },
 
+    // Get the sum of OPENING adjustments for a product on a specific date
+    // Used as fallback opening balance when the report starts from the very first tracking date
+    getOpeningAdjustmentOnDate: async (productId, locationCode, date) => {
+        try {
+            const query = `
+                SELECT COALESCE(SUM(qty), 0) as opening_qty
+                FROM t_lubes_stock_adjustment
+                WHERE product_id = ?
+                  AND location_code = ?
+                  AND adjustment_type = 'OPENING'
+                  AND DATE(adjustment_date) = ?
+            `;
+            const result = await db.sequelize.query(query, {
+                replacements: [productId, locationCode, date],
+                type: Sequelize.QueryTypes.SELECT
+            });
+            const qty = result[0]?.opening_qty;
+            return (qty !== null && qty !== undefined && parseFloat(qty) > 0)
+                ? parseFloat(qty)
+                : null;
+        } catch (error) {
+            console.error('Error fetching opening adjustment:', error);
+            throw error;
+        }
+    },
+
     // Get stock balance for a product on a specific date
     getStockBalance: async (productId, locationCode, date) => {
         try {
@@ -58,14 +84,14 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
         const query = `
             SELECT * FROM (
                 -- Purchases
-                SELECT 
+                SELECT
                     hdr.invoice_date as txn_date,
-                    'PURCHASE' as txn_type,
-                    hdr.invoice_number as reference_no,
+                    CONVERT('PURCHASE' USING utf8mb4) as txn_type,
+                    CONVERT(COALESCE(hdr.invoice_number, '') USING utf8mb4) as reference_no,
                     li.qty as quantity,
                     0 as out_qty,
                     li.qty as in_qty,
-                    s.supplier_name as party_name,
+                    CONVERT(COALESCE(s.supplier_name, '') USING utf8mb4) as party_name,
                     li.net_rate as rate,
                     (li.qty * li.net_rate) as amount
                 FROM t_lubes_inv_lines li
@@ -74,18 +100,18 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 WHERE li.product_id = ?
                 AND hdr.location_code = ?
                 AND DATE(hdr.invoice_date) BETWEEN ? AND ?
-                
+
                 UNION ALL
-                
+
                 -- Cash Sales
-                SELECT 
+                SELECT
                     c.closing_date as txn_date,
-                    'CASH SALE' as txn_type,
-                    cs.bill_no as reference_no,
+                    CONVERT('CASH SALE' USING utf8mb4) as txn_type,
+                    CONVERT(COALESCE(cs.bill_no, '') USING utf8mb4) as reference_no,
                     cs.qty as quantity,
                     cs.qty as out_qty,
                     0 as in_qty,
-                    'Cash Sale' as party_name,
+                    CONVERT('Cash Sale' USING utf8mb4) as party_name,
                     cs.price as rate,
                     cs.amount as amount
                 FROM t_cashsales cs
@@ -93,18 +119,18 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 WHERE cs.product_id = ?
                 AND c.location_code = ?
                 AND DATE(c.closing_date) BETWEEN ? AND ?
-                
+
                 UNION ALL
-                
+
                 -- Credit Sales
-                SELECT 
+                SELECT
                     c.closing_date as txn_date,
-                    'CREDIT SALE' as txn_type,
-                    cr.bill_no as reference_no,
+                    CONVERT('CREDIT SALE' USING utf8mb4) as txn_type,
+                    CONVERT(COALESCE(cr.bill_no, '') USING utf8mb4) as reference_no,
                     cr.qty as quantity,
                     cr.qty as out_qty,
                     0 as in_qty,
-                    cl.Company_Name as party_name,
+                    CONVERT(COALESCE(cl.Company_Name, '') USING utf8mb4) as party_name,
                     cr.price as rate,
                     cr.amount as amount
                 FROM t_credits cr
@@ -113,18 +139,18 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 WHERE cr.product_id = ?
                 AND c.location_code = ?
                 AND DATE(c.closing_date) BETWEEN ? AND ?
-                
+
                 UNION ALL
-                
+
                 -- 2T Oil
-                SELECT 
+                SELECT
                     c.closing_date as txn_date,
-                    '2T OIL' as txn_type,
-                    '' as reference_no,
+                    CONVERT('2T OIL' USING utf8mb4) as txn_type,
+                    CONVERT('' USING utf8mb4) as reference_no,
                     (o.given_qty - o.returned_qty) as quantity,
                     (o.given_qty - o.returned_qty) as out_qty,
                     0 as in_qty,
-                    '2T Oil Distribution' as party_name,
+                    CONVERT('2T Oil Distribution' USING utf8mb4) as party_name,
                     o.price as rate,
                     ((o.given_qty - o.returned_qty) * o.price) as amount
                 FROM t_2toil o
@@ -133,19 +159,19 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 AND c.location_code = ?
                 AND DATE(c.closing_date) BETWEEN ? AND ?
                 AND (o.given_qty - o.returned_qty) > 0
-                
+
                 UNION ALL
 
                 -- Meter Sales (metered lube products like 2T LOOSE and MAK ADBLUE - LOOSE)
                 -- Returns no rows for regular lube products (no m_pump row will match)
                 SELECT
                     c.closing_date as txn_date,
-                    'METER SALE' as txn_type,
-                    CAST(c.closing_id AS CHAR) as reference_no,
+                    CONVERT('METER SALE' USING utf8mb4) as txn_type,
+                    CONVERT(CAST(c.closing_id AS CHAR) USING utf8mb4) as reference_no,
                     SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as quantity,
                     SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as out_qty,
                     0 as in_qty,
-                    'Meter Sale' as party_name,
+                    CONVERT('Meter Sale' USING utf8mb4) as party_name,
                     MAX(r.price) as rate,
                     SUM((r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) * r.price) as amount
                 FROM t_reading r
@@ -159,20 +185,21 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
 
                 UNION ALL
 
-                -- Stock Adjustments
+                -- Stock Adjustments (IN and OUT only — OPENING is the balance anchor, never a line item)
                 SELECT
                     sa.adjustment_date as txn_date,
-                    CONCAT('ADJUSTMENT ', sa.adjustment_type) as txn_type,
-                    '' as reference_no,
+                    CONVERT(CONCAT('ADJUSTMENT ', sa.adjustment_type) USING utf8mb4) as txn_type,
+                    CONVERT('' USING utf8mb4) as reference_no,
                     sa.qty as quantity,
                     CASE WHEN sa.adjustment_type = 'OUT' THEN sa.qty ELSE 0 END as out_qty,
                     CASE WHEN sa.adjustment_type = 'IN' THEN sa.qty ELSE 0 END as in_qty,
-                    sa.remarks as party_name,
+                    CONVERT(COALESCE(sa.remarks, '') USING utf8mb4) as party_name,
                     NULL as rate,
                     NULL as amount
                 FROM t_lubes_stock_adjustment sa
                 WHERE sa.product_id = ?
                 AND sa.location_code = ?
+                AND sa.adjustment_type IN ('IN', 'OUT')
                 AND DATE(sa.adjustment_date) BETWEEN ? AND ?
                 
             ) as all_transactions
