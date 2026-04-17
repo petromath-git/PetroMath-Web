@@ -17,7 +17,7 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: false
         },
         adjustment_type: {
-            type: DataTypes.ENUM('IN', 'OUT'),
+            type: DataTypes.ENUM('IN', 'OUT', 'OPENING'),
             allowNull: false
         },
         qty: {

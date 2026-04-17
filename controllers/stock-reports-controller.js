@@ -142,17 +142,24 @@ getStockLedgerReport: async (req, res, next) => {
         if (productId && fromDate && toDate) {
             productInfo = products.find(p => p.product_id == productId);
             
-            // Get opening balance using DB function (stock on day before fromDate)
+            // Get opening balance: closing stock on the day before fromDate.
+            // If NULL (history starts on fromDate itself), fall back to any OPENING
+            // adjustment entered on fromDate.
             const dayBeforeFrom = moment(fromDate).subtract(1, 'day').format('YYYY-MM-DD');
 
-
-
-
             openingBalance = await stockReportsDao.getStockBalance(
-                productId, 
-                locationCode, 
+                productId,
+                locationCode,
                 dayBeforeFrom
             );
+
+            if (openingBalance === null) {
+                openingBalance = await stockReportsDao.getOpeningAdjustmentOnDate(
+                    productId,
+                    locationCode,
+                    fromDate
+                );
+            }
 
             
 

@@ -284,15 +284,16 @@ reopenShift: async (req, res, next) => {
         const result = await TxnWriteDao.reopenShift(closingId, locationCode, userId);
 
         if (result > 0) {
-            // Clear stale day bill items so they rebuild on re-close (non-blocking)
+            // Recalculate day bill after reopen — shift is now DRAFT so generate_day_bill
+            // will only pick remaining CLOSED shifts, naturally excluding this one (non-blocking)
             db.sequelize.query(
                 `SELECT DATE_FORMAT(closing_date, '%Y-%m-%d') as closing_date FROM t_closing WHERE closing_id = :closingId`,
                 { replacements: { closingId }, type: db.Sequelize.QueryTypes.SELECT }
             ).then(rows => {
                 const dateStr = rows[0] && rows[0].closing_date;
                 if (dateStr) {
-                    DayBillSvc.clearDayBillOnReopen(locationCode, dateStr)
-                        .catch(e => console.error('DayBillSvc clearOnReopen failed:', e));
+                    DayBillSvc.recalculateDayBill(locationCode, dateStr, userId)
+                        .catch(e => console.error('DayBillSvc recalculate on reopen failed:', e));
                 }
             }).catch(() => {});
             res.status(200).json({

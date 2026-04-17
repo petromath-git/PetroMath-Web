@@ -104,6 +104,37 @@ getStockAdjustmentsList: async (locationCode, filters = {}) => {
         }
     },
 
+    // Check if an OPENING adjustment already exists for a product
+    hasOpeningBalance: async (productId, locationCode) => {
+        try {
+            const result = await StockAdjustment.findOne({
+                where: { product_id: productId, location_code: locationCode, adjustment_type: 'OPENING' }
+            });
+            return result !== null;
+        } catch (error) {
+            console.error('Error checking opening balance:', error);
+            throw error;
+        }
+    },
+
+    // Check if any IN/OUT adjustments exist before a given date for a product
+    hasAdjustmentsBeforeDate: async (productId, locationCode, date) => {
+        try {
+            const result = await StockAdjustment.findOne({
+                where: {
+                    product_id: productId,
+                    location_code: locationCode,
+                    adjustment_type: { [Op.in]: ['IN', 'OUT'] },
+                    adjustment_date: { [Op.lt]: date }
+                }
+            });
+            return result !== null;
+        } catch (error) {
+            console.error('Error checking prior adjustments:', error);
+            throw error;
+        }
+    },
+
     // Save new stock adjustment
     saveStockAdjustment: async (adjustmentData) => {
         try {

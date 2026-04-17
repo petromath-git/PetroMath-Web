@@ -22,6 +22,10 @@ module.exports = function (sequelize, DataTypes) {
       updation_date: DataTypes.DATE,
       receipt_date: DataTypes.DATE,
       cashflow_date: DataTypes.DATE,
+      pending_cashflow_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       receipt_date_fmt: {
         type: DataTypes.DATE
       },
