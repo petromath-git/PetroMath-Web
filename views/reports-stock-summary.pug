@@ -1,50 +1,76 @@
 extends layout
 
 block content
-    form(method='POST' action='/reports/stock/summary')
+    form#summaryForm(method='POST' action='/reports/stock/summary')
+        input(type='hidden' name='showValues' id='showValuesInput' value=showValues ? 'true' : 'false')
         table.center
             tr
                 td From Date:
                 td
-                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format="dd/mm/yyyy", required)
+                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, required)
                 td &nbsp;
                 td To Date:
                 td
-                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format="dd/mm/yyyy", required)
+                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, required)
+                td &nbsp;
+                td
+                    .form-check.d-inline-flex.align-items-center.ml-3
+                        input#showValuesCheck.form-check-input(
+                            type='checkbox'
+                            checked=showValues
+                            onchange="document.getElementById('showValuesInput').value = this.checked ? 'true' : 'false';"
+                            style="margin-top:0"
+                        )
+                        label.form-check-label.ml-2(for='showValuesCheck') Show Values
                 td &nbsp;
                 include report-print-download.pug
+                td
+                    if fromDate && toDate && stockSummary && stockSummary.length > 0
+                        button.btn.btn-success.ml-2(
+                            type='button'
+                            onclick="exportExcel()"
+                        )
+                            i.fas.fa-file-excel
+                            |  Export Excel
+
     div &nbsp;
     div
         div.row &nbsp;
         h4.font-weight-bold.text-center Stock Summary Report
         if formattedFromDate && formattedToDate
             h4.text-center.text-muted= `${formattedFromDate} to ${formattedToDate}`
-        h4.font-weight-bold.text-success.text-center
+
         if stockSummary && stockSummary.length > 0
             div.row
             div.col-md-12
                 div.row &nbsp;
                 div.table-responsive
-                    table.table.table-bordered.table-hover.table-sm
+                    table.table.table-bordered.table-hover.table-sm#stockSummaryTable
                         thead.thead-light
                             tr
                                 th.text-center(rowspan='2') #
                                 th.text-center(rowspan='2') Product Name
                                 th.text-center(rowspan='2') Unit
-                                th.text-center(colspan='4') Stock Movement
+                                th.text-center(colspan= showValues ? '8' : '4') Stock Movement
                             tr
                                 th.text-right Opening
-                                th.text-right IN
-                                th.text-right OUT
+                                if showValues
+                                    th.text-right Value
+                                th.text-right Purchase
+                                if showValues
+                                    th.text-right Amount
+                                th.text-right Sales
+                                if showValues
+                                    th.text-right Amount
                                 th.text-right Closing
+                                if showValues
+                                    th.text-right Value
                         tbody
                             - var productsWithStock = 0
                             - var productsWithMovement = 0
-                            - var totalOpeningValue = 0
-                            - var totalInValue = 0
-                            - var totalOutValue = 0
-                            - var totalClosingValue = 0
-                            
+                            - var totOpeningVal = 0, totPurchaseQty = 0, totPurchaseVal = 0
+                            - var totSalesQty = 0, totSalesVal = 0, totClosingVal = 0
+
                             each item, index in stockSummary
                                 - var rowClass = ''
                                 if item.opening_balance === null || item.opening_balance === undefined
@@ -52,36 +78,43 @@ block content
                                 else if item.has_movement
                                     - rowClass = 'table-success-light'
                                     - productsWithMovement++
-                                
+
                                 if item.opening_balance !== null && item.opening_balance !== undefined
                                     - productsWithStock++
-                                    - totalOpeningValue += parseFloat(item.opening_balance || 0)
-                                    - totalInValue += parseFloat(item.total_in || 0)
-                                    - totalOutValue += parseFloat(item.total_out || 0)
-                                    - totalClosingValue += parseFloat(item.closing_balance || 0)
-                                
+                                    - if(item.opening_value) totOpeningVal += item.opening_value
+                                    - totPurchaseQty += item.total_in || 0
+                                    - if(item.purchase_value) totPurchaseVal += item.purchase_value
+                                    - totSalesQty += item.total_out || 0
+                                    - if(item.sales_value) totSalesVal += item.sales_value
+                                    - if(item.closing_value) totClosingVal += item.closing_value
+
                                 tr(class=rowClass)
                                     td.text-center= index + 1
                                     td= item.product_name
                                     td.text-center= item.unit
                                     if item.opening_balance === null || item.opening_balance === undefined
-                                        td.text-center(colspan='4')
+                                        td.text-center(colspan= showValues ? '8' : '4')
                                             span.text-warning.font-italic
                                                 i.fas.fa-exclamation-triangle
                                                 |  No opening stock
                                     else
-                                        td.text-right
-                                            = parseFloat(item.opening_balance || 0).toFixed(2)
+                                        td.text-right= parseFloat(item.opening_balance || 0).toFixed(2)
+                                        if showValues
+                                            td.text-right.text-muted= item.opening_value !== null ? parseFloat(item.opening_value).toFixed(2) : '-'
                                         td.text-right
                                             if item.total_in > 0
                                                 span.text-success.font-weight-bold= parseFloat(item.total_in).toFixed(2)
                                             else
                                                 span.text-muted -
+                                        if showValues
+                                            td.text-right.text-muted= item.purchase_value > 0 ? parseFloat(item.purchase_value).toFixed(2) : '-'
                                         td.text-right
                                             if item.total_out > 0
                                                 span.text-danger.font-weight-bold= parseFloat(item.total_out).toFixed(2)
                                             else
                                                 span.text-muted -
+                                        if showValues
+                                            td.text-right.text-muted= item.sales_value > 0 ? parseFloat(item.sales_value).toFixed(2) : '-'
                                         td.text-right
                                             if item.closing_balance === null || item.closing_balance === undefined
                                                 span.text-warning.font-italic N/A
@@ -89,30 +122,55 @@ block content
                                                 span.text-danger.font-weight-bold= parseFloat(item.closing_balance || 0).toFixed(2)
                                             else
                                                 = parseFloat(item.closing_balance || 0).toFixed(2)
+                                        if showValues
+                                            td.text-right.text-muted= item.closing_value !== null ? parseFloat(item.closing_value).toFixed(2) : '-'
+
                         tfoot.bg-light
                             tr.font-weight-bold
-                                td(colspan='3') 
+                                td(colspan='3')
                                     div Total Products: #{stockSummary.length}
                                     div.small.text-muted With Stock: #{productsWithStock} | With Movement: #{productsWithMovement}
-                                td.text-right= totalOpeningValue.toFixed(2)
-                                td.text-right.text-success= totalInValue.toFixed(2)
-                                td.text-right.text-danger= totalOutValue.toFixed(2)
-                                td.text-right= totalClosingValue.toFixed(2)
-                
-                if stockSummary.some(item => item.opening_balance === null || item.opening_balance === undefined)
-                    div.row &nbsp;
-                    div.alert.alert-info.mt-3
-                        i.fas.fa-info-circle
-                        strong  Note: 
-                        | Products highlighted in yellow do not have opening stock recorded. Please add opening stock via Stock Adjustment before using these products in reports.
+                                td.text-right -
+                                if showValues
+                                    td.text-right= totOpeningVal.toFixed(2)
+                                td.text-right= totPurchaseQty.toFixed(2)
+                                if showValues
+                                    td.text-right= totPurchaseVal.toFixed(2)
+                                td.text-right= totSalesQty.toFixed(2)
+                                if showValues
+                                    td.text-right= totSalesVal.toFixed(2)
+                                td.text-right -
+                                if showValues
+                                    td.text-right= totClosingVal.toFixed(2)
+
+            if stockSummary.some(item => item.opening_balance === null || item.opening_balance === undefined)
+                div.row &nbsp;
+                div.alert.alert-info.mt-3
+                    i.fas.fa-info-circle
+                    strong  Note:
+                    |  Products highlighted in yellow do not have opening stock recorded. Please add opening stock via Stock Adjustment.
         else
             div.row &nbsp;
             div.row.bg-light No records to display.
-    
-    // Include the overlay
+
     include overlay.pug
-    
+
     style.
-        .table-success-light {
-            background-color: #f0f9ff !important;
+        .table-success-light { background-color: #f0f9ff !important; }
+
+    script.
+        function exportExcel() {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/reports/stock/summary/excel';
+            ['fromDate','toDate'].forEach(name => {
+                const inp = document.createElement('input');
+                inp.type  = 'hidden';
+                inp.name  = name;
+                inp.value = document.querySelector('[name="' + name + '"]').value;
+                form.appendChild(inp);
+            });
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
         }

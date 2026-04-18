@@ -3,6 +3,31 @@ const stockReportsDao = require('../dao/stock-reports-dao');
 const stockAdjustmentDao = require('../dao/stock-adjustment-dao');
 const moment = require('moment');
 
+function buildStockSummary(rawResults) {
+    return rawResults.map(item => {
+        const openingQty   = item.opening_balance !== null ? parseFloat(item.opening_balance) : null;
+        const closingQty   = item.closing_balance !== null ? parseFloat(item.closing_balance) : null;
+        const openingPrice = parseFloat(item.opening_price || 0);
+        const closingPrice = parseFloat(item.closing_price || 0);
+        return {
+            product_id:      item.product_id,
+            product_name:    item.product_name,
+            unit:            item.unit,
+            is_tank_product: item.is_tank_product,
+            is_lube_product: item.is_lube_product,
+            opening_balance: openingQty,
+            opening_value:   openingQty !== null ? parseFloat((openingQty * openingPrice).toFixed(2)) : null,
+            total_in:        parseFloat(item.total_in  || 0),
+            purchase_value:  parseFloat(item.purchase_value || 0),
+            total_out:       parseFloat(item.total_out || 0),
+            sales_value:     parseFloat(item.sales_value || 0),
+            closing_balance: closingQty,
+            closing_value:   closingQty !== null ? parseFloat((closingQty * closingPrice).toFixed(2)) : null,
+            has_movement:    (parseFloat(item.total_in || 0) > 0 || parseFloat(item.total_out || 0) > 0)
+        };
+    });
+}
+
 module.exports = {
 
   // Stock Summary Report
@@ -10,89 +35,46 @@ getStockSummaryReport: async (req, res, next) => {
     try {
         const locationCode = req.user.location_code;
         const caller = req.body.caller || 'notpdf';
-        
-        // Get date range from body (POST) or query (GET)
-        let fromDate = req.body.fromDate || req.query.fromDate;
-        let toDate = req.body.toDate || req.query.toDate;
-        
-        // Convert to YYYY-MM-DD format
-        if (fromDate instanceof Date) {
-            fromDate = moment(fromDate).format('YYYY-MM-DD');
-        } else if (fromDate) {
-            fromDate = moment(fromDate).format('YYYY-MM-DD');
-        }
+        const showValues = req.body.showValues === 'true' || req.query.showValues === 'true';
 
-        if (toDate instanceof Date) {
-            toDate = moment(toDate).format('YYYY-MM-DD');
-        } else if (toDate) {
-            toDate = moment(toDate).format('YYYY-MM-DD');
-        }
+        let fromDate = req.body.fromDate || req.query.fromDate;
+        let toDate   = req.body.toDate   || req.query.toDate;
+
+        if (fromDate instanceof Date) fromDate = moment(fromDate).format('YYYY-MM-DD');
+        else if (fromDate) fromDate = moment(fromDate).format('YYYY-MM-DD');
+        if (toDate instanceof Date)   toDate   = moment(toDate).format('YYYY-MM-DD');
+        else if (toDate)              toDate   = moment(toDate).format('YYYY-MM-DD');
 
         let stockSummary = [];
 
-        // Generate report if dates are provided
         if (fromDate && toDate) {
-            // Use optimized stored procedure
-            const rawResults = await stockReportsDao.getStockSummaryOptimized(
-                locationCode,
-                fromDate,
-                toDate
-            );
-
-            
-            
-                        
-            // Format results
-            stockSummary = rawResults.map(item => ({
-                product_id: item.product_id,
-                product_name: item.product_name,
-                unit: item.unit,
-                opening_balance: item.opening_balance,
-                total_in: parseFloat(item.total_in || 0),
-                total_out: parseFloat(item.total_out || 0),
-                closing_balance: item.closing_balance,
-                has_movement: (item.total_in > 0 || item.total_out > 0)
-            }));
-
-            
-
+            const rawResults = await stockReportsDao.getStockSummaryOptimized(locationCode, fromDate, toDate);
+            stockSummary = buildStockSummary(rawResults);
         }
 
         const formattedFromDate = fromDate ? moment(fromDate).format('DD/MM/YYYY') : '';
-        const formattedToDate = toDate ? moment(toDate).format('DD/MM/YYYY') : '';
+        const formattedToDate   = toDate   ? moment(toDate).format('DD/MM/YYYY')   : '';
         const currentDate = moment().format('YYYY-MM-DD');
 
+        const viewData = {
+            title: 'Stock Summary Report',
+            user: req.user,
+            stockSummary,
+            fromDate,
+            toDate,
+            formattedFromDate,
+            formattedToDate,
+            currentDate,
+            showValues
+        };
+
         if (caller === 'notpdf') {
-            res.render('reports-stock-summary', {
-                title: 'Stock Summary Report',
-                user: req.user,
-                stockSummary: stockSummary,
-                fromDate: fromDate,
-                toDate: toDate,
-                formattedFromDate: formattedFromDate,
-                formattedToDate: formattedToDate,
-                currentDate: currentDate
-            });
+            res.render('reports-stock-summary', viewData);
         } else {
-            // For PDF generation
             return new Promise((resolve, reject) => {
-                res.render('reports-stock-summary', {
-                    title: 'Stock Summary Report',
-                    user: req.user,
-                    stockSummary: stockSummary,
-                    fromDate: fromDate,
-                    toDate: toDate,
-                    formattedFromDate: formattedFromDate,
-                    formattedToDate: formattedToDate,
-                    currentDate: currentDate
-                }, (err, html) => {
-                    if (err) {
-                        console.error('getStockSummaryReport: Error in res.render:', err);
-                        reject(err);
-                    } else {
-                        console.log('getStockSummaryReport: Successfully rendered HTML');
-                        resolve(html);
-                    }
+                res.render('reports-stock-summary', viewData, (err, html) => {
+                    if (err) { console.error('getStockSummaryReport render error:', err); reject(err); }
+                    else resolve(html);
                 });
             });
         }
@@ -101,7 +83,106 @@ getStockSummaryReport: async (req, res, next) => {
         console.error('Error in getStockSummaryReport:', error);
         req.flash('error', 'Failed to generate stock summary report');
         res.redirect('/home');
+    }
+},
+
+// Stock Summary Excel Export
+exportStockSummaryExcel: async (req, res, next) => {
+    try {
+        const ExcelJS = require('exceljs');
+        const locationCode = req.user.location_code;
+
+        let fromDate = req.body.fromDate || req.query.fromDate;
+        let toDate   = req.body.toDate   || req.query.toDate;
+        if (fromDate) fromDate = moment(fromDate).format('YYYY-MM-DD');
+        if (toDate)   toDate   = moment(toDate).format('YYYY-MM-DD');
+
+        if (!fromDate || !toDate) {
+            return res.status(400).send('Date range required for export');
         }
+
+        const rawResults = await stockReportsDao.getStockSummaryOptimized(locationCode, fromDate, toDate);
+        const rows = buildStockSummary(rawResults);
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Stock Summary');
+
+        const periodLabel = `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
+
+        // Station name + address header (rows 1-2 blank = row 2 + 3 in 1-based sheet)
+        ws.getRow(1).getCell(1).value = req.user.station_name || locationCode;
+        ws.getRow(1).getCell(1).font = { bold: true, size: 13 };
+        ws.getRow(2).getCell(1).value = periodLabel;
+
+        // Column headers (row 4)
+        const headers = [
+            'Product Name', 'Opening', 'Value', 'Purchase', 'Amount',
+            'Sales', 'Amount', 'Closing', 'Amount'
+        ];
+        const headerRow = ws.getRow(4);
+        headers.forEach((h, i) => {
+            const cell = headerRow.getCell(i + 1);
+            cell.value = h;
+            cell.font = { bold: true };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+            cell.border = {
+                top: { style: 'thin' }, bottom: { style: 'thin' },
+                left: { style: 'thin' }, right: { style: 'thin' }
+            };
+            cell.alignment = { horizontal: 'center' };
+        });
+
+        // Data rows
+        let totalOpeningVal = 0, totalPurchaseQty = 0, totalPurchaseVal = 0;
+        let totalSalesQty = 0, totalSalesVal = 0, totalClosingVal = 0;
+
+        rows.forEach((item, idx) => {
+            const r = ws.getRow(5 + idx);
+            const fmt = (v) => v !== null && v !== undefined ? parseFloat(parseFloat(v).toFixed(2)) : null;
+            r.getCell(1).value = item.product_name;
+            r.getCell(2).value = fmt(item.opening_balance);
+            r.getCell(3).value = fmt(item.opening_value);
+            r.getCell(4).value = fmt(item.total_in);
+            r.getCell(5).value = fmt(item.purchase_value);
+            r.getCell(6).value = fmt(item.total_out);
+            r.getCell(7).value = fmt(item.sales_value);
+            r.getCell(8).value = fmt(item.closing_balance);
+            r.getCell(9).value = fmt(item.closing_value);
+
+            if (item.opening_value)  totalOpeningVal  += item.opening_value;
+            if (item.total_in)       totalPurchaseQty += item.total_in;
+            if (item.purchase_value) totalPurchaseVal += item.purchase_value;
+            if (item.total_out)      totalSalesQty    += item.total_out;
+            if (item.sales_value)    totalSalesVal    += item.sales_value;
+            if (item.closing_value)  totalClosingVal  += item.closing_value;
+        });
+
+        // Total row
+        const totalRow = ws.getRow(5 + rows.length);
+        totalRow.getCell(1).value = 'Total';
+        totalRow.getCell(1).font = { bold: true };
+        totalRow.getCell(3).value = parseFloat(totalOpeningVal.toFixed(2));
+        totalRow.getCell(4).value = parseFloat(totalPurchaseQty.toFixed(2));
+        totalRow.getCell(5).value = parseFloat(totalPurchaseVal.toFixed(2));
+        totalRow.getCell(6).value = parseFloat(totalSalesQty.toFixed(2));
+        totalRow.getCell(7).value = parseFloat(totalSalesVal.toFixed(2));
+        totalRow.getCell(9).value = parseFloat(totalClosingVal.toFixed(2));
+        [1,2,3,4,5,6,7,8,9].forEach(c => { totalRow.getCell(c).font = { bold: true }; });
+
+        // Column widths
+        ws.getColumn(1).width = 36;
+        [2,3,4,5,6,7,8,9].forEach(c => { ws.getColumn(c).width = 14; });
+
+        const fileName = `StockSummary_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        await wb.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error in exportStockSummaryExcel:', error);
+        res.status(500).send('Failed to generate Excel export');
+    }
 },
     
 // Stock Ledger Report
@@ -128,8 +209,8 @@ getStockLedgerReport: async (req, res, next) => {
             toDate = moment(toDate).format('YYYY-MM-DD');
         }
 
-        // Get all products for dropdown
-        const products = await stockAdjustmentDao.getProductsNotLinkedToPumps(locationCode);
+        // Get all stock-tracked products (fuel + lube) for dropdown
+        const products = await stockAdjustmentDao.getStockTrackingProducts(locationCode);
 
         let ledgerData = [];
         let productInfo = null;

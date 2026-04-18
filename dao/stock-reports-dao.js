@@ -162,12 +162,11 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
 
                 UNION ALL
 
-                -- Meter Sales (metered lube products like 2T LOOSE and MAK ADBLUE - LOOSE)
-                -- Returns no rows for regular lube products (no m_pump row will match)
+                -- Meter Sales (fuel + metered lubes like 2T LOOSE) — grouped by day
                 SELECT
-                    c.closing_date as txn_date,
+                    DATE(c.closing_date) as txn_date,
                     CONVERT('METER SALE' USING utf8mb4) as txn_type,
-                    CONVERT(CAST(c.closing_id AS CHAR) USING utf8mb4) as reference_no,
+                    CONVERT('' USING utf8mb4) as reference_no,
                     SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as quantity,
                     SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as out_qty,
                     0 as in_qty,
@@ -181,7 +180,7 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 WHERE c.location_code = ?
                 AND DATE(c.closing_date) BETWEEN ? AND ?
                 AND (r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) > 0
-                GROUP BY c.closing_date, c.closing_id
+                GROUP BY DATE(c.closing_date)
 
                 UNION ALL
 
