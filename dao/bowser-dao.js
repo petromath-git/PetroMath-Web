@@ -140,8 +140,8 @@ module.exports = {
         return db.sequelize.query(`
             SELECT bc.*, b.bowser_name, b.capacity_litres, b.product_id,
                    p.product_name, p.price AS product_price,
-                   (bc.closing_meter - bc.opening_meter) AS meter_diff,
-                   (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter)) AS closing_stock
+                   (bc.closing_meter - bc.opening_meter - bc.testing_qty) AS meter_diff,
+                   (bc.opening_stock + bc.fills_received - (bc.closing_meter - bc.opening_meter - bc.testing_qty)) AS closing_stock
             FROM t_bowser_closing bc
             JOIN m_bowser  b ON b.bowser_id  = bc.bowser_id
             JOIN m_product p ON p.product_id = b.product_id
@@ -174,9 +174,9 @@ module.exports = {
     createBowserClosing: (data) => {
         return db.sequelize.query(`
             INSERT INTO t_bowser_closing
-                (bowser_id, location_code, closing_date, opening_meter, closing_meter, rate,
+                (bowser_id, location_code, closing_date, opening_meter, closing_meter, testing_qty, rate,
                  fills_received, opening_stock, status, created_by)
-            VALUES (:bowserId, :locationCode, :closingDate, :openingMeter, :closingMeter, :rate,
+            VALUES (:bowserId, :locationCode, :closingDate, :openingMeter, :closingMeter, :testingQty, :rate,
                     :fillsReceived, :openingStock, 'DRAFT', :createdBy)
         `, { replacements: data, type: db.Sequelize.QueryTypes.INSERT });
     },
@@ -186,6 +186,7 @@ module.exports = {
             UPDATE t_bowser_closing
             SET opening_meter  = :openingMeter,
                 closing_meter  = :closingMeter,
+                testing_qty    = :testingQty,
                 rate           = :rate,
                 fills_received = :fillsReceived,
                 opening_stock  = :openingStock,
@@ -203,7 +204,7 @@ module.exports = {
                     COALESCE((SELECT SUM(amount) FROM t_bowser_credits       WHERE bowser_closing_id = :bowserClosingId), 0) +
                     COALESCE((SELECT SUM(amount) FROM t_bowser_digital_sales  WHERE bowser_closing_id = :bowserClosingId), 0) +
                     COALESCE((SELECT SUM(amount) FROM t_bowser_cashsales      WHERE bowser_closing_id = :bowserClosingId), 0) -
-                    (closing_meter - opening_meter) * rate
+                    (closing_meter - opening_meter - testing_qty) * rate
                 ),
                 updated_by  = :updatedBy,
                 updation_date = NOW()
@@ -365,14 +366,14 @@ module.exports = {
     getExShortage: (bowserClosingId) => {
         return db.sequelize.query(`
             SELECT
-                (bc.closing_meter - bc.opening_meter) * bc.rate          AS reading_amount,
+                (bc.closing_meter - bc.opening_meter - bc.testing_qty) * bc.rate AS reading_amount,
                 COALESCE(SUM(cr.amount), 0)                              AS credit_amount,
                 COALESCE((SELECT SUM(amount) FROM t_bowser_digital_sales WHERE bowser_closing_id = :bowserClosingId), 0) AS digital_amount,
                 COALESCE((SELECT SUM(amount) FROM t_bowser_cashsales     WHERE bowser_closing_id = :bowserClosingId), 0) AS cash_amount
             FROM t_bowser_closing bc
             LEFT JOIN t_bowser_credits cr ON cr.bowser_closing_id = bc.bowser_closing_id
             WHERE bc.bowser_closing_id = :bowserClosingId
-            GROUP BY bc.bowser_closing_id, bc.closing_meter, bc.opening_meter, bc.rate
+            GROUP BY bc.bowser_closing_id, bc.closing_meter, bc.opening_meter, bc.testing_qty, bc.rate
         `, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.SELECT })
         .then(rows => {
             if (!rows[0]) return { reading_amount: 0, credit_amount: 0, digital_amount: 0, cash_amount: 0, ex_shortage: 0 };

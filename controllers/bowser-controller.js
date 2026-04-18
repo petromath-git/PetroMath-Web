@@ -237,7 +237,7 @@ module.exports = {
     saveDraft: async (req, res) => {
         try {
             const { bowser_closing_id, bowser_id, closing_date,
-                    opening_meter, closing_meter, rate, fills_received, opening_stock } = req.body;
+                    opening_meter, closing_meter, testing_qty, rate, fills_received, opening_stock } = req.body;
             const locationCode = req.user.location_code;
             const createdBy = String(req.user.Person_id);
             const parsedRate = parsePositiveRate(rate);
@@ -249,6 +249,7 @@ module.exports = {
             if (bowser_closing_id) {
                 await BowserDao.updateBowserClosing(bowser_closing_id, {
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    testingQty: testing_qty || 0,
                     rate: parsedRate,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     updatedBy: createdBy
@@ -267,6 +268,7 @@ module.exports = {
                 const [insertId] = await BowserDao.createBowserClosing({
                     bowserId: bowser_id, locationCode, closingDate: closing_date,
                     openingMeter: opening_meter, closingMeter: closing_meter,
+                    testingQty: testing_qty || 0,
                     rate: parsedRate,
                     fillsReceived: fills_received, openingStock: opening_stock,
                     createdBy
