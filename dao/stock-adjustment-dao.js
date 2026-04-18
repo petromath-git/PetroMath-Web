@@ -62,6 +62,7 @@ getStockAdjustmentsList: async (locationCode, filters = {}) => {
 },
 
     // Get all lube products (including metered lubes like 2T LOOSE and MAK ADBLUE - LOOSE)
+    // Kept for backwards compatibility — adjustment screens now use getStockTrackingProducts
     getProductsNotLinkedToPumps: async (locationCode) => {
         try {
             const query = `
@@ -81,6 +82,31 @@ getStockAdjustmentsList: async (locationCode, filters = {}) => {
             });
         } catch (error) {
             console.error('Error fetching products:', error);
+            throw error;
+        }
+    },
+
+    // Get all stock-tracked products: lube (is_lube_product=1) + fuel (is_tank_product=1, is_lube_product=0)
+    getStockTrackingProducts: async (locationCode) => {
+        try {
+            const query = `
+                SELECT
+                    p.product_id,
+                    p.product_name,
+                    p.unit,
+                    p.is_tank_product,
+                    p.is_lube_product
+                FROM m_product p
+                WHERE p.location_code = ?
+                  AND (p.is_lube_product = 1 OR (p.is_tank_product = 1 AND p.is_lube_product = 0))
+                ORDER BY p.is_lube_product ASC, p.product_name
+            `;
+            return await db.sequelize.query(query, {
+                replacements: [locationCode],
+                type: Sequelize.QueryTypes.SELECT
+            });
+        } catch (error) {
+            console.error('Error fetching stock tracking products:', error);
             throw error;
         }
     },

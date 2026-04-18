@@ -18,6 +18,11 @@ router.post('/summary', isLoginEnsured, function (req, res, next) {
     stockReportsController.getStockSummaryReport(req, res, next);
 });
 
+// Stock Summary Excel Export
+router.post('/summary/excel', isLoginEnsured, function (req, res, next) {
+    stockReportsController.exportStockSummaryExcel(req, res, next);
+});
+
 // Stock Ledger Report - GET (initial load)
 router.get('/ledger', isLoginEnsured, function (req, res, next) {
     req.body.fromDate = new Date(Date.now());
