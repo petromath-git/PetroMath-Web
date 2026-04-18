@@ -124,8 +124,8 @@ module.exports = {
     getBowserClosings: (locationCode, fromDate, toDate) => {
         return db.sequelize.query(`
             SELECT bc.bowser_closing_id, bc.closing_date, bc.status,
-                   bc.opening_meter, bc.closing_meter,
-                   (bc.closing_meter - bc.opening_meter) AS meter_diff,
+                   bc.opening_meter, bc.closing_meter, bc.testing_qty,
+                   (bc.closing_meter - bc.opening_meter - bc.testing_qty) AS meter_diff,
                    bc.rate, bc.ex_shortage,
                    b.bowser_name, b.capacity_litres
             FROM t_bowser_closing bc
