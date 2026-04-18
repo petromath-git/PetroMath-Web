@@ -10,8 +10,7 @@ module.exports = {
             const locationCode = req.user.location_code;
             const currentDate = moment().format('YYYY-MM-DD');
 
-            // Fetch products not linked to pumps
-            const products = await stockAdjustmentDao.getProductsNotLinkedToPumps(locationCode);
+            const products = await stockAdjustmentDao.getStockTrackingProducts(locationCode);
 
             res.render('stock-adjustment-form', {
                 title: 'Add Stock Adjustment',
@@ -42,8 +41,7 @@ getStockAdjustmentListPage: async (req, res, next) => {
             adjustmentType: req.query.adjustmentType || null
         };
 
-        // Get all products for filter dropdown
-        const products = await stockAdjustmentDao.getProductsNotLinkedToPumps(locationCode);
+        const products = await stockAdjustmentDao.getStockTrackingProducts(locationCode);
         
         // Get filtered adjustments
         const adjustmentsList = await stockAdjustmentDao.getStockAdjustmentsList(
