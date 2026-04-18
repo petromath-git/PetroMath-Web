@@ -40,6 +40,8 @@ block content
         if formattedFromDate && formattedToDate
             h4.text-center.text-muted= `${formattedFromDate} to ${formattedToDate}`
 
+        - var fmtN = (n) => parseFloat(n || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+
         if stockSummary && stockSummary.length > 0
             div.row
             div.col-md-12
@@ -98,32 +100,32 @@ block content
                                                 i.fas.fa-exclamation-triangle
                                                 |  No opening stock
                                     else
-                                        td.text-right= parseFloat(item.opening_balance || 0).toFixed(2)
+                                        td.text-right= fmtN(item.opening_balance)
                                         if showValues
-                                            td.text-right.text-muted= item.opening_value !== null ? parseFloat(item.opening_value).toFixed(2) : '-'
+                                            td.text-right.text-muted= item.opening_value !== null ? fmtN(item.opening_value) : '-'
                                         td.text-right
                                             if item.total_in > 0
-                                                span.text-success.font-weight-bold= parseFloat(item.total_in).toFixed(2)
+                                                span.text-success.font-weight-bold= fmtN(item.total_in)
                                             else
                                                 span.text-muted -
                                         if showValues
-                                            td.text-right.text-muted= item.purchase_value > 0 ? parseFloat(item.purchase_value).toFixed(2) : '-'
+                                            td.text-right.text-muted= item.purchase_value > 0 ? fmtN(item.purchase_value) : '-'
                                         td.text-right
                                             if item.total_out > 0
-                                                span.text-danger.font-weight-bold= parseFloat(item.total_out).toFixed(2)
+                                                span.text-danger.font-weight-bold= fmtN(item.total_out)
                                             else
                                                 span.text-muted -
                                         if showValues
-                                            td.text-right.text-muted= item.sales_value > 0 ? parseFloat(item.sales_value).toFixed(2) : '-'
+                                            td.text-right.text-muted= item.sales_value > 0 ? fmtN(item.sales_value) : '-'
                                         td.text-right
                                             if item.closing_balance === null || item.closing_balance === undefined
                                                 span.text-warning.font-italic N/A
                                             else if parseFloat(item.closing_balance) < 0
-                                                span.text-danger.font-weight-bold= parseFloat(item.closing_balance || 0).toFixed(2)
+                                                span.text-danger.font-weight-bold= fmtN(item.closing_balance)
                                             else
-                                                = parseFloat(item.closing_balance || 0).toFixed(2)
+                                                = fmtN(item.closing_balance)
                                         if showValues
-                                            td.text-right.text-muted= item.closing_value !== null ? parseFloat(item.closing_value).toFixed(2) : '-'
+                                            td.text-right.text-muted= item.closing_value !== null ? fmtN(item.closing_value) : '-'
 
                         tfoot.bg-light
                             tr.font-weight-bold
@@ -132,16 +134,16 @@ block content
                                     div.small.text-muted With Stock: #{productsWithStock} | With Movement: #{productsWithMovement}
                                 td.text-right -
                                 if showValues
-                                    td.text-right= totOpeningVal.toFixed(2)
-                                td.text-right= totPurchaseQty.toFixed(2)
+                                    td.text-right= fmtN(totOpeningVal)
+                                td.text-right= fmtN(totPurchaseQty)
                                 if showValues
-                                    td.text-right= totPurchaseVal.toFixed(2)
-                                td.text-right= totSalesQty.toFixed(2)
+                                    td.text-right= fmtN(totPurchaseVal)
+                                td.text-right= fmtN(totSalesQty)
                                 if showValues
-                                    td.text-right= totSalesVal.toFixed(2)
+                                    td.text-right= fmtN(totSalesVal)
                                 td.text-right -
                                 if showValues
-                                    td.text-right= totClosingVal.toFixed(2)
+                                    td.text-right= fmtN(totClosingVal)
 
             if stockSummary.some(item => item.opening_balance === null || item.opening_balance === undefined)
                 div.row &nbsp;
