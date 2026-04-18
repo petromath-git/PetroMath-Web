@@ -28,6 +28,7 @@ block content
                             th Bowser
                             th Open Meter
                             th Close Meter
+                            th Testing Qty (L)
                             th Bowser Sales (L)
                             th Rate (₹/L)
                             th Ex / Shortage (₹)
@@ -35,7 +36,8 @@ block content
                             th
                     tbody
                         each c in closings
-                            - const meterDiff = (parseFloat(c.closing_meter) - parseFloat(c.opening_meter)).toFixed(3)
+                            - const testingQty = parseFloat(c.testing_qty || 0).toFixed(3)
+                            - const meterDiff = (parseFloat(c.closing_meter) - parseFloat(c.opening_meter) - parseFloat(c.testing_qty || 0)).toFixed(3)
                             - const exShortage = c.ex_shortage != null ? parseFloat(c.ex_shortage).toFixed(2) : '—'
                             - const exClass = c.ex_shortage != null ? (parseFloat(c.ex_shortage) >= 0 ? 'text-danger' : 'text-success') : ''
                             tr
@@ -43,6 +45,7 @@ block content
                                 td= c.bowser_name
                                 td= parseFloat(c.opening_meter).toFixed(3)
                                 td= parseFloat(c.closing_meter).toFixed(3)
+                                td= testingQty
                                 td= meterDiff
                                 td= c.rate ? parseFloat(c.rate).toFixed(4) : '—'
                                 td(class=exClass)= exShortage
