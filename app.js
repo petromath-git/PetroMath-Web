@@ -228,8 +228,10 @@ const campaignPublicRoutes = require('./routes/campaign-public-routes');
 const gstRoutes = require('./routes/gst-routes');
 const transactionUploadRoutes = require('./routes/transaction-upload-routes');
 const dayBillRoutes = require('./routes/day-bill-routes');
+const glRoutes = require('./routes/gl-routes');
 const employeeRoutes  = require('./routes/employee-routes');
 const documentRoutes  = require('./routes/document-routes');
+const tankReceiptRoutes = require('./routes/tank-receipt-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -395,8 +397,10 @@ app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/day-bill', dayBillRoutes);
+app.use('/tank-receipts', tankReceiptRoutes);
 app.use('/employees', employeeRoutes);
 app.use('/documents', documentRoutes);
+app.use('/gl', glRoutes);
 app.use('/bowser', bowserRoutes);
 
 
