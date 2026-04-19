@@ -2181,6 +2181,164 @@ function formDecant(ttank_id, user) {
     };
 }
 
+async function showInvoicePreview(passedNumber) {
+    const invoiceNumber = passedNumber || (document.getElementById('invoiceno') || {}).value || '';
+    if (!invoiceNumber.trim()) { alert('Enter an invoice number first.'); return; }
+
+    const body = document.getElementById('invoicePreviewBody');
+    if (!body) return;
+    body.innerHTML = '<div class="text-center text-muted py-3">Loading...</div>';
+    $('#invoicePreviewModal').modal('show');
+
+    try {
+        const resp = await fetch('/tank-receipts/invoice-preview?invoiceNumber=' + encodeURIComponent(invoiceNumber));
+        const json = await resp.json();
+        if (!json.success) {
+            body.innerHTML = '<div class="alert alert-warning">' + (json.error || 'Invoice not found.') + '</div>';
+            return;
+        }
+        body.innerHTML = renderInvoicePreview(json.invoice);
+    } catch (e) {
+        body.innerHTML = '<div class="alert alert-danger">Error: ' + e.message + '</div>';
+    }
+}
+
+function renderInvoicePreview(inv) {
+    const fmtN = (n) => n != null ? parseFloat(n).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
+    const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+
+    let html = `
+    <table class="table table-sm table-borderless mb-3">
+        <tbody>
+            <tr><td class="text-muted" style="width:160px">Supplier</td><td><strong>${inv.supplier || '—'}</strong></td>
+                <td class="text-muted" style="width:160px">Invoice No.</td><td>${inv.invoice_number || '—'}</td></tr>
+            <tr><td class="text-muted">Invoice Date</td><td>${fmtD(inv.invoice_date)}</td>
+                <td class="text-muted">Truck No.</td><td>${inv.truck_number || '—'}</td></tr>
+            <tr><td class="text-muted">Delivery Doc No.</td><td>${inv.delivery_doc_no || '—'}</td>
+                <td class="text-muted">Seal / Lock No.</td><td>${inv.seal_lock_no || '—'}</td></tr>
+            <tr><td class="text-muted">Total Amount</td><td colspan="3"><strong>₹ ${fmtN(inv.total_invoice_amount)}</strong></td></tr>
+        </tbody>
+    </table>
+    <h6 class="border-bottom pb-1">Product Lines</h6>
+    <table class="table table-sm table-hover">
+        <thead class="thead-light">
+            <tr>
+                <th>Product</th><th class="text-right">Qty (KL)</th><th class="text-right">Rate/KL</th>
+                <th class="text-right">Density</th><th>HSN</th><th class="text-right">Line Total</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    (inv.lines || []).forEach(line => {
+        html += `<tr>
+            <td>${line.product_name || '—'}</td>
+            <td class="text-right">${line.quantity != null ? parseFloat(line.quantity).toFixed(3) : '—'}</td>
+            <td class="text-right">${fmtN(line.rate_per_kl)}</td>
+            <td class="text-right">${line.density != null ? parseFloat(line.density).toFixed(1) : '—'}</td>
+            <td>${line.hsn_code || '—'}</td>
+            <td class="text-right">₹ ${fmtN(line.total_line_amount)}</td>
+        </tr>`;
+        (line.charges || []).forEach(c => {
+            const pct = c.charge_pct != null ? ` (${c.charge_pct}%)` : '';
+            html += `<tr class="text-muted small">
+                <td colspan="5" class="pl-3 text-right">${c.charge_type.replace(/_/g,' ')}${pct}</td>
+                <td class="text-right">₹ ${fmtN(c.charge_amount)}</td>
+            </tr>`;
+        });
+    });
+
+    html += `</tbody></table>`;
+    return html;
+}
+
+async function uploadAndParseInvoice() {
+    const fileInput = document.getElementById('invoicePdfUpload');
+    if (!fileInput || !fileInput.files.length) {
+        alert('Please select a PDF file first.');
+        return;
+    }
+    const statusEl = document.getElementById('invoiceParseStatus');
+    statusEl.textContent = 'Reading invoice...';
+    statusEl.className = 'text-info small';
+
+    const formData = new FormData();
+    formData.append('invoicePdf', fileInput.files[0]);
+
+    try {
+        const resp = await fetch('/tank-receipts/parse-invoice', { method: 'POST', body: formData });
+        if (resp.status === 403) {
+            statusEl.textContent = 'Not authorised to upload invoices.';
+            statusEl.className = 'text-danger small';
+            return;
+        }
+        const json = await resp.json();
+        if (!resp.ok || !json.success) {
+            statusEl.textContent = 'Could not read invoice: ' + (json.error || 'Unknown error');
+            statusEl.className = 'text-danger small';
+            return;
+        }
+        prefillFromInvoice(json.data, json.supplier);
+        statusEl.textContent = 'Invoice read (' + (json.supplierName || json.supplier) + '). Select products below and save.';
+        statusEl.className = 'text-success small';
+        renderInvoiceConfirmForm(json.data, json.products, json.mappings, json.tempId, json.supplier, json.supplierId);
+    } catch (e) {
+        statusEl.textContent = 'Error: ' + e.message;
+        statusEl.className = 'text-danger small';
+    }
+}
+
+async function checkInvoiceNumberDuplicate() {
+    const input = document.getElementById('invoiceno');
+    if (!input) return;
+    const invoiceNumber = input.value.trim();
+    let warningEl = document.getElementById('invoiceNoDuplicateWarning');
+    if (!warningEl) {
+        warningEl = document.createElement('small');
+        warningEl.id = 'invoiceNoDuplicateWarning';
+        warningEl.className = 'text-warning d-block mt-1';
+        input.parentNode.appendChild(warningEl);
+    }
+    warningEl.textContent = '';
+    if (!invoiceNumber) return;
+
+    const excludeId = (document.getElementById('closing_hiddenId') || {}).value || '';
+    const params = new URLSearchParams({ invoiceNumber });
+    if (excludeId) params.append('excludeId', excludeId);
+
+    try {
+        const res = await fetch('/tank-receipts/check-invoice-number?' + params.toString());
+        const json = await res.json();
+        if (json.duplicate) {
+            const dt = json.decantDate ? ' on ' + new Date(json.decantDate).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '';
+            warningEl.textContent = `⚠ Invoice ${invoiceNumber} is already recorded in receipt #${json.receiptId}${dt}.`;
+        }
+    } catch (e) { /* silent */ }
+}
+
+function prefillFromInvoice(data, supplier) {
+    const h = data.header || {};
+    const frozen = document.getElementById('freezedRecord_hiddenValue');
+    const isFrozen = frozen && frozen.value === 'true';
+
+    if (!isFrozen) {
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+        setVal('invoiceno', h.invoice_number);
+        setVal('invoiceDate', h.invoice_date);
+        setVal('ttnumber', h.truck_number);
+    }
+
+    // Show invoice reference info (read-only display) — always shown
+    const refEl = document.getElementById('invoiceRefInfo');
+    if (refEl) {
+        const parts = [];
+        if (h.invoice_number) parts.push('Invoice: ' + h.invoice_number);
+        if (h.delivery_doc_no) parts.push('Delivery: ' + h.delivery_doc_no);
+        if (h.seal_lock_no) parts.push('Seal: ' + h.seal_lock_no);
+        if (h.total_invoice_amount) parts.push('Total: ₹' + Number(h.total_invoice_amount).toLocaleString('en-IN'));
+        refEl.textContent = parts.join('  |  ');
+    }
+}
+
 // Add new page - add credit sales to DB via ajax
 function saveDecantLines() {
     return new Promise((resolve, reject) => {
@@ -2238,11 +2396,12 @@ function saveDecantLines() {
 }
 
 function formDecantLines(tdtank_Id, decantLineTag, decantRow, user) {
+    const getVal = (id) => { const el = document.getElementById(id); return el ? el.value || null : null; };
     return {
         'tdtank_id': tdtank_Id,
         'ttank_id': document.getElementById('closing_hiddenId').value,
         'tank_id': document.getElementById(decantLineTag + 'tank_' + decantRow).value,
-        'quantity': parseInt(document.getElementById(decantLineTag + 'tankqty_' + decantRow).value),
+        'quantity': parseFloat(document.getElementById(decantLineTag + 'tankqty_' + decantRow).value),
         'opening_dip': document.getElementById(decantLineTag + 'opening_dip_' + decantRow).value,
         'closing_dip': document.getElementById(decantLineTag + 'closing_dip_' + decantRow).value,
         'EB_MS_FLAG': document.getElementById(decantLineTag + 'eb_' + decantRow).value,
@@ -3125,5 +3284,212 @@ function toggleSmartReadingSection() {
         smartSection.style.display = '';
     } else {
         smartSection.style.display = 'none';
+    }
+}
+
+
+function renderInvoiceConfirmForm(data, products, mappings, tempId, supplier, supplierId) {
+    const container = document.getElementById('invoiceTabContent');
+    if (!container) return;
+    const h = data.header || {};
+    const lines = data.lines || [];
+    const fmtN = (n) => n != null ? parseFloat(n).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
+
+    const productOptions = (products || []).map(p =>
+        `<option value="${p.product_id}">${p.product_name}</option>`
+    ).join('');
+
+    const lineRows = lines.map((line, i) => {
+        const mappedId = (mappings || {})[line.product_name] || '';
+        const opts = `<option value="">-- Select product --</option>` +
+            (products || []).map(p =>
+                `<option value="${p.product_id}" ${p.product_id == mappedId ? 'selected' : ''}>${p.product_name}</option>`
+            ).join('');
+        return `<tr>
+            <td>${line.product_name || '—'}</td>
+            <td>
+                <select class="form-control form-control-sm inv-line-product" data-line="${i}" required>
+                    ${opts}
+                </select>
+            </td>
+            <td>${line.quantity != null ? line.quantity : '—'}</td>
+            <td>${line.rate_per_kl != null ? fmtN(line.rate_per_kl) : '—'}</td>
+            <td>${fmtN(line.total_line_amount)}</td>
+        </tr>`;
+    }).join('');
+
+    const decantInvoiceNo = ((document.getElementById('invoiceno') || {}).value || '').trim();
+    const parsedInvoiceNo = (h.invoice_number || '').trim();
+    const frozen = !!(document.getElementById('freezedRecord_hiddenValue'));
+    const mismatch = decantInvoiceNo && parsedInvoiceNo && decantInvoiceNo !== parsedInvoiceNo;
+    const mismatchBanner = mismatch
+        ? `<div class="alert alert-danger py-1 px-2 mb-2 small">
+               <strong>Cannot save — invoice number mismatch.</strong>
+               The decant header has <strong>${decantInvoiceNo}</strong> but this PDF is for <strong>${parsedInvoiceNo}</strong>.
+               ${frozen
+                   ? 'This receipt is closed and cannot be changed. Upload the correct invoice PDF.'
+                   : 'Update the invoice number on the Header tab to <strong>' + parsedInvoiceNo + '</strong> first, then re-upload.'}
+           </div>`
+        : '';
+
+    container.innerHTML = `
+        ${mismatchBanner}
+        <div class="mb-3 p-2 bg-light rounded small">
+            <strong>${h.invoice_number || ''}</strong>
+            ${h.invoice_date ? ' &nbsp;|&nbsp; ' + h.invoice_date : ''}
+            ${h.truck_number ? ' &nbsp;|&nbsp; TT: ' + h.truck_number : ''}
+            ${h.delivery_doc_no ? ' &nbsp;|&nbsp; Delivery: ' + h.delivery_doc_no : ''}
+            ${h.total_invoice_amount ? ' &nbsp;|&nbsp; Total: ₹' + fmtN(h.total_invoice_amount) : ''}
+        </div>
+        <table class="table table-sm table-bordered">
+            <thead class="thead-light">
+                <tr>
+                    <th>Invoice Product</th>
+                    <th>Map to Product <span class="text-danger">*</span></th>
+                    <th>Qty (KL)</th>
+                    <th>Rate/KL</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>${lineRows}</tbody>
+        </table>
+        ${mismatch ? '' : `<button type="button" class="btn btn-primary btn-sm" onclick="saveInvoice('${tempId}', '${supplier}', ${supplierId})">
+            Save Invoice
+        </button>
+        <span id="invoiceSaveStatus" class="text-muted small ml-2"></span>`}`;
+
+    // Store parsed data on container for saveInvoice to read
+    container._parsedData = data;
+}
+
+async function saveInvoice(tempId, supplier, supplierId) {
+    const container = document.getElementById('invoiceTabContent');
+    const statusEl = document.getElementById('invoiceSaveStatus');
+    const data = container._parsedData || {};
+    const lines = (data.lines || []).slice();
+
+    const selects = container.querySelectorAll('.inv-line-product');
+    let valid = true;
+    selects.forEach((sel, i) => {
+        if (!sel.value) { sel.classList.add('is-invalid'); valid = false; }
+        else { sel.classList.remove('is-invalid'); lines[i] = Object.assign({}, lines[i], { product_id: sel.value }); }
+    });
+    if (!valid) { if (statusEl) { statusEl.textContent = 'Select a product for every line.'; statusEl.className = 'text-danger small ml-2'; } return; }
+
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.className = 'text-muted small ml-2'; }
+
+    try {
+        const resp = await fetch('/tank-receipts/save-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tempId, supplier, supplierId, header: data.header || {}, lines })
+        });
+        const json = await resp.json();
+        if (!json.success) {
+            if (statusEl) { statusEl.textContent = json.error || 'Save failed.'; statusEl.className = 'text-danger small ml-2'; }
+            return;
+        }
+        // Show saved invoice and remember the number for tab re-open
+        if (json.invoiceNumber) {
+            const c = document.getElementById('invoiceTabContent');
+            if (c) c.dataset.savedInvoiceNumber = json.invoiceNumber;
+            loadInvoiceTabByNumber(json.invoiceNumber);
+        }
+
+        // Update invoiceParseStatus
+        const ps = document.getElementById('invoiceParseStatus');
+        if (ps) { ps.textContent = 'Invoice saved.'; ps.className = 'text-success small d-block mt-1'; }
+    } catch (e) {
+        if (statusEl) { statusEl.textContent = 'Error: ' + e.message; statusEl.className = 'text-danger small ml-2'; }
+    }
+}
+
+function loadInvoiceTab() {
+    const container = document.getElementById('invoiceTabContent');
+    const savedNumber = container && container.dataset.savedInvoiceNumber;
+    const invoiceNumber = savedNumber || (document.getElementById('invoiceno') || {}).value || '';
+    loadInvoiceTabByNumber(invoiceNumber);
+}
+
+async function loadInvoiceTabByNumber(invoiceNumber) {
+    const container = document.getElementById('invoiceTabContent');
+    if (!container) return;
+    if (!invoiceNumber || !invoiceNumber.trim()) {
+        container.innerHTML = '<div class="text-muted">No invoice attached yet.</div>';
+        return;
+    }
+    container.innerHTML = '<div class="text-muted py-2">Loading...</div>';
+    try {
+        const resp = await fetch('/tank-receipts/invoice-preview?invoiceNumber=' + encodeURIComponent(invoiceNumber));
+        const json = await resp.json();
+        if (!json.success) {
+            container.innerHTML = '<div class="text-muted">No invoice found for this receipt.</div>';
+            return;
+        }
+        container.innerHTML = renderInvoicePreview(json.invoice);
+    } catch (e) {
+        container.innerHTML = '<div class="alert alert-danger small">' + e.message + '</div>';
+    }
+}
+
+function updateTankReceiptDateRange() {
+    const dateRange = document.getElementById('tankReceiptDateRange').value;
+    const fromDateInput = document.getElementById('tankreceipts_fromDate');
+    const toDateInput = document.getElementById('tankreceipts_toDate');
+    const fromDateLabel = document.getElementById('tankrcpt_fromDateLabel');
+    const toDateLabel = document.getElementById('tankrcpt_toDateLabel');
+
+    const currentDate = new Date();
+    let fromDate, toDate;
+
+    function formatDateToISOString(date) {
+        const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        return utcDate.toISOString().split('T')[0];
+    }
+
+    if (dateRange === 'this_week') {
+        fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - fromDate.getDay());
+        toDate = new Date();
+    } else if (dateRange === 'this_month') {
+        fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        toDate = new Date();
+    } else if (dateRange === 'last_month') {
+        fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+        toDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+    } else if (dateRange === 'this_financial_year') {
+        const yr = currentDate.getFullYear();
+        const mo = currentDate.getMonth();
+        fromDate = mo < 3 ? new Date(yr - 1, 3, 1) : new Date(yr, 3, 1);
+        toDate = new Date();
+    } else if (dateRange === 'last_financial_year') {
+        const yr = currentDate.getFullYear();
+        const mo = currentDate.getMonth();
+        if (mo < 3) {
+            fromDate = new Date(yr - 2, 3, 1);
+            toDate = new Date(yr - 1, 2, 31);
+        } else {
+            fromDate = new Date(yr - 1, 3, 1);
+            toDate = new Date(yr, 2, 31);
+        }
+    } else {
+        fromDate = '';
+        toDate = '';
+    }
+
+    fromDateInput.value = fromDate ? formatDateToISOString(fromDate) : '';
+    toDateInput.value = toDate ? formatDateToISOString(toDate) : '';
+
+    if (dateRange === 'custom') {
+        fromDateInput.style.display = 'block';
+        toDateInput.style.display = 'block';
+        fromDateLabel.style.display = 'table-cell';
+        toDateLabel.style.display = 'table-cell';
+    } else {
+        fromDateInput.style.display = 'none';
+        toDateInput.style.display = 'none';
+        fromDateLabel.style.display = 'none';
+        toDateLabel.style.display = 'none';
+        document.getElementById('receipts-by-date').submit();
     }
 }

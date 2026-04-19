@@ -85,6 +85,10 @@ db.document_store = require("./document-store")(sequelize, Sequelize);
 db.employee = require("./employee")(sequelize, Sequelize);
 db.employee_salary = require("./employee-salary")(sequelize, Sequelize);
 db.employee_ledger = require("./employee-ledger")(sequelize, Sequelize);
+db.tank_invoice = require("./txn-tank-invoice")(sequelize, Sequelize);
+db.tank_invoice_dtl = require("./txn-tank-invoice-dtl")(sequelize, Sequelize);
+db.tank_invoice_charges = require("./txn-tank-invoice-charges")(sequelize, Sequelize);
+db.invoice_product_map = require("./txn-invoice-product-map")(sequelize, Sequelize);
 
 // relations
 db.pump.hasMany(db.txn_reading, {foreignKey: 'pump_id'});
@@ -308,6 +312,12 @@ db.day_bill_header.hasMany(db.day_bill_items, {foreignKey: 'header_id', as: 'ite
 db.day_bill_items.belongsTo(db.day_bill_header, {foreignKey: 'header_id'});
 db.day_bill_header.belongsTo(db.credit, {foreignKey: 'vendor_id', targetKey: 'creditlist_id', as: 'vendor'});
 db.day_bill_items.belongsTo(db.product, {foreignKey: 'product_id', targetKey: 'product_id'});
+
+// Tank invoice relations
+db.tank_invoice.hasMany(db.tank_invoice_dtl, {foreignKey: 'invoice_id', as: 'lines'});
+db.tank_invoice_dtl.belongsTo(db.tank_invoice, {foreignKey: 'invoice_id'});
+db.tank_invoice_dtl.hasMany(db.tank_invoice_charges, {foreignKey: 'invoice_dtl_id', as: 'charges'});
+db.tank_invoice_charges.belongsTo(db.tank_invoice_dtl, {foreignKey: 'invoice_dtl_id'});
 
 // Employee relations
 db.employee.hasMany(db.employee_ledger, {foreignKey: 'employee_id', as: 'ledgerEntries'});

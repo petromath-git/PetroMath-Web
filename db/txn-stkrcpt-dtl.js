@@ -18,7 +18,7 @@ module.exports = function(sequelize, DataTypes) {
         },
         quantity: {
             field: 'quantity',
-            type: DataTypes.INTEGER,
+            type: DataTypes.DECIMAL(8, 3),
         },
         created_by: {
             field: 'created_by',
@@ -65,7 +65,7 @@ module.exports = function(sequelize, DataTypes) {
         amount: {
             field: 'amount',
             type: DataTypes.DECIMAL
-        }
+        },
     }, {
         timestamps: false,
         freezeTableName: true
