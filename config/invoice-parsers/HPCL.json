@@ -1,0 +1,7 @@
+{
+  "supplier": "HPCL",
+  "dateFormats": ["DD-MMM-YYYY", "DD/MM/YYYY", "DD-MM-YYYY"],
+  "header": {},
+  "lines": { "fields": {} },
+  "total_amount": {}
+}

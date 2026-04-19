@@ -110,7 +110,6 @@ module.exports = function(sequelize, DataTypes) {
             field: 'truck_id',
             type: DataTypes.INTEGER
         },
-     
     }, {
         timestamps: false,
         freezeTableName: true

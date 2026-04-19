@@ -3,6 +3,7 @@ const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const db = require("../db/db-connection");
+const fs = require('fs');
 const PersonDao = require("../dao/person-dao");
 const TxnReadDao = require("../dao/txn-read-dao");
 const TxnTankRcptDao = require ("../dao/txn-tankrcpt-dao");
@@ -11,6 +12,14 @@ const TankDao = require("../dao/tank-dao");
 const TruckDao = require("../dao/truck-dao");
 const LookupDao = require("../dao/lookup-dao");
 const locationConfig = require("../utils/location-config");
+const LocationDao = require("../dao/location-dao");
+const InvoiceParserService = require("../services/invoice-parser-service");
+const TankInvoiceDao = require("../dao/tank-invoice-dao");
+const InvoiceProductMapDao = require("../dao/invoice-product-map-dao");
+const { v4: uuidv4 } = require('uuid');
+
+// Temp store for uploaded PDF buffers pending user product confirmation (in-memory, short-lived)
+const tempInvoiceStore = new Map();
 
 
 module.exports = {
@@ -112,6 +121,137 @@ module.exports = {
             });
     },
 
+    parseInvoicePdf: async (req, res, next) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ success: false, error: 'No PDF file uploaded.' });
+            }
+            const locationCode = req.user.location_code;
+            const location = await LocationDao.findByLocationCode(locationCode);
+            const companyName = location && location.company_name ? location.company_name : null;
+
+            if (!companyName) {
+                return res.status(400).json({ success: false, error: `No oil company configured for location ${locationCode}. Check m_location.company_name.` });
+            }
+
+            const pdfBuffer = fs.readFileSync(req.file.path);
+            fs.unlink(req.file.path, () => {});
+
+            const result = await InvoiceParserService.parseInvoice(pdfBuffer, companyName);
+
+            // Resolve supplier_id — mandatory
+            const supplierRow = await db.sequelize.query(
+                `SELECT supplier_id, supplier_name FROM m_supplier WHERE UPPER(supplier_short_name) = UPPER(:code) AND location_code = :loc LIMIT 1`,
+                { replacements: { code: result.supplier, loc: locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+            ).then(r => r[0] || null);
+
+            if (!supplierRow) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Supplier "${result.supplier}" not found in supplier master for this location. Please add it under Supplier Master first.`
+                });
+            }
+
+            // Stash buffer temporarily — saved to DB only after user confirms products
+            const tempId = uuidv4();
+            const originalFileName = req.file ? req.file.originalname : 'invoice.pdf';
+            tempInvoiceStore.set(tempId, { buffer: pdfBuffer, supplierId: supplierRow.supplier_id, originalFileName, expires: Date.now() + 30 * 60 * 1000 });
+            for (const [k, v] of tempInvoiceStore) { if (v.expires < Date.now()) tempInvoiceStore.delete(k); }
+
+            const [products, mappings] = await Promise.all([
+                getTankProductsForLocation(locationCode),
+                InvoiceProductMapDao.getMappings(locationCode, supplierRow.supplier_id)
+            ]);
+
+            return res.json({
+                success: true,
+                supplier: result.supplier,
+                supplierId: supplierRow.supplier_id,
+                supplierName: supplierRow.supplier_name,
+                tempId,
+                products,
+                mappings,
+                data: { header: result.header, lines: result.lines }
+            });
+        } catch (err) {
+            console.error('Error parsing invoice PDF:', err);
+            return res.status(500).json({ success: false, error: 'Failed to read invoice: ' + err.message });
+        }
+    },
+
+    saveInvoiceWithProducts: async (req, res, next) => {
+        try {
+            const { tempId, supplierId, supplier, header, lines } = req.body;
+            const locationCode = req.user.location_code;
+
+            if (!supplierId) {
+                return res.status(400).json({ success: false, error: 'Supplier is required.' });
+            }
+            if (!lines || lines.some(l => !l.product_id)) {
+                return res.status(400).json({ success: false, error: 'All invoice lines must have a product selected.' });
+            }
+
+            const temp = tempInvoiceStore.get(tempId);
+            const pdfBuffer = temp ? temp.buffer : null;
+            const originalFileName = temp ? temp.originalFileName : 'invoice.pdf';
+            if (temp) tempInvoiceStore.delete(tempId);
+
+            const headerData = {
+                location_id: locationCode,
+                supplier_id: Number(supplierId),
+                supplier,
+                invoice_number: header.invoice_number || null,
+                invoice_date: header.invoice_date || null,
+                truck_number: header.truck_number || null,
+                delivery_doc_no: header.delivery_doc_no || null,
+                seal_lock_no: header.seal_lock_no || null,
+                total_invoice_amount: header.total_invoice_amount || null
+            };
+
+            const lineData = lines.map(l => {
+                const charges = [];
+                if (l.vat_pct != null || l.vat_amount != null)
+                    charges.push({ charge_type: 'VAT', charge_pct: l.vat_pct || null, charge_amount: l.vat_amount || null });
+                if (l.additional_vat_amount != null)
+                    charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
+                if (l.delivery_charge != null)
+                    charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
+                return {
+                    product_id: Number(l.product_id),
+                    product_name: l.product_name || null,
+                    quantity: l.quantity || null,
+                    rate_per_kl: l.rate_per_kl || null,
+                    density: l.density || null,
+                    hsn_code: l.hsn_code || null,
+                    total_line_amount: l.total_line_amount || null,
+                    charges
+                };
+            });
+
+            const invoice = await TankInvoiceDao.saveInvoice(headerData, lineData, pdfBuffer, locationCode, Number(supplierId), originalFileName);
+            return res.json({ success: true, invoiceId: invoice.id, invoiceNumber: invoice.invoice_number });
+        } catch (err) {
+            console.error('Error saving invoice:', err);
+            return res.status(500).json({ success: false, error: 'Failed to save invoice: ' + err.message });
+        }
+    },
+
+    invoicePreview: async (req, res, next) => {
+        try {
+            const invoiceNumber = (req.query.invoiceNumber || '').trim();
+            if (!invoiceNumber) return res.status(400).json({ success: false, error: 'invoiceNumber required' });
+
+            const locationCode = req.user.location_code;
+            const invoice = await TankInvoiceDao.findByInvoiceNumber(locationCode, invoiceNumber);
+            if (!invoice) return res.json({ success: false, error: 'No invoice found for this invoice number.' });
+
+            return res.json({ success: true, invoice });
+        } catch (err) {
+            console.error('Error fetching invoice preview:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
     closeData: (req, res, next) => {
      TxnTankRcptDao.finishClosing(req.query.id)
         .then(() => {
@@ -124,6 +264,13 @@ module.exports = {
 }
 
 }
+const getTankProductsForLocation = (locationCode) => {
+    return db.sequelize.query(
+        `SELECT product_id, product_name FROM m_product WHERE location_code = :locationCode AND is_tank_product = 1 ORDER BY product_name`,
+        { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+    ).catch(() => []);
+};
+
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
         return TxnReadDao.getDraftClosingsCount(locationCode)
@@ -238,24 +385,33 @@ const txnDeleteDecantLinePromise = (decantLineId) => {
 
 const getHomeData = (req, res, next) => {
     let locationCode = req.user.location_code;
-    let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+    const now = new Date();
+    let fromDate = dateFormat(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-mm-dd");
+    let toDate = dateFormat(now, "yyyy-mm-dd");
     if(req.query.tankreceipts_fromDate) {
         fromDate = req.query.tankreceipts_fromDate;
     }
     if(req.query.tankreceipts_toDate) {
         toDate = req.query.tankreceipts_toDate;
     }
-    Promise.allSettled([getTankRcptByDate(locationCode, fromDate, toDate), getTankProductColumns(locationCode), getTankProductQty(locationCode, fromDate, toDate)])
-        .then(values => {
+    Promise.allSettled([
+        getTankRcptByDate(locationCode, fromDate, toDate),
+        getTankProductColumns(locationCode),
+        getTankProductQty(locationCode, fromDate, toDate),
+        getInvoiceNumbersSet(locationCode)
+    ]).then(values => {
             const receipts = values[0].value || [];
             const productColumns = values[1].value || [];
+            const invoiceNumbers = values[3].value || new Set();
             const qtyMap = {};
             (values[2].value || []).forEach(row => {
                 if (!qtyMap[row.ttank_id]) qtyMap[row.ttank_id] = {};
                 qtyMap[row.ttank_id][row.product_code] = row.qty;
             });
-            receipts.forEach(r => Object.assign(r, qtyMap[r.ttank_id] || {}));
+            receipts.forEach(r => {
+                Object.assign(r, qtyMap[r.ttank_id] || {});
+                r.hasInvoice = invoiceNumbers.has(r.invoice_number);
+            });
 
             res.render('tankreceipts', {
                 title: 'Tank Receipts',
@@ -267,10 +423,7 @@ const getHomeData = (req, res, next) => {
                 fromDate: fromDate,
                 toDate: toDate,
             });
-
-            console.log("inside tank");
         });
-
 }
 
 const getTankRcptByDate = (locationCode, fromDate, toDate) => {
@@ -358,5 +511,41 @@ const getLocationId = (locationCode) => {
                 resolve({location_id:location_id});
             });
 
+    });
+}
+
+module.exports.checkInvoiceNumber = async (req, res) => {
+    try {
+        const { invoiceNumber, excludeId } = req.query;
+        const locationCode = req.session.passport.user.location_code;
+        if (!invoiceNumber || !invoiceNumber.trim()) return res.json({ duplicate: false });
+
+        const sql = `SELECT ttank_id, invoice_number, decant_date
+                     FROM t_tank_stk_rcpt
+                     WHERE location_code = :locationCode
+                       AND invoice_number = :invoiceNumber
+                       ${excludeId ? 'AND ttank_id != :excludeId' : ''}
+                     LIMIT 1`;
+        const rows = await db.sequelize.query(sql, {
+            replacements: { locationCode, invoiceNumber: invoiceNumber.trim(), excludeId: excludeId || null },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        if (rows.length === 0) return res.json({ duplicate: false });
+        const r = rows[0];
+        return res.json({ duplicate: true, receiptId: r.ttank_id, decantDate: r.decant_date });
+    } catch (err) {
+        console.error('checkInvoiceNumber error:', err);
+        return res.json({ duplicate: false });
+    }
+};
+
+const getInvoiceNumbersSet = (locationCode) => {
+    return new Promise((resolve) => {
+        db.sequelize.query(
+            `SELECT invoice_number FROM t_tank_invoice WHERE location_id = :locationCode AND invoice_number IS NOT NULL`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        ).then(rows => {
+            resolve(new Set(rows.map(r => r.invoice_number)));
+        }).catch(() => resolve(new Set()));
     });
 }
