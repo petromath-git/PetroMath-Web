@@ -39,6 +39,8 @@ block content
                         a.nav-link#decantlines_tab(data-toggle="tab" href="#new_decantlines" onclick=`trackMenu(this)`) Decant Lines
                     li.nav-item.col-md
                         a.nav-link#summary_tab(data-toggle="tab" href="#summary" onclick="populateReceiptSummary(this)") Summary
+                    li.nav-item.col-md
+                        a.nav-link#invoice_tab(data-toggle="tab" href="#invoice_tab_pane" onclick="loadInvoiceTab()") Invoice
             else
                 ul.nav.nav-tabs
                     li.nav-item.col-md
@@ -47,6 +49,8 @@ block content
                         a.nav-link#decantlines_tab(data-toggle="tab" href="#new_decantlines") Decant Lines
                     li.nav-item.col-md.active
                         a.nav-link.active#summary_tab(data-toggle="tab" href="#summary" onclick="populateReceiptSummary(this)") Summary
+                    li.nav-item.col-md
+                        a.nav-link#invoice_tab(data-toggle="tab" href="#invoice_tab_pane" onclick="loadInvoiceTab()") Invoice
             div.tab-content
                 // ----------------------- New Decant Header details ----------------------------
                 div.row &nbsp;
@@ -73,8 +77,8 @@ block content
                                                 td
                                                     input(type='hidden' id='h_invoiceDate' value= receiptsData.h_invoiceDate)
                                                     input#invoiceDate.form-control(type='date', name='invoiceDate', value=receiptsData.invoice_date max=currentDate required)
-                                                td  
-                                                    input#invoiceno.form-control(type="text" name="invoice_no" value=receiptsData.invoice_number required)
+                                                td
+                                                    input#invoiceno.form-control(type="text" name="invoice_no" value=receiptsData.invoice_number required onblur="checkInvoiceNumberDuplicate()")
                                                 td 
                                                     input(type='hidden' id='h_decantDate' value= receiptsData.h_decantDate)
                                                     input#decantDate.form-control(type='date', name='decantDate', value=receiptsData.decant_date max=currentDate required)
@@ -199,9 +203,24 @@ block content
                                                 - var rowCnt = 0
                                                 while rowCnt < maxDecantLines
                                                     +summaryDecantLinesData(rowCnt++)
-                    if(!freezedRecord)            
+                    if(!freezedRecord)
                         div.row
                             div.col &nbsp;
                         div(align="center")
                             span
                                 button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-receipt\', \'tankReceipt_tab\')') CLOSE &raquo;
+
+                // ----------------------- Invoice ----------------------------
+                div.tab-pane.fade#invoice_tab_pane
+                    div.p-3
+                        div.mb-3
+                            label.font-weight-bold Upload Invoice PDF
+                            div.mt-1
+                                input#invoicePdfUpload.form-control-file(type='file' accept='.pdf' onchange='uploadAndParseInvoice()')
+                            span#invoiceParseStatus.text-muted.small.d-block.mt-1
+                        div.mt-2#invoiceTabContent
+                            div.text-muted No invoice attached yet.
+
+            if(freezedRecord)
+                script.
+                    document.addEventListener('DOMContentLoaded', function() { populateReceiptSummary(); });

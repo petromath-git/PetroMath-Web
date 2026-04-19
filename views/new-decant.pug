@@ -14,10 +14,11 @@ block content
                     a.nav-link#decantlines_tab(data-toggle="tab" href="#new_decantlines" onclick=`trackMenu(this)`) Decant Lines
                 li.nav-item.col-md
                     a.nav-link#summary_tab(data-toggle="tab" href="#summary" onclick="populateReceiptSummary(this)") Summary
+                li.nav-item.col-md
+                    a.nav-link#invoice_tab(data-toggle="tab" href="#invoice_tab_pane" onclick="loadInvoiceTab()") Invoice
             div.tab-content
                 // ----------------------- New Decant details ----------------------------
                 div.row &nbsp;
-                //div.tab-pane.active#new_decantheader
                 div.container-fluid#new_decantheader(class="tab-pane active")
                     div.row &nbsp;
                     input(type='hidden' name='location' id='location_id' value= location)
@@ -45,8 +46,8 @@ block content
                                                 td
                                                     input(type='hidden' id='h_invoiceDate' value= currentDate)
                                                     input#invoiceDate.form-control(type='date', name='decant_invoiceDate', value=currentDate max=currentDate required)
-                                                td  
-                                                    input#invoiceno.form-control(type="text" name="decant_invoiceno" required) 
+                                                td
+                                                    input#invoiceno.form-control(type="text" name="decant_invoiceno" required onblur="checkInvoiceNumberDuplicate()")
                                                 td
                                                     input(type='hidden' id='h_decantDate' value= currentDate)
                                                     input#decantDate.form-control(type='date', name='decant_decantDate', value=currentDate max=currentDate required)
@@ -176,4 +177,15 @@ block content
                     div(align="center")
                         span
                             button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-receipt\', \'tankReceipt_tab\')') CLOSE &raquo;
+
+                // ----------------------- Invoice ----------------------------
+                div.tab-pane.fade#invoice_tab_pane
+                    div.p-3
+                        div.mb-3
+                            label.font-weight-bold Upload Invoice PDF
+                            div.mt-1
+                                input#invoicePdfUpload.form-control-file(type='file' accept='.pdf' onchange='uploadAndParseInvoice()')
+                            span#invoiceParseStatus.text-muted.small.d-block.mt-1
+                        div.mt-2#invoiceTabContent
+                            div.text-muted No invoice attached yet.
 

@@ -198,7 +198,7 @@ const txnDecantLinesPromise = (ttank_id) => {
                         tdtank_id: decantdata.tdtank_id,
                         ttank_id: decantdata.ttank_id,
                         tank_id: decantdata.tank_id,
-                        quantity: (decantdata.quantity).toString(),
+                        quantity: parseFloat(decantdata.quantity).toString(),
                         closing_dip: decantdata.closing_dip,
                         opening_dip: decantdata.opening_dip,
                         EB_MS_FLAG: decantdata.EB_MS_FLAG,

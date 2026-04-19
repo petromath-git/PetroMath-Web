@@ -1,0 +1,88 @@
+{
+  "supplier": "BPCL",
+  "dateFormats": ["DD.MM.YYYY", "DD-MM-YYYY", "DD/MM/YYYY"],
+  "header": {
+    "invoice_number": {
+      "keyword": "INVOICE No.:",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d+"
+    },
+    "invoice_date": {
+      "keyword": "DATE/TIME:",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d{2}\\.\\d{2}\\.\\d{4}"
+    },
+    "truck_number": {
+      "keyword": "TL No:",
+      "strategy": "value_after_keyword",
+      "pattern": "[A-Z0-9]+"
+    },
+    "delivery_doc_no": {
+      "keyword": "DELIVERY No:",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d+"
+    },
+    "seal_lock_no": {
+      "keyword": "Seal/Lock No:",
+      "strategy": "value_after_keyword",
+      "pattern": "[\\d/]+"
+    }
+  },
+  "lines": {
+    "product_block_start": "VAT/LST",
+    "product_block_end": "HSN :",
+    "fields": {
+      "product_name": {
+        "keyword": "VAT/LST",
+        "strategy": "value_at_keyword",
+        "pattern": "(?:\\d{2}\\.)([A-Za-z][A-Za-z\\s()/.-]*)(?=\\d)"
+      },
+      "quantity": {
+        "keyword": " KL",
+        "strategy": "number_before_keyword"
+      },
+      "rate_per_kl": {
+        "keyword": "/KL",
+        "strategy": "number_before_keyword"
+      },
+      "total_line_amount": {
+        "keyword": "VAT/LST",
+        "strategy": "number_before_keyword"
+      },
+      "vat_pct": {
+        "keyword": "VAT/LST",
+        "strategy": "value_after_keyword",
+        "pattern": "\\d+"
+      },
+      "vat_amount": {
+        "keyword": "VAT/LST",
+        "strategy": "last_number_on_line"
+      },
+      "delivery_charge": {
+        "keyword": "DLY/TAXABLE CHARGE",
+        "strategy": "value_after_keyword",
+        "pattern": "[\\d,]+\\.?\\d*"
+      },
+      "additional_vat_amount": {
+        "keyword": "Additional VAT",
+        "strategy": "value_after_keyword",
+        "pattern": "[\\d,]+\\.?\\d*"
+      },
+      "density": {
+        "keyword": "Base Density",
+        "strategy": "nth_number_on_line",
+        "position": 1
+      },
+      "hsn_code": {
+        "keyword": "HSN :",
+        "strategy": "value_after_keyword",
+        "pattern": "[\\d\\s]+"
+      }
+    }
+  },
+  "total_amount": {
+    "keyword": "TOTAL VALUE : Rs",
+    "strategy": "value_after_keyword",
+    "pattern": "[\\d,]+\\.?\\d*"
+  }
+}

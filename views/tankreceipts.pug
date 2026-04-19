@@ -4,13 +4,23 @@ block content
     form(method='GET' action='/tankreceipts' id='receipts-by-date')
         table.center
             tr
-                td From Date:
+                td Date Range:
                 td
-                    input#tankreceipts_fromDate.form-control(type='date', name='tankreceipts_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required)
+                    select#tankReceiptDateRange.form-control(onchange='updateTankReceiptDateRange()')
+                        option(value='this_week') This Week
+                        option(value='this_month' selected) This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom') Custom Date
                 td &nbsp;
-                td To Date:
+                td#tankrcpt_fromDateLabel(style='display:none') From Date:
                 td
-                    input#tankreceipts_toDate.form-control(type='date', name='tankreceipts_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required)
+                    input#tankreceipts_fromDate.form-control(type='date', name='tankreceipts_fromDate', value=fromDate max=currentDate required style='display:none')
+                td &nbsp;
+                td#tankrcpt_toDateLabel(style='display:none') To Date:
+                td
+                    input#tankreceipts_toDate.form-control(type='date', name='tankreceipts_toDate', value=toDate max=currentDate required style='display:none')
                 td &nbsp;
                 td
                     button.btn.btn-primary(type='submit') Go
@@ -47,6 +57,10 @@ block content
                                    span= val.invoice_date
                                 td
                                     span= val.invoice_number
+                                    if val.hasInvoice
+                                        |
+                                        button.btn.btn-link.btn-sm.p-0.ml-1(type='button' title='View Invoice' onclick=`showInvoicePreview('${val.invoice_number}')`)
+                                            span.bi.bi-file-pdf-fill.text-danger
                                 td
                                     span= val.decant_date
                                 td
@@ -103,3 +117,15 @@ block content
                 div.row
                     div.col
                         button.btn.btn-primary(type='button' onclick='getNewDecantPage()') Add New
+
+    div.modal.fade#invoicePreviewModal(tabindex='-1' role='dialog' aria-labelledby='invoicePreviewTitle' aria-hidden='true')
+        div.modal-dialog.modal-lg(role='document')
+            div.modal-content
+                div.modal-header.bg-light
+                    h5.modal-title#invoicePreviewTitle Purchase Invoice
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                div.modal-body#invoicePreviewBody
+                    div.text-center.text-muted Loading...
+                div.modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Close
