@@ -1,5 +1,4 @@
-const _pdfParseModule = require('pdf-parse');
-const pdfParse = typeof _pdfParseModule === 'function' ? _pdfParseModule : _pdfParseModule.default;
+const pdfParse = require('pdf-parse');
 const path = require('path');
 const fs = require('fs');
 const moment = require('moment');
