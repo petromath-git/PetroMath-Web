@@ -31,7 +31,8 @@ module.exports = {
         const receiptTxn = TxnTankReceipts.bulkCreate(data, {
             returning: true,
             updateOnDuplicate: ["ttank_id", "invoice_number", "invoice_date","decant_date","driver_id","driver_name","helper_id","helper_name","truck_id","truck_number",
-                "decant_incharge", "odometer_reading","decant_time","truck_halt_flag", "updated_by", "updation_date"]
+                "decant_incharge", "odometer_reading","decant_time","truck_halt_flag", "updated_by", "updation_date",
+                ]
         });
         return receiptTxn;
     },
