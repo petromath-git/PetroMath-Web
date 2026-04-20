@@ -2645,8 +2645,6 @@ let vehicleDataByCredit = {};
 // Initialize vehicle data on page load using jQuery
 $(document).ready(function() {
     // Store vehicle data passed from backend
-    console.log('Checking for vehicleData:', typeof vehicleData !== 'undefined' ? 'Found' : 'Not found');
-
     if (typeof vehicleData !== 'undefined') {
         vehicleDataByCredit = vehicleData;
     }
@@ -2692,9 +2690,6 @@ function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
     const creditListId = obj.value;
     const vehicleSelect = document.getElementById(creditRowPrefix + 'vehicle-' + rowNo);
 
-    console.log('Looking for vehicles for creditListId:', creditListId);
-    console.log('Available vehicle data:', vehicleDataByCredit);
-    
     // Clear existing options
     $(vehicleSelect).empty().append('<option value="">Select Vehicle</option>');
     

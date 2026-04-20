@@ -1,7 +1,9 @@
 node_modules/
+public/dist/
 .wwebjs_cache/
 session/
 session-petromath
 puppeteer_reports_data
 benchmark-puppeteer.js
 .env
+smoke-screenshots/

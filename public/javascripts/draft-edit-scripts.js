@@ -438,7 +438,6 @@ function changeClosedValue(prefix,rownum){
 function setDigitalSalesDateRestrictions() {
     const closingDateField = document.getElementById('cashierDate');
     if (!closingDateField || !closingDateField.value) {
-        console.warn('Closing date not found');
         return;
     }
 
