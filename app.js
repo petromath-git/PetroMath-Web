@@ -188,6 +188,10 @@ app.use(compression());
 
 
 
+const distPath = path.join(__dirname, 'public/dist');
+if (require('fs').existsSync(distPath)) {
+    app.use(express.static(distPath, { maxAge: '7d' }));
+}
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 
@@ -232,6 +236,7 @@ const glRoutes = require('./routes/gl-routes');
 const employeeRoutes  = require('./routes/employee-routes');
 const documentRoutes  = require('./routes/document-routes');
 const tankReceiptRoutes = require('./routes/tank-receipt-routes');
+const purchasesRoutes   = require('./routes/purchases-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -398,6 +403,7 @@ app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/day-bill', dayBillRoutes);
 app.use('/tank-receipts', tankReceiptRoutes);
+app.use('/purchases',    purchasesRoutes);
 app.use('/employees', employeeRoutes);
 app.use('/documents', documentRoutes);
 app.use('/gl', glRoutes);

@@ -181,7 +181,11 @@ block content
                         button.btn.btn-sm.btn-primary(type='submit') Go
                     td &nbsp;
                     td
-                        a.btn.btn-sm.btn-primary(href='/lubes-invoice/new') Create New Invoice
+                        div.dropdown
+                            button.btn.btn-sm.btn-primary.dropdown-toggle(type='button' data-toggle='dropdown') New Purchase
+                            div.dropdown-menu
+                                a.dropdown-item(href='/purchases/fuel-invoice/new') Fuel Invoice
+                                a.dropdown-item(href='/lubes-invoice/new') Lube Invoice
             
             input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
             input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
@@ -195,39 +199,55 @@ block content
                         th Invoice Number
                         th Supplier
                         th Date
+                        th Type
                         th.text-right Amount
-                        th.text-center Lines
+                        th.text-center Lines / Qty
                         th Status
                         th Actions
                 tbody
                     each val in invoiceValues
                         tr(class=val.closing_status.toLowerCase())
                             td
-                                button.btn.btn-sm.btn-link.p-0(
-                                    type='button'
-                                    onclick=`toggleInvoiceLines(${val.lubes_hdr_id}, this)`
-                                    aria-expanded='false'
-                                )
-                                    i.oi.oi-chevron-right.toggle-icon
+                                if val.type === 'LUBE'
+                                    button.btn.btn-sm.btn-link.p-0(
+                                        type='button'
+                                        onclick=`toggleInvoiceLines(${val.lubes_hdr_id}, this)`
+                                        aria-expanded='false'
+                                    )
+                                        i.oi.oi-chevron-right.toggle-icon
                             td= val.invoice_number
                             td= val.supplier_name
                             td= val.date
+                            td
+                                if val.type === 'FUEL'
+                                    span.badge.badge-warning Fuel
+                                else
+                                    span.badge.badge-info Lube
                             td.text-right= val.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             td.text-center
-                                span.badge.badge-info= val.total_lines
+                                if val.type === 'FUEL'
+                                    = val.qty_kl ? val.qty_kl + ' KL' : val.total_lines + ' lines'
+                                else
+                                    span.badge.badge-info= val.total_lines
                             td
-                                span(class=val.closing_status === 'DRAFT' ? 'badge badge-warning' : 'badge badge-success')
-                                    = val.closing_status
-                            if (val.closing_status === 'DRAFT')
-                                td
+                                if val.type === 'FUEL'
+                                    span.badge.badge-secondary= val.closing_status
+                                else
+                                    span(class=val.closing_status === 'DRAFT' ? 'badge badge-warning' : 'badge badge-success')
+                                        = val.closing_status
+                            td
+                                if val.type === 'FUEL'
+                                    a.btn.btn-sm.btn-info(href='/purchases/fuel-invoice/' + val.fuel_id)
+                                        span.oi.oi-envelope-open
+                                else if val.closing_status === 'DRAFT'
                                     a.btn.btn-sm.btn-info.mr-2(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-pencil
                                     a.btn.btn-sm.btn-danger(onClick=`deleteInvoice(${val.lubes_hdr_id}, '${val.closing_status}')`)
                                         span.oi.oi-trash
-                            else
-                                td
+                                else
                                     a.btn.btn-sm.btn-info(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-envelope-open
-                        tr.collapse-row
-                            td.line-details(colspan='8')
-                                div.collapse(id=`invoice-lines-${val.lubes_hdr_id}`)
+                        if val.type === 'LUBE'
+                            tr.collapse-row
+                                td.line-details(colspan='9')
+                                    div.collapse(id=`invoice-lines-${val.lubes_hdr_id}`)
