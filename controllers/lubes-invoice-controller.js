@@ -394,39 +394,64 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
         toDate = financialYearDates.toDate;
     }
     
-    // Create promises for both data fetches
+    const { Op } = require('sequelize');
+    const TankInvoice = db.tank_invoice;
+    const TankInvoiceDtl = db.tank_invoice_dtl;
+
     const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
-    const invoicesPromise = lubesInvoiceDao.findLubesInvoices(
-        user.location_code, 
-        fromDate, 
-        toDate, 
-        supplierId
-    );
-    
-    // Execute both promises together
-    Promise.all([suppliersPromise, invoicesPromise])
-        .then(([suppliers, invoices]) => {
+    const lubesPromise = lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
+    const fuelPromise = TankInvoice.findAll({
+        where: { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } },
+        include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity'] }],
+        order: [['invoice_date', 'DESC'], ['id', 'DESC']]
+    });
+
+    Promise.all([suppliersPromise, lubesPromise, fuelPromise])
+        .then(([suppliers, lubesInvoices, fuelInvoices]) => {
             let invoiceValues = [];
-            
-            if(invoices && invoices.length > 0) {
-                invoices.forEach(invoice => {
+
+            if (lubesInvoices && lubesInvoices.length > 0) {
+                lubesInvoices.forEach(invoice => {
                     invoiceValues.push({
+                        type: 'LUBE',
                         lubes_hdr_id: invoice.lubes_hdr_id,
                         invoice_number: invoice.invoice_number,
                         supplier_name: invoice.Supplier ? invoice.Supplier.supplier_name : 'N/A',
                         closing_status: invoice.closing_status,
                         notes: invoice.notes,
                         date: dateFormat(invoice.invoice_date, 'dd-mmm-yyyy'),
+                        invoice_date_raw: invoice.invoice_date,
                         amount: parseFloat(invoice.invoice_amount) || 0,
                         total_lines: invoice.LubesInvoiceLines ? invoice.LubesInvoiceLines.length : 0
                     });
                 });
             }
-            
+
+            if (fuelInvoices && fuelInvoices.length > 0) {
+                fuelInvoices.forEach(f => {
+                    const qty = (f.lines || []).reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+                    invoiceValues.push({
+                        type: 'FUEL',
+                        fuel_id: f.id,
+                        invoice_number: f.invoice_number || '',
+                        supplier_name: f.supplier || '',
+                        closing_status: 'SAVED',
+                        notes: '',
+                        date: f.invoice_date ? dateFormat(new Date(f.invoice_date), 'dd-mmm-yyyy') : '',
+                        invoice_date_raw: f.invoice_date,
+                        amount: parseFloat(f.total_invoice_amount) || 0,
+                        total_lines: (f.lines || []).length,
+                        qty_kl: qty > 0 ? qty.toFixed(3) : ''
+                    });
+                });
+            }
+
+            invoiceValues.sort((a, b) => new Date(b.invoice_date_raw) - new Date(a.invoice_date_raw));
+
             res.render('lubes-invoice-home', {
-                title: "Lubes Invoice: Home", 
+                title: "Purchases",
                 user: user,
-                fromDate: fromDate, 
+                fromDate: fromDate,
                 toDate: toDate,
                 selectedSupplierId: supplierId,
                 suppliers: suppliers,
