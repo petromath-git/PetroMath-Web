@@ -139,6 +139,15 @@ module.exports = {
 
             const result = await InvoiceParserService.parseInvoice(pdfBuffer, companyName);
 
+            // Validate dealer code if configured — catches wrong-location uploads (e.g. MC invoice at MC2)
+            const dealerCode = location.oil_co_dealer_code ? String(location.oil_co_dealer_code).trim() : null;
+            if (dealerCode && !result.rawText.includes(dealerCode)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Invoice does not belong to this outlet. Expected dealer code ${dealerCode} not found in the PDF.`
+                });
+            }
+
             // Resolve supplier_id — mandatory
             const supplierRow = await db.sequelize.query(
                 `SELECT supplier_id, supplier_name FROM m_supplier WHERE UPPER(supplier_short_name) = UPPER(:code) AND location_code = :loc LIMIT 1`,
@@ -163,6 +172,17 @@ module.exports = {
                 InvoiceProductMapDao.getMappings(locationCode, supplierRow.supplier_id)
             ]);
 
+            const linesWithCharges = result.lines.map(l => {
+                const charges = [];
+                if (l.vat_pct != null || l.vat_amount != null)
+                    charges.push({ charge_type: 'VAT', charge_pct: l.vat_pct || null, charge_amount: l.vat_amount || null });
+                if (l.additional_vat_amount != null)
+                    charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
+                if (l.delivery_charge != null)
+                    charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
+                return { ...l, charges };
+            });
+
             return res.json({
                 success: true,
                 supplier: result.supplier,
@@ -171,7 +191,7 @@ module.exports = {
                 tempId,
                 products,
                 mappings,
-                data: { header: result.header, lines: result.lines }
+                data: { header: result.header, lines: linesWithCharges }
             });
         } catch (err) {
             console.error('Error parsing invoice PDF:', err);

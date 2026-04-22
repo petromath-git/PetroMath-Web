@@ -18,6 +18,22 @@ function resolveSupplier(companyName) {
     return SUPPLIER_MAP[companyName.toUpperCase().trim()] || null;
 }
 
+const SUPPLIER_DETECT_PATTERNS = [
+    { pattern: /INDIAN OIL CORPORATION/i,       supplier: 'IOCL' },
+    { pattern: /BHARAT PETROLEUM CORPORATION/i,  supplier: 'BPCL' },
+    { pattern: /HINDUSTAN PETROLEUM CORPORATION/i, supplier: 'HPCL' },
+    { pattern: /\bINDIAN OIL\b/i,               supplier: 'IOCL' },
+    { pattern: /\bBHARAT PETROLEUM\b/i,          supplier: 'BPCL' },
+    { pattern: /\bHINDUSTAN PETROLEUM\b/i,       supplier: 'HPCL' },
+];
+
+function detectSupplierFromText(text) {
+    for (const { pattern, supplier } of SUPPLIER_DETECT_PATTERNS) {
+        if (pattern.test(text)) return supplier;
+    }
+    return null;
+}
+
 function loadConfig(supplierKey) {
     const configPath = path.join(__dirname, '..', 'config', 'invoice-parsers', `${supplierKey}.json`);
     if (!fs.existsSync(configPath)) {
@@ -293,12 +309,25 @@ async function parseInvoice(pdfBuffer, companyName) {
         throw new Error(`Unknown supplier: "${companyName}". Add to SUPPLIER_MAP in invoice-parser-service.js`);
     }
 
-    const config = loadConfig(supplierKey);
     const rawText = await extractText(pdfBuffer);
 
     if (!rawText || rawText.trim().length < 50) {
         throw new Error('No readable text found in PDF. File may be a scanned image or password-protected.');
     }
+
+    // Reject if PDF is from a different oil company than this location
+    const detectedSupplier = detectSupplierFromText(rawText);
+    if (detectedSupplier && detectedSupplier !== supplierKey) {
+        throw new Error(`This PDF is a ${detectedSupplier} invoice but this location uses ${supplierKey}. Please upload the correct invoice.`);
+    }
+
+    // Auto-detect CNG variant for BPCL
+    let configKey = supplierKey;
+    if (supplierKey === 'BPCL' && /COMPRESSED NATURAL GAS|CNG/i.test(rawText)) {
+        configKey = 'BPCL_CNG';
+    }
+
+    const config = loadConfig(configKey);
 
     const lines = getLines(rawText);
 
