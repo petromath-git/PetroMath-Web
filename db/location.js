@@ -28,6 +28,14 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(50),
             allowNull: true
         },
+        tin_number: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
+        oil_co_dealer_code: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
         phone: {
             type: DataTypes.STRING(50),
             allowNull: false

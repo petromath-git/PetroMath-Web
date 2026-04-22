@@ -54,6 +54,7 @@ block content
                             th(scope="col") Company
                             th(scope="col") Phone
                             th(scope="col") GST
+                            th(scope="col") Dealer Code
                             th(scope="col") Start Date
                             th(scope="col") Status
                             th(scope="col") Actions
@@ -88,14 +89,22 @@ block content
                                     )
                                 td(scope="row")
                                     input.form-control.form-control-sm(
-                                        type="text", 
-                                        id=`location-gst-${index}`, 
-                                        value=location.gst_number || '', 
+                                        type="text",
+                                        id=`location-gst-${index}`,
+                                        value=location.gst_number || '',
                                         readonly
                                     )
                                 td(scope="row")
                                     input.form-control.form-control-sm(
-                                        type="date", 
+                                        type="text",
+                                        id=`location-dealer-code-${index}`,
+                                        value=location.oil_co_dealer_code || '',
+                                        readonly,
+                                        placeholder="SAP No / CC No"
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="date",
                                         id=`location-start-${index}`, 
                                         value=new Date(location.start_date).toISOString().split('T')[0], 
                                         readonly
@@ -195,6 +204,17 @@ block content
                                             )
                                     .col-12
                                         .location-detail
+                                            small.text-muted Dealer Code (SAP No / CC No)
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-dealer-code-${index}`,
+                                                value=location.oil_co_dealer_code || '',
+                                                readonly,
+                                                placeholder="SAP No / CC No",
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                    .col-12
+                                        .location-detail
                                             small.text-muted Address
                                             textarea.mobile-input.fw-bold(
                                                 id=`mobile-address-${index}`,
@@ -264,6 +284,10 @@ block content
                             .col-md-6.mb-3
                                 label.form-label GST Number
                                 input.form-control(type="text", name="gst_number", maxlength="50")
+                            .col-md-6.mb-3
+                                label.form-label Dealer Code
+                                    small.text-muted.ml-1 (SAP No for IOCL / CC No for BPCL)
+                                input.form-control(type="text", name="oil_co_dealer_code", maxlength="50", placeholder="e.g. 1016730 or 111090")
                             .col-md-6.mb-3
                                 label.form-label Start Date *
                                 input.form-control(
@@ -462,6 +486,7 @@ block content
                 company_name: document.getElementById(`location-company-${index}`).value,
                 phone: document.getElementById(`location-phone-${index}`).value,
                 gst_number: document.getElementById(`location-gst-${index}`).value,
+                oil_co_dealer_code: document.getElementById(`location-dealer-code-${index}`).value,
                 start_date: document.getElementById(`location-start-${index}`).value
             };
             
@@ -494,6 +519,7 @@ block content
                 company_name: document.getElementById(`mobile-company-${index}`).value,
                 phone: document.getElementById(`mobile-phone-${index}`).value,
                 gst_number: document.getElementById(`mobile-gst-${index}`).value,
+                oil_co_dealer_code: document.getElementById(`mobile-dealer-code-${index}`).value,
                 address: document.getElementById(`mobile-address-${index}`).value,
                 start_date: new Date().toISOString().split('T')[0]
             };

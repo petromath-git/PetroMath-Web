@@ -12,13 +12,20 @@ block content
                 if !isNew && invoice
                     span.badge.badge-secondary.mr-2 ##{invoice.id}
 
-        //- PDF Upload card (always shown even when edit is disabled — for remapping)
-        div.card.mb-3
-            div.card-body.py-2
-                div.d-flex.align-items-center
-                    label.font-weight-bold.mb-0.mr-3 Upload Invoice PDF
-                    input#fuelInvoicePdfUpload.form-control-file(type='file' accept='.pdf' style='max-width:320px' onchange='fuelInvoiceUploadAndParse()')
-                    span#fuelParseStatus.text-muted.small.ml-3
+        //- PDF Upload card (new invoice only)
+        if isNew
+            div.card.mb-3
+                div.card-body.py-2
+                    div.d-flex.align-items-center
+                        label.font-weight-bold.mb-0.mr-3 Upload Invoice PDF
+                        input#fuelInvoicePdfUpload.form-control-file(type='file' accept='.pdf' style='max-width:320px' onchange='fuelInvoiceUploadAndParse()')
+                        span#fuelParseStatus.text-muted.small.ml-3
+        else
+            div.mb-3.d-flex.align-items-center
+                a.btn.btn-outline-secondary.btn-sm(href='/purchases/fuel-invoice/new') + Upload Another Invoice
+                a.btn.btn-outline-danger.btn-sm.ml-2(href=`/purchases/fuel-invoice/${invoice.id}/pdf` target='_blank' title='View PDF')
+                    span.oi.oi-document
+                    |  View PDF
 
         //- Header card
         div.card.mb-3
@@ -77,12 +84,15 @@ block content
             button.btn.btn-primary(type='button' onclick='fuelInvoiceSave()')
                 = editDisabled ? 'Save Mapping' : 'Save Invoice'
             a.btn.btn-secondary.ml-2(href='/lubes-invoice-home') Cancel
+            if !isNew && invoice
+                button.btn.btn-danger.ml-4(type='button' onclick='fuelInvoiceDelete()')  Delete Invoice
             span#fi_save_status.text-muted.small.ml-3
 
     script.
         const FI_PRODUCTS = !{JSON.stringify(products)};
         const FI_EXISTING_LINES = !{JSON.stringify(invoice ? (invoice.lines || []) : [])};
         const FI_EDIT_DISABLED = !{JSON.stringify(editDisabled)};
+        const FI_INVOICE_ID = !{JSON.stringify(invoice ? invoice.id : null)};
 
         document.addEventListener('DOMContentLoaded', function() {
             if (FI_EXISTING_LINES.length > 0) {
@@ -279,19 +289,17 @@ block content
 
         function fuelInvoicePrefill(data, supplier, supplierId, products, mappings) {
             const h = data.header || {};
-            if (!FI_EDIT_DISABLED) {
-                if (h.invoice_number) document.getElementById('fi_invoice_number').value = h.invoice_number;
-                if (h.invoice_date)   document.getElementById('fi_invoice_date').value   = h.invoice_date;
-                if (h.truck_number)   document.getElementById('fi_truck_number').value   = h.truck_number;
-                if (h.delivery_doc_no)document.getElementById('fi_delivery_doc_no').value= h.delivery_doc_no;
-                if (h.seal_lock_no)   document.getElementById('fi_seal_lock_no').value   = h.seal_lock_no;
-                if (h.total_invoice_amount) document.getElementById('fi_total_amount').value = h.total_invoice_amount;
+            if (h.invoice_number) document.getElementById('fi_invoice_number').value = h.invoice_number;
+            if (h.invoice_date)   document.getElementById('fi_invoice_date').value   = h.invoice_date;
+            if (h.truck_number)   document.getElementById('fi_truck_number').value   = h.truck_number;
+            if (h.delivery_doc_no)document.getElementById('fi_delivery_doc_no').value= h.delivery_doc_no;
+            if (h.seal_lock_no)   document.getElementById('fi_seal_lock_no').value   = h.seal_lock_no;
+            if (h.total_invoice_amount) document.getElementById('fi_total_amount').value = h.total_invoice_amount;
 
-                if (supplierId) {
-                    const sel = document.getElementById('fi_supplier_id');
-                    for (let i = 0; i < sel.options.length; i++) {
-                        if (sel.options[i].value == supplierId) { sel.selectedIndex = i; break; }
-                    }
+            if (supplierId) {
+                const sel = document.getElementById('fi_supplier_id');
+                for (let i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].value == supplierId) { sel.selectedIndex = i; break; }
                 }
             }
 
@@ -314,4 +322,17 @@ block content
                     charges:           line.charges || []
                 });
             });
+        }
+
+        async function fuelInvoiceDelete() {
+            if (!FI_INVOICE_ID) return;
+            if (!confirm('Delete this invoice? This cannot be undone.')) return;
+            try {
+                const resp = await fetch('/purchases/fuel-invoice/' + FI_INVOICE_ID + '/delete', { method: 'POST' });
+                const json = await resp.json();
+                if (!json.success) { alert(json.error || 'Delete failed.'); return; }
+                window.location.href = '/lubes-invoice-home';
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         }

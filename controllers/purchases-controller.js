@@ -5,6 +5,7 @@ const SupplierDao = require('../dao/supplier-dao');
 const locationConfig = require('../utils/location-config');
 const utils = require('../utils/app-utils');
 const dateFormat = require('dateformat');
+const DocumentStoreDao = require('../dao/document-store-dao');
 
 module.exports = {
 
@@ -84,12 +85,13 @@ module.exports = {
     getNewFuelInvoice: async (req, res, next) => {
         try {
             const locationCode = req.user.location_code;
-            const [suppliers, products] = await Promise.all([
+            const [suppliers, products, editDisabledCfg] = await Promise.all([
                 SupplierDao.findSuppliers(locationCode),
                 db.sequelize.query(
                     `SELECT product_id, product_name FROM m_product WHERE location_code = :locationCode AND is_tank_product = 1`,
                     { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
-                )
+                ),
+                locationConfig.getLocationConfigValue(locationCode, 'FUEL_INVOICE_EDIT_DISABLED', 'N')
             ]);
             res.render('fuel-invoice', {
                 user: req.user,
@@ -98,7 +100,7 @@ module.exports = {
                 products,
                 currentDate: utils.currentDate(),
                 isNew: true,
-                editDisabled: false
+                editDisabled: String(editDisabledCfg).toUpperCase() === 'Y'
             });
         } catch (err) {
             next(err);
@@ -130,6 +132,41 @@ module.exports = {
             });
         } catch (err) {
             next(err);
+        }
+    },
+
+    getFuelInvoicePdf: async (req, res, next) => {
+        try {
+            const id = req.params.id;
+            const invoice = await TankInvoiceDao.findById(id);
+            if (!invoice) return res.status(404).send('Invoice not found.');
+            if (invoice.location_id.toUpperCase() !== req.user.location_code.toUpperCase()) {
+                return res.status(403).send('Access denied.');
+            }
+            const docs = await DocumentStoreDao.findByEntity('TANK_INVOICE', id);
+            if (!docs || docs.length === 0) return res.status(404).send('No PDF attached to this invoice.');
+            const doc = await DocumentStoreDao.findById(docs[0].doc_id);
+            res.set('Content-Type', 'application/pdf');
+            res.set('Content-Disposition', `inline; filename="${doc.file_name}"`);
+            res.send(doc.file_data);
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    deleteFuelInvoice: async (req, res, next) => {
+        try {
+            const id = req.params.id;
+            const invoice = await TankInvoiceDao.findById(id);
+            if (!invoice) return res.status(404).json({ success: false, error: 'Invoice not found.' });
+            if (invoice.location_id.toUpperCase() !== req.user.location_code.toUpperCase()) {
+                return res.status(403).json({ success: false, error: 'Access denied.' });
+            }
+            await TankInvoiceDao.deleteById(id);
+            return res.json({ success: true });
+        } catch (err) {
+            console.error('deleteFuelInvoice error:', err);
+            return res.status(500).json({ success: false, error: err.message });
         }
     },
 
