@@ -237,8 +237,10 @@ block content
                                         = val.closing_status
                             td
                                 if val.type === 'FUEL'
-                                    a.btn.btn-sm.btn-info(href='/purchases/fuel-invoice/' + val.fuel_id)
+                                    a.btn.btn-sm.btn-info.mr-1(href='/purchases/fuel-invoice/' + val.fuel_id)
                                         span.oi.oi-envelope-open
+                                    a.btn.btn-sm.btn-danger(href='/purchases/fuel-invoice/' + val.fuel_id + '/pdf' target='_blank' title='View PDF')
+                                        span.oi.oi-document
                                 else if val.closing_status === 'DRAFT'
                                     a.btn.btn-sm.btn-info.mr-2(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-pencil

@@ -46,8 +46,8 @@ module.exports = {
      */
     createLocation: async (req, res, next) => {
         try {
-            const { location_code, location_name, address, company_name, 
-                    gst_number, phone, start_date } = req.body;
+            const { location_code, location_name, address, company_name,
+                    gst_number, oil_co_dealer_code, phone, start_date } = req.body;
 
             // Validate location code format
             if (!locationDao.validateLocationCode(location_code)) {
@@ -75,6 +75,7 @@ module.exports = {
                 address: address.toUpperCase().trim(),
                 company_name: company_name.toUpperCase().trim(),
                 gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
+                oil_co_dealer_code: oil_co_dealer_code ? oil_co_dealer_code.trim() : null,
                 phone: phone.trim(),
                 start_date: start_date ? new Date(start_date + 'T00:00:00') : new Date(new Date().setHours(0,0,0,0)),
                 created_by: req.user.Person_id.toString()
@@ -96,7 +97,7 @@ module.exports = {
    updateLocation: async (req, res, next) => {
     try {
         const locationId = req.params.id;
-        const { location_name, company_name, gst_number, phone, start_date } = req.body;
+        const { location_name, company_name, gst_number, oil_co_dealer_code, phone, start_date } = req.body;
 
         // Validate phone number (10 digits)
         if (!phone || !/^\d{10}$/.test(phone)) {
@@ -105,14 +106,15 @@ module.exports = {
 
         // Update location
         await locationDao.update(locationId, {
-        location_name: location_name.toUpperCase().trim(),
-        company_name: company_name.toUpperCase().trim(),
-        gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
-        phone: phone.trim(),
-        start_date: start_date ? new Date(start_date + 'T00:00:00') : new Date(new Date().setHours(0,0,0,0)),
-        effective_end_date: '9999-12-31',
-        updated_by: req.user.Person_id.toString()
-    });
+            location_name: location_name.toUpperCase().trim(),
+            company_name: company_name.toUpperCase().trim(),
+            gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
+            oil_co_dealer_code: oil_co_dealer_code ? oil_co_dealer_code.trim() : null,
+            phone: phone.trim(),
+            start_date: start_date ? new Date(start_date + 'T00:00:00') : new Date(new Date().setHours(0,0,0,0)),
+            effective_end_date: '9999-12-31',
+            updated_by: req.user.Person_id.toString()
+        });
 
         res.json({ success: true, message: 'Location updated successfully' });
     } catch (error) {

@@ -31,6 +31,20 @@ module.exports = {
         });
     },
 
+    deleteById: async (id) => {
+        return db.sequelize.transaction(async (t) => {
+            const lines = await TankInvoiceDtl.findAll({ where: { invoice_id: id }, transaction: t });
+            for (const line of lines) {
+                await TankInvoiceCharges.destroy({ where: { invoice_dtl_id: line.id }, transaction: t });
+            }
+            await TankInvoiceDtl.destroy({ where: { invoice_id: id }, transaction: t });
+            await TankInvoice.destroy({ where: { id }, transaction: t });
+        }).then(async () => {
+            const docs = await DocumentStoreDao.findByEntity('TANK_INVOICE', id);
+            for (const doc of docs) await DocumentStoreDao.deleteById(doc.doc_id);
+        });
+    },
+
     findByInvoiceNumber: (locationId, invoiceNumber) => {
         return TankInvoice.findOne({
             where: { location_id: locationId, invoice_number: invoiceNumber },
