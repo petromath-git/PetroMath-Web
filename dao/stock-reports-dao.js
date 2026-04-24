@@ -342,13 +342,42 @@ getTankVarianceInputs: async (locationCode, fromDate, toDate) => {
             }
         );
 
+        const testings = await db.sequelize.query(
+            `SELECT mpt.tank_id,
+                    CONCAT(
+                        DATE_FORMAT(tc.closing_date, '%Y-%m-%d'),
+                        ' ',
+                        TIME_FORMAT(COALESCE(tc.close_reading_time, '00:00:00'), '%H:%i:%s')
+                    ) AS testing_ts,
+                    SUM(COALESCE(tr.testing, 0)) AS testing_liters
+             FROM t_reading tr
+             INNER JOIN t_closing tc ON tc.closing_id = tr.closing_id
+             INNER JOIN m_pump_tank mpt ON mpt.pump_id = tr.pump_id
+                AND mpt.location_code = tc.location_code
+                AND DATE(tc.closing_date) BETWEEN mpt.effective_start_date AND mpt.effective_end_date
+             WHERE tc.location_code = :locationCode
+               AND DATE(tc.closing_date) BETWEEN :fromDate AND :toDate
+               AND COALESCE(tr.testing, 0) > 0
+             GROUP BY mpt.tank_id,
+                      CONCAT(
+                        DATE_FORMAT(tc.closing_date, '%Y-%m-%d'),
+                        ' ',
+                        TIME_FORMAT(COALESCE(tc.close_reading_time, '00:00:00'), '%H:%i:%s')
+                      )`,
+            {
+                replacements: { locationCode, fromDate, toDate },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+
         return {
             tanks,
             dipChartLines,
             currentDips,
             previousDips,
             pumpReadings,
-            receipts
+            receipts,
+            testings
         };
     } catch (error) {
         console.error('Error fetching tank variance inputs:', error);
