@@ -352,11 +352,38 @@ getTankVarianceReport: async (req, res, next) => {
 
         let fromDate = req.body.fromDate || req.query.fromDate;
         let toDate = req.body.toDate || req.query.toDate;
+        const selectedRange = req.body.selectedRange || req.query.selectedRange || 'this_month';
         const selectedTank = req.body.tank_code || req.query.tank_code || '';
         const selectedProduct = req.body.product_code || req.query.product_code || '';
 
+        if (selectedRange !== 'custom') {
+            const today = moment();
+            if (selectedRange === 'this_month') {
+                fromDate = today.clone().startOf('month').format('YYYY-MM-DD');
+                toDate = today.clone().endOf('month').format('YYYY-MM-DD');
+            } else if (selectedRange === 'last_month') {
+                fromDate = today.clone().subtract(1, 'month').startOf('month').format('YYYY-MM-DD');
+                toDate = today.clone().subtract(1, 'month').endOf('month').format('YYYY-MM-DD');
+            } else if (selectedRange === 'this_financial_year') {
+                const fyStart = today.month() < 3
+                    ? moment({ year: today.year() - 1, month: 3, day: 1 })
+                    : moment({ year: today.year(), month: 3, day: 1 });
+                fromDate = fyStart.format('YYYY-MM-DD');
+                toDate = today.format('YYYY-MM-DD');
+            } else if (selectedRange === 'last_financial_year') {
+                const fyStartYear = today.month() < 3 ? today.year() - 2 : today.year() - 1;
+                fromDate = moment({ year: fyStartYear, month: 3, day: 1 }).format('YYYY-MM-DD');
+                toDate = moment({ year: fyStartYear + 1, month: 2, day: 31 }).format('YYYY-MM-DD');
+            }
+        }
+
         if (fromDate) fromDate = moment(fromDate).format('YYYY-MM-DD');
         if (toDate) toDate = moment(toDate).format('YYYY-MM-DD');
+
+        if (!fromDate || !toDate) {
+            fromDate = moment().startOf('month').format('YYYY-MM-DD');
+            toDate = moment().endOf('month').format('YYYY-MM-DD');
+        }
 
         let varianceRows = [];
         let tankOptions = [];
@@ -392,6 +419,7 @@ getTankVarianceReport: async (req, res, next) => {
             varianceRows,
             tankOptions,
             productOptions,
+            selectedRange,
             selectedTank,
             selectedProduct,
             caller
@@ -489,6 +517,16 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
         });
     });
 
+    const testingByTank = {};
+    (raw.testings || []).forEach(t => {
+        const ts = new Date((t.testing_ts || '').replace(' ', 'T'));
+        if (!testingByTank[t.tank_id]) testingByTank[t.tank_id] = [];
+        testingByTank[t.tank_id].push({
+            ts,
+            qtyLiters: parseFloat(t.testing_liters || 0)
+        });
+    });
+
     const eventsByTank = {};
     [...raw.previousDips, ...raw.currentDips].forEach(d => {
         if (!eventsByTank[d.tank_id]) eventsByTank[d.tank_id] = [];
@@ -508,6 +546,7 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
         const tankId = parseInt(tankIdStr, 10);
         const events = eventsByTank[tankId].sort((a, b) => a.ts - b.ts);
         const receipts = (receiptsByTank[tankId] || []).sort((a, b) => a.ts - b.ts);
+        const testings = (testingByTank[tankId] || []).sort((a, b) => a.ts - b.ts);
         const tank = tankById[tankId];
         const lookup = volumeMapByTank[tankId] || {};
 
@@ -524,18 +563,23 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
                 .filter(r => r.ts > prev.ts && r.ts <= curr.ts)
                 .reduce((s, r) => s + r.qtyLiters, 0);
 
+            const testingLiters = testings
+                .filter(t => t.ts > prev.ts && t.ts <= curr.ts)
+                .reduce((s, t) => s + t.qtyLiters, 0);
+
             const pumpIds = Object.keys(curr.readings);
-            let sales = 0;
+            let grossSales = 0;
             pumpIds.forEach(pid => {
                 if (prev.readings[pid] !== undefined) {
                     const delta = curr.readings[pid] - prev.readings[pid];
-                    if (delta > 0) sales += delta;
+                    if (delta > 0) grossSales += delta;
                 }
             });
 
-            const expected = opening + receiptLiters - sales;
+            const netSales = grossSales - testingLiters;
+            const expected = opening + receiptLiters - netSales;
             const variance = actual - expected;
-            const variancePct = sales > 0 ? (variance / sales) * 100 : null;
+            const variancePct = netSales > 0 ? (variance / netSales) * 100 : null;
 
             rows.push({
                 date: curr.dip_date,
@@ -544,7 +588,9 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
                 product_code: tank?.product_code || '-',
                 opening_liters: opening,
                 receipts_liters: receiptLiters,
-                sales_liters: sales,
+                gross_sales_liters: grossSales,
+                testing_liters: testingLiters,
+                sales_liters: netSales,
                 expected_liters: expected,
                 actual_liters: actual,
                 variance_liters: variance,
