@@ -103,7 +103,7 @@ block content
                                                     th Time
                                                     th Dip (cm)
                                                     th Pumps
-                                                    if user.isAdmin
+                                                    if allowTankDipDelete
                                                         th Actions
                                             tbody
                                                 each dip in existingDips
@@ -118,7 +118,7 @@ block content
                                                                     div #{reading.pump_code}: #{reading.reading}
                                                             else
                                                                 p No readings available.        
-                                                        if user.isAdmin
+                                                        if allowTankDipDelete
                                                             td
                                                                 button.btn.btn-danger.btn-sm.delete-dip(
                                                                     type="button"

@@ -7,28 +7,50 @@ const db = require("../db/db-connection");
 const TankDipDao = require("../dao/tank-dip-dao");
 const LocationConfigDao = require("../dao/location-config-dao"); 
 
+const ALLOW_PAST_DATE_TANK_DIP = 'ALLOW_PAST_DATE_TANK_DIP';
+const ALLOW_TANK_DIP_DELETE = 'ALLOW_TANK_DIP_DELETE';
+
+function getDateRangeFromSelection(selectedRange) {
+    const today = new Date();
+    let from;
+    let to;
+    if (selectedRange === 'this_month') {
+        from = new Date(today.getFullYear(), today.getMonth(), 1);
+        to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (selectedRange === 'last_month') {
+        from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        to = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (selectedRange === 'financial_year') {
+        const m = today.getMonth();
+        from = m < 3 ? new Date(today.getFullYear() - 1, 3, 1) : new Date(today.getFullYear(), 3, 1);
+        to = today;
+    } else {
+        return { fromDate: null, toDate: null };
+    }
+    return {
+        fromDate: dateFormat(from, "yyyy-mm-dd"),
+        toDate: dateFormat(to, "yyyy-mm-dd")
+    };
+}
+
+function formatDipRows(dips) {
+    return (dips || []).map(dip => ({
+        ...dip,
+        dip_date_display: dip.dip_date ? dateFormat(new Date(dip.dip_date), "dd-mm-yyyy") : ""
+    }));
+}
+
 exports.getTankDipEntry = async function (req, res, next) {
     try {
         const locationCode = req.user.location_code;
         const today = dateFormat(new Date(), "yyyy-mm-dd");
 
-         // Get configuration for allowing past dates
-        const allowPastDateSetting = await LocationConfigDao.getSetting(
-            locationCode, 
-            'ALLOW_PAST_DATE_TANK_DIP'
-        );
-
-         // ADD THESE DEBUG LINES
-        console.log('=== TANK DIP DEBUG ===');
-        console.log('Location Code:', locationCode);
-        console.log('Setting from DB:', allowPastDateSetting);
-        console.log('Setting type:', typeof allowPastDateSetting);
-        
+        const [allowPastDateSetting, allowTankDipDeleteSetting] = await Promise.all([
+            LocationConfigDao.getSetting(locationCode, ALLOW_PAST_DATE_TANK_DIP),
+            LocationConfigDao.getSetting(locationCode, ALLOW_TANK_DIP_DELETE)
+        ]);
         const allowPastDate = allowPastDateSetting === 'Y';
-        
-        console.log('allowPastDate:', allowPastDate);
-        console.log('======================');
-        // END DEBUG
+        const allowTankDipDelete = req.user.isAdmin && allowTankDipDeleteSetting === 'Y';
         
 
         
@@ -101,6 +123,7 @@ exports.getTankDipEntry = async function (req, res, next) {
             lastReadings: lastReadings,
             searchDate: today,
             allowPastDate: allowPastDate,
+            allowTankDipDelete: allowTankDipDelete,
             currentDate: today  
         });
     } catch (error) {
@@ -204,6 +227,11 @@ exports.deleteTankDip = async function (req, res, next) {
     try {
         const tdip_id = req.body.tdip_id;
         const locationCode = req.user.location_code;
+        const allowTankDipDeleteSetting = await LocationConfigDao.getSetting(locationCode, ALLOW_TANK_DIP_DELETE);
+
+        if (allowTankDipDeleteSetting !== 'Y') {
+            return res.status(403).json({ success: false, error: 'Tank dip delete is disabled for this location' });
+        }
 
         // // Check if dip exists and belongs to user's location
         // const dip = await TankDipDao.findById(tdip_id);
@@ -298,21 +326,20 @@ exports.validateDip = async function (req, res) {
 
 exports.searchDipPage = async (req, res, next) => {
     try {
-
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
-        const dateFormat = require("dateformat");
-        const fromDate = dateFormat(firstDay, "yyyy-mm-dd");
-        const toDate = dateFormat(lastDay, "yyyy-mm-dd");    
-
+        const locationCode = req.user.location_code;
+        const selectedRange = 'this_month';
+        const { fromDate, toDate } = getDateRangeFromSelection(selectedRange);
+        const dips = await TankDipDao.searchDipByDateRange(locationCode, fromDate, toDate);
+        const allowTankDipDeleteSetting = await LocationConfigDao.getSetting(locationCode, ALLOW_TANK_DIP_DELETE);
+        const allowTankDipDelete = req.user.isAdmin && allowTankDipDeleteSetting === 'Y';
 
         res.render("tank-dip-search", {
             title: "Tank Dip Search",
             fromDate: fromDate,
             toDate: toDate,
-            dips: [],
+            selectedRange,
+            dips: formatDipRows(dips),
+            allowTankDipDelete,
             user: req.user, 
             messages: req.flash() // optional but consistent with layout expectations
         });
@@ -323,25 +350,79 @@ exports.searchDipPage = async (req, res, next) => {
 
 exports.searchDipResults = async (req, res, next) => {
     try {
-        const fromDate = req.body.fromDate;
-        const toDate = req.body.toDate;
+        const locationCode = req.user.location_code;
+        const selectedRange = req.body.selectedRange || 'this_month';
+        let fromDate = req.body.fromDate;
+        let toDate = req.body.toDate;
+
+        if (selectedRange !== 'custom') {
+            const range = getDateRangeFromSelection(selectedRange);
+            fromDate = range.fromDate;
+            toDate = range.toDate;
+        }
+
+        if (!fromDate || !toDate) {
+            const fallback = getDateRangeFromSelection('this_month');
+            fromDate = fallback.fromDate;
+            toDate = fallback.toDate;
+        }
 
         const dips = await TankDipDao.searchDipByDateRange(
-            req.user.location_code,
+            locationCode,
             fromDate,
             toDate
         );
+        const allowTankDipDeleteSetting = await LocationConfigDao.getSetting(locationCode, ALLOW_TANK_DIP_DELETE);
+        const allowTankDipDelete = req.user.isAdmin && allowTankDipDeleteSetting === 'Y';
 
         res.render("tank-dip-search", {
             title: "Tank Dip Search",
             fromDate,
             toDate,
-            dips,
+            selectedRange,
+            dips: formatDipRows(dips),
+            allowTankDipDelete,
             user: req.user, 
             messages: req.flash()
         });
     } catch (err) {
         next(err);
+    }
+};
+
+exports.getDipDetails = async (req, res) => {
+    try {
+        const tdip_id = parseInt(req.query.tdip_id, 10);
+        if (!tdip_id) {
+            return res.status(400).json({ success: false, error: 'Invalid dip id' });
+        }
+
+        const rows = await TankDipDao.getDipDetailsById(req.user.location_code, tdip_id);
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Dip not found' });
+        }
+
+        const base = rows[0];
+        const detail = {
+            tdip_id: base.tdip_id,
+            tank_code: base.tank_code,
+            product_code: base.product_code,
+            dip_date: base.dip_date ? dateFormat(new Date(base.dip_date), "dd-mm-yyyy") : "",
+            dip_time: base.dip_time,
+            dip_reading: base.dip_reading,
+            readings: rows
+                .filter(r => r.pump_id)
+                .map(r => ({
+                    pump_code: r.pump_code,
+                    pump_make: r.pump_make,
+                    reading: r.reading
+                }))
+        };
+
+        return res.json({ success: true, detail });
+    } catch (error) {
+        console.error('Error fetching dip details:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch dip details' });
     }
 };
 

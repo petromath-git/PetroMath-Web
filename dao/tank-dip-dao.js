@@ -255,6 +255,31 @@ function TankDipDao() {
             throw error;
         }
     };
+
+    this.getDipDetailsById = async function(location_code, tdip_id) {
+        try {
+            const results = await db.sequelize.query(
+                `SELECT d.tdip_id, d.tank_id, d.dip_date, d.dip_time, d.dip_reading,
+                        t.tank_code, t.product_code,
+                        tr.pump_id, tr.reading, p.pump_code, p.pump_make
+                 FROM t_tank_dip d
+                 JOIN m_tank t ON d.tank_id = t.tank_id
+                 LEFT JOIN t_tank_reading tr ON d.tdip_id = tr.tdip_id
+                 LEFT JOIN m_pump p ON tr.pump_id = p.pump_id
+                 WHERE d.location_code = :location_code
+                   AND d.tdip_id = :tdip_id
+                 ORDER BY p.pump_code`,
+                {
+                    replacements: { location_code, tdip_id },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return results;
+        } catch (error) {
+            console.error("Error in getDipDetailsById:", error);
+            throw error;
+        }
+    };
     
 }
 

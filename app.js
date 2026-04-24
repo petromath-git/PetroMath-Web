@@ -1376,6 +1376,10 @@ app.get('/tank-dip/validate', isLoginEnsured, function(req, res) {
     tankDipController.validateDip(req, res);
 });
 
+app.get('/tank-dip/details', isLoginEnsured, function(req, res, next) {
+    tankDipController.getDipDetails(req, res, next);
+});
+
 // Tank Dip Search Page
 app.get('/tank-dip/search', [isLoginEnsured], tankDipController.searchDipPage);
 
