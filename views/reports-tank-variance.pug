@@ -104,7 +104,7 @@ block content
                                         = Number(row.variance_liters || 0).toFixed(2)
                                     td.text-right
                                         if row.variance_pct !== null
-                                            = Number(row.variance_pct).toFixed(3) + '%'
+                                            = Number(row.variance_pct).toFixed(2) + '%'
                                         else
                                             | -
                         tfoot.bg-light
@@ -120,7 +120,7 @@ block content
                                 td.text-right= totalVariance.toFixed(2)
                                 td.text-right
                                     if totalSales > 0
-                                        = ((totalVariance / totalSales) * 100).toFixed(3) + '%'
+                                        = ((totalVariance / totalSales) * 100).toFixed(2) + '%'
                                     else
                                         | -
         else
