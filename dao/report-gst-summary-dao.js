@@ -30,7 +30,8 @@ module.exports = {
                                     AND p.location_code = tr.location_code
                                     AND tr.location_code = :locationCode
                                     AND tr.invoice_date BETWEEN :reportFromDate AND :reportToDate
-                                    ORDER BY 
+                                    AND COALESCE(p.is_lube_product, 0) = 0
+                                    ORDER BY
                                         p.product_name, tr.invoice_date`,
         {
           replacements: {locationCode: locationCode,reportFromDate: reportFromDate ,reportToDate: reportToDate}, 
@@ -57,12 +58,13 @@ module.exports = {
         JOIN m_product p 
           ON t.product_code = p.product_name 
           AND p.location_code = tr.location_code
-      WHERE 
+      WHERE
         tr.location_code = :locationCode
         AND tr.invoice_date BETWEEN :reportFromDate AND :reportToDate
-      GROUP BY 
+        AND COALESCE(p.is_lube_product, 0) = 0
+      GROUP BY
         p.product_name
-      ORDER BY 
+      ORDER BY
         p.product_name;
     `;
   
@@ -81,12 +83,16 @@ module.exports = {
         SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) AS amount
       FROM t_closing tc
       JOIN t_reading tr ON tc.closing_id = tr.closing_id
-      JOIN m_pump mp 
-        ON tr.pump_id = mp.pump_id 
+      JOIN m_pump mp
+        ON tr.pump_id = mp.pump_id
         AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
+      JOIN m_product mprod
+        ON mp.product_code = mprod.product_name
+        AND mprod.location_code = tc.location_code
       WHERE tc.closing_status = 'CLOSED'
         AND tc.location_code = :locationCode
         AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND COALESCE(mprod.is_lube_product, 0) = 0
       GROUP BY mp.product_code
       ORDER BY mp.product_code;
     `;
@@ -101,100 +107,129 @@ module.exports = {
 
   getNonFuelSalesConsolidated: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
-      SELECT
-        mp.product_name AS product,
-        SUM(s.qty) AS total_qty,
-        SUM(s.amount) AS total_amount
+      SELECT product, SUM(total_qty) AS total_qty, SUM(total_amount) AS total_amount
       FROM (
-        SELECT closing_id, product_id, qty, amount
-        FROM t_credits
+        -- Packed lube sales via t_credits / t_cashsales
+        SELECT
+          mp.product_name AS product,
+          SUM(s.qty) AS total_qty,
+          SUM(s.amount) AS total_amount
+        FROM (
+          SELECT closing_id, product_id, qty, amount
+          FROM t_credits
+          UNION ALL
+          SELECT closing_id, product_id, qty, amount
+          FROM t_cashsales
+        ) s
+        JOIN t_closing tc ON s.closing_id = tc.closing_id
+        JOIN m_product mp ON s.product_id = mp.product_id
+        WHERE tc.closing_status = 'CLOSED'
+          AND tc.location_code = :locationCode
+          AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          AND (
+            COALESCE(mp.is_lube_product, 0) = 1
+            OR mp.product_name NOT IN (
+                SELECT DISTINCT product_code
+                FROM m_pump
+                WHERE location_code = :locationCode
+            )
+          )
+        GROUP BY mp.product_name
+
         UNION ALL
-        SELECT closing_id, product_id, qty, amount
-        FROM t_cashsales
-        UNION ALL
-        SELECT ot.closing_id, ot.product_id,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
-                 CASE
-                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                        AND UPPER(p2t.product_name) = '2T LOOSE'
-                   THEN (SELECT dsr.price FROM m_product dsr
-                         WHERE dsr.product_name = 'DSR - OIL'
-                           AND dsr.location_code = :locationCode
-                         LIMIT 1)
-                   ELSE ot.price
-                 END AS amount
-        FROM t_2toil ot
-        JOIN m_product p2t ON ot.product_id = p2t.product_id
-      ) s
-      JOIN t_closing tc ON s.closing_id = tc.closing_id
-      JOIN m_product mp ON s.product_id = mp.product_id
-      WHERE tc.closing_status = 'CLOSED'
-        AND tc.location_code = :locationCode
-        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
-        AND mp.product_name NOT IN (
-            SELECT DISTINCT product_code 
-            FROM m_pump 
-            WHERE location_code = :locationCode
-        )
-      GROUP BY mp.product_name
-      ORDER BY mp.product_name;
+
+        -- Metered lube sales (pump-dispensed, tracked via day bill)
+        SELECT
+          mp.product_name AS product,
+          SUM(dbi.quantity) AS total_qty,
+          SUM(dbi.total_amount) AS total_amount
+        FROM t_day_bill db
+        JOIN t_day_bill_header dbh ON db.day_bill_id = dbh.day_bill_id
+        JOIN t_day_bill_items dbi ON dbh.header_id = dbi.header_id
+        JOIN m_product mp ON dbi.product_id = mp.product_id
+        WHERE db.location_code = :locationCode
+          AND db.bill_date BETWEEN :reportFromDate AND :reportToDate
+          AND db.status = 'ACTIVE'
+          AND COALESCE(mp.is_lube_product, 0) = 1
+        GROUP BY mp.product_name
+      ) combined
+      GROUP BY product
+      ORDER BY product;
     `;
-  
+
     const result = await db.sequelize.query(query, {
       replacements: { locationCode, reportFromDate, reportToDate },
       type: Sequelize.QueryTypes.SELECT,
     });
-  
+
     return result;
   },
-  
+
 
   
   // Get Non-Fuel Sales item-wise (by product) with GST amounts
   getNonFuelSalesByItem: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT
-        mp.product_name AS product_name,
-        CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
-        SUM(s.qty) AS total_qty,
-        SUM(s.amount) AS total_amount,
-        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        product_name,
+        gst_rate,
+        SUM(total_qty) AS total_qty,
+        SUM(total_amount) AS total_amount,
+        SUM(total_cgst) AS total_cgst,
+        SUM(total_sgst) AS total_sgst
       FROM (
-        SELECT closing_id, product_id, qty, amount
-        FROM t_credits
+        -- Packed lube sales via t_credits / t_cashsales
+        SELECT
+          mp.product_name,
+          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
+          SUM(s.qty) AS total_qty,
+          SUM(s.amount) AS total_amount,
+          SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+          SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        FROM (
+          SELECT closing_id, product_id, qty, amount
+          FROM t_credits
+          UNION ALL
+          SELECT closing_id, product_id, qty, amount
+          FROM t_cashsales
+        ) s
+        JOIN t_closing tc ON s.closing_id = tc.closing_id
+        JOIN m_product mp ON s.product_id = mp.product_id
+        WHERE tc.closing_status = 'CLOSED'
+          AND tc.location_code = :locationCode
+          AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          AND (
+            COALESCE(mp.is_lube_product, 0) = 1
+            OR mp.product_name NOT IN (
+                SELECT DISTINCT product_code
+                FROM m_pump
+                WHERE location_code = :locationCode
+            )
+          )
+        GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
+
         UNION ALL
-        SELECT closing_id, product_id, qty, amount
-        FROM t_cashsales
-        UNION ALL
-        SELECT ot.closing_id, ot.product_id,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
-                 CASE
-                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                        AND UPPER(p2t.product_name) = '2T LOOSE'
-                   THEN (SELECT dsr.price FROM m_product dsr
-                         WHERE dsr.product_name = 'DSR - OIL'
-                           AND dsr.location_code = :locationCode
-                         LIMIT 1)
-                   ELSE ot.price
-                 END AS amount
-        FROM t_2toil ot
-        JOIN m_product p2t ON ot.product_id = p2t.product_id
-      ) s
-      JOIN t_closing tc ON s.closing_id = tc.closing_id
-      JOIN m_product mp ON s.product_id = mp.product_id
-      WHERE tc.closing_status = 'CLOSED'
-        AND tc.location_code = :locationCode
-        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
-        AND mp.product_name NOT IN (
-            SELECT DISTINCT product_code
-            FROM m_pump
-            WHERE location_code = :locationCode
-        )
-      GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
-      ORDER BY mp.product_name;
+
+        -- Metered lube sales (pump-dispensed, tracked via day bill)
+        SELECT
+          mp.product_name,
+          CONCAT(COALESCE(dbi.cgst_rate, 0) + COALESCE(dbi.sgst_rate, 0), '%') AS gst_rate,
+          SUM(dbi.quantity) AS total_qty,
+          SUM(dbi.total_amount) AS total_amount,
+          SUM(dbi.cgst_amount) AS total_cgst,
+          SUM(dbi.sgst_amount) AS total_sgst
+        FROM t_day_bill db
+        JOIN t_day_bill_header dbh ON db.day_bill_id = dbh.day_bill_id
+        JOIN t_day_bill_items dbi ON dbh.header_id = dbi.header_id
+        JOIN m_product mp ON dbi.product_id = mp.product_id
+        WHERE db.location_code = :locationCode
+          AND db.bill_date BETWEEN :reportFromDate AND :reportToDate
+          AND db.status = 'ACTIVE'
+          AND COALESCE(mp.is_lube_product, 0) = 1
+        GROUP BY mp.product_name, dbi.cgst_rate, dbi.sgst_rate
+      ) combined
+      GROUP BY product_name, gst_rate
+      ORDER BY product_name;
     `;
 
     const result = await db.sequelize.query(query, {
@@ -209,43 +244,60 @@ module.exports = {
   getNonFuelSalesByGST: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT
-        CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_category,
-        SUM(s.qty) AS total_qty,
-        SUM(s.amount) AS total_amount,
-        SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-        SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        gst_category,
+        SUM(total_qty) AS total_qty,
+        SUM(total_amount) AS total_amount,
+        SUM(total_cgst) AS total_cgst,
+        SUM(total_sgst) AS total_sgst
       FROM (
-        SELECT closing_id, product_id, qty, amount
-        FROM t_credits
+        -- Packed lube sales via t_credits / t_cashsales
+        SELECT
+          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_category,
+          SUM(s.qty) AS total_qty,
+          SUM(s.amount) AS total_amount,
+          SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+          SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        FROM (
+          SELECT closing_id, product_id, qty, amount
+          FROM t_credits
+          UNION ALL
+          SELECT closing_id, product_id, qty, amount
+          FROM t_cashsales
+        ) s
+        JOIN t_closing tc ON s.closing_id = tc.closing_id
+        JOIN m_product mp ON s.product_id = mp.product_id
+        WHERE tc.closing_status = 'CLOSED'
+          AND tc.location_code = :locationCode
+          AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          AND (
+            COALESCE(mp.is_lube_product, 0) = 1
+            OR mp.product_name NOT IN (
+                SELECT DISTINCT product_code
+                FROM m_pump
+                WHERE location_code = :locationCode
+            )
+          )
+        GROUP BY gst_category
+
         UNION ALL
-        SELECT closing_id, product_id, qty, amount
-        FROM t_cashsales
-        UNION ALL
-        SELECT ot.closing_id, ot.product_id,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) AS qty,
-               (ot.given_qty - COALESCE(ot.returned_qty, 0)) *
-                 CASE
-                   WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                        AND UPPER(p2t.product_name) = '2T LOOSE'
-                   THEN (SELECT dsr.price FROM m_product dsr
-                         WHERE dsr.product_name = 'DSR - OIL'
-                           AND dsr.location_code = :locationCode
-                         LIMIT 1)
-                   ELSE ot.price
-                 END AS amount
-        FROM t_2toil ot
-        JOIN m_product p2t ON ot.product_id = p2t.product_id
-      ) s
-      JOIN t_closing tc ON s.closing_id = tc.closing_id
-      JOIN m_product mp ON s.product_id = mp.product_id
-      WHERE tc.closing_status = 'CLOSED'
-        AND tc.location_code = :locationCode
-        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
-        AND mp.product_name NOT IN (
-            SELECT DISTINCT product_code
-            FROM m_pump
-            WHERE location_code = :locationCode
-        )
+
+        -- Metered lube sales (pump-dispensed, tracked via day bill)
+        SELECT
+          CONCAT(COALESCE(dbi.cgst_rate, 0) + COALESCE(dbi.sgst_rate, 0), '%') AS gst_category,
+          SUM(dbi.quantity) AS total_qty,
+          SUM(dbi.total_amount) AS total_amount,
+          SUM(dbi.cgst_amount) AS total_cgst,
+          SUM(dbi.sgst_amount) AS total_sgst
+        FROM t_day_bill db
+        JOIN t_day_bill_header dbh ON db.day_bill_id = dbh.day_bill_id
+        JOIN t_day_bill_items dbi ON dbh.header_id = dbi.header_id
+        JOIN m_product mp ON dbi.product_id = mp.product_id
+        WHERE db.location_code = :locationCode
+          AND db.bill_date BETWEEN :reportFromDate AND :reportToDate
+          AND db.status = 'ACTIVE'
+          AND COALESCE(mp.is_lube_product, 0) = 1
+        GROUP BY gst_category
+      ) combined
       GROUP BY gst_category
       ORDER BY gst_category DESC;
     `;

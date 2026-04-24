@@ -155,47 +155,32 @@ block content
                             
                             hr
                             
-                            //- Category Breakdown
+                            //- Category Breakdown (from Summary - matches Detailed Summary)
                             .row
-                                if nilRatedTotal > 0
+                                //- Nil-Rated (0% GST)
+                                if summary.nil_rated_value && parseFloat(summary.nil_rated_value) > 0
                                     .col-md-4.mb-3
                                         .card.border-secondary
                                             .card-body
                                                 h6.text-muted
                                                     i.bi.bi-circle-fill.text-secondary.me-2
                                                     | Nil-Rated (0% GST)
-                                                h5.mb-0= `₹${nilRatedTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                                h5.mb-0= `₹${parseFloat(summary.nil_rated_value).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
                                                 small.text-muted Fuel (Petrol/Diesel)
                                 
-                                if taxable5Total > 0
-                                    .col-md-4.mb-3
-                                        .card.border-success
-                                            .card-body
-                                                h6.text-muted
-                                                    i.bi.bi-circle-fill.text-success.me-2
-                                                    | Taxable @ 5%
-                                                h5.mb-0= `₹${taxable5Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                                                small.text-muted= `GST: ₹${gst5Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                                
-                                if taxable18Total > 0
-                                    .col-md-4.mb-3
-                                        .card.border-info
-                                            .card-body
-                                                h6.text-muted
-                                                    i.bi.bi-circle-fill.text-info.me-2
-                                                    | Taxable @ 18%
-                                                h5.mb-0= `₹${taxable18Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                                                small.text-muted= `GST: ₹${gst18Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                                
-                                if taxable28Total > 0
-                                    .col-md-4.mb-3
-                                        .card.border-warning
-                                            .card-body
-                                                h6.text-muted
-                                                    i.bi.bi-circle-fill.text-warning.me-2
-                                                    | Taxable @ 28%
-                                                h5.mb-0= `₹${taxable28Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-                                                small.text-muted= `GST: ₹${gst28Total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                //- Dynamic Tax Rate Cards
+                                if summary.tax_rates && summary.tax_rates.length > 0
+                                    each rateInfo in summary.tax_rates
+                                        - var borderColor = rateInfo.rate === 5 ? 'success' : rateInfo.rate === 12 ? 'primary' : rateInfo.rate === 18 ? 'info' : rateInfo.rate === 28 ? 'warning' : 'secondary'
+                                        - var textColor = rateInfo.rate === 5 ? 'success' : rateInfo.rate === 12 ? 'primary' : rateInfo.rate === 18 ? 'info' : rateInfo.rate === 28 ? 'warning' : 'secondary'
+                                        .col-md-4.mb-3
+                                            .card(class=`border-${borderColor}`)
+                                                .card-body
+                                                    h6.text-muted
+                                                        i.bi.bi-circle-fill(class=`text-${textColor}`).me-2
+                                                        | Taxable @ #{rateInfo.rate}%
+                                                    h5.mb-0= `₹${parseFloat(rateInfo.taxable_value).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                                    small.text-muted= `GST: ₹${parseFloat(rateInfo.tax_amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
         
         //- GSTR-3B Summary
         if returnType === 'GSTR3B'
