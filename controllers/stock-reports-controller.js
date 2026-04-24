@@ -39,11 +39,17 @@ getStockSummaryReport: async (req, res, next) => {
 
         let fromDate = req.body.fromDate || req.query.fromDate;
         let toDate   = req.body.toDate   || req.query.toDate;
+        const selectedRange = req.body.selectedRange || req.query.selectedRange || 'this_month';
 
         if (fromDate instanceof Date) fromDate = moment(fromDate).format('YYYY-MM-DD');
         else if (fromDate) fromDate = moment(fromDate).format('YYYY-MM-DD');
         if (toDate instanceof Date)   toDate   = moment(toDate).format('YYYY-MM-DD');
         else if (toDate)              toDate   = moment(toDate).format('YYYY-MM-DD');
+
+        if (!fromDate || !toDate) {
+            fromDate = moment().startOf('month').format('YYYY-MM-DD');
+            toDate   = moment().format('YYYY-MM-DD');
+        }
 
         let stockSummary = [];
 
@@ -65,7 +71,8 @@ getStockSummaryReport: async (req, res, next) => {
             formattedFromDate,
             formattedToDate,
             currentDate,
-            showValues
+            showValues,
+            selectedRange
         };
 
         if (caller === 'notpdf') {

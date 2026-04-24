@@ -7,8 +7,9 @@ const stockReportsController = require('../controllers/stock-reports-controller'
 
 // Stock Summary Report - GET (initial load)
 router.get('/summary', isLoginEnsured, function (req, res, next) {
-    req.body.fromDate = new Date(Date.now());
-    req.body.toDate = new Date(Date.now());
+    const now = new Date();
+    req.body.fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    req.body.toDate = now;
     req.body.caller = 'notpdf';
     stockReportsController.getStockSummaryReport(req, res, next);
 });

@@ -155,6 +155,18 @@ BEGIN
 
                 UNION ALL
 
+                -- Fuel invoices (fuel only: is_tank_product=1, is_lube_product=0)
+                SELECT tid.quantity * 1000 AS qty
+                FROM t_tank_invoice_dtl tid
+                JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
+                WHERE tid.product_id   = p.product_id
+                  AND ti.location_id   = p_location_code
+                  AND p.is_tank_product = 1
+                  AND p.is_lube_product = 0
+                  AND DATE(ti.invoice_date) BETWEEN p_from_date AND p_to_date
+
+                UNION ALL
+
                 SELECT qty
                 FROM t_lubes_stock_adjustment
                 WHERE product_id     = p.product_id
@@ -188,6 +200,18 @@ BEGIN
                   AND p.is_tank_product = 1
                   AND p.is_lube_product = 0
                   AND DATE(tr.invoice_date) BETWEEN p_from_date AND p_to_date
+
+                UNION ALL
+
+                -- Fuel invoice amounts (fuel only)
+                SELECT tid.total_line_amount AS amt
+                FROM t_tank_invoice_dtl tid
+                JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
+                WHERE tid.product_id   = p.product_id
+                  AND ti.location_id   = p_location_code
+                  AND p.is_tank_product = 1
+                  AND p.is_lube_product = 0
+                  AND DATE(ti.invoice_date) BETWEEN p_from_date AND p_to_date
 
             ) AS purch_amts
         ), 0) AS purchase_value,
