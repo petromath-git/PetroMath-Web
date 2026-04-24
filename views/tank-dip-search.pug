@@ -1,9 +1,17 @@
 extends layout
 
 block content
-    form(method='POST', action='/tank-dip/search')
+    form#dipSearchForm(method='POST', action='/tank-dip/search')
         table.center
             tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(name='selectedRange', onchange='onDateRangeChange()')
+                        option(value='this_month' selected=(selectedRange==='this_month' || !selectedRange)) This Month
+                        option(value='last_month' selected=(selectedRange==='last_month')) Last Month
+                        option(value='financial_year' selected=(selectedRange==='financial_year')) Financial Year
+                        option(value='custom' selected=(selectedRange==='custom')) Custom Date
+                td &nbsp;
                 td From Date:
                 td
                     input#dip_fromDate.form-control(
@@ -35,15 +43,129 @@ block content
                 th Tank Code
                 th Product
                 th Dip Reading
+                th Actions
             tbody
                 if dips.length
                     each dip, index in dips
                         tr
                             td #{index + 1}
-                            td #{dip.dip_date}
+                            td #{dip.dip_date_display || dip.dip_date}
                             td #{dip.dip_time}
                             td #{dip.tank_code}
                             td #{dip.product_code}
-                            td #{dip.dip_reading}                              
+                            td #{dip.dip_reading}
+                            td
+                                button.btn.btn-info.btn-sm.view-dip(type='button', data-dip-id=dip.tdip_id) View
+                                if allowTankDipDelete
+                                    | &nbsp;
+                                    button.btn.btn-danger.btn-sm.delete-dip(type='button', data-dip-id=dip.tdip_id) Delete
     div(align="center")
         button.btn.btn-primary(type="button", onclick="window.location.href='/tank-dip'") Add New
+
+    #dipDetailsModal.modal.fade(tabindex='-1', role='dialog', aria-labelledby='dipDetailsModalLabel', aria-hidden='true')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5#dipDetailsModalLabel.modal-title Dip Details
+                    button.close(type='button', data-dismiss='modal', aria-label='Close')
+                        span(aria-hidden='true') ×
+                .modal-body
+                    .row.mb-2
+                        .col-md-4
+                            strong Tank:
+                            span#detailTank.ml-2
+                        .col-md-4
+                            strong Product:
+                            span#detailProduct.ml-2
+                        .col-md-4
+                            strong Dip:
+                            span#detailDip.ml-2
+                    .row.mb-3
+                        .col-md-6
+                            strong Date:
+                            span#detailDate.ml-2
+                        .col-md-6
+                            strong Time:
+                            span#detailTime.ml-2
+                    h6 Pump Readings
+                    .table-responsive
+                        table.table.table-bordered.table-sm
+                            thead.thead-light
+                                tr
+                                    th Pump
+                                    th Make
+                                    th Reading
+                            tbody#detailReadingsBody
+
+    script.
+        function onDateRangeChange() {
+            var range = document.getElementById('dateRange').value;
+            var fromInput = document.getElementById('dip_fromDate');
+            var toInput = document.getElementById('dip_toDate');
+            var today = new Date();
+            var from, to;
+
+            if (range === 'this_month') {
+                from = new Date(today.getFullYear(), today.getMonth(), 1);
+                to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            } else if (range === 'last_month') {
+                from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                to = new Date(today.getFullYear(), today.getMonth(), 0);
+            } else if (range === 'financial_year') {
+                var m = today.getMonth();
+                from = m < 3 ? new Date(today.getFullYear() - 1, 3, 1) : new Date(today.getFullYear(), 3, 1);
+                to = today;
+            } else {
+                return;
+            }
+
+            function fmt(d) {
+                return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+            }
+            fromInput.value = fmt(from);
+            toInput.value = fmt(to);
+            document.getElementById('dipSearchForm').submit();
+        }
+
+        $(document).on('click', '.view-dip', async function() {
+            const dipId = $(this).data('dip-id');
+            try {
+                const res = await $.get('/tank-dip/details', { tdip_id: dipId });
+                if (!res.success) return alert(res.error || 'Failed to load dip details');
+                const d = res.detail;
+                $('#detailTank').text(d.tank_code || '-');
+                $('#detailProduct').text(d.product_code || '-');
+                $('#detailDip').text(d.dip_reading || '-');
+                $('#detailDate').text(d.dip_date || '-');
+                $('#detailTime').text(d.dip_time || '-');
+                const body = $('#detailReadingsBody');
+                body.empty();
+                if (d.readings && d.readings.length) {
+                    d.readings.forEach(function(r) {
+                        body.append('<tr><td>' + (r.pump_code || '-') + '</td><td>' + (r.pump_make || '-') + '</td><td>' + (r.reading || '-') + '</td></tr>');
+                    });
+                } else {
+                    body.append('<tr><td colspan="3" class="text-center">No pump readings available</td></tr>');
+                }
+                $('#dipDetailsModal').modal('show');
+            } catch (e) {
+                alert('Error loading dip details');
+            }
+        });
+
+        $(document).on('click', '.delete-dip', async function() {
+            if (!confirm('Are you sure you want to delete this dip reading?')) return;
+            const dipId = $(this).data('dip-id');
+            try {
+                const response = await $.ajax({
+                    url: '/tank-dip',
+                    method: 'DELETE',
+                    data: JSON.stringify({ tdip_id: dipId }),
+                    contentType: 'application/json'
+                });
+                if (response.success) location.reload();
+                else alert(response.error || 'Failed to delete dip reading');
+            } catch (error) {
+                alert('Error deleting dip reading');
+            }
+        });
