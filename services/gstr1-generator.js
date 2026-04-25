@@ -1,74 +1,176 @@
 const GstDataAggregationDao = require("../dao/gst-data-aggregation-dao");
 const gstUtils = require("../utils/gst-utils");
+const crypto = require('crypto');
 
 module.exports = {
     /**
      * Generate complete GSTR-1 JSON
      */
-    generateGSTR1Json: async (locationCode, gstin, returnPeriod) => {
-        try {
-            // Get period dates
-            const periodDates = gstUtils.getPeriodDates(returnPeriod);
-            const { from_date, to_date, financial_year } = periodDates;
+generateGSTR1Json: async (locationCode, gstin, returnPeriod) => {
+    try {
+        // Get period dates
+        const periodDates = gstUtils.getPeriodDates(returnPeriod);
+        const { from_date, to_date, financial_year } = periodDates;
 
-            // Fetch all required data in parallel
-            const [b2bData, b2clData, b2csData, hsnData] = await Promise.all([
-                GstDataAggregationDao.getB2BSalesData(locationCode, from_date, to_date),
-                GstDataAggregationDao.getB2CLSalesData(locationCode, from_date, to_date),
-                GstDataAggregationDao.getB2CSSalesData(locationCode, from_date, to_date),
-                GstDataAggregationDao.getHSNSummary(locationCode, from_date, to_date)
-            ]);
+        // Fetch all required data in parallel
+        const [b2bData, b2clData, b2csData, hsnData, twoTOilSummary, nilRatedSummary] = await Promise.all([
+            GstDataAggregationDao.getB2BSalesData(locationCode, from_date, to_date),
+            GstDataAggregationDao.getB2CLSalesData(locationCode, from_date, to_date),
+            GstDataAggregationDao.getB2CSSalesData(locationCode, from_date, to_date),
+            GstDataAggregationDao.getHSNSummary(locationCode, from_date, to_date),
+            GstDataAggregationDao.get2TOilSalesSummary(locationCode, from_date, to_date),
+            GstDataAggregationDao.getNilRatedSalesSummary(locationCode, from_date, to_date)
+        ]);
 
-            // Build GSTR-1 JSON structure
-            const gstr1Json = {
-                gstin: gstin,
-                fp: returnPeriod, // Financial Period in MMYYYY format
-                gt: calculateGrandTotal(b2bData, b2clData, b2csData), // Grand Total
-                cur_gt: calculateGrandTotal(b2bData, b2clData, b2csData), // Current period grand total
-                
-                // B2B Invoices
-                b2b: formatB2BData(b2bData),
-                
-                // B2C Large Invoices (> 2.5 lakh)
-                b2cl: formatB2CLData(b2clData),
-                
-                // B2C Small - Other (State-wise summary)
-                b2cs: formatB2CSData(b2csData, gstin),
-                
-                // HSN Summary
-                hsn: formatHSNData(hsnData),
-                
-                // Documents Issued (if needed)
-                doc_issue: generateDocumentSummary(b2bData, b2clData, b2csData),
-                
-                // Nil rated, exempted and non-GST supplies (if any)
-                nil: {
-                    inv: []
-                }
-            };
+        // Calculate totals
+        let totalTaxableValue = 0;
+        let totalTax = 0;
 
-            return {
-                success: true,
-                data: gstr1Json,
-                summary: {
-                    total_b2b_invoices: b2bData.length,
-                    total_b2cl_invoices: b2clData.length,
-                    total_b2cs_entries: b2csData.length,
-                    total_hsn_entries: hsnData.length,
-                    period: gstUtils.formatReturnPeriod(returnPeriod),
-                    from_date,
-                    to_date
-                }
-            };
+        // Sum from B2B
+        b2bData.forEach(row => {
+            totalTaxableValue += parseFloat(row.taxable_value || 0);
+            totalTax += parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+        });
 
-        } catch (error) {
-            console.error('Error generating GSTR-1 JSON:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+        // Sum from B2CL
+        b2clData.forEach(row => {
+            totalTaxableValue += parseFloat(row.taxable_value || 0);
+            totalTax += parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+        });
+
+        // Sum from B2CS
+        b2csData.forEach(row => {
+            totalTaxableValue += parseFloat(row.taxable_value || 0);
+            totalTax += parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+        });
+
+        // Add 2T Oil
+        if (twoTOilSummary) {
+            totalTaxableValue += parseFloat(twoTOilSummary.taxable_value || 0);
+            totalTax += parseFloat(twoTOilSummary.cgst_amount || 0) + 
+                       parseFloat(twoTOilSummary.sgst_amount || 0) + 
+                       parseFloat(twoTOilSummary.igst_amount || 0);
         }
-    },
+
+        // ✅ NEW: Calculate tax-rate-wise breakdown DYNAMICALLY
+        const taxRateBreakdown = {};
+
+        // Helper function to add to breakdown
+        const addToBreakdown = (rate, taxable, tax) => {
+            const rateKey = parseFloat(rate || 0).toFixed(2);
+            if (!taxRateBreakdown[rateKey]) {
+                taxRateBreakdown[rateKey] = { taxable: 0, tax: 0 };
+            }
+            taxRateBreakdown[rateKey].taxable += parseFloat(taxable || 0);
+            taxRateBreakdown[rateKey].tax += parseFloat(tax || 0);
+        };
+
+        // From B2CS
+        b2csData.forEach(row => {
+            const rate = parseFloat(row.tax_rate || 0);
+            const taxable = parseFloat(row.taxable_value || 0);
+            const tax = parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+            addToBreakdown(rate, taxable, tax);
+        });
+
+        // From B2B
+        b2bData.forEach(row => {
+            const rate = parseFloat(row.cgst_percent || 0) + 
+                        parseFloat(row.sgst_percent || 0) + 
+                        parseFloat(row.igst_percent || 0);
+            const taxable = parseFloat(row.taxable_value || 0);
+            const tax = parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+            addToBreakdown(rate, taxable, tax);
+        });
+
+        // From B2CL
+        b2clData.forEach(row => {
+            const rate = parseFloat(row.cgst_percent || 0) + 
+                        parseFloat(row.sgst_percent || 0) + 
+                        parseFloat(row.igst_percent || 0);
+            const taxable = parseFloat(row.taxable_value || 0);
+            const tax = parseFloat(row.cgst_amount || 0) + 
+                       parseFloat(row.sgst_amount || 0) + 
+                       parseFloat(row.igst_amount || 0);
+            addToBreakdown(rate, taxable, tax);
+        });
+
+        // Add 2T Oil to breakdown
+        if (twoTOilSummary && parseFloat(twoTOilSummary.taxable_value || 0) > 0) {
+            // Calculate rate from the tax amounts
+            const taxableVal = parseFloat(twoTOilSummary.taxable_value || 0);
+            const taxVal = parseFloat(twoTOilSummary.cgst_amount || 0) + 
+                          parseFloat(twoTOilSummary.sgst_amount || 0);
+            const rate = taxableVal > 0 ? (taxVal / taxableVal) * 100 : 0;
+            addToBreakdown(rate, taxableVal, taxVal);
+        }
+
+        // Convert to array and sort by rate
+        const taxRates = Object.keys(taxRateBreakdown)
+            .filter(rate => parseFloat(rate) > 0) // Exclude 0% from this list
+            .map(rate => ({
+                rate: parseFloat(rate),
+                taxable_value: taxRateBreakdown[rate].taxable.toFixed(2),
+                tax_amount: taxRateBreakdown[rate].tax.toFixed(2)
+            }))
+            .sort((a, b) => a.rate - b.rate);
+
+        // Build GSTR-1 JSON structure
+        const gstr1Json = {
+            version: "GST3.0.4",
+            gstin: gstin,
+            fp: returnPeriod,
+            gt: calculateGrandTotal(b2bData, b2clData, b2csData, twoTOilSummary),
+            cur_gt: calculateGrandTotal(b2bData, b2clData, b2csData, twoTOilSummary),
+            b2b: formatB2BData(b2bData),
+            b2cl: formatB2CLData(b2clData),
+            b2cs: formatB2CSData(b2csData, gstin),
+            hsn: formatHSNData(hsnData),
+            doc_issue: generateDocumentSummary(b2bData, b2clData, b2csData),
+            nil: { inv: [] }
+        };
+
+        // Calculate and add hash
+        const crypto = require('crypto');
+        const jsonString = JSON.stringify(gstr1Json);
+        gstr1Json.hash = crypto.createHash('sha256').update(jsonString).digest('hex');
+
+        return {
+            success: true,
+            data: gstr1Json,
+            summary: {
+                total_b2b_invoices: b2bData.length,
+                total_b2cl_invoices: b2clData.length,
+                total_b2cs_entries: b2csData.length,
+                total_hsn_entries: hsnData.length,
+                total_taxable_value: totalTaxableValue.toFixed(2),
+                total_tax: totalTax.toFixed(2),
+                tax_rates: taxRates,  // ✅ Dynamic array of all tax rates
+                nil_rated_value: parseFloat(nilRatedSummary?.total_nil_rated_sales || 0).toFixed(2),  // ✅ Nil-rated sales
+                period: gstUtils.formatReturnPeriod(returnPeriod),
+                from_date,
+                to_date
+            }
+        };
+
+    } catch (error) {
+        console.error('Error generating GSTR-1 JSON:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+},
 
     /**
      * Validate GSTR-1 data before generation
@@ -260,18 +362,36 @@ function formatHSNData(hsnData) {
  * Generate document summary
  */
 function generateDocumentSummary(b2bData, b2clData, b2csData) {
+    // Count actual invoices (B2B + B2CL have invoice numbers, B2CS is aggregated)
     const totalInvoices = b2bData.length + b2clData.length;
+    
+    // If no B2B or B2CL invoices, return minimal structure
+    if (totalInvoices === 0) {
+        return {
+            doc_det: [{
+                doc_num: 1,
+                docs: [{
+                    num: 1,
+                    from: "",      // Empty for no invoices
+                    to: "",        // Empty for no invoices
+                    totnum: 0,
+                    cancel: 0,
+                    net_issue: 0
+                }]
+            }]
+        };
+    }
     
     return {
         doc_det: [{
-            doc_num: 1, // Document serial number from
+            doc_num: 1,
             docs: [{
                 num: 1,
-                from: "1", // Starting serial number
-                to: totalInvoices.toString(), // Ending serial number
-                totnum: totalInvoices, // Total number of documents
-                cancel: 0, // Number of cancelled documents
-                net_issue: totalInvoices // Net documents issued
+                from: "1",
+                to: totalInvoices.toString(),
+                totnum: totalInvoices,
+                cancel: 0,
+                net_issue: totalInvoices
             }]
         }]
     };
@@ -280,7 +400,8 @@ function generateDocumentSummary(b2bData, b2clData, b2csData) {
 /**
  * Calculate grand total
  */
-function calculateGrandTotal(b2bData, b2clData, b2csData) {
+
+function calculateGrandTotal(b2bData, b2clData, b2csData, twoTOilSummary) {
     let total = 0;
 
     b2bData.forEach(row => {
@@ -297,6 +418,14 @@ function calculateGrandTotal(b2bData, b2clData, b2csData) {
                            parseFloat(row.sgst_amount || 0);
         total += invoiceValue;
     });
+
+    
+    if (twoTOilSummary) {
+        const twoTOilInvoiceValue = parseFloat(twoTOilSummary.taxable_value || 0) + 
+                                    parseFloat(twoTOilSummary.cgst_amount || 0) + 
+                                    parseFloat(twoTOilSummary.sgst_amount || 0);
+        total += twoTOilInvoiceValue;
+    }
 
     return parseFloat(total).toFixed(2);
 }
