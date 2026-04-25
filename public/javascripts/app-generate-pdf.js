@@ -37,6 +37,12 @@ function generatePDF(currentPage,isPrint = 'N') {
     requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
     requestBody.toClosingDate = document.getElementById('toclosingDate').value;
     requestBody.supplier_id = document.getElementById('supplier_id').value;    
+    } else if (currentPage.includes('reports-vat')) {
+        requestBody.reportType = 'VatReport';
+        requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
+        requestBody.toClosingDate = document.getElementById('toclosingDate').value;
+        const locationCodeElement = document.getElementById('locationCode');
+        requestBody.locationCode = locationCodeElement ? locationCodeElement.value : '';
     }  else if (currentPage.includes('reports-gst-summary')) {
         requestBody.reportType = 'GstSummary';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
