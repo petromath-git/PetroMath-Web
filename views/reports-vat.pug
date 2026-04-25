@@ -1,0 +1,155 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports-vat')
+        script.
+            var vatRowsFromServer = !{JSON.stringify(vatRows)}
+            var vatTotalsFromServer = !{JSON.stringify(vatTotals)}
+
+            document.addEventListener('DOMContentLoaded', function() {
+                renderVatTable();
+            });
+
+            function renderVatTable() {
+                var rows = vatRowsFromServer;
+                var totals = vatTotalsFromServer;
+
+                if (!rows || rows.length === 0) {
+                    document.getElementById('vat-table-container').innerHTML =
+                        "<p class='text-center'><strong>*** No VAT Purchase data found for the selected period ***</strong></p>";
+                    return;
+                }
+
+                var fmt = function(v) {
+                    return new Intl.NumberFormat('en-IN', {
+                        style: 'decimal',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }).format(parseFloat(v) || 0);
+                };
+
+                var html = "<table class='table table-bordered table-sm' style='width:100%;border:1px solid #000;font-size:13px;'>";
+                html += "<thead class='thead-light'><tr>";
+                html += "<th style='border:1px solid #000;text-align:center;'>Sl No</th>";
+                html += "<th style='border:1px solid #000;'>Name</th>";
+                html += "<th style='border:1px solid #000;text-align:center;'>TIN No</th>";
+                html += "<th style='border:1px solid #000;text-align:center;'>HSN Code</th>";
+                html += "<th style='border:1px solid #000;'>Invoice No</th>";
+                html += "<th style='border:1px solid #000;text-align:center;'>Invoice Date</th>";
+                html += "<th style='border:1px solid #000;text-align:right;'>Value</th>";
+                html += "<th style='border:1px solid #000;text-align:center;'>Tax Rate</th>";
+                html += "<th style='border:1px solid #000;text-align:right;'>VAT</th>";
+                html += "<th style='border:1px solid #000;text-align:right;'>Addition VAT</th>";
+                html += "</tr></thead><tbody>";
+
+                rows.forEach(function(row) {
+                    html += "<tr>";
+                    html += "<td style='border:1px solid #000;text-align:center;'>" + row['Sl No'] + "</td>";
+                    html += "<td style='border:1px solid #000;'>" + (row['Name'] || '-') + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:center;'>" + (row['TIN No'] || '-') + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:center;'>" + (row['HSN Code'] || '-') + "</td>";
+                    html += "<td style='border:1px solid #000;'>" + (row['Invoice No'] || '-') + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:center;'>" + (row['Invoice Date'] || '-') + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['Value']) + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:center;'>" + (row['Tax Rate'] || 0) + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['VAT']) + "</td>";
+                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['Addition VAT']) + "</td>";
+                    html += "</tr>";
+                });
+
+                // Total row
+                html += "<tr class='font-weight-bold' style='background-color:#ffffcc;'>";
+                html += "<td colspan='6' style='border:1px solid #000;text-align:right;'>Total</td>";
+                html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_value) + "</td>";
+                html += "<td style='border:1px solid #000;'></td>";
+                html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_vat) + "</td>";
+                html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_add_vat) + "</td>";
+                html += "</tr>";
+
+                html += "</tbody></table>";
+
+                document.getElementById('vat-table-container').innerHTML = html;
+            }
+
+            function exportExcel() {
+                var fromDate = document.getElementById('fromclosingDate').value;
+                var toDate = document.getElementById('toclosingDate').value;
+                var locationCode = document.getElementById('locationCode') ?
+                    document.getElementById('locationCode').value : '#{locationCode}';
+
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports-vat/excel';
+
+                var addField = function(name, value) {
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                };
+
+                addField('fromClosingDate', fromDate);
+                addField('toClosingDate', toDate);
+                addField('locationCode', locationCode);
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='this_month', selected=true) This Month
+                        option(value='last_month') Last Month
+                        option(value='this_financial_year') This Financial Year
+                        option(value='last_financial_year') Last Financial Year
+                        option(value='custom') Custom Date
+                td &nbsp;
+                td#fromDateLabel From Date:
+                td
+                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
+                td &nbsp;
+                td#toDateLabel To Date:
+                td
+                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
+                td &nbsp;
+                if personLocations.length > 1
+                    td Location:
+                    td
+                        select#locationCode.form-control(name='locationCode', required)
+                            option(value='') Select Location
+                            each location in personLocations
+                                option(value=location.LocationCodes, selected=(location.LocationCodes === locationCode))= location.LocationCodes
+                td &nbsp;
+                td
+                    input(type='hidden', name='caller', value='notpdf')
+                td
+                    button.btn.btn-primary.mr-2(type='submit', id='goButton') Go
+                td
+                    button.btn.btn-success.mr-2(type='button', onClick='generatePDF(window.location.href,"N")')
+                        i.bi.bi-cloud-download
+                        |  Download PDF
+                td
+                    button.btn.btn-success.mr-2(type='button', onClick='exportExcel()')
+                        i.bi.bi-file-excel
+                        |  Export Excel
+                td
+                    button.btn.btn-info(type='button', onClick='generatePDF(window.location.href,"Y")')
+                        i.bi.bi-printer
+                        |  Print
+
+    div
+        div.row &nbsp;
+        h5.text-center.text-muted= locationName
+        h4.font-weight-bold.text-center VAT Report - Fuel Purchase
+        h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+        div.row &nbsp;
+
+    div.col-md-12
+        div(id='vat-table-container')
+
+    include overlay.pug

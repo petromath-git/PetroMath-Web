@@ -153,6 +153,7 @@ const reportsController = require("./controllers/reports-controller");
 const cashflowReportsController = require("./controllers/reports-cashflow-controller");
 const dsrReportsController = require("./controllers/reports-dsr-controller");
 const gstsummaryreportsController = require("./controllers/reports-gst-summary-controller");
+const vatReportsController = require("./controllers/reports-vat-controller");
 const digitalReconreportsController = require("./controllers/reports-digital-recon-controller");
 const digitalSalesCorrectionsRoutes = require('./routes/digital-sales-corrections-routes');   
 const decantEditController = require("./controllers/decant-edit-controller");
@@ -247,6 +248,7 @@ app.use(methodOverride('_method'));
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
+app.locals.CACHE_BUST = Date.now();
 
 app.use(flash());
 app.use(require('cookie-parser')('keyboard cat'));
@@ -415,7 +417,6 @@ app.use('/bowser', bowserRoutes);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
     res.locals.SERVER_PORT = process.env.SERVER_PORT;
-    res.locals.CACHE_BUST = Date.now(); // Cache busting version
     next();
 });
 
@@ -896,6 +897,17 @@ app.post('/reports-gst-summary', isLoginEnsured, function (req, res, next) {
 // Excel export for GST Summary
 app.post('/reports-gst-summary/excel', isLoginEnsured, function (req, res, next) {
     gstsummaryreportsController.exportGstSummaryExcel(req, res, next);
+});
+
+app.get('/reports-vat', isLoginEnsured, function (req, res, next) {
+    req.body.caller = 'notpdf';
+    vatReportsController.getVatReport(req, res, next);
+});
+app.post('/reports-vat', isLoginEnsured, function (req, res, next) {
+    vatReportsController.getVatReport(req, res, next);
+});
+app.post('/reports-vat/excel', isLoginEnsured, function (req, res, next) {
+    vatReportsController.exportVatExcel(req, res, next);
 });
 
 app.get('/reports-sales-summary', isLoginEnsured, function (req, res, next) {   

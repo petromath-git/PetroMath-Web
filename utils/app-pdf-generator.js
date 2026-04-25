@@ -5,6 +5,7 @@ const reportsController = require("../controllers/reports-controller");
 const cashflowReportsController = require("../controllers/reports-cashflow-controller");
 const dsrReportsController = require("../controllers/reports-dsr-controller");
 const gstReportsController = require("../controllers/reports-gst-summary-controller");
+const vatReportsController = require("../controllers/reports-vat-controller");
 const digitalReconreportsController = require("../controllers/reports-digital-recon-controller");
 const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
 const stockReportsController = require("../controllers/stock-reports-controller");
@@ -81,6 +82,10 @@ module.exports = {
         else if (req.body.reportType == 'GstSummary')
         {
             htmlContent = await gstReportsController.getgstsummaryReport(req, res, next);
+        }
+        else if (req.body.reportType == 'VatReport')
+        {
+            htmlContent = await vatReportsController.getVatReport(req, res, next);
         }
         else if (req.body.reportType == 'DigitalRecon')
         {
@@ -318,11 +323,18 @@ module.exports = {
             format: 'A4',
             printBackground: true,
             displayHeaderFooter: true,
-            headerTemplate: `<div style="width: 100%; padding: 10px 20px;">
-                                ${companyLogo ? `<img src="${companyLogo}" style="position: absolute; left: 20px; top: 10px; height: 60px; width: auto;" />` : ''}
-                                <div style="text-align: center; margin-bottom: 10px;">
-                                    <div style="font-size: 16px; font-weight: bold;">${locationDetails.location_name}</div>
-                                    <div style="font-size: 14px;">${locationDetails.address}</div>
+            headerTemplate: `<div style="width: 100%; padding: 8px 20px; box-sizing: border-box;">
+                                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                                    <div style="width: 120px; flex-shrink: 0; display: flex; align-items: center;">
+                                        ${companyLogo ? `<img src="${companyLogo}" style="max-height: 80px; width: auto; height: auto;" />` : ''}
+                                    </div>
+                                    <div style="flex: 1; text-align: center;">
+                                        <div style="font-size: 16px; font-weight: bold;">${locationDetails.location_name}</div>
+                                        ${locationDetails.company_name ? `<div style="font-size: 12px;">Dealer ${({'BPCL':'Bharat Petroleum Corporation Ltd','HPCL':'Hindustan Petroleum Corporation Ltd','IOCL':'Indian Oil Corporation Ltd'})[locationDetails.company_name] || locationDetails.company_name}</div>` : ''}
+                                        <div style="font-size: 12px;">${locationDetails.address}</div>
+                                        ${(locationDetails.gst_number || locationDetails.tin_number) ? `<div style="font-size: 12px;">${[locationDetails.gst_number ? 'GSTIN: ' + locationDetails.gst_number : '', locationDetails.tin_number ? 'TIN: ' + locationDetails.tin_number : ''].filter(Boolean).join(', ')}</div>` : ''}
+                                    </div>
+                                    <div style="width: 120px; flex-shrink: 0;"></div>
                                 </div>
                                 <div style="border-bottom: 2px solid #000; width: 100%;"></div>
                             </div>`,
@@ -335,7 +347,7 @@ module.exports = {
                 <span style="font-size: 12px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
             </div>`,
             margin: {
-                top: '120px',    // Increased from 80px to give more space for header
+                top: '140px',    // Increased to accommodate dealer line + GSTIN/TIN in header
                 bottom: '90px',  // Increased from 60px to give more space for footer
                 left: '20px',
                 right: '20px'
