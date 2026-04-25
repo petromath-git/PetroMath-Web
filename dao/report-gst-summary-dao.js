@@ -12,27 +12,22 @@ module.exports = {
     
     
     const result = await db.sequelize.query(
-                                        `SELECT 
-                                        p.product_name Product,
-                                        DATE_FORMAT(tr.invoice_date, '%d-%b-%Y') "Date",
-                                        tr.invoice_number "Invoice-Number",
-                                        trd.quantity*1000  "Quantity",                                       
-                                        trd.amount Amount
-                                    FROM 
-                                        t_tank_stk_rcpt tr,
-                                    t_tank_stk_rcpt_dtl trd ,
-                                    m_tank t,
-                                    m_product p
-                                    WHERE 
-                                    tr.ttank_id = trd.ttank_id
-                                    AND trd.tank_id = t.tank_id
-                                    AND t.product_code = p.product_name     
-                                    AND p.location_code = tr.location_code
-                                    AND tr.location_code = :locationCode
-                                    AND tr.invoice_date BETWEEN :reportFromDate AND :reportToDate
-                                    AND COALESCE(p.is_lube_product, 0) = 0
+                                        `SELECT
+                                        mp.product_name Product,
+                                        DATE_FORMAT(ti.invoice_date, '%d-%b-%Y') "Date",
+                                        ti.invoice_number "Invoice-Number",
+                                        tid.quantity * 1000 "Quantity",
+                                        tid.total_line_amount Amount
+                                    FROM
+                                        t_tank_invoice ti
+                                        JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
+                                        JOIN m_product mp ON tid.product_id = mp.product_id
+                                    WHERE
+                                        ti.location_id = :locationCode
+                                        AND ti.invoice_date BETWEEN :reportFromDate AND :reportToDate
+                                        AND COALESCE(mp.is_lube_product, 0) = 0
                                     ORDER BY
-                                        p.product_name, tr.invoice_date`,
+                                        mp.product_name, ti.invoice_date`,
         {
           replacements: {locationCode: locationCode,reportFromDate: reportFromDate ,reportToDate: reportToDate}, 
           type: Sequelize.QueryTypes.SELECT
@@ -47,25 +42,22 @@ module.exports = {
    },
    getPurchaseSummaryConsolidated: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
-      SELECT 
-        p.product_name AS Product,
-        SUM(trd.quantity * 1000) AS Total_Quantity,
-        SUM(trd.amount) AS Total_Amount
-      FROM 
-        t_tank_stk_rcpt tr
-        JOIN t_tank_stk_rcpt_dtl trd ON tr.ttank_id = trd.ttank_id
-        JOIN m_tank t ON trd.tank_id = t.tank_id
-        JOIN m_product p 
-          ON t.product_code = p.product_name 
-          AND p.location_code = tr.location_code
+      SELECT
+        mp.product_name AS Product,
+        SUM(tid.quantity * 1000) AS Total_Quantity,
+        SUM(tid.total_line_amount) AS Total_Amount
+      FROM
+        t_tank_invoice ti
+        JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
+        JOIN m_product mp ON tid.product_id = mp.product_id
       WHERE
-        tr.location_code = :locationCode
-        AND tr.invoice_date BETWEEN :reportFromDate AND :reportToDate
-        AND COALESCE(p.is_lube_product, 0) = 0
+        ti.location_id = :locationCode
+        AND ti.invoice_date BETWEEN :reportFromDate AND :reportToDate
+        AND COALESCE(mp.is_lube_product, 0) = 0
       GROUP BY
-        p.product_name
+        mp.product_name
       ORDER BY
-        p.product_name;
+        mp.product_name;
     `;
   
     const result = await db.sequelize.query(query, {
