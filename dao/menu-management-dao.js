@@ -212,6 +212,71 @@ const menuManagementDao = {
 },
 
 
+getAllGlobalAccess: async () => {
+    const query = `
+        SELECT g.access_id, g.role, g.menu_code, g.allowed,
+               COALESCE(mi.menu_name, g.menu_code) AS menu_name
+        FROM m_menu_access_global g
+        LEFT JOIN m_menu_items mi ON g.menu_code = mi.menu_code
+        WHERE g.effective_start_date <= CURDATE()
+          AND (g.effective_end_date IS NULL OR g.effective_end_date >= CURDATE())
+        ORDER BY g.role, menu_name
+    `;
+    return await db.sequelize.query(query, { type: QueryTypes.SELECT });
+},
+
+deleteGlobalAccess: async (accessId, updatedBy) => {
+    return await db.menu_access_global.update(
+        { effective_end_date: new Date(), updated_by: updatedBy },
+        { where: { access_id: accessId } }
+    );
+},
+
+getAllOverrides: async (locationCode) => {
+    const query = `
+        SELECT o.access_id, o.role, o.location_code, o.menu_code, o.allowed,
+               COALESCE(mi.menu_name, o.menu_code) AS menu_name
+        FROM m_menu_access_override o
+        LEFT JOIN m_menu_items mi ON o.menu_code = mi.menu_code
+        WHERE o.location_code = ?
+          AND o.effective_start_date <= CURDATE()
+          AND (o.effective_end_date IS NULL OR o.effective_end_date >= CURDATE())
+        ORDER BY o.role, menu_name
+    `;
+    return await db.sequelize.query(query, { replacements: [locationCode], type: QueryTypes.SELECT });
+},
+
+getAllOverridesAll: async () => {
+    const query = `
+        SELECT o.access_id, o.role, o.location_code, o.menu_code, o.allowed,
+               COALESCE(mi.menu_name, o.menu_code) AS menu_name
+        FROM m_menu_access_override o
+        LEFT JOIN m_menu_items mi ON o.menu_code = mi.menu_code
+        WHERE o.effective_start_date <= CURDATE()
+          AND (o.effective_end_date IS NULL OR o.effective_end_date >= CURDATE())
+        ORDER BY o.location_code, o.role, menu_name
+    `;
+    return await db.sequelize.query(query, { type: QueryTypes.SELECT });
+},
+
+deleteOverride: async (accessId, updatedBy) => {
+    return await db.menu_access_override.update(
+        { effective_end_date: new Date(), updated_by: updatedBy },
+        { where: { access_id: accessId } }
+    );
+},
+
+getCacheStats: async () => {
+    const query = `
+        SELECT refresh_time, records_refreshed, duration_ms
+        FROM menu_cache_refresh_log
+        ORDER BY refresh_time DESC
+        LIMIT 1
+    `;
+    const rows = await db.sequelize.query(query, { type: QueryTypes.SELECT });
+    return rows[0] || null;
+},
+
 checkSequenceInGroup: async (groupCode, sequence, excludeMenuId = null) => {
     const whereClause = {
         group_code: groupCode,
