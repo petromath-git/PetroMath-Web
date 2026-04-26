@@ -151,6 +151,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         LEFT JOIN m_creditlist_vehicles mcv ON tc.vehicle_id = mcv.vehicle_id
         WHERE tcl.location_code = :locationCode
           AND mcl.creditlist_id = :creditId
+          AND tcl.closing_status = 'CLOSED'
           AND COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :closingQueryFromDate AND :closingQueryToDate
 
         UNION ALL
@@ -231,6 +232,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         LEFT JOIN m_creditlist_vehicles mcv ON mcv.vehicle_id    = bc.vehicle_id
         WHERE bcl.location_code = :locationCode
           AND mcl.creditlist_id = :creditId
+          AND bcl.status = 'CLOSED'
           AND bcl.closing_date BETWEEN :closingQueryFromDate AND :closingQueryToDate
 
         ORDER BY tran_date, bill_no`,
