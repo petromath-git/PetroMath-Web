@@ -6,6 +6,7 @@ const locationConfig = require('../utils/location-config');
 const utils = require('../utils/app-utils');
 const dateFormat = require('dateformat');
 const DocumentStoreDao = require('../dao/document-store-dao');
+const { tempInvoiceStore } = require('./tank-receipt-controller');
 
 module.exports = {
 
@@ -187,8 +188,21 @@ module.exports = {
                 truck_number:         body.truck_number   || null,
                 delivery_doc_no:      body.delivery_doc_no || null,
                 seal_lock_no:         body.seal_lock_no   || null,
+                bay_number:           body.bay_number     || null,
                 total_invoice_amount: body.total_invoice_amount || null
             };
+
+            // Retrieve PDF buffer from temp store if a tempId was passed (from parse-invoice flow)
+            let pdfBuffer = null;
+            let originalFileName = null;
+            if (body.tempId) {
+                const temp = tempInvoiceStore.get(body.tempId);
+                if (temp) {
+                    pdfBuffer = temp.buffer;
+                    originalFileName = temp.originalFileName;
+                    tempInvoiceStore.delete(body.tempId);
+                }
+            }
 
             const lines = (Array.isArray(body.lines) ? body.lines : []).map(l => ({
                 product_id:        Number(l.product_id),
@@ -211,7 +225,7 @@ module.exports = {
             if (lines.some(l => !l.product_id)) return res.status(400).json({ success: false, error: 'All lines must have a product selected.' });
 
             const invoice = await TankInvoiceDao.saveInvoice(
-                header, lines, null, locationCode, header.supplier_id, null
+                header, lines, pdfBuffer, locationCode, header.supplier_id, originalFileName
             );
             return res.json({ success: true, id: invoice.id });
         } catch (err) {
