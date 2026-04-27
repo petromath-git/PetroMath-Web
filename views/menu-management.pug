@@ -2,238 +2,325 @@ extends layout
 
 block content
   .container-fluid.mt-3
-    .row
+
+    .row.mb-3
       .col-12
-        .card
-          .card-header.d-flex.justify-content-between.align-items-center
-            h4.mb-0
-              i.bi.bi-gear.me-2
-              | Menu Management System
-            button.btn.btn-success.btn-sm#refresh-cache-btn
-              i.bi.bi-arrow-clockwise.me-1
-              | Refresh Cache
+        h4.mb-0
+          i.bi.bi-gear.mr-2
+          | Menu Management
 
-          .card-body
-            // Alert for messages
-            .alert.alert-info.d-none#alert-message
+    .card
+      .card-body
 
-            // Tab Navigation
-            ul.nav.nav-tabs.mb-3#menu-tabs(role="tablist")
-              li.nav-item(role="presentation")
-                a.nav-link.active#menu-items-tab(data-toggle="tab" href="#menu-items-pane" role="tab") 
-                  i.bi.bi-list-ul.me-1
-                  | Menu Items
-              li.nav-item(role="presentation")
-                a.nav-link#menu-groups-tab(data-toggle="tab" href="#menu-groups-pane" role="tab")
-                  i.bi.bi-collection.me-1
-                  | Menu Groups
-              li.nav-item(role="presentation")
-                a.nav-link#menu-access-tab(data-toggle="tab" href="#menu-access-pane" role="tab")
-                  i.bi.bi-shield-lock.me-1
-                  | Access Control
-              li.nav-item(role="presentation")
-                a.nav-link#cache-tab(data-toggle="tab" href="#cache-pane" role="tab")
-                  i.bi.bi-hdd-stack.me-1
-                  | Cache Status
+        ul.nav.nav-tabs.mb-3#menu-tabs(role="tablist")
+          if isSuperUser
+            li.nav-item
+              a.nav-link.active#tab-menu-items(data-toggle="tab" href="#pane-menu-items" role="tab")
+                i.bi.bi-list-ul.mr-1
+                | Menu Items
+            li.nav-item
+              a.nav-link#tab-menu-groups(data-toggle="tab" href="#pane-menu-groups" role="tab")
+                i.bi.bi-collection.mr-1
+                | Menu Groups
+            li.nav-item
+              a.nav-link#tab-global-access(data-toggle="tab" href="#pane-global-access" role="tab")
+                i.bi.bi-shield-check.mr-1
+                | Global Access
+          li.nav-item
+            a.nav-link(class=isSuperUser ? '' : 'active' data-toggle="tab" href="#pane-overrides" role="tab")#tab-overrides
+              i.bi.bi-shield-exclamation.mr-1
+              | Location Overrides
+          if isSuperUser
+            li.nav-item
+              a.nav-link#tab-cache(data-toggle="tab" href="#pane-cache" role="tab")
+                i.bi.bi-hdd-stack.mr-1
+                | Cache
 
-            // Tab Content
-            .tab-content#menu-tab-content
+        .tab-content
 
-              // ===============================
-              // MENU ITEMS TAB
-              // ===============================
-              .tab-pane.fade.show.active#menu-items-pane(role="tabpanel")
-                .row.mb-3
-                  .col-md-8
-                    h5.mb-0 Manage Menu Items
-                  .col-md-4.text-end
-                    button.btn.btn-primary.btn-sm#add-menu-item-btn
-                      i.bi.bi-plus-circle.me-1
-                      | Add New Item
+          //- ===== TAB 1: MENU ITEMS (SuperUser only) =====
+          if isSuperUser
+            .tab-pane.fade.show.active#pane-menu-items(role="tabpanel")
+              .d-flex.justify-content-between.align-items-center.mb-3
+                h6.mb-0.font-weight-bold Menu Items
+                button.btn.btn-primary.btn-sm#btn-add-menu-item
+                  i.bi.bi-plus-circle.mr-1
+                  | Add Item
+              .mb-3
+                .input-group.input-group-sm(style="max-width:360px")
+                  .input-group-prepend
+                    span.input-group-text
+                      i.bi.bi-search
+                  input.form-control#search-menu-items(type="text" placeholder="Search by name, code, path, group…")
+              .table-responsive
+                table.table.table-sm.table-hover.table-bordered#tbl-menu-items
+                  thead.thead-dark
+                    tr
+                      th Code
+                      th Name
+                      th URL Path
+                      th(style="width:50px") Seq
+                      th.text-center(style="width:120px") Actions
+                  tbody#tbody-menu-items
+                    tr
+                      td.text-center.text-muted(colspan="5") Loading...
 
-                // Menu Items Table
-                .table-responsive
-                  table.table.table-striped.table-hover#menu-items-table
-                    thead.table-dark
-                      tr
-                        th Menu Code
-                        th Menu Name
-                        th URL Path
-                        th Group
-                        th Sequence
-                        th.text-center Actions
-                    tbody
-                      // Dynamic content loaded via JavaScript
+          //- ===== TAB 2: MENU GROUPS (SuperUser only) =====
+          if isSuperUser
+            .tab-pane.fade#pane-menu-groups(role="tabpanel")
+              .d-flex.justify-content-between.align-items-center.mb-3
+                h6.mb-0.font-weight-bold Menu Groups
+                button.btn.btn-primary.btn-sm#btn-add-menu-group
+                  i.bi.bi-plus-circle.mr-1
+                  | Add Group
+              .table-responsive
+                table.table.table-sm.table-hover.table-bordered#tbl-menu-groups
+                  thead.thead-dark
+                    tr
+                      th Code
+                      th Name
+                      th(style="width:60px") Seq
+                      th Icon
+                      th.text-center(style="width:100px") Actions
+                  tbody#tbody-menu-groups
+                    tr
+                      td.text-center.text-muted(colspan="5") Loading...
 
-              // ===============================
-              // MENU GROUPS TAB
-              // ===============================
-              .tab-pane.fade#menu-groups-pane(role="tabpanel")
-                .row.mb-3
-                  .col-md-8
-                    h5.mb-0 Manage Menu Groups
-                  .col-md-4.text-end
-                    button.btn.btn-primary.btn-sm#add-menu-group-btn
-                      i.bi.bi-plus-circle.me-1
-                      | Add New Group
+          //- ===== TAB 3: GLOBAL ACCESS (SuperUser only) =====
+          if isSuperUser
+            .tab-pane.fade#pane-global-access(role="tabpanel")
+              .d-flex.justify-content-between.align-items-center.mb-3
+                div
+                  h6.mb-0.font-weight-bold Global Access Rules
+                  small.text-muted Applies to all locations unless overridden
+                button.btn.btn-primary.btn-sm#btn-add-global
+                  i.bi.bi-plus-circle.mr-1
+                  | Add Rule
+              .mb-3
+                .input-group.input-group-sm(style="max-width:360px")
+                  .input-group-prepend
+                    span.input-group-text
+                      i.bi.bi-search
+                  input.form-control#search-global-access(type="text" placeholder="Search by role, menu name, code…")
+              .table-responsive
+                table.table.table-sm.table-hover.table-bordered#tbl-global-access
+                  thead.thead-dark
+                    tr
+                      th Role
+                      th Menu Item
+                      th.text-center(style="width:80px") Access
+                      th.text-center(style="width:70px") Actions
+                  tbody#tbody-global-access
+                    tr
+                      td.text-center.text-muted(colspan="4") Loading...
 
-                // Menu Groups Table
-                .table-responsive
-                  table.table.table-striped.table-hover#menu-groups-table
-                    thead.table-dark
-                      tr
-                        th Group Code
-                        th Group Name
-                        th Sequence
-                        th Icon
-                        th.text-center Actions
-                    tbody
-                      // Dynamic content loaded via JavaScript
+          //- ===== TAB 4: LOCATION OVERRIDES =====
+          .tab-pane.fade(class=isSuperUser ? '' : 'show active' role="tabpanel")#pane-overrides
+            .d-flex.justify-content-between.align-items-center.mb-3
+              div
+                h6.mb-0.font-weight-bold Location Overrides
+                small.text-muted
+                  | Location:&nbsp;
+                  strong#override-location-label ...
+              button.btn.btn-primary.btn-sm#btn-add-override
+                i.bi.bi-plus-circle.mr-1
+                | Add Override
+            .mb-3.d-flex.flex-wrap.align-items-center(style="gap:8px")
+              .input-group.input-group-sm(style="max-width:360px")
+                .input-group-prepend
+                  span.input-group-text
+                    i.bi.bi-search
+                input.form-control#search-overrides(type="text" placeholder="Search by role, menu name, location…")
+              .d-none#override-filter-row
+                .form-inline
+                  label.mr-2.small.font-weight-bold Location:
+                  select.custom-select.custom-select-sm#override-location-filter(style="width:auto")
+                    option(value="") All Locations
+            .table-responsive
+              table.table.table-sm.table-hover.table-bordered#tbl-overrides
+                thead.thead-dark
+                  tr
+                    th.d-none#th-override-location Location
+                    th Role
+                    th Menu Item
+                    th.text-center(style="width:80px") Access
+                    th.text-center(style="width:70px") Actions
+                tbody#tbody-overrides
+                  tr
+                    td.text-center.text-muted(colspan="5") Loading...
 
-              // ===============================
-              // MENU ACCESS TAB
-              // ===============================
-              .tab-pane.fade#menu-access-pane(role="tabpanel")
-                .row.mb-3
-                  .col-12
-                    h5.mb-3 Menu Access Control Matrix
-                    p.text-muted Configure which roles can access which menu items. Changes apply immediately.
+          //- ===== TAB 5: CACHE (SuperUser only) =====
+          if isSuperUser
+            .tab-pane.fade#pane-cache(role="tabpanel")
+              h6.mb-3.font-weight-bold Cache Status
+              .row
+                .col-md-5
+                  .card.border
+                    .card-body#cache-stats-body
+                      p.text-muted.mb-0 Loading...
+                .col-md-4.mt-3.mt-md-0
+                  .card.border
+                    .card-body
+                      p.text-muted.small Rebuild the menu cache after making changes to items, groups, or access rules.
+                      button.btn.btn-warning.btn-sm.btn-block#btn-refresh-cache
+                        i.bi.bi-arrow-clockwise.mr-1
+                        | Refresh Cache Now
 
-                // Access Control Matrix
-                .table-responsive
-                  table.table.table-sm.table-bordered#menu-access-table
-                    thead.table-dark
-                      tr
-                        th.sticky-left Menu Item
-                        // Role columns will be added dynamically
-                    tbody
-                      // Dynamic content loaded via JavaScript
-
-              // ===============================
-              // CACHE STATUS TAB
-              // ===============================
-              .tab-pane.fade#cache-pane(role="tabpanel")
-                .row
-                  .col-md-6
-                    .card.h-100
-                      .card-header
-                        h6.mb-0
-                          i.bi.bi-info-circle.me-1
-                          | Cache Information
-                      .card-body
-                        #cache-info
-                          p.text-muted Loading cache information...
-
-                  .col-md-6
-                    .card.h-100
-                      .card-header
-                        h6.mb-0
-                          i.bi.bi-tools.me-1
-                          | Cache Actions
-                      .card-body
-                        p.mb-3 Use this to refresh the menu cache after making changes to menu items or permissions.
-                        button.btn.btn-warning.w-100#refresh-cache-btn-tab
-                          i.bi.bi-arrow-clockwise.me-1
-                          | Refresh Menu Cache Now
-
-  // ===============================
-  // MODAL: Add/Edit Menu Item
-  // ===============================
-  .modal.fade#menu-item-modal(tabindex="-1")
-    .modal-dialog.modal-lg
+  //- ===== MODAL: Add / Edit Menu Item =====
+  .modal.fade#modal-menu-item(tabindex="-1" role="dialog")
+    .modal-dialog.modal-lg(role="document")
       .modal-content
         .modal-header
-          h5.modal-title#menu-item-modal-title Add Menu Item
-          button.btn.btn-close(type="button" data-dismiss="modal" aria-label="Close")
-            span(aria-hidden="true") ×
-        .modal-body
-          form#menu-item-form
-            .row
-              .col-md-6
-                .mb-3
-                  label.form-label Menu Code *
-                  input.form-control#menu-code(type="text" required maxlength="100")
-                  .form-text Unique identifier for this menu item
-              .col-md-6
-                .mb-3
-                  label.form-label Menu Name *
-                  input.form-control#menu-name(type="text" required maxlength="100")
-                  .form-text Display name shown in the menu
-            .row
-              .col-md-6
-                .mb-3
-                  label.form-label URL Path
-                  input.form-control#url-path(type="text" required maxlength="255")
-                  .form-text e.g., /dashboard or /reports/sales
-              .col-md-6
-                .mb-3
-                  label.form-label Parent Code
-                  select.form-select#parent-code
-                    option(value="") None (Top Level)
-                    // Options loaded dynamically
-            .row
-              .col-md-4
-                .mb-3
-                  label.form-label Group Code *
-                  select.form-select#group-code(required)
-                    option(value="") Select Group
-                    // Options loaded dynamically
-              .col-md-4
-                .mb-3
-                  label.form-label Sequence
-                  input.form-control#sequence(type="number" value="1")
-                  .form-text Display order
-              .col-md-4
-                .mb-3
-                  label.form-label Status
-                  select.form-select#status
-                    option(value="active") Active
-                    option(value="inactive") Inactive
-
-        .modal-footer
-          button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
-          button.btn.btn-primary#save-menu-item-btn Save Menu Item
-
-  // ===============================
-  // MODAL: Add/Edit Menu Group
-  // ===============================
-  .modal.fade#menu-group-modal(tabindex="-1")
-    .modal-dialog
-      .modal-content
-        .modal-header
-          h5.modal-title#menu-group-modal-title Add Menu Group
+          h5.modal-title#modal-menu-item-title Add Menu Item
           button.close(type="button" data-dismiss="modal" aria-label="Close")
             span(aria-hidden="true") &times;
         .modal-body
-          form#menu-group-form
-            .mb-3
-              label.form-label Group Code *
-              input.form-control#group-code-input(type="text" required maxlength="50")
-              .form-text Unique identifier (e.g., DAILY_OPS, REPORTS)
-            .mb-3
-              label.form-label Group Name *
-              input.form-control#group-name-input(type="text" required maxlength="100")
-              .form-text Display name (e.g., Daily Operations, Reports)
-            .row
+          form#form-menu-item
+            .form-row
               .col-md-6
-                .mb-3
-                  label.form-label Sequence *
-                  input.form-control#group-sequence-input(type="number" required value="1")
-                  .form-text Display order
+                .form-group
+                  label Menu Code *
+                  input.form-control.form-control-sm#fi-menu-code(type="text" required maxlength="100")
+                  small.form-text.text-muted Unique identifier
               .col-md-6
-                .mb-3
-                  label.form-label Icon
-                  input.form-control#group-icon-input(type="text" maxlength="50")
-                  .form-text Bootstrap icon class (e.g., bi-clock)
-
+                .form-group
+                  label Menu Name *
+                  input.form-control.form-control-sm#fi-menu-name(type="text" required maxlength="100")
+            .form-row
+              .col-md-6
+                .form-group
+                  label URL Path
+                  input.form-control.form-control-sm#fi-url-path(type="text" maxlength="255" placeholder="/dashboard")
+              .col-md-6
+                .form-group
+                  label Parent
+                  select.custom-select.custom-select-sm#fi-parent-code
+                    option(value="") None (top level)
+            .form-row
+              .col-md-4
+                .form-group
+                  label Group *
+                  select.custom-select.custom-select-sm#fi-group-code(required)
+                    option(value="") Select group
+              .col-md-4
+                .form-group
+                  label Sequence
+                  input.form-control.form-control-sm#fi-sequence(type="number" value="1")
         .modal-footer
-          button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
-          button.btn.btn-primary#save-menu-group-btn Save Menu Group
-          
-  script.
-        const userLocationCode = '#{user.location_code}';
-        const userName = '#{user.User_Name}';
-            
-  script(src=`/javascripts/menu-management.js?v=${CACHE_BUST}`)
+          button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+          button.btn.btn-primary.btn-sm#btn-save-menu-item Save
 
-   
+  //- ===== MODAL: Add / Edit Menu Group =====
+  .modal.fade#modal-menu-group(tabindex="-1" role="dialog")
+    .modal-dialog(role="document")
+      .modal-content
+        .modal-header
+          h5.modal-title#modal-menu-group-title Add Menu Group
+          button.close(type="button" data-dismiss="modal" aria-label="Close")
+            span(aria-hidden="true") &times;
+        .modal-body
+          form#form-menu-group
+            .form-group
+              label Group Code *
+              input.form-control.form-control-sm#fg-code(type="text" required maxlength="50" placeholder="e.g. DAILY_OPS")
+            .form-group
+              label Group Name *
+              input.form-control.form-control-sm#fg-name(type="text" required maxlength="100")
+            .form-row
+              .col-6
+                .form-group
+                  label Sequence *
+                  input.form-control.form-control-sm#fg-sequence(type="number" required value="1")
+              .col-6
+                .form-group
+                  label Icon
+                  input.form-control.form-control-sm#fg-icon(type="text" maxlength="50" placeholder="bi-clock")
+        .modal-footer
+          button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+          button.btn.btn-primary.btn-sm#btn-save-menu-group Save
+
+  //- ===== MODAL: Add Global Access Rule =====
+  .modal.fade#modal-global-access(tabindex="-1" role="dialog")
+    .modal-dialog(role="document")
+      .modal-content
+        .modal-header
+          h5.modal-title Add Global Access Rule
+          button.close(type="button" data-dismiss="modal" aria-label="Close")
+            span(aria-hidden="true") &times;
+        .modal-body
+          form#form-global-access
+            .form-group
+              .d-flex.justify-content-between.align-items-center.mb-1
+                label.mb-0 Roles *
+                span
+                  a.small(href="#" id="ga-select-all") All
+                  |  &nbsp;·&nbsp;
+                  a.small(href="#" id="ga-deselect-all") None
+              .border.rounded.p-2#ga-roles-checkboxes(style="max-height:160px;overflow-y:auto")
+                .text-muted.small Loading...
+            .form-group
+              label Menu Item *
+              select.custom-select.custom-select-sm#ga-menu(required)
+                option(value="") Select menu item
+            .form-group
+              label Access *
+              .d-flex
+                .custom-control.custom-radio.mr-4
+                  input.custom-control-input(type="radio" name="ga-allowed" id="ga-allow" value="1" checked)
+                  label.custom-control-label(for="ga-allow")
+                    span.badge.badge-success Allow
+                .custom-control.custom-radio
+                  input.custom-control-input(type="radio" name="ga-allowed" id="ga-deny" value="0")
+                  label.custom-control-label(for="ga-deny")
+                    span.badge.badge-danger Deny
+        .modal-footer
+          button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+          button.btn.btn-primary.btn-sm#btn-save-global Save Rule
+
+  //- ===== MODAL: Add Location Override =====
+  .modal.fade#modal-override(tabindex="-1" role="dialog")
+    .modal-dialog(role="document")
+      .modal-content
+        .modal-header
+          h5.modal-title Add Location Override
+          button.close(type="button" data-dismiss="modal" aria-label="Close")
+            span(aria-hidden="true") &times;
+        .modal-body
+          form#form-override
+            .form-group.d-none#ov-location-group
+              label Location Code *
+              input.form-control.form-control-sm#ov-location(type="text" maxlength="50" placeholder="e.g. MUE")
+              small.form-text.text-muted Leave blank to use your own location
+            .form-group
+              .d-flex.justify-content-between.align-items-center.mb-1
+                label.mb-0 Roles *
+                span
+                  a.small(href="#" id="ov-select-all") All
+                  |  &nbsp;·&nbsp;
+                  a.small(href="#" id="ov-deselect-all") None
+              .border.rounded.p-2#ov-roles-checkboxes(style="max-height:160px;overflow-y:auto")
+                .text-muted.small Loading...
+            .form-group
+              label Menu Item *
+              select.custom-select.custom-select-sm#ov-menu(required)
+                option(value="") Select menu item
+            .form-group
+              label Access *
+              .d-flex
+                .custom-control.custom-radio.mr-4
+                  input.custom-control-input(type="radio" name="ov-allowed" id="ov-allow" value="1" checked)
+                  label.custom-control-label(for="ov-allow")
+                    span.badge.badge-success Allow
+                .custom-control.custom-radio
+                  input.custom-control-input(type="radio" name="ov-allowed" id="ov-deny" value="0")
+                  label.custom-control-label(for="ov-deny")
+                    span.badge.badge-danger Deny
+        .modal-footer
+          button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+          button.btn.btn-primary.btn-sm#btn-save-override Save Override
+
+  script.
+    const userLocationCode = '#{user.location_code}';
+    const userName = '#{user.User_Name}';
+    const pageIsSuperUser = !{JSON.stringify(isSuperUser)};
+  script(src=`/javascripts/menu-management.js?v=${CACHE_BUST}`)

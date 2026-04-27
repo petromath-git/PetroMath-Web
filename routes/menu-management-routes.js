@@ -62,8 +62,35 @@ router.put('/api/menu-access', [isLoginEnsured, security.hasPermission('MANAGE_M
 );
 
 // API: Refresh menu cache
-router.post('/api/refresh-cache', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')], 
+router.post('/api/refresh-cache', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
     menuManagementController.refreshCache
+);
+
+// API: Global access rules (raw m_menu_access_global)
+router.get('/api/global-access', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.getGlobalAccess
+);
+router.post('/api/global-access', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.createGlobalAccess
+);
+router.delete('/api/global-access/:id', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.deleteGlobalAccess
+);
+
+// API: Location overrides (raw m_menu_access_override, scoped to current user location)
+router.get('/api/overrides', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.getOverrides
+);
+router.post('/api/overrides', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.createOverride
+);
+router.delete('/api/overrides/:id', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.deleteOverride
+);
+
+// API: Cache stats
+router.get('/api/cache-stats', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
+    menuManagementController.getCacheStats
 );
 
 
