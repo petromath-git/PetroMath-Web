@@ -570,3 +570,5 @@ const getInvoiceNumbersSet = (locationCode) => {
         }).catch(() => resolve(new Set()));
     });
 }
+
+module.exports.tempInvoiceStore = tempInvoiceStore;

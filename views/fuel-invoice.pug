@@ -107,6 +107,7 @@ block content
 
         let fi_lineCount = 0;
         const fi_chargeCounters = {};
+        let fi_tempId = null;
 
         function fuelInvoiceAddLine(data) {
             const i = fi_lineCount++;
@@ -233,6 +234,7 @@ block content
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        tempId:               fi_tempId,
                         supplier_id:          supplierId,
                         supplier_name:        supplierName,
                         invoice_number:       invoiceNumber,
@@ -282,6 +284,7 @@ block content
                     statusEl.className = 'text-danger small ml-3';
                     return;
                 }
+                fi_tempId = json.tempId || null;
                 fuelInvoicePrefill(json.data, json.supplier, json.supplierId, json.products, json.mappings);
                 statusEl.textContent = 'Invoice read successfully.';
                 statusEl.className = 'text-success small ml-3';
