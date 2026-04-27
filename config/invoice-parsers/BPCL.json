@@ -26,6 +26,11 @@
       "keyword": "Seal/Lock No:",
       "strategy": "value_after_keyword",
       "pattern": "[\\d/]+"
+    },
+    "bay_number": {
+      "keyword": "BAY No.:",
+      "strategy": "value_after_keyword",
+      "pattern": "[\\d\\s/]+"
     }
   },
   "lines": {

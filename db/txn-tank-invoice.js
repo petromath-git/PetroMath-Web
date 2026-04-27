@@ -47,6 +47,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(100),
             allowNull: true
         },
+        bay_number: {
+            field: 'bay_number',
+            type: DataTypes.STRING(20),
+            allowNull: true
+        },
         total_invoice_amount: {
             field: 'total_invoice_amount',
             type: DataTypes.DECIMAL(12, 2),

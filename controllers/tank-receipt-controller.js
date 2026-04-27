@@ -225,6 +225,7 @@ module.exports = {
                 truck_number: header.truck_number || null,
                 delivery_doc_no: header.delivery_doc_no || null,
                 seal_lock_no: header.seal_lock_no || null,
+                bay_number: header.bay_number ? header.bay_number.trim() : null,
                 total_invoice_amount: header.total_invoice_amount || null
             };
 

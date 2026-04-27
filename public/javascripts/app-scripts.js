@@ -2216,7 +2216,8 @@ function renderInvoicePreview(inv) {
                 <td class="text-muted">Truck No.</td><td>${inv.truck_number || '—'}</td></tr>
             <tr><td class="text-muted">Delivery Doc No.</td><td>${inv.delivery_doc_no || '—'}</td>
                 <td class="text-muted">Seal / Lock No.</td><td>${inv.seal_lock_no || '—'}</td></tr>
-            <tr><td class="text-muted">Total Amount</td><td colspan="3"><strong>₹ ${fmtN(inv.total_invoice_amount)}</strong></td></tr>
+            <tr><td class="text-muted">Bay No.</td><td>${inv.bay_number || '—'}</td>
+                <td class="text-muted">Total Amount</td><td><strong>₹ ${fmtN(inv.total_invoice_amount)}</strong></td></tr>
         </tbody>
     </table>
     <h6 class="border-bottom pb-1">Product Lines</h6>

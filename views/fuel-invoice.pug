@@ -56,6 +56,9 @@ block content
                         label.small Seal / Lock No
                         input#fi_seal_lock_no.form-control.form-control-sm(type='text' value=(invoice ? invoice.seal_lock_no : '') readonly=editDisabled)
                     div.col-md-2.form-group
+                        label.small Bay No.
+                        input#fi_bay_number.form-control.form-control-sm(type='text' value=(invoice ? invoice.bay_number : '') readonly=editDisabled)
+                    div.col-md-2.form-group
                         label.small Total Invoice Amount
                         input#fi_total_amount.form-control.form-control-sm(type='number' step='0.01' min='0' value=(invoice ? invoice.total_invoice_amount : '') readonly=editDisabled)
 
@@ -237,6 +240,7 @@ block content
                         truck_number:         document.getElementById('fi_truck_number').value,
                         delivery_doc_no:      document.getElementById('fi_delivery_doc_no').value,
                         seal_lock_no:         document.getElementById('fi_seal_lock_no').value,
+                        bay_number:           document.getElementById('fi_bay_number').value,
                         total_invoice_amount: document.getElementById('fi_total_amount').value,
                         lines
                     })
@@ -294,6 +298,7 @@ block content
             if (h.truck_number)   document.getElementById('fi_truck_number').value   = h.truck_number;
             if (h.delivery_doc_no)document.getElementById('fi_delivery_doc_no').value= h.delivery_doc_no;
             if (h.seal_lock_no)   document.getElementById('fi_seal_lock_no').value   = h.seal_lock_no;
+            if (h.bay_number)     document.getElementById('fi_bay_number').value     = h.bay_number;
             if (h.total_invoice_amount) document.getElementById('fi_total_amount').value = h.total_invoice_amount;
 
             if (supplierId) {
