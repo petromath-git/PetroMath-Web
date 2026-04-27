@@ -9,7 +9,8 @@ const menuManagementController = {
             res.render('menu-management', {
                 title: 'Menu Management',
                 user: req.user,
-                location: req.user.location_code
+                location: req.user.location_code,
+                isSuperUser: req.user.Role === 'SuperUser'
             });
         } catch (error) {
             console.error('Error rendering menu management page:', error);
@@ -269,6 +270,100 @@ const menuManagementController = {
                 success: false,
                 error: 'Failed to update menu access: ' + error.message
             });
+        }
+    },
+
+    // GET: Raw global access rules
+    getGlobalAccess: async (req, res, next) => {
+        try {
+            const [roles, menuItems, access] = await Promise.all([
+                menuManagementDao.getAllRoles(),
+                menuManagementDao.getAllMenuItems(),
+                menuManagementDao.getAllGlobalAccess()
+            ]);
+            res.json({ success: true, roles, menuItems, access });
+        } catch (error) {
+            console.error('Error fetching global access:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // POST: Create/upsert a global access rule
+    createGlobalAccess: async (req, res, next) => {
+        try {
+            const { role, menu_code, allowed } = req.body;
+            await menuManagementDao.updateGlobalMenuAccess(role, menu_code, allowed, req.user.User_Name);
+            res.json({ success: true, message: 'Global access rule saved' });
+        } catch (error) {
+            console.error('Error creating global access:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // DELETE: Soft-delete a global access rule
+    deleteGlobalAccess: async (req, res, next) => {
+        try {
+            await menuManagementDao.deleteGlobalAccess(req.params.id, req.user.User_Name);
+            res.json({ success: true, message: 'Global access rule removed' });
+        } catch (error) {
+            console.error('Error deleting global access:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // GET: Raw override rules — all locations for SuperUser, own location otherwise
+    getOverrides: async (req, res, next) => {
+        try {
+            const isSuperUser = req.user.Role === 'SuperUser';
+            const [roles, menuItems, access] = await Promise.all([
+                menuManagementDao.getAllRoles(),
+                menuManagementDao.getAllMenuItems(),
+                isSuperUser
+                    ? menuManagementDao.getAllOverridesAll()
+                    : menuManagementDao.getAllOverrides(req.user.location_code)
+            ]);
+            res.json({ success: true, roles, menuItems, access, location: req.user.location_code, isSuperUser });
+        } catch (error) {
+            console.error('Error fetching overrides:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // POST: Create/upsert a location override
+    createOverride: async (req, res, next) => {
+        try {
+            const { role, menu_code, allowed, location_code } = req.body;
+            const isSuperUser = req.user.Role === 'SuperUser';
+            const targetLocation = (isSuperUser && location_code) ? location_code : req.user.location_code;
+            await menuManagementDao.updateOverrideMenuAccess(
+                role, targetLocation, menu_code, allowed, req.user.User_Name
+            );
+            res.json({ success: true, message: 'Override saved' });
+        } catch (error) {
+            console.error('Error creating override:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // DELETE: Soft-delete a location override
+    deleteOverride: async (req, res, next) => {
+        try {
+            await menuManagementDao.deleteOverride(req.params.id, req.user.User_Name);
+            res.json({ success: true, message: 'Override removed' });
+        } catch (error) {
+            console.error('Error deleting override:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // GET: Cache stats
+    getCacheStats: async (req, res, next) => {
+        try {
+            const stats = await menuManagementDao.getCacheStats();
+            res.json({ success: true, stats });
+        } catch (error) {
+            console.error('Error fetching cache stats:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
     },
 

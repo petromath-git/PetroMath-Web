@@ -71,9 +71,9 @@
         "strategy": "hsn_from_prev_line"
       },
       "total_line_amount": {
-        "keyword": "Total for material",
+        "keyword": "BASIC DESTINATION PRICE",
         "strategy": "nth_number_on_line",
-        "position": 1
+        "position": 3
       }
     }
   },
