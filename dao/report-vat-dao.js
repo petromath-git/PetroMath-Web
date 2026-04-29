@@ -3,6 +3,25 @@ const Sequelize = require("sequelize");
 
 module.exports = {
 
+    getChargeTypes: async (locationCode, reportFromDate, reportToDate) => {
+        const result = await db.sequelize.query(
+            `SELECT DISTINCT tic.charge_type
+             FROM t_tank_invoice ti
+             JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
+             JOIN m_product mp ON tid.product_id = mp.product_id
+             JOIN t_tank_invoice_charges tic ON tid.id = tic.invoice_dtl_id
+             WHERE ti.location_id = :locationCode
+               AND ti.invoice_date BETWEEN :reportFromDate AND :reportToDate
+               AND COALESCE(mp.is_lube_product, 0) = 0
+             ORDER BY tic.charge_type`,
+            {
+                replacements: { locationCode, reportFromDate, reportToDate },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+        return result.map(r => r.charge_type);
+    },
+
     getVatDetail: async (locationCode, reportFromDate, reportToDate) => {
         const result = await db.sequelize.query(
             `SELECT
@@ -13,8 +32,9 @@ module.exports = {
                 DATE_FORMAT(ti.invoice_date, '%d-%b-%Y') AS \`Invoice Date\`,
                 tid.total_line_amount AS Value,
                 COALESCE(vat.charge_pct, 0) AS \`Tax Rate\`,
-                COALESCE(vat.charge_amount, 0) AS VAT,
-                COALESCE(add_vat.charge_amount, 0) AS \`Addition VAT\`
+                (SELECT JSON_OBJECTAGG(charge_type, charge_amount)
+                 FROM t_tank_invoice_charges
+                 WHERE invoice_dtl_id = tid.id) AS charges_json
             FROM t_tank_invoice ti
             JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
             JOIN m_product mp ON tid.product_id = mp.product_id
@@ -22,8 +42,6 @@ module.exports = {
             LEFT JOIN m_location ml ON ml.location_code = ti.location_id
             LEFT JOIN t_tank_invoice_charges vat
                 ON tid.id = vat.invoice_dtl_id AND vat.charge_type = 'VAT'
-            LEFT JOIN t_tank_invoice_charges add_vat
-                ON tid.id = add_vat.invoice_dtl_id AND add_vat.charge_type = 'ADDITIONAL_VAT'
             WHERE ti.location_id = :locationCode
               AND ti.invoice_date BETWEEN :reportFromDate AND :reportToDate
               AND COALESCE(mp.is_lube_product, 0) = 0
@@ -34,30 +52,6 @@ module.exports = {
             }
         );
         return result;
-    },
-
-    getVatTotals: async (locationCode, reportFromDate, reportToDate) => {
-        const result = await db.sequelize.query(
-            `SELECT
-                SUM(tid.total_line_amount) AS total_value,
-                SUM(COALESCE(vat.charge_amount, 0)) AS total_vat,
-                SUM(COALESCE(add_vat.charge_amount, 0)) AS total_add_vat
-            FROM t_tank_invoice ti
-            JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
-            JOIN m_product mp ON tid.product_id = mp.product_id
-            LEFT JOIN t_tank_invoice_charges vat
-                ON tid.id = vat.invoice_dtl_id AND vat.charge_type = 'VAT'
-            LEFT JOIN t_tank_invoice_charges add_vat
-                ON tid.id = add_vat.invoice_dtl_id AND add_vat.charge_type = 'ADDITIONAL_VAT'
-            WHERE ti.location_id = :locationCode
-              AND ti.invoice_date BETWEEN :reportFromDate AND :reportToDate
-              AND COALESCE(mp.is_lube_product, 0) = 0`,
-            {
-                replacements: { locationCode, reportFromDate, reportToDate },
-                type: Sequelize.QueryTypes.SELECT
-            }
-        );
-        return result[0];
     }
 
 };

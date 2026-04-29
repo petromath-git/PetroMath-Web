@@ -5,6 +5,7 @@ block content
         script.
             var vatRowsFromServer = !{JSON.stringify(vatRows)}
             var vatTotalsFromServer = !{JSON.stringify(vatTotals)}
+            var chargeTypesFromServer = !{JSON.stringify(chargeTypes)}
 
             document.addEventListener('DOMContentLoaded', function() {
                 renderVatTable();
@@ -13,6 +14,7 @@ block content
             function renderVatTable() {
                 var rows = vatRowsFromServer;
                 var totals = vatTotalsFromServer;
+                var chargeTypes = chargeTypesFromServer;
 
                 if (!rows || rows.length === 0) {
                     document.getElementById('vat-table-container').innerHTML =
@@ -28,18 +30,26 @@ block content
                     }).format(parseFloat(v) || 0);
                 };
 
+                var thStyle = "border:1px solid #000;text-align:center;";
+                var toTitleCase = function(ct) {
+                    return ct.replace(/_/g, ' ').replace(/\w+/g, function(w) {
+                        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+                    });
+                };
+
                 var html = "<table class='table table-bordered table-sm' style='width:100%;border:1px solid #000;font-size:13px;'>";
                 html += "<thead class='thead-light'><tr>";
-                html += "<th style='border:1px solid #000;text-align:center;'>Sl No</th>";
-                html += "<th style='border:1px solid #000;'>Name</th>";
-                html += "<th style='border:1px solid #000;text-align:center;'>TIN No</th>";
-                html += "<th style='border:1px solid #000;text-align:center;'>HSN Code</th>";
-                html += "<th style='border:1px solid #000;'>Invoice No</th>";
-                html += "<th style='border:1px solid #000;text-align:center;'>Invoice Date</th>";
-                html += "<th style='border:1px solid #000;text-align:right;'>Value</th>";
-                html += "<th style='border:1px solid #000;text-align:center;'>Tax Rate</th>";
-                html += "<th style='border:1px solid #000;text-align:right;'>VAT</th>";
-                html += "<th style='border:1px solid #000;text-align:right;'>Addition VAT</th>";
+                html += "<th style='" + thStyle + "'>Sl No</th>";
+                html += "<th style='" + thStyle + "'>Name</th>";
+                html += "<th style='" + thStyle + "'>TIN No</th>";
+                html += "<th style='" + thStyle + "'>HSN Code</th>";
+                html += "<th style='" + thStyle + "'>Invoice No</th>";
+                html += "<th style='" + thStyle + "'>Invoice Date</th>";
+                html += "<th style='" + thStyle + "'>Value</th>";
+                html += "<th style='" + thStyle + "'>Tax Rate</th>";
+                chargeTypes.forEach(function(ct) {
+                    html += "<th style='" + thStyle + "'>" + toTitleCase(ct) + "</th>";
+                });
                 html += "</tr></thead><tbody>";
 
                 rows.forEach(function(row) {
@@ -52,8 +62,9 @@ block content
                     html += "<td style='border:1px solid #000;text-align:center;'>" + (row['Invoice Date'] || '-') + "</td>";
                     html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['Value']) + "</td>";
                     html += "<td style='border:1px solid #000;text-align:center;'>" + (row['Tax Rate'] || 0) + "</td>";
-                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['VAT']) + "</td>";
-                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row['Addition VAT']) + "</td>";
+                    chargeTypes.forEach(function(ct) {
+                        html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(row[ct]) + "</td>";
+                    });
                     html += "</tr>";
                 });
 
@@ -62,8 +73,9 @@ block content
                 html += "<td colspan='6' style='border:1px solid #000;text-align:right;'>Total</td>";
                 html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_value) + "</td>";
                 html += "<td style='border:1px solid #000;'></td>";
-                html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_vat) + "</td>";
-                html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals.total_add_vat) + "</td>";
+                chargeTypes.forEach(function(ct) {
+                    html += "<td style='border:1px solid #000;text-align:right;'>" + fmt(totals[ct]) + "</td>";
+                });
                 html += "</tr>";
 
                 html += "</tbody></table>";
