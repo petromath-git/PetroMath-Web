@@ -60,12 +60,13 @@ module.exports = {
         
         const baseQuery = {
             attributes: [
-                'product_id', 
-                'product_name', 
-                'qty', 
-                'unit', 
+                'product_id',
+                'product_name',
+                'qty',
+                'unit',
                 'price',
                 'ledger_name',
+                'purchase_ledger_name',
                 'cgst_percent',
                 'sgst_percent',
                 'sku_name',
@@ -202,6 +203,7 @@ findPumpProducts: async (locationCode) => {
             price: product.price,
             unit: product.unit,
             ledger_name: product.ledger_name,
+            purchase_ledger_name: product.purchase_ledger_name,
             cgst_percent: product.cgst_percent,
             sgst_percent: product.sgst_percent,
             updated_by: product.updated_by,
