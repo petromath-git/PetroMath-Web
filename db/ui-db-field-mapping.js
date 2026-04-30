@@ -15,6 +15,7 @@ module.exports = {
         unit: req.body.m_product_unit_0,
         price: req.body.m_product_price_0,
         ledger_name: req.body.m_product_ledger_name_0,
+        purchase_ledger_name: req.body.m_product_purchase_ledger_name_0,
         cgst_percent: req.body.m_product_cgst_0,
         sgst_percent: req.body.m_product_sgst_0,
         sku_name: req.body.m_product_sku_name_0,

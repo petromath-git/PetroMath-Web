@@ -47,7 +47,7 @@ block content
                             th(scope="col") Edit
                     tbody
                         each val, index in products
-                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                             tr(id=`product-row-${index}`)
                                 th(scope="row")= index + 1
                                 td(scope="row")
@@ -106,7 +106,7 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             .row
                 each val, index in products
-                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                     .col-12.mb-3
                         .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
@@ -278,9 +278,18 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input.form-control(type="number", name="price", step="0.01", required)
-                            .col-md-12.mb-3
-                                label.form-label Ledger Name
-                                input.form-control.text-uppercase(type="text", name="ledger_name", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label Sales Ledger
+                                select.form-control(name="ledger_name")
+                                    option(value="") — Not Set —
+                                    each l in salesLedgers
+                                        option(value=l.ledger_name)= l.ledger_name
+                            .col-md-6.mb-3
+                                label.form-label Purchase Ledger
+                                select.form-control(name="purchase_ledger_name")
+                                    option(value="") — Not Set —
+                                    each l in purchaseLedgers
+                                        option(value=l.ledger_name)= l.ledger_name
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input.form-control(type="number", name="cgst_percent", step="0.01", min="0", max="100")
@@ -346,9 +355,18 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input#edit-price.form-control(type="number", step="0.01")
-                            .col-md-12.mb-3
-                                label.form-label Ledger Name
-                                input#edit-ledger-name.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
+                            .col-md-6.mb-3
+                                label.form-label Sales Ledger
+                                select#edit-ledger-name.form-control
+                                    option(value="") — Not Set —
+                                    each l in salesLedgers
+                                        option(value=l.ledger_name)= l.ledger_name
+                            .col-md-6.mb-3
+                                label.form-label Purchase Ledger
+                                select#edit-purchase-ledger-name.form-control
+                                    option(value="") — Not Set —
+                                    each l in purchaseLedgers
+                                        option(value=l.ledger_name)= l.ledger_name
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input#edit-cgst.form-control(type="number", step="0.01", min="0", max="100")
@@ -556,6 +574,7 @@ block content
             document.getElementById('edit-unit').value = product.unit || '';
             document.getElementById('edit-price').value = product.price || '';
             document.getElementById('edit-ledger-name').value = product.ledger_name || '';
+            document.getElementById('edit-purchase-ledger-name').value = product.purchase_ledger_name || '';
             document.getElementById('edit-cgst').value = product.cgst_percent || 0;
             document.getElementById('edit-sgst').value = product.sgst_percent || 0;
 
@@ -600,7 +619,8 @@ block content
                 m_product_name: document.getElementById('edit-product-name').value.toUpperCase().trim(),
                 m_product_price: document.getElementById('edit-price').value,
                 m_product_unit: document.getElementById('edit-unit').value.toUpperCase(),
-                m_product_ledger_name: document.getElementById('edit-ledger-name').value.toUpperCase(),
+                m_product_ledger_name: ($('#edit-ledger-name').val() || '').toUpperCase(),
+                m_product_purchase_ledger_name: ($('#edit-purchase-ledger-name').val() || '').toUpperCase(),
                 m_product_cgst: document.getElementById('edit-cgst').value,
                 m_product_sgst: document.getElementById('edit-sgst').value
             };
@@ -663,6 +683,8 @@ block content
         // Event listeners
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+
+
             
             // Add uppercase event listeners to all text inputs in the modal
             const textInputs = document.querySelectorAll('input[type="text"].text-uppercase');

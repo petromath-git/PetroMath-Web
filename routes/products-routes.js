@@ -8,6 +8,7 @@ const ProductDao = require('../dao/product-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
+const { getLedgersByGroup } = require('./gl-routes');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
 
@@ -22,10 +23,12 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
-            ProductDao.findPumpLinkedProductNames(locationCode)
+            ProductDao.findPumpLinkedProductNames(locationCode),
+            getLedgersByGroup(locationCode, 'Sales Accounts'),
+            getLedgersByGroup(locationCode, 'Purchase Accounts')
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -39,6 +42,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 qty: product.qty,
                 price: product.price,
                 ledger_name: product.ledger_name,
+                purchase_ledger_name: product.purchase_ledger_name,
                 cgst_percent: product.cgst_percent,
                 sgst_percent: product.sgst_percent,
                 sku_name: product.sku_name,
@@ -50,12 +54,14 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
             });
         });
 
-        res.render('products', { 
-            title: 'Products', 
-            user: req.user, 
-            products: products, 
+        res.render('products', {
+            title: 'Products',
+            user: req.user,
+            products: products,
             config: config.APP_CONFIGS,
             canEditProductName: canEditProductName,
+            salesLedgers: salesLedgers,
+            purchaseLedgers: purchaseLedgers,
             messages: req.flash()
         });
     } catch (error) {
@@ -78,6 +84,7 @@ router.get('/api/data', [isLoginEnsured, security.isAdmin()], function (req, res
                 qty: product.qty,
                 price: product.price,
                 ledger_name: product.ledger_name,
+                purchase_ledger_name: product.purchase_ledger_name,
                 cgst_percent: product.cgst_percent,
                 sgst_percent: product.sgst_percent,
                 sku_name: product.sku_name,
@@ -115,6 +122,7 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, ne
                 m_product_unit_0: req.body.unit,
                 m_product_price_0: req.body.price,
                 m_product_ledger_name_0: req.body.ledger_name,
+                m_product_purchase_ledger_name_0: req.body.purchase_ledger_name,
                 m_product_cgst_0: req.body.cgst_percent || 0,
                 m_product_sgst_0: req.body.sgst_percent || 0,
                 m_product_sku_name_0: req.body.sku_name || '',
@@ -199,6 +207,7 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             price: req.body.m_product_price,
             unit: req.body.m_product_unit,
             ledger_name: req.body.m_product_ledger_name,
+            purchase_ledger_name: req.body.m_product_purchase_ledger_name,
             cgst_percent: req.body.m_product_cgst,
             sgst_percent: req.body.m_product_sgst,
             is_tank_product: req.body.m_product_is_tank_product,
