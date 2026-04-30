@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { execFile, exec } = require('child_process');
 const moment = require('moment');
 
 const SUPPLIER_MAP = {
@@ -52,6 +52,14 @@ async function extractText(pdfBuffer) {
     return await extractTextViaOcr(pdfBuffer);
 }
 
+function fixOcrText(text) {
+    return text
+        // "KL" commonly misread as "Ku" by OCR
+        .replace(/(\d)\s+Ku\b/g, '$1 KL')
+        // Colon ":" commonly misread as "2" after "No " → "No 2497884734" → "No :497884734"
+        .replace(/\b(No|No\.)\s+2(\d{6,})/g, '$1 :$2');
+}
+
 async function extractTextViaOcr(pdfBuffer) {
     const uid = crypto.randomBytes(8).toString('hex');
     const tmpDir = os.tmpdir();
@@ -62,8 +70,9 @@ async function extractTextViaOcr(pdfBuffer) {
 
     try {
         // Convert each PDF page to a PNG image at 300 DPI
+        const pdftoppmBin = process.env.PDFTOPPM_PATH || 'pdftoppm';
         await new Promise((resolve, reject) => {
-            execFile('pdftoppm', ['-r', '300', '-png', pdfPath, imgPrefix], (err) => {
+            exec(`"${pdftoppmBin}" -r 300 -png "${pdfPath}" "${imgPrefix}"`, (err) => {
                 if (err) reject(new Error('PDF→image conversion failed. Is poppler-utils installed? ' + err.message));
                 else resolve();
             });
@@ -79,8 +88,9 @@ async function extractTextViaOcr(pdfBuffer) {
         // OCR each page with tesseract
         const pageTexts = await Promise.all(imgFiles.map(imgPath =>
             new Promise((resolve, reject) => {
-                execFile(
-                    'tesseract', [imgPath, 'stdout', '-l', 'eng', '--oem', '1', '--psm', '3'],
+                const tesseractBin = process.env.TESSERACT_PATH || 'tesseract';
+                exec(
+                    `"${tesseractBin}" "${imgPath}" stdout -l eng --oem 1 --psm 3`,
                     { maxBuffer: 4 * 1024 * 1024 },
                     (err, stdout) => {
                         if (err) reject(new Error('Tesseract OCR failed. Is tesseract-ocr installed? ' + err.message));
@@ -90,7 +100,7 @@ async function extractTextViaOcr(pdfBuffer) {
             })
         ));
 
-        return pageTexts.join('\n');
+        return fixOcrText(pageTexts.join('\n'));
     } finally {
         try { fs.unlinkSync(pdfPath); } catch {}
         fs.readdirSync(tmpDir)
@@ -146,16 +156,21 @@ function applyStrategy(lines, fieldConfig, blockStart, blockEnd) {
     const { keyword, strategy, pattern, position, clean, exact_match } = fieldConfig;
 
     if (strategy === 'value_after_keyword') {
-        const idx = findLineIndex(lines, keyword, blockStart);
-        if (idx < 0 || idx > blockEnd) return null;
-        const line = lines[idx];
-        const kwPos = line.toLowerCase().indexOf(keyword.toLowerCase());
-        const after = line.slice(kwPos + keyword.length).trim().replace(/^[:\s]+/, '');
-        if (pattern) {
-            const m = after.match(new RegExp(pattern));
-            return m ? m[0].trim() : null;
+        let searchFrom = blockStart;
+        while (true) {
+            const idx = findLineIndex(lines, keyword, searchFrom);
+            if (idx < 0 || idx > blockEnd) return null;
+            const line = lines[idx];
+            const kwPos = line.toLowerCase().indexOf(keyword.toLowerCase());
+            const after = line.slice(kwPos + keyword.length).trim().replace(/^[:\s]+/, '');
+            if (pattern) {
+                const m = after.match(new RegExp(pattern));
+                if (m) return m[0].trim();
+                searchFrom = idx + 1;
+                continue;
+            }
+            return after.split(/\s+/)[0] || null;
         }
-        return after.split(/\s+/)[0] || null;
     }
 
     if (strategy === 'value_at_keyword') {
@@ -362,6 +377,7 @@ async function parseInvoice(pdfBuffer, companyName) {
     }
 
     const rawText = await extractText(pdfBuffer);
+    if (process.env.DEBUG_OCR === '1') console.log('=== RAW OCR TEXT ===\n', rawText, '\n=== END OCR TEXT ===');
 
     if (!rawText || rawText.trim().length < 50) {
         throw new Error('No readable text found in PDF even after OCR attempt. Check if tesseract-ocr and poppler-utils are installed on the server.');
@@ -398,98 +414,125 @@ async function parseInvoice(pdfBuffer, companyName) {
 }
 
 // ---------------------------------------------------------------------------
-// BPCL Lube Invoice Parser
-// Structure per product (2 lines in the PDF table):
-//   Line 1: NN.PRODUCT NAME   QTY UOM   RATE/L29   TAXABLE_VALUE   CGST X%   CGST_AMT
-//   Line 2: HSN/SAC : HSNNO (BATCHNO)   QTY_L29 L29   DISCOUNT   -DISC_AMT   SGST X%   SGST_AMT
+// BPCL Lube Invoice Parser (scanned PDF via OCR)
+//
+// Scanned PDFs are read column-by-column, so the multi-column table is
+// completely shattered. Product names are garbled.
+//
+// Strategy: extract L29 quantities, packing UOMs, rates, HSN codes as
+// ordered lists, then zip them into product records.
+// Taxable value is computed as qty_litres × rate (reliable).
 // ---------------------------------------------------------------------------
 
-function parseBpclLubeProduct(blockLines) {
-    const blockText = blockLines.join('\n');
-    const item = {};
-
-    // Product name: strip "NN." prefix; stop before packing qty (digits + UOM)
-    const firstLine = blockLines[0] || '';
-    const stripped = firstLine.replace(/^\d{2}\./, '').trim();
-    const nameMatch = stripped.match(/^(.+?)(?=\s+\d+\s+(?:BRL|CS|PKT|TIN|CAN|BTL|KG|LTR)\b)/i);
-    item.product_name = nameMatch ? nameMatch[1].trim() : stripped.split(/\s{2,}/)[0].trim();
-
-    // Invoice packing qty + UOM  e.g. "15 BRL", "3 CS"
-    const invQtyMatch = blockText.match(/\b(\d+(?:\.\d+)?)\s+(BRL|CS|PKT|TIN|CAN|BTL|KG|LTR)\b/i);
-    if (invQtyMatch) {
-        item.invoice_qty = parseFloat(invQtyMatch[1]);
-        item.invoice_uom = invQtyMatch[2].toUpperCase();
-    }
-
-    // Qty in L29  e.g. "3150 L29", "28.800 L29"
-    const l29Match = blockText.match(/([\d,]+\.?\d*)\s+L29\b/i);
-    item.qty_litres = l29Match ? cleanNumber(l29Match[1]) : null;
-
-    // Rate per L29  e.g. "55.00/L29"
-    const rateMatch = blockText.match(/([\d,]+\.?\d*)\/L29/i);
-    item.rate = rateMatch ? cleanNumber(rateMatch[1]) : null;
-
-    // HSN code  (digits immediately after "HSN :" or "HSN/SAC :")
-    const hsnMatch = blockText.match(/HSN(?:\/SAC)?\s*[:\s]+(\d{6,8})/i);
-    item.hsn_code = hsnMatch ? hsnMatch[1] : null;
-
-    // Batch number  (first parenthesised 7-digit number)
-    const batchMatch = blockText.match(/\((\d{7})\)/);
-    item.batch_no = batchMatch ? batchMatch[1] : null;
-
-    // Taxable value: largest number before "CGST"
-    const taxableMatch = blockText.match(/([\d,]+\.?\d*)\s+CGST/i);
-    item.taxable_value = taxableMatch ? cleanNumber(taxableMatch[1]) : null;
-
-    // Discount: first negative number in block
-    const discountMatch = blockText.match(/(-[\d,]+\.?\d*)/);
-    item.discount_amount = discountMatch ? cleanNumber(discountMatch[1]) : null;
-
-    // CGST  e.g. "CGST 9% 644.93"
-    const cgstMatch = blockText.match(/CGST\s+([\d.]+)%\s+([\d,]+\.?\d*)/i);
-    if (cgstMatch) {
-        item.cgst_pct    = parseFloat(cgstMatch[1]);
-        item.cgst_amount = cleanNumber(cgstMatch[2]);
-    }
-
-    // SGST  e.g. "SGST 9% 644.93"
-    const sgstMatch = blockText.match(/SGST\s+([\d.]+)%\s+([\d,]+\.?\d*)/i);
-    if (sgstMatch) {
-        item.sgst_pct    = parseFloat(sgstMatch[1]);
-        item.sgst_amount = cleanNumber(sgstMatch[2]);
-    }
-
-    return item;
-}
-
 function parseBpclLubeInvoice(rawText) {
-    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    // --- OCR fixes for common BPCL lube misreads ---
+    const fixed = rawText
+        .replace(/\bERL\b/g, 'BRL')                              // E/B confusion: "ERL" → "BRL"
+        .replace(/\b(\d+\.?\d*)\s+129\b/g, '$1 L29')             // "210 129" → "210 L29" (missing L)
+        .replace(/\/129\b/g, '/L29')                              // "55.00/129" → "55.00/L29"
+        .replace(/\bSS\b/g, '55')                                 // "SS" → "55" (digit 5 read as S)
+        .replace(/\b(5[0-9])\s+\.([\d]{2}\/L29)/g, '$1.$2');     // "55 .00/L29" → "55.00/L29"
 
-    // --- Header (regex on full text) ---
-    const match = (pat) => { const m = rawText.match(pat); return m ? m[1] : null; };
+    const lines = fixed.split('\n').map(l => l.trim());
 
+    // === HEADER ===
     const header = {};
-    header.invoice_number   = match(/INVOICE\s+No\.?\s*[:\s]+(\d+)/i);
-    const dateRaw           = match(/DATE\/TIME\s*[:\s]+(\d{2}\.\d{2}\.\d{4})/i);
-    header.invoice_date     = dateRaw ? normaliseDate(dateRaw, ['DD.MM.YYYY', 'DD-MM-YYYY']) : null;
-    header.delivery_doc_no  = match(/DELIVERY\s+No\s*[:\s]+(\d+)/i);
-    const sealRaw           = match(/Seal\/Lock\s+No\s*[:\s]+([\w/,\s]+)/i);
-    header.seal_lock_no     = sealRaw ? sealRaw.trim() : null;
-    header.e_way_bill_no    = match(/E[-\s]?Way\s+Bill\s+No\s*[:\s]+(\d+)/i);
-    const totalRaw          = match(/TOTAL\s+(?:VALUE|AMOUNT)\s*[;:\s]*Rs\s+([\d,]+\.?\d*)/i) ||
-                              match(/TOTAL\s+AMOUNT\s+([\d,]+\.?\d*)/i);
-    header.total_invoice_amount = totalRaw ? cleanNumber(totalRaw) : null;
 
-    // --- Product blocks: each starts with "NN." (01., 02., …) ---
-    const blockStartRe = /^\d{2}\./;
-    const blockIndices = lines.reduce((acc, l, i) => { if (blockStartRe.test(l)) acc.push(i); return acc; }, []);
+    // Invoice number: standalone 9-11 digit number anywhere in first 25 lines
+    // (In scanned OCR the number appears in its own text run before the "INVOICE No." label)
+    for (let i = 0; i < Math.min(25, lines.length); i++) {
+        const m = lines[i].match(/^(\d{9,11})$/);
+        if (m) { header.invoice_number = m[1]; break; }
+    }
 
-    const productLines = blockIndices.map((start, b) => {
-        const end = b + 1 < blockIndices.length ? blockIndices[b + 1] - 1 : Math.min(start + 6, lines.length - 1);
-        return parseBpclLubeProduct(lines.slice(start, end + 1));
-    }).filter(item => item.qty_litres != null);
+    // Invoice date: from the digital signature block at the bottom
+    // OCR gives e.g. "Thu.\nsep\n25,\n2025 IST" — \s+ spans the newlines
+    const dateM = fixed.match(
+        /(?:mon|tue|wed|thu|fri|sat|sun)\.?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.?\s+(\d{1,2})[,.]?\s+(20\d{2})/i
+    );
+    if (dateM) {
+        const d = moment(`${dateM[1]} ${dateM[2]} ${dateM[3]}`, 'MMM D YYYY');
+        header.invoice_date = d.isValid() ? d.format('YYYY-MM-DD') : null;
+    }
 
-    return { header, lines: productLines };
+    // E-way bill: long digit sequence after "Bill No"
+    const ewayM = fixed.match(/Bill\s+No\s*[\s:]+(\d{10,})/i);
+    header.e_way_bill_no = ewayM ? ewayM[1] : null;
+
+    // Total invoice amount: number on line after TOTAL / OCR variants / "VAUJE RS"
+    const totalM = fixed.match(/(?:VAUJE|VALUE)\s*[\s:]+RS?\s*([\d,\s]+\.?\d*)/i) ||
+                   fixed.match(/(?:'IVrAL|1VrAL|TOTAL)\s*\n\s*([\d,\s]+\.?\d*)/i);
+    if (totalM) {
+        const cleaned = totalM[1].replace(/,\s+/g, ',').replace(/\s/g, '');
+        header.total_invoice_amount = cleanNumber(cleaned);
+    }
+
+    // Delivery doc no: digits after "DOC No" or "roc No" (OCR variant of "DOC")
+    const delivM = fixed.match(/(?:roc|DOC)\s*No\s*[\s:]+(\d+)/i);
+    header.delivery_doc_no = delivM ? delivM[1] : null;
+
+    // === PRODUCT LINES — sequential (column-by-column) extraction ===
+    // Scanned PDFs are read column-by-column. Each field type appears as a
+    // group; we extract all instances in order and zip them per product.
+
+    // 1. L29 quantities — most reliable; count defines number of products
+    const l29List = [...fixed.matchAll(/([\d,]+\.?\d*)\s+L29\b/gi)]
+        .map(m => cleanNumber(m[1]));
+
+    if (l29List.length === 0) return { header, lines: [] };
+    const n = l29List.length;
+
+    // 2. Packing quantities + UOM  e.g. "15 BRL", "3 CS"
+    const packingList = [...fixed.matchAll(/\b(\d+)\s+(BRL|CS|PKT|TIN|CAN|BTL|KG|LTR)\b/gi)]
+        .map(m => ({ qty: parseFloat(m[1]), uom: m[2].toUpperCase() }));
+
+    // 3. Rates  e.g. "55.00/L29"  — after OCR fixes "SS .00/L29" → "55.00/L29"
+    const rateList = [...fixed.matchAll(/([\d,]+\.?\d*)\/L29\b/gi)]
+        .map(m => cleanNumber(m[1]));
+
+    // 4. HSN codes: 6-8 digit numbers after ":"
+    //    Filter: must be >= 270000 to skip non-HSN codes (supply plant codes etc.)
+    //    Petroleum/lube HSNs: 2710xx, 2712xx, 3102xx, 3403xx etc.
+    const hsnList = [...rawText.matchAll(/:\s*(\d{6,8})\b/g)]
+        .map(m => m[1])
+        .filter(h => parseInt(h) >= 270000);
+
+    // 5. Batch numbers: 7-digit numbers in parentheses
+    const batchList = [...rawText.matchAll(/\((\d{7})\)/g)].map(m => m[1]);
+
+    // 6. Taxable values: comma-formatted amounts (NNN,NNN.NN) that are > 5000
+    //    These are reliably OCR'd even in scans; used to fill gaps when rate is null
+    const taxableFromText = [...fixed.matchAll(/\b(\d{1,3},\d{3}\.\d{2})\b/g)]
+        .map(m => cleanNumber(m[1]))
+        .filter(v => v > 5000)
+        .sort((a, b) => b - a)           // largest first — taxable values dominate
+        .slice(0, n * 2);                // take at most 2× product count
+
+    // Build product records — pair each field list in order
+    return {
+        header,
+        lines: l29List.map((qty_litres, i) => {
+            const rate = rateList[i] != null ? rateList[i] : null;
+            // Taxable: prefer computed (qty × rate); fall back to largest unassigned amount from text
+            let taxable = (qty_litres && rate) ? Math.round(qty_litres * rate * 100) / 100 : null;
+            if (taxable == null && taxableFromText[i] != null) taxable = taxableFromText[i];
+            // If we have taxable but not rate, back-compute rate
+            const effectiveRate = rate != null ? rate : (taxable && qty_litres ? Math.round(taxable / qty_litres * 100) / 100 : null);
+            return {
+                product_name:  null,   // unreadable from scanned OCR
+                invoice_qty:   packingList[i] ? packingList[i].qty : null,
+                invoice_uom:   packingList[i] ? packingList[i].uom : null,
+                qty_litres,
+                rate:          effectiveRate,
+                hsn_code:      hsnList[i] || null,
+                batch_no:      batchList[i] || null,
+                taxable_value: taxable,
+                discount_amount: null,
+                cgst_pct: null, cgst_amount: null,
+                sgst_pct: null, sgst_amount: null
+            };
+        })
+    };
 }
 
 module.exports = { parseInvoice, resolveSupplier, parseBpclLubeInvoice, extractText };
