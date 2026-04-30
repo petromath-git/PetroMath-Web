@@ -3,9 +3,9 @@
   "dateFormats": ["DD.MM.YYYY", "DD-MM-YYYY", "DD/MM/YYYY"],
   "header": {
     "invoice_number": {
-      "keyword": "INVOICE No.:",
+      "keyword": "No.:",
       "strategy": "value_after_keyword",
-      "pattern": "\\d+"
+      "pattern": "\\d{9,}"
     },
     "invoice_date": {
       "keyword": "DATE/TIME:",
@@ -18,7 +18,7 @@
       "pattern": "[A-Z0-9]+"
     },
     "delivery_doc_no": {
-      "keyword": "DELIVERY No:",
+      "keyword": "DELIVERY No",
       "strategy": "value_after_keyword",
       "pattern": "\\d+"
     },
@@ -43,7 +43,7 @@
         "pattern": "(?:\\d{2}\\.)([A-Za-z][A-Za-z\\s()/.-]*)(?=\\d)"
       },
       "quantity": {
-        "keyword": " KL",
+        "keyword": "KL",
         "strategy": "number_before_keyword"
       },
       "rate_per_kl": {

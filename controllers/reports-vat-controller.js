@@ -5,6 +5,10 @@ const locationdao = require('../dao/report-dao');
 const personDao = require('../dao/person-dao');
 const ExcelJS = require('exceljs');
 
+function toTitleCase(ct) {
+    return ct.replace(/_/g, ' ').replace(/\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 function flattenRows(vatRows, chargeTypes) {
     return vatRows.map((row, idx) => {
         const charges = typeof row.charges_json === 'string'
@@ -117,7 +121,7 @@ module.exports = {
             // Fixed columns: Sl No, Name, TIN No, HSN Code, Invoice No, Invoice Date, Value, Tax Rate
             // Then one column per charge type
             const fixedHeaders = ['Sl No', 'Name', 'TIN No', 'HSN Code', 'Invoice No', 'Invoice Date', 'Value', 'Tax Rate'];
-            const headerValues = [...fixedHeaders, ...chargeTypes];
+            const headerValues = [...fixedHeaders, ...chargeTypes.map(toTitleCase)];
             const headerRow = sheet.getRow(currentRow);
             headerRow.values = headerValues;
             headerRow.font = { bold: true };
