@@ -237,23 +237,46 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
 
 // ── Product Ledger Map ────────────────────────────────────────────────────────
 
+// Map types shown in the configure modal — add new types here as needed
+const PRODUCT_MAP_TYPES = [
+    { type: 'SALES',       label: 'Sales',       group: 'sales' },
+    { type: 'PURCHASE',    label: 'Purchase',     group: 'purchase' },
+    { type: 'OUTPUT_CGST', label: 'Output CGST',  group: 'tax' },
+    { type: 'OUTPUT_SGST', label: 'Output SGST',  group: 'tax' },
+    { type: 'INPUT_CGST',  label: 'Input CGST',   group: 'tax' },
+    { type: 'INPUT_SGST',  label: 'Input SGST',   group: 'tax' },
+];
+
 router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res) => {
     const locationCode = req.user.location_code;
     try {
-        const [products, salesLedgers, purchaseLedgers, taxLedgers] = await Promise.all([
-            ProductLedgerMapDao.getAllMappings(locationCode),
+        const [products, rawMappings, salesLedgers, purchaseLedgers, taxLedgers] = await Promise.all([
+            ProductLedgerMapDao.getProducts(locationCode),
+            ProductLedgerMapDao.getAllMappingsRaw(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
             getLedgersByGroup(locationCode, 'Duties & Taxes')
         ]);
+
+        // Build { productId: { MAP_TYPE: ledgerId } } lookup for the modal
+        const mappingLookup = {};
+        rawMappings.forEach(m => {
+            if (!mappingLookup[m.product_id]) mappingLookup[m.product_id] = {};
+            mappingLookup[m.product_id][m.map_type] = m.ledger_id;
+        });
+
         res.render('product-ledger-map', {
             title: 'Product GL Ledger Map',
             user: req.user,
             config: config.APP_CONFIGS,
             products,
-            salesLedgers,
-            purchaseLedgers,
-            taxLedgers
+            mappingLookup,
+            mapTypes: PRODUCT_MAP_TYPES,
+            ledgers: {
+                sales:    salesLedgers,
+                purchase: purchaseLedgers,
+                tax:      taxLedgers
+            }
         });
     } catch (err) {
         console.error('Error loading product ledger map:', err);

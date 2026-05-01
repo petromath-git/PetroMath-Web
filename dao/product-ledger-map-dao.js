@@ -1,29 +1,35 @@
 const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 
-const VALID_MAP_TYPES = ['SALES', 'PURCHASE', 'OUTPUT_CGST', 'OUTPUT_SGST'];
+// All map types the accounting engine supports — add new types here only
+const VALID_MAP_TYPES = ['SALES', 'PURCHASE', 'OUTPUT_CGST', 'OUTPUT_SGST', 'INPUT_CGST', 'INPUT_SGST'];
 
 module.exports = {
 
-    getAllMappings: async (locationCode) => {
+    // Returns one row per product with all current mapping ledger IDs
+    getProducts: async (locationCode) => {
         return db.sequelize.query(`
             SELECT
                 p.product_id,
                 p.product_name,
                 p.cgst_percent,
                 p.sgst_percent,
-                p.is_lube_product,
-                MAX(CASE WHEN plm.map_type = 'SALES'       THEN plm.ledger_id END) AS sales_ledger_id,
-                MAX(CASE WHEN plm.map_type = 'PURCHASE'    THEN plm.ledger_id END) AS purchase_ledger_id,
-                MAX(CASE WHEN plm.map_type = 'OUTPUT_CGST' THEN plm.ledger_id END) AS output_cgst_ledger_id,
-                MAX(CASE WHEN plm.map_type = 'OUTPUT_SGST' THEN plm.ledger_id END) AS output_sgst_ledger_id
+                p.is_lube_product
             FROM m_product p
-            LEFT JOIN gl_product_ledger_map plm
-                   ON plm.product_id    = p.product_id
-                  AND plm.location_code = :locationCode
             WHERE p.location_code = :locationCode
-            GROUP BY p.product_id, p.product_name, p.cgst_percent, p.sgst_percent, p.is_lube_product
             ORDER BY p.is_lube_product DESC, p.product_name
+        `, {
+            replacements: { locationCode },
+            type: QueryTypes.SELECT
+        });
+    },
+
+    // Returns flat rows (product_id, map_type, ledger_id) — used to build the modal lookup
+    getAllMappingsRaw: async (locationCode) => {
+        return db.sequelize.query(`
+            SELECT product_id, map_type, ledger_id
+            FROM gl_product_ledger_map
+            WHERE location_code = :locationCode
         `, {
             replacements: { locationCode },
             type: QueryTypes.SELECT
