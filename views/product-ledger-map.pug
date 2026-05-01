@@ -7,115 +7,167 @@ block content
             h4.mb-0.text-primary Product GL Ledger Map
             a.btn.btn-sm.btn-outline-secondary(href="/products") &larr; Back to Products
 
-        .alert.alert-info.py-2
+        .alert.alert-info.py-2.mb-3
             i.bi.bi-info-circle.me-1
-            | Assign GL ledgers for each product. Changes auto-save on selection.
-            | Output CGST / Output SGST only apply to GST products.
-
-        div#saveStatus.mb-2(style="min-height:24px;")
+            | Click Configure on any product to assign GL ledgers. Changes auto-save on selection.
 
         .table-responsive
-            table.table.table-bordered.table-hover.table-sm#ledgerMapTable
+            table.table.table-hover.table-sm.table-bordered
                 thead.thead-dark
                     tr
-                        th(style="min-width:200px;") Product
-                        th.text-center(style="width:50px;") CGST%
-                        th(style="min-width:180px;") Sales Ledger
-                        th(style="min-width:180px;") Purchase Ledger
-                        th(style="min-width:180px;") Output CGST
-                        th(style="min-width:180px;") Output SGST
+                        th Product
+                        th.text-center(style="width:70px;") CGST%
+                        th.text-center(style="width:120px;") Configured
+                        th.text-center(style="width:100px;") Action
                 tbody
                     each p in products
-                        - const isGst = p.cgst_percent > 0
-                        tr(class=isGst ? '' : 'table-secondary')
+                        - const pMaps = mappingLookup[p.product_id] || {}
+                        - const configCount = Object.keys(pMaps).length
+                        - const totalTypes = mapTypes.length
+                        tr
                             td
                                 strong= p.product_name
-                                if isGst
+                                if p.cgst_percent > 0
                                     span.badge.badge-warning.ml-1 GST
                             td.text-center= p.cgst_percent + '%'
-                            td
-                                select.form-control.form-control-sm.ledger-select(
-                                    data-product-id=p.product_id,
-                                    data-map-type="SALES")
-                                    option(value="") — Not Set —
-                                    each l in salesLedgers
-                                        option(value=l.ledger_id, selected=(p.sales_ledger_id == l.ledger_id))= l.ledger_name
-                            td
-                                select.form-control.form-control-sm.ledger-select(
-                                    data-product-id=p.product_id,
-                                    data-map-type="PURCHASE")
-                                    option(value="") — Not Set —
-                                    each l in purchaseLedgers
-                                        option(value=l.ledger_id, selected=(p.purchase_ledger_id == l.ledger_id))= l.ledger_name
-                            td
-                                if isGst
-                                    select.form-control.form-control-sm.ledger-select(
-                                        data-product-id=p.product_id,
-                                        data-map-type="OUTPUT_CGST")
-                                        option(value="") — Not Set —
-                                        each l in taxLedgers
-                                            option(value=l.ledger_id, selected=(p.output_cgst_ledger_id == l.ledger_id))= l.ledger_name
+                            td.text-center
+                                if configCount === 0
+                                    span.badge.badge-danger None
+                                else if configCount < totalTypes
+                                    span.badge.badge-warning #{configCount} / #{totalTypes}
                                 else
-                                    span.text-muted.small N/A
-                            td
-                                if isGst
-                                    select.form-control.form-control-sm.ledger-select(
-                                        data-product-id=p.product_id,
-                                        data-map-type="OUTPUT_SGST")
-                                        option(value="") — Not Set —
-                                        each l in taxLedgers
-                                            option(value=l.ledger_id, selected=(p.output_sgst_ledger_id == l.ledger_id))= l.ledger_name
-                                else
-                                    span.text-muted.small N/A
+                                    span.badge.badge-success All set
+                            td.text-center
+                                button.btn.btn-primary.btn-sm.btn-configure(
+                                    type="button",
+                                    data-product-id=p.product_id,
+                                    data-product-name=p.product_name,
+                                    data-cgst=p.cgst_percent)
+                                    i.bi.bi-gear-fill.mr-1
+                                    | Configure
 
-    style.
-        #ledgerMapTable thead th { position: sticky; top: 0; z-index: 1; }
-        .table-secondary td { color: #6c757d; }
-        select.saving { border-color: #ffc107 !important; }
-        select.saved  { border-color: #28a745 !important; }
-        select.error  { border-color: #dc3545 !important; }
+    // Configure Modal
+    .modal.fade#configureModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#configureModalTitle Configure Ledgers
+                    button.close(type="button", data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    p.text-muted.small.mb-3 Changes are saved automatically on selection.
+                    div#modalRows
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Close
 
     script.
-        document.querySelectorAll('.ledger-select').forEach(function(sel) {
-            sel.addEventListener('change', function() {
-                const productId = this.dataset.productId;
-                const mapType   = this.dataset.mapType;
-                const ledgerId  = this.value;
-                const el        = this;
+        const MAP_TYPES = !{JSON.stringify(mapTypes)};
+        const LEDGERS   = !{JSON.stringify(ledgers)};
+        const MAPPINGS  = !{JSON.stringify(mappingLookup)};
 
-                el.classList.remove('saved', 'error');
-                el.classList.add('saving');
-                el.disabled = true;
+        document.querySelectorAll('.btn-configure').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const productId   = this.dataset.productId;
+                const productName = this.dataset.productName;
+                const cgst        = parseFloat(this.dataset.cgst) || 0;
 
-                fetch('/products/api/ledger-maps/' + productId + '/' + mapType, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ledger_id: ledgerId || null })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    el.classList.remove('saving');
-                    el.disabled = false;
-                    if (data.success) {
-                        el.classList.add('saved');
-                        showStatus('Saved.', 'success');
-                        setTimeout(() => el.classList.remove('saved'), 2000);
-                    } else {
-                        el.classList.add('error');
-                        showStatus('Error: ' + data.error, 'danger');
-                    }
-                })
-                .catch(function(err) {
-                    el.classList.remove('saving');
-                    el.disabled = false;
-                    el.classList.add('error');
-                    showStatus('Error: ' + err.message, 'danger');
+                document.getElementById('configureModalTitle').textContent = productName;
+
+                const container = document.getElementById('modalRows');
+                container.innerHTML = '';
+
+                const currentMaps = MAPPINGS[productId] || {};
+
+                MAP_TYPES.forEach(function(mt) {
+                    const options = LEDGERS[mt.group] || [];
+                    const currentVal = currentMaps[mt.type] || '';
+
+                    const row = document.createElement('div');
+                    row.className = 'form-group row align-items-center mb-2';
+
+                    const labelCol = document.createElement('div');
+                    labelCol.className = 'col-4';
+                    labelCol.innerHTML = '<label class="mb-0">' + mt.label + '</label>';
+
+                    const selectCol = document.createElement('div');
+                    selectCol.className = 'col-7';
+
+                    const select = document.createElement('select');
+                    select.className = 'form-control form-control-sm';
+                    select.dataset.productId = productId;
+                    select.dataset.mapType   = mt.type;
+
+                    let html = '<option value="">— Not Set —</option>';
+                    options.forEach(function(l) {
+                        const sel = String(l.ledger_id) === String(currentVal) ? ' selected' : '';
+                        html += '<option value="' + l.ledger_id + '"' + sel + '>' + l.ledger_name + '</option>';
+                    });
+                    select.innerHTML = html;
+
+                    const statusCol = document.createElement('div');
+                    statusCol.className = 'col-1 text-center';
+                    statusCol.id = 'status-' + productId + '-' + mt.type;
+
+                    select.addEventListener('change', function() {
+                        saveMapping(this, productId, mt.type, this.value, statusCol);
+                    });
+
+                    selectCol.appendChild(select);
+                    row.appendChild(labelCol);
+                    row.appendChild(selectCol);
+                    row.appendChild(statusCol);
+                    container.appendChild(row);
                 });
+
+                $('#configureModal').modal('show');
             });
         });
 
-        function showStatus(msg, type) {
-            const el = document.getElementById('saveStatus');
-            el.innerHTML = '<span class="text-' + type + ' small">' + msg + '</span>';
-            setTimeout(() => { el.innerHTML = ''; }, 3000);
+        function saveMapping(selectEl, productId, mapType, ledgerId, statusEl) {
+            selectEl.disabled = true;
+            statusEl.innerHTML = '<i class="bi bi-hourglass-split text-warning"></i>';
+
+            fetch('/products/api/ledger-maps/' + productId + '/' + mapType, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ledger_id: ledgerId || null })
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                selectEl.disabled = false;
+                if (data.success) {
+                    // Update in-memory lookup so re-opening modal shows current values
+                    if (!MAPPINGS[productId]) MAPPINGS[productId] = {};
+                    if (ledgerId) {
+                        MAPPINGS[productId][mapType] = ledgerId;
+                    } else {
+                        delete MAPPINGS[productId][mapType];
+                    }
+                    updateBadge(productId);
+                    statusEl.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                    setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
+                } else {
+                    statusEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger" title="' + data.error + '"></i>';
+                }
+            })
+            .catch(function(err) {
+                selectEl.disabled = false;
+                statusEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+            });
+        }
+
+        function updateBadge(productId) {
+            const count = Object.keys(MAPPINGS[productId] || {}).length;
+            const total = MAP_TYPES.length;
+            const btn   = document.querySelector('.btn-configure[data-product-id="' + productId + '"]');
+            if (!btn) return;
+            const row   = btn.closest('tr');
+            const cell  = row.querySelector('td:nth-child(3)');
+            if (count === 0) {
+                cell.innerHTML = '<span class="badge badge-danger">None</span>';
+            } else if (count < total) {
+                cell.innerHTML = '<span class="badge badge-warning">' + count + ' / ' + total + '</span>';
+            } else {
+                cell.innerHTML = '<span class="badge badge-success">All set</span>';
+            }
         }
