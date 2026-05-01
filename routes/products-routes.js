@@ -5,6 +5,7 @@ const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
 const ProductDao = require('../dao/product-dao');
+const ProductLedgerMapDao = require('../dao/product-ledger-map-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
@@ -231,6 +232,51 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             success: false,
             error: 'Failed to update product: ' + error.message
         });
+    }
+});
+
+// ── Product Ledger Map ────────────────────────────────────────────────────────
+
+router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const locationCode = req.user.location_code;
+    try {
+        const [products, salesLedgers, purchaseLedgers, taxLedgers] = await Promise.all([
+            ProductLedgerMapDao.getAllMappings(locationCode),
+            getLedgersByGroup(locationCode, 'Sales Accounts'),
+            getLedgersByGroup(locationCode, 'Purchase Accounts'),
+            getLedgersByGroup(locationCode, 'Duties & Taxes')
+        ]);
+        res.render('product-ledger-map', {
+            title: 'Product GL Ledger Map',
+            user: req.user,
+            config: config.APP_CONFIGS,
+            products,
+            salesLedgers,
+            purchaseLedgers,
+            taxLedgers
+        });
+    } catch (err) {
+        console.error('Error loading product ledger map:', err);
+        req.flash('error', 'Failed to load product ledger map: ' + err.message);
+        res.redirect('/products');
+    }
+});
+
+router.put('/api/ledger-maps/:productId/:mapType', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const { productId, mapType } = req.params;
+    const { ledger_id } = req.body;
+    const locationCode = req.user.location_code;
+    const updatedBy = req.user.username || req.user.Person_id;
+    try {
+        if (!ledger_id) {
+            await ProductLedgerMapDao.deleteMapping(locationCode, productId, mapType);
+        } else {
+            await ProductLedgerMapDao.upsertMapping(locationCode, productId, mapType, ledger_id, updatedBy);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error saving product ledger map:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

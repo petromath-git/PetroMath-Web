@@ -38,7 +38,6 @@ block content
                             th(scope="col") HSN Code
                             th(scope="col") Unit
                             th(scope="col") Price
-                            th(scope="col") Ledger Name
                             th(scope="col") CGST%
                             th(scope="col") SGST%
                             if user.Role === 'SuperUser'
@@ -59,7 +58,6 @@ block content
                                         .input-group-prepend
                                             span.input-group-text ₹
                                         span.form-control-plaintext= val.price
-                                td(scope="row")= val.ledger_name || '-'
                                 td(scope="row") #{val.cgst_percent}%
                                 td(scope="row") #{val.sgst_percent}%
                                 if user.Role === 'SuperUser'
@@ -186,16 +184,6 @@ block content
                                                 )
                                     .col-6
                                         .product-detail
-                                            small.text-muted Ledger
-                                            input.mobile-input.fw-bold.text-uppercase(
-                                                type="text",
-                                                id=`mobile-ledger-${index}`,
-                                                value=val.ledger_name || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
-                                            )
-                                    .col-6
-                                        .product-detail
                                             small.text-muted CGST
                                             .input-group.input-group-sm
                                                 input.mobile-input.fw-bold(
@@ -279,18 +267,6 @@ block content
                                 label.form-label Price
                                 input.form-control(type="number", name="price", step="0.01", required)
                             .col-md-6.mb-3
-                                label.form-label Sales Ledger
-                                select.form-control(name="ledger_name")
-                                    option(value="") — Not Set —
-                                    each l in salesLedgers
-                                        option(value=l.ledger_name)= l.ledger_name
-                            .col-md-6.mb-3
-                                label.form-label Purchase Ledger
-                                select.form-control(name="purchase_ledger_name")
-                                    option(value="") — Not Set —
-                                    each l in purchaseLedgers
-                                        option(value=l.ledger_name)= l.ledger_name
-                            .col-md-6.mb-3
                                 label.form-label CGST %
                                 input.form-control(type="number", name="cgst_percent", step="0.01", min="0", max="100")
                             .col-md-6.mb-3
@@ -355,18 +331,6 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input#edit-price.form-control(type="number", step="0.01")
-                            .col-md-6.mb-3
-                                label.form-label Sales Ledger
-                                select#edit-ledger-name.form-control
-                                    option(value="") — Not Set —
-                                    each l in salesLedgers
-                                        option(value=l.ledger_name)= l.ledger_name
-                            .col-md-6.mb-3
-                                label.form-label Purchase Ledger
-                                select#edit-purchase-ledger-name.form-control
-                                    option(value="") — Not Set —
-                                    each l in purchaseLedgers
-                                        option(value=l.ledger_name)= l.ledger_name
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input#edit-cgst.form-control(type="number", step="0.01", min="0", max="100")
@@ -573,8 +537,6 @@ block content
             document.getElementById('edit-hsn-code').value = product.hsn_code || '';
             document.getElementById('edit-unit').value = product.unit || '';
             document.getElementById('edit-price').value = product.price || '';
-            document.getElementById('edit-ledger-name').value = product.ledger_name || '';
-            document.getElementById('edit-purchase-ledger-name').value = product.purchase_ledger_name || '';
             document.getElementById('edit-cgst').value = product.cgst_percent || 0;
             document.getElementById('edit-sgst').value = product.sgst_percent || 0;
 
@@ -619,8 +581,6 @@ block content
                 m_product_name: document.getElementById('edit-product-name').value.toUpperCase().trim(),
                 m_product_price: document.getElementById('edit-price').value,
                 m_product_unit: document.getElementById('edit-unit').value.toUpperCase(),
-                m_product_ledger_name: ($('#edit-ledger-name').val() || '').toUpperCase(),
-                m_product_purchase_ledger_name: ($('#edit-purchase-ledger-name').val() || '').toUpperCase(),
                 m_product_cgst: document.getElementById('edit-cgst').value,
                 m_product_sgst: document.getElementById('edit-sgst').value
             };
