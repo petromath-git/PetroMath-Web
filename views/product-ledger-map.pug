@@ -1,0 +1,121 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0.text-primary Product GL Ledger Map
+            a.btn.btn-sm.btn-outline-secondary(href="/products") &larr; Back to Products
+
+        .alert.alert-info.py-2
+            i.bi.bi-info-circle.me-1
+            | Assign GL ledgers for each product. Changes auto-save on selection.
+            | Output CGST / Output SGST only apply to GST products.
+
+        div#saveStatus.mb-2(style="min-height:24px;")
+
+        .table-responsive
+            table.table.table-bordered.table-hover.table-sm#ledgerMapTable
+                thead.thead-dark
+                    tr
+                        th(style="min-width:200px;") Product
+                        th.text-center(style="width:50px;") CGST%
+                        th(style="min-width:180px;") Sales Ledger
+                        th(style="min-width:180px;") Purchase Ledger
+                        th(style="min-width:180px;") Output CGST
+                        th(style="min-width:180px;") Output SGST
+                tbody
+                    each p in products
+                        - const isGst = p.cgst_percent > 0
+                        tr(class=isGst ? '' : 'table-secondary')
+                            td
+                                strong= p.product_name
+                                if isGst
+                                    span.badge.badge-warning.ml-1 GST
+                            td.text-center= p.cgst_percent + '%'
+                            td
+                                select.form-control.form-control-sm.ledger-select(
+                                    data-product-id=p.product_id,
+                                    data-map-type="SALES")
+                                    option(value="") — Not Set —
+                                    each l in salesLedgers
+                                        option(value=l.ledger_id, selected=(p.sales_ledger_id == l.ledger_id))= l.ledger_name
+                            td
+                                select.form-control.form-control-sm.ledger-select(
+                                    data-product-id=p.product_id,
+                                    data-map-type="PURCHASE")
+                                    option(value="") — Not Set —
+                                    each l in purchaseLedgers
+                                        option(value=l.ledger_id, selected=(p.purchase_ledger_id == l.ledger_id))= l.ledger_name
+                            td
+                                if isGst
+                                    select.form-control.form-control-sm.ledger-select(
+                                        data-product-id=p.product_id,
+                                        data-map-type="OUTPUT_CGST")
+                                        option(value="") — Not Set —
+                                        each l in taxLedgers
+                                            option(value=l.ledger_id, selected=(p.output_cgst_ledger_id == l.ledger_id))= l.ledger_name
+                                else
+                                    span.text-muted.small N/A
+                            td
+                                if isGst
+                                    select.form-control.form-control-sm.ledger-select(
+                                        data-product-id=p.product_id,
+                                        data-map-type="OUTPUT_SGST")
+                                        option(value="") — Not Set —
+                                        each l in taxLedgers
+                                            option(value=l.ledger_id, selected=(p.output_sgst_ledger_id == l.ledger_id))= l.ledger_name
+                                else
+                                    span.text-muted.small N/A
+
+    style.
+        #ledgerMapTable thead th { position: sticky; top: 0; z-index: 1; }
+        .table-secondary td { color: #6c757d; }
+        select.saving { border-color: #ffc107 !important; }
+        select.saved  { border-color: #28a745 !important; }
+        select.error  { border-color: #dc3545 !important; }
+
+    script.
+        document.querySelectorAll('.ledger-select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                const productId = this.dataset.productId;
+                const mapType   = this.dataset.mapType;
+                const ledgerId  = this.value;
+                const el        = this;
+
+                el.classList.remove('saved', 'error');
+                el.classList.add('saving');
+                el.disabled = true;
+
+                fetch('/products/api/ledger-maps/' + productId + '/' + mapType, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ledger_id: ledgerId || null })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    el.classList.remove('saving');
+                    el.disabled = false;
+                    if (data.success) {
+                        el.classList.add('saved');
+                        showStatus('Saved.', 'success');
+                        setTimeout(() => el.classList.remove('saved'), 2000);
+                    } else {
+                        el.classList.add('error');
+                        showStatus('Error: ' + data.error, 'danger');
+                    }
+                })
+                .catch(function(err) {
+                    el.classList.remove('saving');
+                    el.disabled = false;
+                    el.classList.add('error');
+                    showStatus('Error: ' + err.message, 'danger');
+                });
+            });
+        });
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('saveStatus');
+            el.innerHTML = '<span class="text-' + type + ' small">' + msg + '</span>';
+            setTimeout(() => { el.innerHTML = ''; }, 3000);
+        }
