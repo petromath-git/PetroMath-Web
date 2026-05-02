@@ -1,0 +1,54 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Manual Journals
+            a.btn.btn-sm.btn-success(href="/gl/journal/new")
+                i.bi.bi-plus-lg.mr-1
+                | New Journal
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/journal")
+            .col-auto
+                label.small.mb-1 From Date
+                input.form-control.form-control-sm(type="date" name="from_date" value=fromDate)
+            .col-auto
+                label.small.mb-1 To Date
+                input.form-control.form-control-sm(type="date" name="to_date" value=toDate)
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        if !journals.length
+            .alert.alert-info.py-2 No manual journals found for this date range.
+        else
+            .table-responsive
+                table.table.table-sm.table-bordered.table-hover
+                    thead.thead-dark
+                        tr
+                            th(style="width:90px") Date
+                            th(style="width:100px") Voucher No
+                            th(style="width:80px") Type
+                            th Narration
+                            th.text-right(style="width:120px") Amount (₹)
+                            th(style="width:90px") Posted By
+                            th.text-center(style="width:60px")
+                    tbody
+                        each j in journals
+                            tr(class=(j.is_reversal==='Y'?'table-warning':''))
+                                td.small= j.voucher_date
+                                td.small
+                                    = j.voucher_no
+                                    if j.is_reversal === 'Y'
+                                        |
+                                        span.badge.badge-warning REV
+                                td.text-center
+                                    - const tc = {JOURNAL:'secondary',PAYMENT:'danger',RECEIPT:'info',CONTRA:'dark'}[j.voucher_type]||'secondary'
+                                    span.badge(class='badge-'+tc)= j.voucher_type
+                                td.small= j.narration
+                                td.text-right.small= parseFloat(j.total_amount).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})
+                                td.small= j.posted_by
+                                td.text-center
+                                    a.btn.btn-outline-secondary.btn-sm(href='/gl/journal/'+j.voucher_id title="View")
+                                        i.bi.bi-eye

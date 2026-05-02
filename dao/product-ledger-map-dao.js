@@ -1,9 +1,6 @@
 const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 
-// All map types the accounting engine supports — add new types here only
-const VALID_MAP_TYPES = ['SALES', 'PURCHASE', 'OUTPUT_CGST', 'OUTPUT_SGST', 'INPUT_CGST', 'INPUT_SGST'];
-
 module.exports = {
 
     // Returns one row per product with all current mapping ledger IDs
@@ -24,6 +21,16 @@ module.exports = {
         });
     },
 
+    // Returns map type definitions from m_lookup — drives the UI modal rows
+    getMapTypes: async () => {
+        return db.sequelize.query(`
+            SELECT tag AS type, description AS label, attribute1 AS \`group\`
+            FROM m_lookup
+            WHERE lookup_type = 'ProductMapType'
+            ORDER BY lookup_id
+        `, { type: QueryTypes.SELECT });
+    },
+
     // Returns flat rows (product_id, map_type, ledger_id) — used to build the modal lookup
     getAllMappingsRaw: async (locationCode) => {
         return db.sequelize.query(`
@@ -37,9 +44,6 @@ module.exports = {
     },
 
     upsertMapping: async (locationCode, productId, mapType, ledgerId, updatedBy) => {
-        if (!VALID_MAP_TYPES.includes(mapType)) {
-            throw new Error(`Invalid map_type: ${mapType}`);
-        }
         await db.sequelize.query(`
             INSERT INTO gl_product_ledger_map
                 (location_code, product_id, map_type, ledger_id, created_by, updated_by)
@@ -55,9 +59,6 @@ module.exports = {
     },
 
     deleteMapping: async (locationCode, productId, mapType) => {
-        if (!VALID_MAP_TYPES.includes(mapType)) {
-            throw new Error(`Invalid map_type: ${mapType}`);
-        }
         await db.sequelize.query(`
             DELETE FROM gl_product_ledger_map
             WHERE location_code = :locationCode

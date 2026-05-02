@@ -1,0 +1,257 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0= title
+            .d-flex.align-items-center
+                if voucher && !readOnly
+                    span already in read-only
+                if readOnly && voucher && voucher.is_reversal !== 'Y'
+                    button.btn.btn-sm.btn-warning.mr-2#btnReverse(data-id=voucher.voucher_id)
+                        i.bi.bi-arrow-counterclockwise.mr-1
+                        | Reverse
+                a.btn.btn-sm.btn-outline-secondary(href="/gl/journal") &larr; Back
+
+        if readOnly && voucher
+            .row.mb-3
+                .col-auto
+                    .small.text-muted Date
+                    strong= voucher.fmt_date
+                .col-auto
+                    .small.text-muted Voucher No
+                    strong= voucher.voucher_no
+                .col-auto
+                    .small.text-muted Type
+                    - const tc = {JOURNAL:'secondary',PAYMENT:'danger',RECEIPT:'info',CONTRA:'dark'}[voucher.voucher_type]||'secondary'
+                    span.badge(class='badge-'+tc)= voucher.voucher_type
+                if voucher.reversal_of_no
+                    .col-auto
+                        .small.text-muted Reversal of
+                        strong= voucher.reversal_of_no
+                .col-12.mt-1
+                    .small.text-muted Narration
+                    = voucher.narration
+
+        else
+            .row.mb-3
+                .col-md-2
+                    label.small.mb-1 Date *
+                    input.form-control.form-control-sm#voucherDate(type="date" value=voucherDate)
+                .col-md-2
+                    label.small.mb-1 Type
+                    select.form-control.form-control-sm#voucherType
+                        each vt in MANUAL_JOURNAL_TYPES
+                            option(value=vt)= vt
+                .col-md-6
+                    label.small.mb-1 Narration
+                    input.form-control.form-control-sm#narration(type="text" placeholder="Purpose of this journal entry")
+
+        .table-responsive.mt-3
+            table.table.table-sm.table-bordered#linesTable
+                thead.thead-dark
+                    tr
+                        th(style="width:30px") #
+                        th Ledger
+                        th.text-right(style="width:130px") DR (₹)
+                        th.text-right(style="width:130px") CR (₹)
+                        th Narration
+                        if !readOnly
+                            th.text-center(style="width:40px")
+                tbody#linesBody
+                    if readOnly
+                        each line in lines
+                            tr
+                                td.small.text-muted= line.line_no
+                                td.small= line.ledger_name
+                                td.text-right.small= line.dr_amount > 0 ? parseFloat(line.dr_amount).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''
+                                td.text-right.small= line.cr_amount > 0 ? parseFloat(line.cr_amount).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''
+                                td.small= line.narration || ''
+                tfoot
+                    tr.font-weight-bold.bg-light
+                        td(colspan="2") Total
+                        td.text-right#totalDr
+                            if readOnly
+                                = lines.reduce((s,l)=>s+parseFloat(l.dr_amount||0),0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})
+                            else
+                                | 0.00
+                        td.text-right#totalCr
+                            if readOnly
+                                = lines.reduce((s,l)=>s+parseFloat(l.cr_amount||0),0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})
+                            else
+                                | 0.00
+                        td(colspan=readOnly ? '1' : '2')
+                            if !readOnly
+                                span#balanceStatus
+
+        if !readOnly
+            .mt-2
+                button.btn.btn-sm.btn-outline-primary.mr-2#btnAddRow
+                    i.bi.bi-plus-lg.mr-1
+                    | Add Row
+                button.btn.btn-success.ml-auto#btnSave(disabled)
+                    i.bi.bi-save.mr-1
+                    | Save Journal
+
+    if !readOnly
+        script.
+            let rowCount = 0;
+
+            function fmtNum(n) {
+                return Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+            }
+
+            function addRow(ledgerId, ledgerName, drAmt, crAmt, lineNarration) {
+                rowCount++;
+                const idx = rowCount;
+                const tr  = document.createElement('tr');
+                tr.dataset.rowIdx = idx;
+                tr.innerHTML = `
+                    <td class="small text-muted align-middle">${idx}</td>
+                    <td>
+                        <select class="form-control form-control-sm ledger-select" name="ledger_${idx}" style="width:100%">
+                            ${ledgerId ? `<option value="${ledgerId}" selected>${ledgerName}</option>` : '<option value="">— Search ledger —</option>'}
+                        </select>
+                    </td>
+                    <td><input type="number" class="form-control form-control-sm text-right dr-amt" min="0" step="0.01" value="${drAmt||''}" placeholder="0.00"></td>
+                    <td><input type="number" class="form-control form-control-sm text-right cr-amt" min="0" step="0.01" value="${crAmt||''}" placeholder="0.00"></td>
+                    <td><input type="text" class="form-control form-control-sm line-narr" value="${lineNarration||''}" placeholder="(optional)"></td>
+                    <td class="text-center align-middle">
+                        <button type="button" class="btn btn-outline-danger btn-sm btn-remove-row">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>`;
+
+                document.getElementById('linesBody').appendChild(tr);
+
+                // Select2 for this row's ledger
+                $(tr).find('.ledger-select').select2({
+                    placeholder: '— Search ledger —',
+                    allowClear: true,
+                    minimumInputLength: 1,
+                    dropdownParent: $('body'),
+                    ajax: {
+                        url: '/gl/api/ledgers/search',
+                        dataType: 'json',
+                        delay: 250,
+                        data: (p) => ({ q: p.term }),
+                        processResults: (data) => ({
+                            results: data.map(l => ({ id: l.ledger_id, text: l.ledger_name }))
+                        })
+                    }
+                });
+
+                // DR clears CR and vice versa
+                $(tr).find('.dr-amt').on('input', function() {
+                    if (this.value) $(tr).find('.cr-amt').val('');
+                    recalc();
+                });
+                $(tr).find('.cr-amt').on('input', function() {
+                    if (this.value) $(tr).find('.dr-amt').val('');
+                    recalc();
+                });
+
+                $(tr).find('.btn-remove-row').on('click', function() {
+                    if (document.querySelectorAll('#linesBody tr').length <= 2) {
+                        alert('At least 2 lines are required.');
+                        return;
+                    }
+                    tr.remove();
+                    recalc();
+                });
+
+                recalc();
+            }
+
+            function recalc() {
+                let totalDr = 0, totalCr = 0;
+                document.querySelectorAll('#linesBody tr').forEach(function(tr) {
+                    totalDr += parseFloat(tr.querySelector('.dr-amt').value || 0);
+                    totalCr += parseFloat(tr.querySelector('.cr-amt').value || 0);
+                });
+                const diff = Math.abs(totalDr - totalCr);
+                document.getElementById('totalDr').textContent = fmtNum(totalDr);
+                document.getElementById('totalCr').textContent = fmtNum(totalCr);
+                const status = document.getElementById('balanceStatus');
+                if (diff < 0.005 && totalDr > 0) {
+                    status.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle-fill"></i> Balanced</span>';
+                    document.getElementById('btnSave').disabled = false;
+                } else {
+                    status.innerHTML = diff < 0.005 ? '' :
+                        `<span class="text-danger small">Diff ₹${fmtNum(diff)}</span>`;
+                    document.getElementById('btnSave').disabled = true;
+                }
+            }
+
+            document.getElementById('btnAddRow').addEventListener('click', () => addRow());
+
+            document.getElementById('btnSave').addEventListener('click', async function() {
+                const lines = [];
+                let valid = true;
+                document.querySelectorAll('#linesBody tr').forEach(function(tr) {
+                    const ledgerId  = $(tr).find('.ledger-select').val();
+                    const drAmount  = parseFloat(tr.querySelector('.dr-amt').value || 0);
+                    const crAmount  = parseFloat(tr.querySelector('.cr-amt').value || 0);
+                    const narration = tr.querySelector('.line-narr').value;
+                    if (!ledgerId) { valid = false; return; }
+                    lines.push({ ledger_id: ledgerId, dr_amount: drAmount, cr_amount: crAmount, narration });
+                });
+                if (!valid) { alert('Please select a ledger for every line.'); return; }
+
+                const payload = {
+                    voucher_type: document.getElementById('voucherType').value,
+                    voucher_date: document.getElementById('voucherDate').value,
+                    narration:    document.getElementById('narration').value,
+                    lines
+                };
+
+                this.disabled = true;
+                this.textContent = 'Saving…';
+
+                try {
+                    const resp = await fetch('/gl/api/journal', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await resp.json();
+                    if (data.success) {
+                        window.location.href = '/gl/journal/' + data.voucher_id;
+                    } else {
+                        alert('Error: ' + data.error);
+                        this.disabled = false;
+                        this.textContent = 'Save Journal';
+                    }
+                } catch (e) {
+                    alert('Network error. Please try again.');
+                    this.disabled = false;
+                    this.textContent = 'Save Journal';
+                }
+            });
+
+            // Seed 2 blank rows on load
+            addRow(); addRow();
+
+    if readOnly && voucher && voucher.is_reversal !== 'Y'
+        script.
+            document.getElementById('btnReverse') && document.getElementById('btnReverse').addEventListener('click', async function() {
+                if (!confirm('Create a reversal entry for ' + this.dataset.id + '?')) return;
+                this.disabled = true;
+                this.textContent = 'Reversing…';
+                try {
+                    const resp = await fetch('/gl/api/journal/' + this.dataset.id + '/reverse', { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        window.location.href = '/gl/journal/' + data.voucher_id;
+                    } else {
+                        alert('Error: ' + data.error);
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-arrow-counterclockwise mr-1"></i> Reverse';
+                    }
+                } catch (e) {
+                    alert('Network error.');
+                    this.disabled = false;
+                }
+            });

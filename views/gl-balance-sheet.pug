@@ -1,0 +1,90 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Balance Sheet
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/profit-loss") &larr; P&amp;L
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/balance-sheet")
+            .col-auto
+                label.small.mb-1 As of Date
+                input.form-control.form-control-sm(type="date" name="as_of_date" value=asOfDate)
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        - const fmt = (n) => Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+        if isBalanced
+            .alert.alert-success.py-2.mb-2
+                i.bi.bi-check-circle-fill.mr-1
+                | Balance Sheet balances &mdash; Assets = Liabilities + P&amp;L = ₹#{fmt(totalAssets)}
+        else
+            .alert.alert-danger.py-2.mb-2
+                i.bi.bi-exclamation-triangle-fill.mr-1
+                | Out of balance &mdash; Assets ₹#{fmt(totalAssets)} vs Liabilities + P&amp;L ₹#{fmt(totalLiabilitiesAndPL)} (diff ₹#{Math.abs(totalAssets - totalLiabilitiesAndPL).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})})
+
+        .row
+            //- LEFT: Assets
+            .col-md-6
+                h6.border-bottom.pb-1 Assets
+                if !assetGroups.length
+                    p.text-muted.small No asset entries up to this date.
+                else
+                    table.table.table-sm.table-bordered#bsAssetTable
+                        tbody
+                            each g in assetGroups
+                                tr.group-header
+                                    td.font-weight-bold(colspan="2")= g.group_name
+                                each row in g.rows
+                                    tr
+                                        td.pl-4
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + asOfDate.substring(0,4) + '-04-01&to_date=' + asOfDate)= row.ledger_name
+                                        td.text-right.small= fmt(row.amount)
+                                tr.group-subtotal
+                                    td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
+                                    td.text-right.font-weight-bold.small= fmt(g.subtotal)
+                        tfoot
+                            tr.font-weight-bold.table-primary
+                                td Total Assets
+                                td.text-right= fmt(totalAssets)
+
+            //- RIGHT: Liabilities + P&L
+            .col-md-6
+                h6.border-bottom.pb-1 Liabilities &amp; Equity
+                table.table.table-sm.table-bordered#bsLiabTable
+                    tbody
+                        if liabilityGroups.length
+                            each g in liabilityGroups
+                                tr.group-header
+                                    td.font-weight-bold(colspan="2")= g.group_name
+                                each row in g.rows
+                                    tr
+                                        td.pl-4
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + asOfDate.substring(0,4) + '-04-01&to_date=' + asOfDate)= row.ledger_name
+                                        td.text-right.small= fmt(row.amount)
+                                tr.group-subtotal
+                                    td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
+                                    td.text-right.font-weight-bold.small= fmt(g.subtotal)
+                        //- P&L rolled in as retained surplus/deficit
+                        tr.group-header
+                            td.font-weight-bold(colspan="2") Retained Earnings
+                        tr(class=(netPL >= 0 ? '' : 'table-warning'))
+                            td.pl-4
+                                a(href='/gl/profit-loss?from_date=' + asOfDate.substring(0,4) + '-04-01&to_date=' + asOfDate)
+                                    = netPL >= 0 ? 'Net Profit (from inception)' : 'Net Loss (from inception)'
+                            td.text-right.small(class=(netPL >= 0 ? '' : 'text-danger'))= fmt(netPL)
+                        tr.group-subtotal
+                            td.text-right.font-weight-bold.text-muted.small Retained Earnings Total
+                            td.text-right.font-weight-bold.small= fmt(netPL)
+                    tfoot
+                        tr.font-weight-bold.table-primary
+                            td Total Liabilities &amp; Equity
+                            td.text-right= fmt(totalLiabilitiesAndPL)
+
+    style.
+        #bsAssetTable, #bsLiabTable { font-size: 0.82rem; }
+        .group-header td  { background-color: #e9ecef; }
+        .group-subtotal td { background-color: #f8f9fa; border-top: 2px solid #dee2e6 !important; }

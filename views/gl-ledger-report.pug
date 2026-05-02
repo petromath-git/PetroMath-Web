@@ -1,0 +1,125 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Ledger Report
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/day-book") &larr; Day Book
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/ledger")
+            .col-md-4
+                label.small.mb-1 Ledger
+                select#ledgerSelect.form-control.form-control-sm(name="ledger_id")
+                    if ledger
+                        option(value=ledger.ledger_id selected)= ledger.ledger_name
+                    else
+                        option(value="") — Search ledger —
+            .col-auto
+                label.small.mb-1 From Date
+                input.form-control.form-control-sm(type="date" name="from_date" value=fromDate)
+            .col-auto
+                label.small.mb-1 To Date
+                input.form-control.form-control-sm(type="date" name="to_date" value=toDate)
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        if !ledger
+            .alert.alert-info.py-2 Select a ledger to view its account statement.
+        else
+            .mb-2
+                span.font-weight-bold= ledger.ledger_name
+                span.text-muted.ml-2.small= ledger.group_name + ' — ' + ledger.group_nature
+
+            - const fmt = (n) => Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+            - const balLabel = (n) => n >= 0 ? fmt(n) + ' Dr' : fmt(n) + ' Cr'
+
+            .row.mb-3
+                .col-3
+                    .card.text-center.py-2
+                        .small.text-muted Opening Balance
+                        strong(class=(obNet >= 0 ? 'text-dark' : 'text-danger'))= balLabel(obNet)
+                .col-3
+                    .card.text-center.py-2
+                        .small.text-muted Period DR (₹)
+                        strong= fmt(periodDr)
+                .col-3
+                    .card.text-center.py-2
+                        .small.text-muted Period CR (₹)
+                        strong= fmt(periodCr)
+                .col-3
+                    .card.text-center.py-2
+                        .small.text-muted Closing Balance
+                        strong(class=(closingBalance >= 0 ? 'text-dark' : 'text-danger'))= balLabel(closingBalance)
+
+            if !entries.length
+                .alert.alert-info.py-2 No transactions in this date range.
+            else
+                .table-responsive
+                    table.table.table-bordered.table-sm#ledgerTable
+                        thead.thead-dark
+                            tr
+                                th(style="width:90px") Date
+                                th(style="width:95px") Voucher No
+                                th(style="width:80px") Type
+                                th Particulars
+                                th.text-right(style="width:110px") DR (₹)
+                                th.text-right(style="width:110px") CR (₹)
+                                th.text-right(style="width:120px") Balance
+                        tbody
+                            tr.table-light.font-weight-bold
+                                td(colspan="6") Opening Balance
+                                td.text-right= balLabel(obNet)
+                            each e in entries
+                                tr(class=(e.is_reversal === 'Y' ? 'table-warning' : ''))
+                                    td.small= e.voucher_date
+                                    td.small
+                                        = e.voucher_no
+                                        if e.is_reversal === 'Y'
+                                            |
+                                            span.badge.badge-warning REV
+                                    td.text-center
+                                        - const tc = {SALES:'success',PURCHASE:'primary',PAYMENT:'danger',RECEIPT:'info',JOURNAL:'secondary',CONTRA:'dark'}[e.voucher_type] || 'secondary'
+                                        span.badge(class='badge-' + tc)= e.voucher_type
+                                    td.small(style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title=e.narration)= e.narration
+                                    td.text-right.small
+                                        if e.dr_amount > 0
+                                            = fmt(e.dr_amount)
+                                    td.text-right.small
+                                        if e.cr_amount > 0
+                                            = fmt(e.cr_amount)
+                                    td.text-right.small.font-weight-bold= balLabel(e.balance)
+                        tfoot
+                            tr.font-weight-bold.bg-light
+                                td(colspan="4") Closing Balance
+                                td.text-right= fmt(periodDr)
+                                td.text-right= fmt(periodCr)
+                                td.text-right= balLabel(closingBalance)
+
+    script.
+        $(document).ready(function() {
+            $('#ledgerSelect').select2({
+                placeholder: '— Search ledger —',
+                allowClear: true,
+                minimumInputLength: 1,
+                ajax: {
+                    url: '/gl/api/ledgers/search',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function(params) {
+                        return { q: params.term };
+                    },
+                    processResults: function(data) {
+                        return {
+                            results: data.map(function(l) {
+                                return { id: l.ledger_id, text: l.ledger_name };
+                            })
+                        };
+                    }
+                }
+            });
+        });
+
+    style.
+        #ledgerTable { font-size: 0.8rem; }
