@@ -1,0 +1,134 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Ledger Groups
+            .d-flex.gap-2
+                a.btn.btn-sm.btn-outline-secondary.mr-2(href="/gl/ledgers") Ledgers &rarr;
+                button.btn.btn-sm.btn-success#btnAddGroup
+                    i.bi.bi-plus-lg.mr-1
+                    | Add Group
+
+        if messages && messages.error && messages.error.length
+            .alert.alert-danger.py-2= messages.error[0]
+
+        - const natures = ['ASSETS','LIABILITIES','INCOME','EXPENSES']
+        - const natureBadge = { ASSETS:'primary', LIABILITIES:'warning', INCOME:'success', EXPENSES:'danger' }
+
+        each nat in natures
+            - const grps = groups.filter(g => g.group_nature === nat)
+            if grps.length
+                h6.border-bottom.pb-1.mt-3
+                    span.badge(class='badge-'+natureBadge[nat])= nat
+                .table-responsive.mb-2
+                    table.table.table-sm.table-bordered
+                        thead.thead-light
+                            tr
+                                th Group Name
+                                th.text-center(style="width:120px") Active Ledgers
+                                th.text-center(style="width:80px")
+                        tbody
+                            each g in grps
+                                tr
+                                    td= g.group_name
+                                    td.text-center.small= g.ledger_count
+                                    td.text-center
+                                        button.btn.btn-outline-primary.btn-sm.btn-edit-group.mr-1(
+                                            data-id=g.group_id
+                                            data-name=g.group_name
+                                            data-nature=g.group_nature
+                                            title="Edit")
+                                            i.bi.bi-pencil
+                                        if g.ledger_count == 0
+                                            button.btn.btn-outline-danger.btn-sm.btn-del-group(
+                                                data-id=g.group_id
+                                                data-name=g.group_name
+                                                title="Delete")
+                                                i.bi.bi-trash
+
+    //- Add / Edit Modal
+    .modal.fade#groupModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#groupModalTitle Add Ledger Group
+                    button.close(data-dismiss="modal" aria-label="Close")
+                        span &times;
+                .modal-body
+                    .form-group
+                        label.small Group Name *
+                        input.form-control.form-control-sm#gName(type="text" maxlength="100")
+                    .form-group
+                        label.small Nature *
+                        select.form-control.form-control-sm#gNature
+                            option(value="ASSETS") ASSETS
+                            option(value="LIABILITIES") LIABILITIES
+                            option(value="INCOME") INCOME
+                            option(value="EXPENSES") EXPENSES
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-primary.btn-sm#btnSaveGroup Save
+
+    script.
+        let editingGroupId = null;
+
+        document.getElementById('btnAddGroup').addEventListener('click', function() {
+            editingGroupId = null;
+            document.getElementById('groupModalTitle').textContent = 'Add Ledger Group';
+            document.getElementById('gName').value = '';
+            document.getElementById('gNature').value = 'ASSETS';
+            $('#groupModal').modal('show');
+        });
+
+        document.querySelectorAll('.btn-edit-group').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                editingGroupId = this.dataset.id;
+                document.getElementById('groupModalTitle').textContent = 'Edit Ledger Group';
+                document.getElementById('gName').value = this.dataset.name;
+                document.getElementById('gNature').value = this.dataset.nature;
+                $('#groupModal').modal('show');
+            });
+        });
+
+        document.getElementById('btnSaveGroup').addEventListener('click', async function() {
+            const name   = document.getElementById('gName').value.trim();
+            const nature = document.getElementById('gNature').value;
+            if (!name) { alert('Group name is required.'); return; }
+
+            this.disabled = true;
+            try {
+                const url    = editingGroupId ? '/gl/api/ledger-groups/' + editingGroupId : '/gl/api/ledger-groups';
+                const method = editingGroupId ? 'PUT' : 'POST';
+                const resp   = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ group_name: name, group_nature: nature })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                    this.disabled = false;
+                }
+            } catch (e) {
+                alert('Network error.');
+                this.disabled = false;
+            }
+        });
+
+        document.querySelectorAll('.btn-del-group').forEach(function(btn) {
+            btn.addEventListener('click', async function() {
+                if (!confirm('Delete group "' + this.dataset.name + '"?')) return;
+                const resp = await fetch('/gl/api/ledger-groups/' + this.dataset.id, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        });

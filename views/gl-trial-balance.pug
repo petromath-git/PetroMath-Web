@@ -10,8 +10,16 @@ block content
 
         form.row.align-items-end.mb-3(method="GET" action="/gl/trial-balance")
             .col-auto
+                label.small.mb-1 Quick Select
+                select.form-control.form-control-sm#glPeriodAsOf(onchange="glSetAsOf('glAsOf')")
+                    option(value="today") Today
+                    option(value="end_last_month") End of Last Month
+                    option(value="end_this_fy") End of This FY
+                    option(value="end_last_fy") End of Last FY
+                    option(value="custom" selected) Custom
+            .col-auto
                 label.small.mb-1 As of Date
-                input.form-control.form-control-sm(type="date" name="as_of_date" value=asOfDate)
+                input.form-control.form-control-sm#glAsOf(type="date" name="as_of_date" value=asOfDate)
             .col-auto.align-self-end
                 .form-check.mb-1
                     input.form-check-input#showZero(type="checkbox" name="show_zero" value="1" checked=showZero)

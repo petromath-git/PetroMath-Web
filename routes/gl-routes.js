@@ -826,6 +826,175 @@ router.post('/api/journal/:id/reverse', [isLoginEnsured, security.isAdmin()], as
     }
 });
 
+// ── Ledger Groups ─────────────────────────────────────────────────────────────
+// GET /gl/ledger-groups
+
+router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const groups = await db.sequelize.query(`
+            SELECT g.group_id, g.group_name, g.group_nature,
+                   COUNT(l.ledger_id) AS ledger_count
+            FROM gl_ledger_groups g
+            LEFT JOIN gl_ledgers l ON l.group_id = g.group_id AND l.active_flag = 'Y'
+            WHERE g.location_code = :locationCode
+            GROUP BY g.group_id
+            ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+
+        res.render('gl-ledger-groups', {
+            title:    'Ledger Groups',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            groups,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Ledger groups error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/day-book');
+    }
+});
+
+router.post('/api/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { group_name, group_nature } = req.body;
+    const NATURES = ['ASSETS', 'LIABILITIES', 'INCOME', 'EXPENSES'];
+    if (!group_name || !NATURES.includes(group_nature))
+        return res.status(400).json({ success: false, error: 'group_name and valid group_nature are required' });
+    try {
+        const [[exists]] = await db.sequelize.query(
+            `SELECT group_id FROM gl_ledger_groups WHERE location_code=:locationCode AND group_name=:group_name LIMIT 1`,
+            { replacements: { locationCode, group_name }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (exists) return res.status(400).json({ success: false, error: 'A group with this name already exists' });
+
+        const [groupId] = await db.sequelize.query(`
+            INSERT INTO gl_ledger_groups (location_code, group_name, group_nature, created_by, updated_by)
+            VALUES (:locationCode, :group_name, :group_nature, :user, :user)
+        `, { replacements: { locationCode, group_name, group_nature, user: req.user.username }, type: db.Sequelize.QueryTypes.INSERT });
+        res.json({ success: true, group_id: groupId });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.put('/api/ledger-groups/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const groupId = parseInt(req.params.id);
+    const { group_name, group_nature } = req.body;
+    const NATURES = ['ASSETS', 'LIABILITIES', 'INCOME', 'EXPENSES'];
+    if (!group_name || !NATURES.includes(group_nature))
+        return res.status(400).json({ success: false, error: 'group_name and valid group_nature are required' });
+    try {
+        await db.sequelize.query(`
+            UPDATE gl_ledger_groups SET group_name=:group_name, group_nature=:group_nature, updated_by=:user
+            WHERE group_id=:groupId AND location_code=:locationCode
+        `, { replacements: { groupId, locationCode, group_name, group_nature, user: req.user.username }, type: db.Sequelize.QueryTypes.UPDATE });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.delete('/api/ledger-groups/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const groupId = parseInt(req.params.id);
+    try {
+        const [rows] = await db.sequelize.query(
+            `SELECT COUNT(*) AS cnt FROM gl_ledgers WHERE group_id=:groupId`,
+            { replacements: { groupId }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (rows.cnt > 0)
+            return res.status(400).json({ success: false, error: `Cannot delete — ${rows.cnt} ledger(s) assigned to this group` });
+        await db.sequelize.query(
+            `DELETE FROM gl_ledger_groups WHERE group_id=:groupId AND location_code=:locationCode`,
+            { replacements: { groupId, locationCode }, type: db.Sequelize.QueryTypes.DELETE }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ── Ledgers ───────────────────────────────────────────────────────────────────
+// GET /gl/ledgers
+
+router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const [ledgers, groups] = await Promise.all([
+            db.sequelize.query(`
+                SELECT l.ledger_id, l.ledger_name, l.active_flag,
+                       g.group_id, g.group_name, g.group_nature
+                FROM gl_ledgers l
+                JOIN gl_ledger_groups g ON g.group_id = l.group_id
+                WHERE l.location_code = :locationCode
+                ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name, l.ledger_name
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+            db.sequelize.query(`
+                SELECT group_id, group_name, group_nature
+                FROM gl_ledger_groups
+                WHERE location_code = :locationCode
+                ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
+        ]);
+
+        res.render('gl-ledgers', {
+            title:    'Ledgers',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            ledgers,
+            groups,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Ledgers error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/day-book');
+    }
+});
+
+router.post('/api/ledger', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { ledger_name, group_id } = req.body;
+    if (!ledger_name || !group_id) return res.status(400).json({ success: false, error: 'ledger_name and group_id are required' });
+    try {
+        const [exists] = await db.sequelize.query(
+            `SELECT ledger_id FROM gl_ledgers WHERE location_code=:locationCode AND ledger_name=:ledger_name LIMIT 1`,
+            { replacements: { locationCode, ledger_name }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (exists) return res.status(400).json({ success: false, error: 'A ledger with this name already exists' });
+
+        const [ledgerId] = await db.sequelize.query(`
+            INSERT INTO gl_ledgers (location_code, ledger_name, group_id, active_flag, created_by, updated_by)
+            VALUES (:locationCode, :ledger_name, :group_id, 'Y', :user, :user)
+        `, { replacements: { locationCode, ledger_name, group_id: parseInt(group_id), user: req.user.username }, type: db.Sequelize.QueryTypes.INSERT });
+        res.json({ success: true, ledger_id: ledgerId });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const ledgerId = parseInt(req.params.id);
+    const { ledger_name, group_id, active_flag } = req.body;
+    if (!ledger_name || !group_id) return res.status(400).json({ success: false, error: 'ledger_name and group_id are required' });
+    try {
+        await db.sequelize.query(`
+            UPDATE gl_ledgers SET ledger_name=:ledger_name, group_id=:group_id, active_flag=:active_flag, updated_by=:user
+            WHERE ledger_id=:ledgerId AND location_code=:locationCode
+        `, {
+            replacements: { ledgerId, locationCode, ledger_name, group_id: parseInt(group_id), active_flag: active_flag === 'Y' ? 'Y' : 'N', user: req.user.username },
+            type: db.Sequelize.QueryTypes.UPDATE
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ── GL Control ────────────────────────────────────────────────────────────────
 // GET /gl/control — admin dashboard: events monitor + create accounting + generate events
 

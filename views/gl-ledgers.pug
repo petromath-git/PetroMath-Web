@@ -1,0 +1,130 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Ledgers
+            .d-flex.gap-2
+                a.btn.btn-sm.btn-outline-secondary.mr-2(href="/gl/ledger-groups") &larr; Groups
+                button.btn.btn-sm.btn-success#btnAddLedger
+                    i.bi.bi-plus-lg.mr-1
+                    | Add Ledger
+
+        if messages && messages.error && messages.error.length
+            .alert.alert-danger.py-2= messages.error[0]
+
+        - const natures = ['ASSETS','LIABILITIES','INCOME','EXPENSES']
+        - const natureBadge = { ASSETS:'primary', LIABILITIES:'warning', INCOME:'success', EXPENSES:'danger' }
+
+        - const byNature = {}
+        - natures.forEach(n => { byNature[n] = {} })
+        - ledgers.forEach(function(l) { if (!byNature[l.group_nature]) byNature[l.group_nature] = {}; if (!byNature[l.group_nature][l.group_name]) byNature[l.group_nature][l.group_name] = []; byNature[l.group_nature][l.group_name].push(l); })
+
+        each nat in natures
+            - const grpMap = byNature[nat]
+            - const grpNames = Object.keys(grpMap)
+            if grpNames.length
+                h6.border-bottom.pb-1.mt-3
+                    span.badge(class='badge-'+natureBadge[nat])= nat
+                each grpName in grpNames
+                    h6.small.text-muted.mt-2.mb-1= grpName
+                    .table-responsive.mb-1
+                        table.table.table-sm.table-bordered
+                            tbody
+                                each l in grpMap[grpName]
+                                    tr(class=(l.active_flag === 'N' ? 'table-secondary text-muted' : ''))
+                                        td= l.ledger_name
+                                        td.text-center(style="width:60px")
+                                            if l.active_flag === 'N'
+                                                span.badge.badge-secondary Inactive
+                                        td.text-center(style="width:80px")
+                                            button.btn.btn-outline-primary.btn-sm.btn-edit-ledger(
+                                                data-id=l.ledger_id
+                                                data-name=l.ledger_name
+                                                data-group=l.group_id
+                                                data-active=l.active_flag
+                                                title="Edit")
+                                                i.bi.bi-pencil
+
+    //- Add / Edit Modal
+    .modal.fade#ledgerModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#ledgerModalTitle Add Ledger
+                    button.close(data-dismiss="modal" aria-label="Close")
+                        span &times;
+                .modal-body
+                    .form-group
+                        label.small Ledger Name *
+                        input.form-control.form-control-sm#lName(type="text" maxlength="150")
+                    .form-group
+                        label.small Group *
+                        select.form-control.form-control-sm#lGroup
+                            each g in groups
+                                option(value=g.group_id)= g.group_name + ' (' + g.group_nature + ')'
+                    .form-group#lActiveWrap
+                        .form-check
+                            input.form-check-input#lActive(type="checkbox" value="Y")
+                            label.form-check-label.small(for="lActive") Active
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-primary.btn-sm#btnSaveLedger Save
+
+    script.
+        let editingLedgerId = null;
+
+        document.getElementById('btnAddLedger').addEventListener('click', function() {
+            editingLedgerId = null;
+            document.getElementById('ledgerModalTitle').textContent = 'Add Ledger';
+            document.getElementById('lName').value = '';
+            document.getElementById('lGroup').selectedIndex = 0;
+            document.getElementById('lActive').checked = true;
+            document.getElementById('lActiveWrap').style.display = 'none';
+            $('#ledgerModal').modal('show');
+        });
+
+        document.querySelectorAll('.btn-edit-ledger').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                editingLedgerId = this.dataset.id;
+                document.getElementById('ledgerModalTitle').textContent = 'Edit Ledger';
+                document.getElementById('lName').value = this.dataset.name;
+                document.getElementById('lGroup').value = this.dataset.group;
+                document.getElementById('lActive').checked = this.dataset.active === 'Y';
+                document.getElementById('lActiveWrap').style.display = '';
+                $('#ledgerModal').modal('show');
+            });
+        });
+
+        document.getElementById('btnSaveLedger').addEventListener('click', async function() {
+            const name      = document.getElementById('lName').value.trim();
+            const group_id  = document.getElementById('lGroup').value;
+            const active    = document.getElementById('lActive').checked ? 'Y' : 'N';
+            if (!name) { alert('Ledger name is required.'); return; }
+
+            this.disabled = true;
+            try {
+                const url    = editingLedgerId ? '/gl/api/ledger/' + editingLedgerId : '/gl/api/ledger';
+                const method = editingLedgerId ? 'PUT' : 'POST';
+                const body   = { ledger_name: name, group_id };
+                if (editingLedgerId) body.active_flag = active;
+
+                const resp = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                    this.disabled = false;
+                }
+            } catch (e) {
+                alert('Network error.');
+                this.disabled = false;
+            }
+        });
