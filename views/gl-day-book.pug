@@ -1,0 +1,89 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Day Book
+            a.btn.btn-sm.btn-outline-secondary(href="/home") &larr; Back
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/day-book")
+            .col-auto
+                label.small.mb-1 From Date
+                input.form-control.form-control-sm(type="date" name="from_date" value=fromDate)
+            .col-auto
+                label.small.mb-1 To Date
+                input.form-control.form-control-sm(type="date" name="to_date" value=toDate)
+            .col-auto
+                label.small.mb-1 Type
+                select.form-control.form-control-sm(name="voucher_type")
+                    option(value="" selected=!selectedType) All Types
+                    each vt in VOUCHER_TYPES
+                        option(value=vt selected=(selectedType === vt))= vt
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        .row.mb-3
+            .col-4
+                .card.text-center.py-2
+                    .small.text-muted Vouchers
+                    strong= vouchers.length
+            .col-4
+                .card.text-center.py-2
+                    .small.text-muted Total DR (₹)
+                    strong= grandTotalDr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+            .col-4
+                .card.text-center.py-2
+                    .small.text-muted Total CR (₹)
+                    strong= grandTotalCr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+        if !vouchers.length
+            .alert.alert-info.py-2 No vouchers found for this date range.
+        else
+            .table-responsive
+                table.table.table-bordered.table-sm#dayBookTable
+                    thead.thead-dark
+                        tr
+                            th(style="width:90px") Date
+                            th(style="width:95px") Voucher No
+                            th(style="width:80px") Type
+                            th Particulars
+                            th.text-right(style="width:110px") DR (₹)
+                            th.text-right(style="width:110px") CR (₹)
+                    tbody
+                        each v in vouchers
+                            tr.vhdr(class=(v.is_reversal === 'Y' ? 'table-warning' : 'table-light'))
+                                td.small= v.voucher_date
+                                td
+                                    strong= v.voucher_no
+                                    if v.is_reversal === 'Y'
+                                        |
+                                        span.badge.badge-warning REV
+                                td.text-center
+                                    - const typeClass = {SALES:'success',PURCHASE:'primary',PAYMENT:'danger',RECEIPT:'info',JOURNAL:'secondary',CONTRA:'dark'}[v.voucher_type] || 'secondary'
+                                    span.badge(class='badge-' + typeClass)= v.voucher_type
+                                td.small.text-muted(style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title=v.narration)= v.narration
+                                td.text-right.small= v.total_dr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+                                td.text-right.small= v.total_cr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+                            each line in v.lines
+                                tr.vline(class=(v.is_reversal === 'Y' ? 'table-warning' : ''))
+                                    td(colspan="3")
+                                    td.small.pl-4= line.ledger_name
+                                    td.text-right.small
+                                        if line.dr_amount > 0
+                                            = line.dr_amount.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+                                    td.text-right.small
+                                        if line.cr_amount > 0
+                                            = line.cr_amount.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+                    tfoot
+                        tr.font-weight-bold.bg-light
+                            td(colspan="4") Grand Total
+                            td.text-right= grandTotalDr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+                            td.text-right= grandTotalCr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+    style.
+        #dayBookTable { font-size: 0.8rem; }
+        .vhdr td { border-bottom: none !important; }
+        .vline td { border-top: none !important; }
+        .vline td:first-child { border: none !important; }

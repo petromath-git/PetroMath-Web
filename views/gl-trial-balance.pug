@@ -1,0 +1,72 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Trial Balance
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/day-book") &larr; Day Book
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/trial-balance")
+            .col-auto
+                label.small.mb-1 As of Date
+                input.form-control.form-control-sm(type="date" name="as_of_date" value=asOfDate)
+            .col-auto.align-self-end
+                .form-check.mb-1
+                    input.form-check-input#showZero(type="checkbox" name="show_zero" value="1" checked=showZero)
+                    label.form-check-label.small(for="showZero") Show zero balances
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        if isBalanced
+            .alert.alert-success.py-2.mb-2
+                i.bi.bi-check-circle-fill.mr-1
+                | Books balance &mdash; DR = CR = ₹#{grandDr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}
+        else
+            .alert.alert-danger.py-2.mb-2
+                i.bi.bi-exclamation-triangle-fill.mr-1
+                | Out of balance &mdash; DR ₹#{grandDr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} vs CR ₹#{grandCr.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})} (diff ₹#{Math.abs(grandDr - grandCr).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})})
+
+        - const fmt = (n) => n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+        if !groups.length
+            .alert.alert-info.py-2 No ledger activity found up to this date.
+        else
+            .table-responsive
+                table.table.table-bordered.table-sm#tbTable
+                    thead.thead-dark
+                        tr
+                            th Ledger
+                            th.text-right(style="width:140px") DR (₹)
+                            th.text-right(style="width:140px") CR (₹)
+                    tbody
+                        each g in groups
+                            tr.group-header
+                                td.font-weight-bold(colspan="3")
+                                    span.badge.mr-2(class=(g.group_nature==='ASSETS'||g.group_nature==='EXPENSES'?'badge-primary':'badge-success'))= g.group_nature
+                                    = g.group_name
+                            each row in g.rows
+                                tr
+                                    td.pl-4
+                                        a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + asOfDate.substring(0,8) + '01&to_date=' + asOfDate)= row.ledger_name
+                                    td.text-right.small
+                                        if row.dr_balance > 0
+                                            = fmt(row.dr_balance)
+                                    td.text-right.small
+                                        if row.cr_balance > 0
+                                            = fmt(row.cr_balance)
+                            tr.group-subtotal
+                                td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
+                                td.text-right.font-weight-bold.small= g.subtotal_dr > 0 ? fmt(g.subtotal_dr) : ''
+                                td.text-right.font-weight-bold.small= g.subtotal_cr > 0 ? fmt(g.subtotal_cr) : ''
+                    tfoot
+                        tr.font-weight-bold(class=(isBalanced ? 'table-success' : 'table-danger'))
+                            td Grand Total
+                            td.text-right= fmt(grandDr)
+                            td.text-right= fmt(grandCr)
+
+    style.
+        #tbTable { font-size: 0.82rem; }
+        .group-header td { background-color: #e9ecef; }
+        .group-subtotal td { background-color: #f8f9fa; border-top: 2px solid #dee2e6 !important; }

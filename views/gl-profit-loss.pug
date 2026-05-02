@@ -1,0 +1,94 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Profit &amp; Loss Statement
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/trial-balance") &larr; Trial Balance
+
+        form.row.align-items-end.mb-3(method="GET" action="/gl/profit-loss")
+            .col-auto
+                label.small.mb-1 From Date
+                input.form-control.form-control-sm(type="date" name="from_date" value=fromDate)
+            .col-auto
+                label.small.mb-1 To Date
+                input.form-control.form-control-sm(type="date" name="to_date" value=toDate)
+            .col-auto.align-self-end
+                button.btn.btn-primary.btn-sm(type="submit") View
+
+        - const fmt = (n) => Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+        .row.mb-3
+            .col-4
+                .card.text-center.py-2
+                    .small.text-muted Total Income (₹)
+                    strong.text-success= fmt(totalIncome)
+            .col-4
+                .card.text-center.py-2
+                    .small.text-muted Total Expenses (₹)
+                    strong.text-danger= fmt(totalExpenses)
+            .col-4
+                .card.text-center.py-2(class=(netPL >= 0 ? 'border-success' : 'border-danger'))
+                    .small.text-muted= netPL >= 0 ? 'Net Profit (₹)' : 'Net Loss (₹)'
+                    strong(class=(netPL >= 0 ? 'text-success' : 'text-danger'))= fmt(netPL)
+
+        .row
+            .col-md-6
+                h6.text-success.border-bottom.pb-1 Income
+                if !incomeGroups.length
+                    p.text-muted.small No income entries for this period.
+                else
+                    table.table.table-sm.table-bordered#plIncomeTable
+                        tbody
+                            each g in incomeGroups
+                                tr.group-header
+                                    td.font-weight-bold(colspan="2")= g.group_name
+                                each row in g.rows
+                                    tr
+                                        td.pl-4
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                        td.text-right.small= fmt(row.amount)
+                                tr.group-subtotal
+                                    td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
+                                    td.text-right.font-weight-bold.small= fmt(g.subtotal)
+                        tfoot
+                            tr.table-success.font-weight-bold
+                                td Total Income
+                                td.text-right= fmt(totalIncome)
+
+            .col-md-6
+                h6.text-danger.border-bottom.pb-1 Expenses
+                if !expenseGroups.length
+                    p.text-muted.small No expense entries for this period.
+                else
+                    table.table.table-sm.table-bordered#plExpenseTable
+                        tbody
+                            each g in expenseGroups
+                                tr.group-header
+                                    td.font-weight-bold(colspan="2")= g.group_name
+                                each row in g.rows
+                                    tr
+                                        td.pl-4
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                        td.text-right.small= fmt(row.amount)
+                                tr.group-subtotal
+                                    td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
+                                    td.text-right.font-weight-bold.small= fmt(g.subtotal)
+                        tfoot
+                            tr.table-danger.font-weight-bold
+                                td Total Expenses
+                                td.text-right= fmt(totalExpenses)
+
+        .row.mt-3
+            .col-md-6.offset-md-6
+                table.table.table-sm.table-bordered
+                    tr(class=(netPL >= 0 ? 'table-success' : 'table-danger') ).font-weight-bold
+                        td= netPL >= 0 ? 'Net Profit for the Period' : 'Net Loss for the Period'
+                        td.text-right= fmt(netPL)
+
+    style.
+        #plIncomeTable, #plExpenseTable { font-size: 0.82rem; }
+        .group-header td  { background-color: #e9ecef; }
+        .group-subtotal td { background-color: #f8f9fa; border-top: 2px solid #dee2e6 !important; }

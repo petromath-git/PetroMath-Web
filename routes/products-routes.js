@@ -237,26 +237,30 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
 
 // ── Product Ledger Map ────────────────────────────────────────────────────────
 
-// Map types shown in the configure modal — add new types here as needed
-const PRODUCT_MAP_TYPES = [
-    { type: 'SALES',       label: 'Sales',       group: 'sales' },
-    { type: 'PURCHASE',    label: 'Purchase',     group: 'purchase' },
-    { type: 'OUTPUT_CGST', label: 'Output CGST',  group: 'tax' },
-    { type: 'OUTPUT_SGST', label: 'Output SGST',  group: 'tax' },
-    { type: 'INPUT_CGST',  label: 'Input CGST',   group: 'tax' },
-    { type: 'INPUT_SGST',  label: 'Input SGST',   group: 'tax' },
-];
+// Maps the attribute1 group key (from m_lookup) → actual GL ledger group name.
+// Update this only if a new ledger category is added to m_lookup.
+const GROUP_LEDGER_NAMES = {
+    sales:    'Sales Accounts',
+    purchase: 'Purchase Accounts',
+    tax:      'Duties & Taxes'
+};
 
 router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res) => {
     const locationCode = req.user.location_code;
     try {
-        const [products, rawMappings, salesLedgers, purchaseLedgers, taxLedgers] = await Promise.all([
+        const [products, rawMappings, mapTypes] = await Promise.all([
             ProductLedgerMapDao.getProducts(locationCode),
             ProductLedgerMapDao.getAllMappingsRaw(locationCode),
-            getLedgersByGroup(locationCode, 'Sales Accounts'),
-            getLedgersByGroup(locationCode, 'Purchase Accounts'),
-            getLedgersByGroup(locationCode, 'Duties & Taxes')
+            ProductLedgerMapDao.getMapTypes()
         ]);
+
+        // Fetch ledger lists for each distinct group used by the current map types
+        const neededGroups = [...new Set(mapTypes.map(m => m.group))];
+        const ledgerArrays = await Promise.all(
+            neededGroups.map(g => getLedgersByGroup(locationCode, GROUP_LEDGER_NAMES[g] || g))
+        );
+        const ledgers = {};
+        neededGroups.forEach((g, i) => { ledgers[g] = ledgerArrays[i]; });
 
         // Build { productId: { MAP_TYPE: ledgerId } } lookup for the modal
         const mappingLookup = {};
@@ -271,12 +275,8 @@ router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res)
             config: config.APP_CONFIGS,
             products,
             mappingLookup,
-            mapTypes: PRODUCT_MAP_TYPES,
-            ledgers: {
-                sales:    salesLedgers,
-                purchase: purchaseLedgers,
-                tax:      taxLedgers
-            }
+            mapTypes,
+            ledgers
         });
     } catch (err) {
         console.error('Error loading product ledger map:', err);
