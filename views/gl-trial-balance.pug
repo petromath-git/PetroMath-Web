@@ -11,7 +11,7 @@ block content
         form.row.align-items-end.mb-3(method="GET" action="/gl/trial-balance")
             .col-auto
                 label.small.mb-1 Quick Select
-                select.form-control.form-control-sm#glPeriodAsOf(onchange="glSetAsOf('glAsOf')")
+                select.form-control.form-control-sm#glPeriodAsOf(onchange="glSetAsOf(this)" data-target="glAsOf")
                     option(value="today") Today
                     option(value="end_last_month") End of Last Month
                     option(value="end_this_fy") End of This FY

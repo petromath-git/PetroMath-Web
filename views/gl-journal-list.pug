@@ -13,7 +13,7 @@ block content
         form.row.align-items-end.mb-3(method="GET" action="/gl/journal")
             .col-auto
                 label.small.mb-1 Period
-                select.form-control.form-control-sm#glPeriod(onchange="glSetPeriod('glFrom','glTo')")
+                select.form-control.form-control-sm#glPeriod(onchange="glSetPeriod(this)" data-from="glFrom" data-to="glTo")
                     option(value="this_month") This Month
                     option(value="last_month") Last Month
                     option(value="this_fy") This Financial Year

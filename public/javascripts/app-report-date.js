@@ -178,10 +178,13 @@ function updateInvoiceDateRange() {
 // ── GL date range helpers ────────────────────────────────────────────────────
 // Used by GL report pages — pre-fills from/to date inputs without hiding them.
 
-function glSetPeriod(fromId, toId, selectId) {
-    const sel = selectId || 'glPeriod';
-    const period = document.getElementById(sel) ? document.getElementById(sel).value : 'custom';
-    const today = new Date();
+// glSetPeriod(sel) — called via onchange="glSetPeriod(this)"
+// The select must have data-from and data-to attributes with the target input IDs.
+function glSetPeriod(sel) {
+    const period = sel.value;
+    const fromId = sel.dataset.from;
+    const toId   = sel.dataset.to;
+    const today  = new Date();
     const yr = today.getFullYear();
     const mo = today.getMonth();
 
@@ -208,18 +211,19 @@ function glSetPeriod(fromId, toId, selectId) {
             to   = new Date(yr, 2, 31);
         }
     } else {
-        return; // custom — user enters manually
+        return;
     }
 
     if (fromId) document.getElementById(fromId).value = iso(from);
     if (toId)   document.getElementById(toId).value   = iso(to);
 }
 
-// For single-date views (Trial Balance, Balance Sheet)
-function glSetAsOf(asOfId, selectId) {
-    const sel = selectId || 'glPeriodAsOf';
-    const period = document.getElementById(sel) ? document.getElementById(sel).value : 'custom';
-    const today = new Date();
+// glSetAsOf(sel) — for single-date views (Trial Balance, Balance Sheet)
+// The select must have a data-target attribute with the target input ID.
+function glSetAsOf(sel) {
+    const period = sel.value;
+    const asOfId = sel.dataset.target;
+    const today  = new Date();
     const yr = today.getFullYear();
     const mo = today.getMonth();
 

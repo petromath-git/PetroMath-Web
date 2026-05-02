@@ -24,7 +24,7 @@ block content
                 form.row.align-items-end.mb-3#eventsFilterForm
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm(onchange="glSetPeriod('evFrom','evTo',this.id)" id="evPeriod")
+                        select.form-control.form-control-sm#evPeriod(onchange="glSetPeriod(this)" data-from="evFrom" data-to="evTo")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
@@ -92,7 +92,7 @@ block content
                 .row.align-items-end.mb-3
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm(onchange="glSetPeriod('caFrom','caTo',this.id)" id="caPeriod")
+                        select.form-control.form-control-sm#caPeriod(onchange="glSetPeriod(this)" data-from="caFrom" data-to="caTo")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
@@ -125,7 +125,7 @@ block content
                 .row.align-items-end.mb-3
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm(onchange="glSetPeriod('geFrom','geTo',this.id)" id="gePeriod")
+                        select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
