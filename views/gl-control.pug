@@ -23,6 +23,14 @@ block content
 
                 form.row.align-items-end.mb-3#eventsFilterForm
                     .col-auto
+                        label.small.mb-1 Period
+                        select.form-control.form-control-sm(onchange="glSetPeriod('evFrom','evTo',this.id)" id="evPeriod")
+                            option(value="this_month") This Month
+                            option(value="last_month") Last Month
+                            option(value="this_fy") This Financial Year
+                            option(value="last_fy") Last Financial Year
+                            option(value="custom" selected) Custom
+                    .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="evFrom" value=fromDate)
                     .col-auto
@@ -83,6 +91,14 @@ block content
 
                 .row.align-items-end.mb-3
                     .col-auto
+                        label.small.mb-1 Period
+                        select.form-control.form-control-sm(onchange="glSetPeriod('caFrom','caTo',this.id)" id="caPeriod")
+                            option(value="this_month") This Month
+                            option(value="last_month") Last Month
+                            option(value="this_fy") This Financial Year
+                            option(value="last_fy") Last Financial Year
+                            option(value="custom" selected) Custom
+                    .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="caFrom" value=fromDate)
                     .col-auto
@@ -107,6 +123,14 @@ block content
                     | or accounting was enabled after transactions already existed.
 
                 .row.align-items-end.mb-3
+                    .col-auto
+                        label.small.mb-1 Period
+                        select.form-control.form-control-sm(onchange="glSetPeriod('geFrom','geTo',this.id)" id="gePeriod")
+                            option(value="this_month") This Month
+                            option(value="last_month") Last Month
+                            option(value="this_fy") This Financial Year
+                            option(value="last_fy") Last Financial Year
+                            option(value="custom" selected) Custom
                     .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="geFrom" value=fromDate)

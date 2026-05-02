@@ -10,11 +10,19 @@ block content
 
         form.row.align-items-end.mb-3(method="GET" action="/gl/profit-loss")
             .col-auto
+                label.small.mb-1 Period
+                select.form-control.form-control-sm#glPeriod(onchange="glSetPeriod('glFrom','glTo')")
+                    option(value="this_month") This Month
+                    option(value="last_month") Last Month
+                    option(value="this_fy") This Financial Year
+                    option(value="last_fy") Last Financial Year
+                    option(value="custom" selected) Custom
+            .col-auto
                 label.small.mb-1 From Date
-                input.form-control.form-control-sm(type="date" name="from_date" value=fromDate)
+                input.form-control.form-control-sm#glFrom(type="date" name="from_date" value=fromDate)
             .col-auto
                 label.small.mb-1 To Date
-                input.form-control.form-control-sm(type="date" name="to_date" value=toDate)
+                input.form-control.form-control-sm#glTo(type="date" name="to_date" value=toDate)
             .col-auto.align-self-end
                 button.btn.btn-primary.btn-sm(type="submit") View
 
