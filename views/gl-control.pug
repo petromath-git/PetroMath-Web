@@ -129,6 +129,12 @@ block content
                 #caResult(style="display:none")
                     .card.card-body.mt-2#caResultBody
 
+                hr.mt-3
+                h6.mt-3.mb-2 Recent Runs
+                    button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadBatchRuns('ca')") Refresh
+                #caBatchRuns
+                    .text-muted.small Loading…
+
             //- ── Generate Events ─────────────────────────────────────────────
             #pane-generate.tab-pane.fade(role="tabpanel")
 
@@ -160,6 +166,12 @@ block content
 
                 #geResult(style="display:none")
                     .card.card-body.mt-2#geResultBody
+
+                hr.mt-3
+                h6.mt-3.mb-2 Recent Runs
+                    button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadBatchRuns('ge')") Refresh
+                #geBatchRuns
+                    .text-muted.small Loading…
 
 
     script.
@@ -250,6 +262,68 @@ block content
         document.getElementById('btnLoadEvents').addEventListener('click', loadEvents);
         document.getElementById('btnRefreshSummary').addEventListener('click', loadSummary);
 
+        // ── Batch Runs (shown in Create Accounting and Generate Events tabs) ────
+
+        const BATCH_TYPE_MAP = {
+            ca: ['CREATE_ACCOUNTING', 'REPROCESS_ACCOUNTING'],
+            ge: ['GENERATE_EVENTS']
+        };
+
+        function batchRunsHtml(rows, types) {
+            const filtered = rows.filter(r => types.includes(r.request_type));
+            if (!filtered.length) return '<p class="text-muted small mb-0">No recent runs.</p>';
+            const statusColor = { PENDING:'secondary', RUNNING:'primary', COMPLETED:'success', ERROR:'danger' };
+            const resultText = (rs) => {
+                try {
+                    const s = typeof rs === 'string' ? JSON.parse(rs) : rs;
+                    if (!s) return '';
+                    if (s.total      !== undefined) return `${s.total} generated`;
+                    if (s.processed  !== undefined) return `proc=${s.processed} err=${s.errors||0}`;
+                    if (s.error) return `<span class="text-danger">${s.error}</span>`;
+                } catch(e) {}
+                return '';
+            };
+            const rows_html = filtered.map(r => `<tr>
+                <td class="small">${r.request_id}</td>
+                <td class="small">${r.request_type}</td>
+                <td class="small">${(r.from_date||'').toString().substring(0,10)}</td>
+                <td class="small">${(r.to_date||'').toString().substring(0,10)}</td>
+                <td class="small"><span class="badge badge-${statusColor[r.status]||'secondary'}">${r.status}</span></td>
+                <td class="small">${r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-IN') : ''}</td>
+                <td class="small">${r.completed_at ? new Date(r.completed_at).toLocaleString('en-IN') : ''}</td>
+                <td class="small">${resultText(r.result_summary)}</td>
+                <td class="text-center"><button class="btn btn-outline-info btn-sm btn-view-log" data-id="${r.request_id}" title="View Log"><i class="bi bi-file-text"></i></button></td>
+            </tr>`).join('');
+            return `<div class="table-responsive"><table class="table table-sm table-bordered table-hover">
+                <thead class="thead-dark"><tr>
+                    <th style="width:50px">ID</th><th style="width:160px">Type</th>
+                    <th style="width:90px">From</th><th style="width:90px">To</th>
+                    <th style="width:90px">Status</th><th style="width:130px">Submitted</th>
+                    <th style="width:130px">Completed</th><th>Result</th>
+                    <th style="width:50px" class="text-center">Log</th>
+                </tr></thead><tbody>${rows_html}</tbody></table></div>`;
+        }
+
+        var _batchRunsCache = null;
+        async function loadBatchRuns(tab) {
+            const containerId = tab === 'ca' ? 'caBatchRuns' : 'geBatchRuns';
+            const el = document.getElementById(containerId);
+            el.innerHTML = '<p class="text-muted small">Loading…</p>';
+            const rows = await fetch('/gl/api/batch-requests').then(r => r.json());
+            _batchRunsCache = rows;
+            el.innerHTML = batchRunsHtml(rows, BATCH_TYPE_MAP[tab]);
+            el.querySelectorAll('.btn-view-log').forEach(function(btn) {
+                btn.addEventListener('click', async function() {
+                    const id = this.dataset.id;
+                    const data = await fetch('/gl/api/batch-requests/' + id + '/log').then(r => r.json());
+                    alert('[Run #' + data.request_id + ' — ' + data.request_type + ']\n\n' + (data.log_text || '(no log)'));
+                });
+            });
+        }
+
+        document.getElementById('tab-accounting').addEventListener('shown.bs.tab', function() { loadBatchRuns('ca'); });
+        document.getElementById('tab-generate').addEventListener('shown.bs.tab',  function() { loadBatchRuns('ge'); });
+
         // Auto-load summary on page open
         loadSummary();
 
@@ -300,6 +374,7 @@ block content
                     body.innerHTML = `<div class="text-danger"><i class="bi bi-exclamation-triangle mr-1"></i>${data.error}</div>`;
                 }
                 wrap.style.display = '';
+                loadBatchRuns('ca');
             } catch (e) {
                 alert('Network error: ' + e.message);
             } finally {
@@ -348,6 +423,7 @@ block content
                     body.innerHTML = `<div class="text-danger"><i class="bi bi-exclamation-triangle mr-1"></i>${data.error}</div>`;
                 }
                 wrap.style.display = '';
+                loadBatchRuns('ge');
             } catch (e) {
                 alert('Network error: ' + e.message);
             } finally {
