@@ -174,3 +174,75 @@ function updateInvoiceDateRange() {
         toDateLabel.closest('td').style.display = 'none';
     }
 }
+
+// ── GL date range helpers ────────────────────────────────────────────────────
+// Used by GL report pages — pre-fills from/to date inputs without hiding them.
+
+// glSetPeriod(sel) — called via onchange="glSetPeriod(this)"
+// The select must have data-from and data-to attributes with the target input IDs.
+function glSetPeriod(sel) {
+    const period = sel.value;
+    const fromId = sel.dataset.from;
+    const toId   = sel.dataset.to;
+    const today  = new Date();
+    const yr = today.getFullYear();
+    const mo = today.getMonth();
+
+    function iso(d) {
+        return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+    }
+
+    let from, to;
+    if (period === 'this_month') {
+        from = new Date(yr, mo, 1);
+        to   = today;
+    } else if (period === 'last_month') {
+        from = new Date(yr, mo - 1, 1);
+        to   = new Date(yr, mo, 0);
+    } else if (period === 'this_fy') {
+        from = mo < 3 ? new Date(yr - 1, 3, 1) : new Date(yr, 3, 1);
+        to   = today;
+    } else if (period === 'last_fy') {
+        if (mo < 3) {
+            from = new Date(yr - 2, 3, 1);
+            to   = new Date(yr - 1, 2, 31);
+        } else {
+            from = new Date(yr - 1, 3, 1);
+            to   = new Date(yr, 2, 31);
+        }
+    } else {
+        return;
+    }
+
+    if (fromId) document.getElementById(fromId).value = iso(from);
+    if (toId)   document.getElementById(toId).value   = iso(to);
+}
+
+// glSetAsOf(sel) — for single-date views (Trial Balance, Balance Sheet)
+// The select must have a data-target attribute with the target input ID.
+function glSetAsOf(sel) {
+    const period = sel.value;
+    const asOfId = sel.dataset.target;
+    const today  = new Date();
+    const yr = today.getFullYear();
+    const mo = today.getMonth();
+
+    function iso(d) {
+        return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+    }
+
+    let dt;
+    if (period === 'today') {
+        dt = today;
+    } else if (period === 'end_last_month') {
+        dt = new Date(yr, mo, 0);
+    } else if (period === 'end_this_fy') {
+        dt = mo < 3 ? new Date(yr, 2, 31) : new Date(yr + 1, 2, 31);
+    } else if (period === 'end_last_fy') {
+        dt = mo < 3 ? new Date(yr - 1, 2, 31) : new Date(yr, 2, 31);
+    } else {
+        return;
+    }
+
+    if (asOfId) document.getElementById(asOfId).value = iso(dt);
+}

@@ -38,7 +38,6 @@ block content
                             th(scope="col") HSN Code
                             th(scope="col") Unit
                             th(scope="col") Price
-                            th(scope="col") Ledger Name
                             th(scope="col") CGST%
                             th(scope="col") SGST%
                             if user.Role === 'SuperUser'
@@ -47,7 +46,7 @@ block content
                             th(scope="col") Edit
                     tbody
                         each val, index in products
-                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                             tr(id=`product-row-${index}`)
                                 th(scope="row")= index + 1
                                 td(scope="row")
@@ -59,7 +58,6 @@ block content
                                         .input-group-prepend
                                             span.input-group-text ₹
                                         span.form-control-plaintext= val.price
-                                td(scope="row")= val.ledger_name || '-'
                                 td(scope="row") #{val.cgst_percent}%
                                 td(scope="row") #{val.sgst_percent}%
                                 if user.Role === 'SuperUser'
@@ -106,7 +104,7 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             .row
                 each val, index in products
-                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
                     .col-12.mb-3
                         .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
@@ -184,16 +182,6 @@ block content
                                                     step="0.01",
                                                     style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
                                                 )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted Ledger
-                                            input.mobile-input.fw-bold.text-uppercase(
-                                                type="text",
-                                                id=`mobile-ledger-${index}`,
-                                                value=val.ledger_name || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
-                                            )
                                     .col-6
                                         .product-detail
                                             small.text-muted CGST
@@ -278,9 +266,6 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input.form-control(type="number", name="price", step="0.01", required)
-                            .col-md-12.mb-3
-                                label.form-label Ledger Name
-                                input.form-control.text-uppercase(type="text", name="ledger_name", style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input.form-control(type="number", name="cgst_percent", step="0.01", min="0", max="100")
@@ -346,9 +331,6 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input#edit-price.form-control(type="number", step="0.01")
-                            .col-md-12.mb-3
-                                label.form-label Ledger Name
-                                input#edit-ledger-name.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label CGST %
                                 input#edit-cgst.form-control(type="number", step="0.01", min="0", max="100")
@@ -555,7 +537,6 @@ block content
             document.getElementById('edit-hsn-code').value = product.hsn_code || '';
             document.getElementById('edit-unit').value = product.unit || '';
             document.getElementById('edit-price').value = product.price || '';
-            document.getElementById('edit-ledger-name').value = product.ledger_name || '';
             document.getElementById('edit-cgst').value = product.cgst_percent || 0;
             document.getElementById('edit-sgst').value = product.sgst_percent || 0;
 
@@ -600,7 +581,6 @@ block content
                 m_product_name: document.getElementById('edit-product-name').value.toUpperCase().trim(),
                 m_product_price: document.getElementById('edit-price').value,
                 m_product_unit: document.getElementById('edit-unit').value.toUpperCase(),
-                m_product_ledger_name: document.getElementById('edit-ledger-name').value.toUpperCase(),
                 m_product_cgst: document.getElementById('edit-cgst').value,
                 m_product_sgst: document.getElementById('edit-sgst').value
             };
@@ -663,6 +643,8 @@ block content
         // Event listeners
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('refreshDataBtn').addEventListener('click', refreshData);
+
+
             
             // Add uppercase event listeners to all text inputs in the modal
             const textInputs = document.querySelectorAll('input[type="text"].text-uppercase');

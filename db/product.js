@@ -50,6 +50,10 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(100),
             allowNull: true
         },
+        purchase_ledger_name: {
+            type: DataTypes.STRING(100),
+            allowNull: true
+        },
         cgst_percent: {
             type: DataTypes.DECIMAL(5, 2),
             allowNull: true

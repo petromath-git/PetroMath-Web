@@ -1,0 +1,173 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0.text-primary Product GL Ledger Map
+            a.btn.btn-sm.btn-outline-secondary(href="/products") &larr; Back to Products
+
+        .alert.alert-info.py-2.mb-3
+            i.bi.bi-info-circle.me-1
+            | Click Configure on any product to assign GL ledgers. Changes auto-save on selection.
+
+        .table-responsive
+            table.table.table-hover.table-sm.table-bordered
+                thead.thead-dark
+                    tr
+                        th Product
+                        th.text-center(style="width:70px;") CGST%
+                        th.text-center(style="width:120px;") Configured
+                        th.text-center(style="width:100px;") Action
+                tbody
+                    each p in products
+                        - const pMaps = mappingLookup[p.product_id] || {}
+                        - const configCount = Object.keys(pMaps).length
+                        - const totalTypes = mapTypes.length
+                        tr
+                            td
+                                strong= p.product_name
+                                if p.cgst_percent > 0
+                                    span.badge.badge-warning.ml-1 GST
+                            td.text-center= p.cgst_percent + '%'
+                            td.text-center
+                                if configCount === 0
+                                    span.badge.badge-danger None
+                                else if configCount < totalTypes
+                                    span.badge.badge-warning #{configCount} / #{totalTypes}
+                                else
+                                    span.badge.badge-success All set
+                            td.text-center
+                                button.btn.btn-primary.btn-sm.btn-configure(
+                                    type="button",
+                                    data-product-id=p.product_id,
+                                    data-product-name=p.product_name,
+                                    data-cgst=p.cgst_percent)
+                                    i.bi.bi-gear-fill.mr-1
+                                    | Configure
+
+    // Configure Modal
+    .modal.fade#configureModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#configureModalTitle Configure Ledgers
+                    button.close(type="button", data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    p.text-muted.small.mb-3 Changes are saved automatically on selection.
+                    div#modalRows
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Close
+
+    script.
+        const MAP_TYPES = !{JSON.stringify(mapTypes)};
+        const LEDGERS   = !{JSON.stringify(ledgers)};
+        const MAPPINGS  = !{JSON.stringify(mappingLookup)};
+
+        document.querySelectorAll('.btn-configure').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const productId   = this.dataset.productId;
+                const productName = this.dataset.productName;
+                const cgst        = parseFloat(this.dataset.cgst) || 0;
+
+                document.getElementById('configureModalTitle').textContent = productName;
+
+                const container = document.getElementById('modalRows');
+                container.innerHTML = '';
+
+                const currentMaps = MAPPINGS[productId] || {};
+
+                MAP_TYPES.forEach(function(mt) {
+                    const options = LEDGERS[mt.group] || [];
+                    const currentVal = currentMaps[mt.type] || '';
+
+                    const row = document.createElement('div');
+                    row.className = 'form-group row align-items-center mb-2';
+
+                    const labelCol = document.createElement('div');
+                    labelCol.className = 'col-4';
+                    labelCol.innerHTML = '<label class="mb-0">' + mt.label + '</label>';
+
+                    const selectCol = document.createElement('div');
+                    selectCol.className = 'col-7';
+
+                    const select = document.createElement('select');
+                    select.className = 'form-control form-control-sm';
+                    select.dataset.productId = productId;
+                    select.dataset.mapType   = mt.type;
+
+                    let html = '<option value="">— Not Set —</option>';
+                    options.forEach(function(l) {
+                        const sel = String(l.ledger_id) === String(currentVal) ? ' selected' : '';
+                        html += '<option value="' + l.ledger_id + '"' + sel + '>' + l.ledger_name + '</option>';
+                    });
+                    select.innerHTML = html;
+
+                    const statusCol = document.createElement('div');
+                    statusCol.className = 'col-1 text-center';
+                    statusCol.id = 'status-' + productId + '-' + mt.type;
+
+                    select.addEventListener('change', function() {
+                        saveMapping(this, productId, mt.type, this.value, statusCol);
+                    });
+
+                    selectCol.appendChild(select);
+                    row.appendChild(labelCol);
+                    row.appendChild(selectCol);
+                    row.appendChild(statusCol);
+                    container.appendChild(row);
+                });
+
+                $('#configureModal').modal('show');
+            });
+        });
+
+        function saveMapping(selectEl, productId, mapType, ledgerId, statusEl) {
+            selectEl.disabled = true;
+            statusEl.innerHTML = '<i class="bi bi-hourglass-split text-warning"></i>';
+
+            fetch('/products/api/ledger-maps/' + productId + '/' + mapType, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ledger_id: ledgerId || null })
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                selectEl.disabled = false;
+                if (data.success) {
+                    // Update in-memory lookup so re-opening modal shows current values
+                    if (!MAPPINGS[productId]) MAPPINGS[productId] = {};
+                    if (ledgerId) {
+                        MAPPINGS[productId][mapType] = ledgerId;
+                    } else {
+                        delete MAPPINGS[productId][mapType];
+                    }
+                    updateBadge(productId);
+                    statusEl.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                    setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
+                } else {
+                    statusEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger" title="' + data.error + '"></i>';
+                }
+            })
+            .catch(function(err) {
+                selectEl.disabled = false;
+                statusEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+            });
+        }
+
+        function updateBadge(productId) {
+            const count = Object.keys(MAPPINGS[productId] || {}).length;
+            const total = MAP_TYPES.length;
+            const btn   = document.querySelector('.btn-configure[data-product-id="' + productId + '"]');
+            if (!btn) return;
+            const row   = btn.closest('tr');
+            const cell  = row.querySelector('td:nth-child(3)');
+            if (count === 0) {
+                cell.innerHTML = '<span class="badge badge-danger">None</span>';
+            } else if (count < total) {
+                cell.innerHTML = '<span class="badge badge-warning">' + count + ' / ' + total + '</span>';
+            } else {
+                cell.innerHTML = '<span class="badge badge-success">All set</span>';
+            }
+        }

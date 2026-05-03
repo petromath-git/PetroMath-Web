@@ -5,9 +5,11 @@ const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
 const ProductDao = require('../dao/product-dao');
+const ProductLedgerMapDao = require('../dao/product-ledger-map-dao');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
+const { getLedgersByGroup } = require('./gl-routes');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
 
@@ -22,10 +24,12 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
-            ProductDao.findPumpLinkedProductNames(locationCode)
+            ProductDao.findPumpLinkedProductNames(locationCode),
+            getLedgersByGroup(locationCode, 'Sales Accounts'),
+            getLedgersByGroup(locationCode, 'Purchase Accounts')
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -39,6 +43,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 qty: product.qty,
                 price: product.price,
                 ledger_name: product.ledger_name,
+                purchase_ledger_name: product.purchase_ledger_name,
                 cgst_percent: product.cgst_percent,
                 sgst_percent: product.sgst_percent,
                 sku_name: product.sku_name,
@@ -50,12 +55,14 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
             });
         });
 
-        res.render('products', { 
-            title: 'Products', 
-            user: req.user, 
-            products: products, 
+        res.render('products', {
+            title: 'Products',
+            user: req.user,
+            products: products,
             config: config.APP_CONFIGS,
             canEditProductName: canEditProductName,
+            salesLedgers: salesLedgers,
+            purchaseLedgers: purchaseLedgers,
             messages: req.flash()
         });
     } catch (error) {
@@ -78,6 +85,7 @@ router.get('/api/data', [isLoginEnsured, security.isAdmin()], function (req, res
                 qty: product.qty,
                 price: product.price,
                 ledger_name: product.ledger_name,
+                purchase_ledger_name: product.purchase_ledger_name,
                 cgst_percent: product.cgst_percent,
                 sgst_percent: product.sgst_percent,
                 sku_name: product.sku_name,
@@ -115,6 +123,7 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, ne
                 m_product_unit_0: req.body.unit,
                 m_product_price_0: req.body.price,
                 m_product_ledger_name_0: req.body.ledger_name,
+                m_product_purchase_ledger_name_0: req.body.purchase_ledger_name,
                 m_product_cgst_0: req.body.cgst_percent || 0,
                 m_product_sgst_0: req.body.sgst_percent || 0,
                 m_product_sku_name_0: req.body.sku_name || '',
@@ -199,6 +208,7 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             price: req.body.m_product_price,
             unit: req.body.m_product_unit,
             ledger_name: req.body.m_product_ledger_name,
+            purchase_ledger_name: req.body.m_product_purchase_ledger_name,
             cgst_percent: req.body.m_product_cgst,
             sgst_percent: req.body.m_product_sgst,
             is_tank_product: req.body.m_product_is_tank_product,
@@ -222,6 +232,74 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             success: false,
             error: 'Failed to update product: ' + error.message
         });
+    }
+});
+
+// ── Product Ledger Map ────────────────────────────────────────────────────────
+
+// Maps the attribute1 group key (from m_lookup) → actual GL ledger group name.
+// Update this only if a new ledger category is added to m_lookup.
+const GROUP_LEDGER_NAMES = {
+    sales:    'Sales Accounts',
+    purchase: 'Purchase Accounts',
+    tax:      'Duties & Taxes'
+};
+
+router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const locationCode = req.user.location_code;
+    try {
+        const [products, rawMappings, mapTypes] = await Promise.all([
+            ProductLedgerMapDao.getProducts(locationCode),
+            ProductLedgerMapDao.getAllMappingsRaw(locationCode),
+            ProductLedgerMapDao.getMapTypes()
+        ]);
+
+        // Fetch ledger lists for each distinct group used by the current map types
+        const neededGroups = [...new Set(mapTypes.map(m => m.group))];
+        const ledgerArrays = await Promise.all(
+            neededGroups.map(g => getLedgersByGroup(locationCode, GROUP_LEDGER_NAMES[g] || g))
+        );
+        const ledgers = {};
+        neededGroups.forEach((g, i) => { ledgers[g] = ledgerArrays[i]; });
+
+        // Build { productId: { MAP_TYPE: ledgerId } } lookup for the modal
+        const mappingLookup = {};
+        rawMappings.forEach(m => {
+            if (!mappingLookup[m.product_id]) mappingLookup[m.product_id] = {};
+            mappingLookup[m.product_id][m.map_type] = m.ledger_id;
+        });
+
+        res.render('product-ledger-map', {
+            title: 'Product GL Ledger Map',
+            user: req.user,
+            config: config.APP_CONFIGS,
+            products,
+            mappingLookup,
+            mapTypes,
+            ledgers
+        });
+    } catch (err) {
+        console.error('Error loading product ledger map:', err);
+        req.flash('error', 'Failed to load product ledger map: ' + err.message);
+        res.redirect('/products');
+    }
+});
+
+router.put('/api/ledger-maps/:productId/:mapType', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const { productId, mapType } = req.params;
+    const { ledger_id } = req.body;
+    const locationCode = req.user.location_code;
+    const updatedBy = req.user.username || req.user.Person_id;
+    try {
+        if (!ledger_id) {
+            await ProductLedgerMapDao.deleteMapping(locationCode, productId, mapType);
+        } else {
+            await ProductLedgerMapDao.upsertMapping(locationCode, productId, mapType, ledger_id, updatedBy);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error saving product ledger map:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
