@@ -138,7 +138,7 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
             replacements: { locationCode, fromDate, toDate, createdBy },
             type: QueryTypes.INSERT
         });
-        const n = meta?.affectedRows || 0;
+        const n = (typeof meta === 'object' ? meta?.affectedRows : meta) || 0;
         counts[sourceType] = n;
         total += n;
         log.debug(`${sourceType}: inserted ${n} missing event(s)`);
@@ -1029,7 +1029,7 @@ async function processTankInvoiceEvent(event, processedBy) {
     // Product purchase lines
     const dtlRows = await db.sequelize.query(`
         SELECT
-            d.dtl_id,
+            d.id AS dtl_id,
             d.product_id,
             p.product_name,
             d.total_line_amount
@@ -1114,9 +1114,9 @@ function deriveBankVoucherType(txn, bankIsDr) {
 async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy) {
     const { external_source, external_id, ledger_name } = txn;
 
-    if (external_source === 'Static') {
+    if (external_source === 'Static' || (!external_source && ledger_name)) {
         const info = await resolveLedgerByName(locationCode, ledger_name);
-        if (!info) throw new Error(`Static GL ledger '${ledger_name}' not found for location ${locationCode}`);
+        if (!info) throw new Error(`GL ledger '${ledger_name}' not found for location ${locationCode}`);
         if (info.group_name === 'Purchase Accounts') {
             // Purchase invoices are journaled by the PURCHASE_INVOICE handler — skip here
             await markEventProcessed(eventId, null, processedBy);
