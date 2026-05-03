@@ -233,25 +233,25 @@ block content
                             button.btn.btn-primary(type='button' onclick='bowserNav("digital_tab")') Next &raquo;
 
             //- ── TAB 4: DIGITAL ──────────────────────────────────────────────
-                if !isClosed
-                    .modal.fade#bowserQuickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='bowserQuickAddVehicleModalLabel' aria-hidden='true')
-                        .modal-dialog(role='document')
-                            .modal-content
-                                .modal-header
-                                    h5.modal-title#bowserQuickAddVehicleModalLabel Add New Vehicle
-                                    button.close(type='button' data-dismiss='modal' aria-label='Close')
-                                        span(aria-hidden='true') &times;
-                                .modal-body
-                                    .form-group
-                                        label Vehicle Number *
-                                        input.form-control.text-uppercase#bowserQuickVehicleNumber(type='text' maxlength='20' placeholder='e.g., TN01AB1234' autocomplete='off')
-                                        small.form-text.text-danger.d-none#bowserQuickVehicleDupMsg Vehicle already exists for this customer
-                                    .form-group
-                                        label Vehicle Type
-                                        input.form-control.text-uppercase#bowserQuickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
-                                .modal-footer
-                                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
-                                    button.btn.btn-success#bowserQuickAddVehicleSaveBtn(type='button' onclick='quickSaveBowserVehicle()') Add Vehicle
+            if !isClosed
+                .modal.fade#bowserQuickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='bowserQuickAddVehicleModalLabel' aria-hidden='true')
+                    .modal-dialog(role='document')
+                        .modal-content
+                            .modal-header
+                                h5.modal-title#bowserQuickAddVehicleModalLabel Add New Vehicle
+                                button.close(type='button' data-dismiss='modal' aria-label='Close')
+                                    span(aria-hidden='true') &times;
+                            .modal-body
+                                .form-group
+                                    label Vehicle Number *
+                                    input.form-control.text-uppercase#bowserQuickVehicleNumber(type='text' maxlength='20' placeholder='e.g., TN01AB1234' autocomplete='off')
+                                    small.form-text.text-danger.d-none#bowserQuickVehicleDupMsg Vehicle already exists for this customer
+                                .form-group
+                                    label Vehicle Type
+                                    input.form-control.text-uppercase#bowserQuickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                            .modal-footer
+                                button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                                button.btn.btn-success#bowserQuickAddVehicleSaveBtn(type='button' onclick='quickSaveBowserVehicle()') Add Vehicle
 
             div.tab-pane.fade#tab-digital
                 div.mt-2.mb-1.px-3
