@@ -104,6 +104,9 @@ module.exports = {
         else if (req.body.reportType == 'StockLedger') {
             htmlContent = await stockReportsController.getStockLedgerReport(req, res, next);
         }
+        else if (req.body.reportType == 'IntercompanyLedger') {
+            htmlContent = await stockReportsController.getIntercompanyLedgerReport(req, res, next);
+        }
         else if (req.body.reportType == 'TankVariance') {
             htmlContent = await stockReportsController.getTankVarianceReport(req, res, next);
         }

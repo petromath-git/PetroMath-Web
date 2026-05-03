@@ -1,0 +1,109 @@
+extends layout
+
+block content
+    form(method='POST' action='/reports/stock/intercompany-ledger')
+        table.center
+            tr
+                td From Date:
+                td
+                    input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, required)
+                td &nbsp;
+                td To Date:
+                td
+                    input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, required)
+                td &nbsp;
+                td Bowser:
+                td
+                    select#bowserId.form-control(name='bowserId', required)
+                        option(value='') Select Bowser
+                        each bowser in bowsers
+                            option(value=bowser.bowser_id, selected=selectedBowserId == bowser.bowser_id)= `${bowser.bowser_name} - ${bowser.product_name}`
+                td &nbsp;
+                include report-print-download.pug
+    div &nbsp;
+    div
+        if selectedBowserId && bowserInfo
+            div.row &nbsp;
+            h6.font-weight-bold.text-center Intercompany Ledger
+            h5.font-weight-bold.text-center.text-uppercase= bowserInfo.bowser_name
+            h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+
+            .container
+                .row.justify-content-center
+                    .col-12
+                        .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                            div(style="font-size: 1.1em; color: #495057; margin-bottom: 10px;")
+                                strong Period Summary
+                            .row
+                                .col-md-3
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Opening Qty
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #007bff;")= openingBalance + ' L'
+                                .col-md-3
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Total Fills
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #28a745;")= totalIn + ' L'
+                                .col-md-3
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Total Sales
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #dc3545;")= totalOut + ' L'
+                                .col-md-3
+                                    div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                        div(style="color: #6c757d; font-size: 0.9em;") Closing Qty
+                                        div(style="font-size: 1.3em; font-weight: bold; color: #007bff;")= closingBalance + ' L'
+
+                        if ledgerData && ledgerData.length > 0
+                            .table-responsive
+                                table.table.table-bordered.table-hover
+                                    thead.thead-light
+                                        tr
+                                            th Date
+                                            th Type
+                                            th Reference
+                                            th Particulars
+                                            th.text-right IN
+                                            th.text-right OUT
+                                            th.text-right Balance
+                                    tbody
+                                        - var runningBalance = parseFloat(openingBalance)
+                                        tr.table-info
+                                            td(colspan='6')
+                                                strong Opening Balance
+                                            td.text-right
+                                                strong= runningBalance.toFixed(3)
+
+                                        each txn in ledgerData
+                                            - runningBalance = runningBalance + parseFloat(txn.in_qty || 0) - parseFloat(txn.out_qty || 0)
+                                            tr
+                                                td= new Date(txn.txn_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')
+                                                td= txn.txn_type
+                                                td= txn.reference_no || '-'
+                                                td= txn.particulars || '-'
+                                                td.text-right
+                                                    if parseFloat(txn.in_qty) > 0
+                                                        span.text-success= parseFloat(txn.in_qty).toFixed(3)
+                                                    else
+                                                        | -
+                                                td.text-right
+                                                    if parseFloat(txn.out_qty) > 0
+                                                        span.text-danger= parseFloat(txn.out_qty).toFixed(3)
+                                                    else
+                                                        | -
+                                                td.text-right(class=runningBalance < 0 ? 'text-danger font-weight-bold' : '')
+                                                    = runningBalance.toFixed(3)
+                                    tfoot.bg-light
+                                        tr.font-weight-bold
+                                            td(colspan='4') Total
+                                            td.text-right.text-success= totalIn
+                                            td.text-right.text-danger= totalOut
+                                            td.text-right Closing: #{closingBalance}
+                        else
+                            div.row &nbsp;
+                            div.row.bg-light No Transactions for the selected period.
+        else
+            div.row &nbsp;
+            div.alert.alert-info.text-center
+                i.fas.fa-info-circle
+                |  Please select a bowser and date range to view the intercompany ledger.
+
+    include overlay.pug
