@@ -8,6 +8,9 @@ block content
             h4.mb-0 Ledgers
             .d-flex.gap-2
                 a.btn.btn-sm.btn-outline-secondary.mr-2(href="/gl/ledger-groups") &larr; Groups
+                a.btn.btn-sm.btn-outline-info.mr-2(href="/gl/tally-import")
+                    i.bi.bi-upload.mr-1
+                    | Tally Import
                 button.btn.btn-sm.btn-success#btnAddLedger
                     i.bi.bi-plus-lg.mr-1
                     | Add Ledger
@@ -36,6 +39,7 @@ block content
                                 each l in grpMap[grpName]
                                     tr(class=(l.active_flag === 'N' ? 'table-secondary text-muted' : ''))
                                         td= l.ledger_name
+                                        td.text-muted.small= l.tally_ledger_name || ''
                                         td.text-center(style="width:60px")
                                             if l.active_flag === 'N'
                                                 span.badge.badge-secondary Inactive
@@ -43,6 +47,7 @@ block content
                                             button.btn.btn-outline-primary.btn-sm.btn-edit-ledger(
                                                 data-id=l.ledger_id
                                                 data-name=l.ledger_name
+                                                data-tally=l.tally_ledger_name || ''
                                                 data-group=l.group_id
                                                 data-active=l.active_flag
                                                 title="Edit")
@@ -60,6 +65,10 @@ block content
                     .form-group
                         label.small Ledger Name *
                         input.form-control.form-control-sm#lName(type="text" maxlength="150")
+                    .form-group
+                        label.small Tally Ledger Name
+                        input.form-control.form-control-sm#lTallyName(type="text" maxlength="250" placeholder="Leave blank to use Ledger Name")
+                        small.form-text.text-muted Used in Tally export — set only if Tally uses a different name
                     .form-group
                         label.small Group *
                         select.form-control.form-control-sm#lGroup
@@ -80,6 +89,7 @@ block content
             editingLedgerId = null;
             document.getElementById('ledgerModalTitle').textContent = 'Add Ledger';
             document.getElementById('lName').value = '';
+            document.getElementById('lTallyName').value = '';
             document.getElementById('lGroup').selectedIndex = 0;
             document.getElementById('lActive').checked = true;
             document.getElementById('lActiveWrap').style.display = 'none';
@@ -91,6 +101,7 @@ block content
                 editingLedgerId = this.dataset.id;
                 document.getElementById('ledgerModalTitle').textContent = 'Edit Ledger';
                 document.getElementById('lName').value = this.dataset.name;
+                document.getElementById('lTallyName').value = this.dataset.tally || '';
                 document.getElementById('lGroup').value = this.dataset.group;
                 document.getElementById('lActive').checked = this.dataset.active === 'Y';
                 document.getElementById('lActiveWrap').style.display = '';
@@ -108,7 +119,8 @@ block content
             try {
                 const url    = editingLedgerId ? '/gl/api/ledger/' + editingLedgerId : '/gl/api/ledger';
                 const method = editingLedgerId ? 'PUT' : 'POST';
-                const body   = { ledger_name: name, group_id };
+                const tallyName = document.getElementById('lTallyName').value.trim();
+                const body   = { ledger_name: name, group_id, tally_ledger_name: tallyName || null };
                 if (editingLedgerId) body.active_flag = active;
 
                 const resp = await fetch(url, {

@@ -1,0 +1,195 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Tally Ledger Import
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/ledgers") &larr; Ledgers
+
+        if messages && messages.error && messages.error.length
+            .alert.alert-danger.py-2= messages.error[0]
+
+        //- Step 1: Upload
+        #stepUpload
+            .card.mb-4
+                .card-body
+                    p.text-muted.small.mb-3
+                        | Export ledger master from Tally:
+                        strong Gateway → Display → List of Accounts → Ledgers → Export → ASCII (Comma Delimited)
+                        | . Upload the resulting
+                        code Master.txt
+                        |  below. Works with all Tally versions.
+                    .form-group
+                        label.small.font-weight-bold Tally Master File (Master.txt)
+                        .custom-file
+                            input.custom-file-input#tallyFile(type="file" accept=".txt,.csv")
+                            label.custom-file-label(for="tallyFile") Choose file…
+                    button.btn.btn-primary#btnParse(type="button" disabled)
+                        i.bi.bi-upload.mr-1
+                        | Upload & Parse
+
+        //- Step 2: Reconcile table (hidden until parsed)
+        #stepReconcile(style="display:none")
+            .d-flex.justify-content-between.align-items-center.mb-2
+                div
+                    span.font-weight-bold Reconcile Results
+                    span.text-muted.small.ml-2#reconcileSummary
+                .d-flex.gap-2
+                    button.btn.btn-sm.btn-outline-secondary#btnBack(type="button") &larr; Upload Different File
+                    button.btn.btn-success#btnSave(type="button")
+                        i.bi.bi-check2-all.mr-1
+                        | Save Matched
+
+            .alert.alert-info.small.py-2.mb-2
+                | Exact matches are pre-confirmed. For mismatches, select the correct PetroMath ledger or leave blank to skip.
+
+            .table-responsive
+                table.table.table-sm.table-bordered#reconcileTable
+                    thead.thead-dark
+                        tr
+                            th(style="width:32px")
+                                input(type="checkbox" id="chkAll" title="Select all matched" checked)
+                            th Tally Ledger Name
+                            th PetroMath Ledger
+                            th(style="width:90px") Status
+                    tbody#reconcileBody
+
+            .mt-3
+                button.btn.btn-success#btnSave2(type="button")
+                    i.bi.bi-check2-all.mr-1
+                    | Save Matched
+
+        //- Result
+        .alert.alert-success.mt-3(id="saveResult" style="display:none")
+
+    script.
+        let parsedLedgers = [];
+        let parsedRows    = [];
+
+        // File input label
+        document.getElementById('tallyFile').addEventListener('change', function() {
+            const label = this.nextElementSibling;
+            label.textContent = this.files[0] ? this.files[0].name : 'Choose file…';
+            document.getElementById('btnParse').disabled = !this.files[0];
+        });
+
+        document.getElementById('btnParse').addEventListener('click', async function() {
+            const file = document.getElementById('tallyFile').files[0];
+            if (!file) return;
+
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span> Parsing…';
+
+            const fd = new FormData();
+            fd.append('tally_file', file);
+
+            const resp = await fetch('/gl/tally-import/parse', { method: 'POST', body: fd });
+            const data = await resp.json();
+
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-upload mr-1"></i> Upload & Parse';
+
+            if (!resp.ok || data.error) {
+                alert('Error: ' + (data.error || 'Unknown error'));
+                return;
+            }
+
+            parsedRows    = data.rows;
+            parsedLedgers = data.ledgers;
+            renderReconcile();
+        });
+
+        document.getElementById('btnBack').addEventListener('click', function() {
+            document.getElementById('stepUpload').style.display = '';
+            document.getElementById('stepReconcile').style.display = 'none';
+            document.getElementById('saveResult').style.display = 'none';
+        });
+
+        function renderReconcile() {
+            const tbody = document.getElementById('reconcileBody');
+            tbody.innerHTML = '';
+
+            const ledgerOptions = parsedLedgers
+                .map(l => `<option value="${l.ledger_id}">${l.ledger_name} (${l.group_name})</option>`)
+                .join('');
+
+            let exactCount = 0, noneCount = 0;
+
+            parsedRows.forEach(function(r, i) {
+                const isExact = r.match === 'exact';
+                if (isExact) exactCount++; else noneCount++;
+
+                const statusBadge = isExact
+                    ? '<span class="badge badge-success">Matched</span>'
+                    : '<span class="badge badge-warning">No match</span>';
+
+                const ledgerCell = isExact
+                    ? `<span class="small">${r.ledger_name}</span><input type="hidden" class="row-ledger-id" value="${r.ledger_id}">`
+                    : `<select class="form-control form-control-sm row-ledger-id" style="min-width:200px">
+                           <option value="">— skip —</option>
+                           ${ledgerOptions}
+                       </select>`;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-center"><input type="checkbox" class="chk-row" ${isExact ? 'checked' : ''}></td>
+                    <td class="small">${r.tally_name}</td>
+                    <td>${ledgerCell}</td>
+                    <td class="text-center">${statusBadge}</td>`;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('reconcileSummary').textContent =
+                `${exactCount} matched, ${noneCount} unmatched`;
+
+            document.getElementById('stepUpload').style.display = 'none';
+            document.getElementById('stepReconcile').style.display = '';
+            document.getElementById('saveResult').style.display = 'none';
+        }
+
+        // Select all checkbox
+        document.getElementById('chkAll').addEventListener('change', function() {
+            document.querySelectorAll('.chk-row').forEach(c => c.checked = this.checked);
+        });
+
+        async function doSave() {
+            const rows = document.querySelectorAll('#reconcileBody tr');
+            const mappings = [];
+            rows.forEach(function(tr) {
+                const chk      = tr.querySelector('.chk-row');
+                const ledgerEl = tr.querySelector('.row-ledger-id');
+                const tallyTd  = tr.querySelectorAll('td')[1];
+                if (!chk || !chk.checked || !ledgerEl) return;
+                const ledgerId = ledgerEl.value;
+                if (!ledgerId) return;
+                mappings.push({ ledger_id: ledgerId, tally_name: tallyTd.textContent.trim() });
+            });
+
+            if (!mappings.length) { alert('No rows selected.'); return; }
+
+            document.getElementById('btnSave').disabled  = true;
+            document.getElementById('btnSave2').disabled = true;
+
+            const resp = await fetch('/gl/tally-import/save', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ mappings })
+            });
+            const data = await resp.json();
+
+            document.getElementById('btnSave').disabled  = false;
+            document.getElementById('btnSave2').disabled = false;
+
+            if (data.success) {
+                const el = document.getElementById('saveResult');
+                el.textContent = `✓ ${data.updated} ledger(s) updated with Tally name.`;
+                el.style.display = '';
+            } else {
+                alert('Error: ' + data.error);
+            }
+        }
+
+        document.getElementById('btnSave').addEventListener('click', doSave);
+        document.getElementById('btnSave2').addEventListener('click', doSave);
