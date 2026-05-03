@@ -79,11 +79,11 @@ router.post('/api/create-accounting', [isLoginEnsured, security.isAdmin()], asyn
     }
 });
 
-// GET /gl/api/accounting-events?from_date=&to_date=&status=
+// GET /gl/api/accounting-events?from_date=&to_date=&status=&source_type=&search=
 // Returns event queue for a date range — used by admin dashboard.
 router.get('/api/accounting-events', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
-    const { from_date, to_date, status } = req.query;
+    const { from_date, to_date, status, source_type, search } = req.query;
 
     try {
         const rows = await db.sequelize.query(`
@@ -93,21 +93,30 @@ router.get('/api/accounting-events', [isLoginEnsured, security.isAdmin()], async
                 e.processed_at, e.processed_by, e.voucher_id
             FROM gl_accounting_events e
             WHERE e.location_code = :locationCode
-              AND (:from_date IS NULL OR e.event_date >= :from_date)
-              AND (:to_date   IS NULL OR e.event_date <= :to_date)
-              AND (:status    IS NULL OR e.event_status = :status)
+              AND (:from_date   IS NULL OR e.event_date   >= :from_date)
+              AND (:to_date     IS NULL OR e.event_date   <= :to_date)
+              AND (:status      IS NULL OR e.event_status  = :status)
+              AND (:source_type IS NULL OR e.source_type   = :source_type)
+              AND (:search      IS NULL OR e.source_id     LIKE :searchLike
+                                       OR e.error_message  LIKE :searchLike
+                                       OR e.processed_by   LIKE :searchLike)
             ORDER BY e.event_date DESC, e.event_id DESC
-            LIMIT 500
+            LIMIT 2001
         `, {
             replacements: {
                 locationCode,
-                from_date: from_date || null,
-                to_date:   to_date   || null,
-                status:    status    || null
+                from_date:   from_date   || null,
+                to_date:     to_date     || null,
+                status:      status      || null,
+                source_type: source_type || null,
+                search:      search      || null,
+                searchLike:  search      ? `%${search}%` : null
             },
             type: db.Sequelize.QueryTypes.SELECT
         });
-        res.json(rows);
+        const hasMore = rows.length > 2000;
+        if (hasMore) rows.splice(2000);
+        res.json({ rows, hasMore });
     } catch (err) {
         console.error('Accounting events fetch error:', err);
         res.status(500).json({ error: err.message });

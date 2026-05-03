@@ -43,6 +43,22 @@ block content
                             option(value="UNPROCESSED") Unprocessed
                             option(value="PROCESSED") Processed
                             option(value="ERROR") Error
+                    .col-auto
+                        label.small.mb-1 Source Type
+                        select.form-control.form-control-sm#evSourceType
+                            option(value="") All
+                            option CREDIT_SALE
+                            option CASH_SALE
+                            option DAY_BILL
+                            option BANK_TXN
+                            option LUBES_INVOICE
+                            option TANK_INVOICE
+                            option BOWSER_CREDIT_SALE
+                            option BOWSER_CASH_SALE
+                            option BOWSER_DIGITAL_SALE
+                    .col-auto
+                        label.small.mb-1 Search
+                        input.form-control.form-control-sm(type="text" id="evSearch" placeholder="source ID / error…" style="width:160px")
                     .col-auto.align-self-end
                         button.btn.btn-primary.btn-sm(type="button" id="btnLoadEvents") View
                     .col-auto.align-self-end
@@ -67,6 +83,7 @@ block content
                             .h5.mb-0.text-danger#sumErrors —
 
                 #eventsTableWrap(style="display:none")
+                    .alert.alert-warning.py-2.small.mb-2(id="eventsLimitWarn" style="display:none")
                     .table-responsive
                         table.table.table-sm.table-bordered.table-hover#eventsTable
                             thead.thead-dark
@@ -144,57 +161,6 @@ block content
                 #geResult(style="display:none")
                     .card.card-body.mt-2#geResultBody
 
-        //- ── Recent Batch Runs ───────────────────────────────────────────
-        h6.mt-4.mb-2 Recent Batch Runs
-            button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" id="btnRefreshRuns") Refresh
-        .table-responsive
-            table.table.table-sm.table-bordered.table-hover#runsTable
-                thead.thead-dark
-                    tr
-                        th(style="width:60px") ID
-                        th(style="width:140px") Type
-                        th(style="width:90px") From
-                        th(style="width:90px") To
-                        th(style="width:90px") Status
-                        th(style="width:130px") Submitted
-                        th(style="width:130px") Completed
-                        th Result
-                        th.text-center(style="width:50px") Log
-                tbody#runsBody
-                    - if (typeof recentRequests !== 'undefined')
-                        each r in recentRequests
-                            tr
-                                td.small= r.request_id
-                                td.small= r.request_type
-                                td.small= r.from_date ? r.from_date.toString().substring(0,10) : ''
-                                td.small= r.to_date ? r.to_date.toString().substring(0,10) : ''
-                                td.small
-                                    - const sc = {PENDING:'secondary',RUNNING:'primary',COMPLETED:'success',ERROR:'danger'}[r.status]||'secondary'
-                                    span.badge(class='badge-'+sc)= r.status
-                                td.small= r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-IN') : ''
-                                td.small= r.completed_at ? new Date(r.completed_at).toLocaleString('en-IN') : ''
-                                td.small
-                                    - try { const s = typeof r.result_summary === 'string' ? JSON.parse(r.result_summary) : r.result_summary; if(s && s.total !== undefined) { }; var rs = s; } catch(e) { var rs = null; }
-                                    if rs && rs.total !== undefined
-                                        | #{rs.total} generated
-                                    else if rs && rs.processed !== undefined
-                                        | proc=#{rs.processed} err=#{rs.errors||0}
-                                    else if rs && rs.error
-                                        span.text-danger= rs.error
-                                td.text-center
-                                    button.btn.btn-outline-info.btn-sm.btn-view-log(type="button" data-id=r.request_id title="View Log")
-                                        i.bi.bi-file-text
-
-        //- Log Modal
-        #logModal.modal.fade(tabindex="-1" role="dialog")
-            .modal-dialog.modal-lg(role="document")
-                .modal-content
-                    .modal-header.py-2
-                        h6.modal-title#logModalLabel Batch Run Log
-                        button.close(type="button" data-dismiss="modal")
-                            span &times;
-                    .modal-body.p-2
-                        pre.small(style="max-height:400px;overflow-y:auto;white-space:pre-wrap;background:#f8f9fa;padding:8px;border-radius:4px" id="logModalBody") Loading…
 
     script.
         // ── Event Summary & List ──────────────────────────────────────────────
@@ -223,14 +189,28 @@ block content
 
         async function loadEvents() {
             await loadSummary();
-            const from   = document.getElementById('evFrom').value;
-            const to     = document.getElementById('evTo').value;
-            const status = document.getElementById('evStatus').value;
-            const qs     = new URLSearchParams({ from_date: from, to_date: to });
-            if (status) qs.set('status', status);
-            const rows = await fetch('/gl/api/accounting-events?' + qs).then(r => r.json());
+            const from       = document.getElementById('evFrom').value;
+            const to         = document.getElementById('evTo').value;
+            const status     = document.getElementById('evStatus').value;
+            const sourceType = document.getElementById('evSourceType').value;
+            const search     = document.getElementById('evSearch').value.trim();
+            const qs         = new URLSearchParams({ from_date: from, to_date: to });
+            if (status)     qs.set('status', status);
+            if (sourceType) qs.set('source_type', sourceType);
+            if (search)     qs.set('search', search);
+            const resp  = await fetch('/gl/api/accounting-events?' + qs).then(r => r.json());
+            const rows  = resp.rows;
             const tbody = document.getElementById('eventsBody');
             tbody.innerHTML = '';
+
+            const warn = document.getElementById('eventsLimitWarn');
+            if (resp.hasMore) {
+                warn.textContent = 'Showing 2,000 of more results — please narrow your date range, status, or source type filter.';
+                warn.style.display = '';
+            } else {
+                warn.style.display = 'none';
+            }
+
             rows.forEach(function(r) {
                 const tr = document.createElement('tr');
                 const retryBtn = r.event_status === 'ERROR'
@@ -376,61 +356,3 @@ block content
             }
         });
 
-        // ── Recent Batch Runs ─────────────────────────────────────────────────
-
-        function statusBadge(s) {
-            const map = { PENDING:'secondary', RUNNING:'primary', COMPLETED:'success', ERROR:'danger' };
-            return `<span class="badge badge-${map[s]||'secondary'}">${s}</span>`;
-        }
-
-        function resultSummaryText(rs) {
-            if (!rs) return '';
-            try {
-                const s = typeof rs === 'string' ? JSON.parse(rs) : rs;
-                if (s.total !== undefined) return `${s.total} generated`;
-                if (s.processed !== undefined) return `proc=${s.processed} err=${s.errors||0}`;
-                if (s.error) return `<span class="text-danger">${s.error}</span>`;
-            } catch(e) {}
-            return '';
-        }
-
-        async function loadRecentRuns() {
-            const rows = await fetch('/gl/api/batch-requests').then(r => r.json());
-            const tbody = document.getElementById('runsBody');
-            tbody.innerHTML = '';
-            rows.forEach(function(r) {
-                const tr = document.createElement('tr');
-                const sub = r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-IN') : '';
-                const cmp = r.completed_at ? new Date(r.completed_at).toLocaleString('en-IN') : '';
-                tr.innerHTML = `
-                    <td class="small">${r.request_id}</td>
-                    <td class="small">${r.request_type}</td>
-                    <td class="small">${(r.from_date||'').toString().substring(0,10)}</td>
-                    <td class="small">${(r.to_date||'').toString().substring(0,10)}</td>
-                    <td class="small">${statusBadge(r.status)}</td>
-                    <td class="small">${sub}</td>
-                    <td class="small">${cmp}</td>
-                    <td class="small">${resultSummaryText(r.result_summary)}</td>
-                    <td class="text-center"><button class="btn btn-outline-info btn-sm btn-view-log" data-id="${r.request_id}" title="View Log"><i class="bi bi-file-text"></i></button></td>`;
-                tbody.appendChild(tr);
-            });
-            bindLogButtons();
-        }
-
-        function bindLogButtons() {
-            document.querySelectorAll('.btn-view-log').forEach(function(btn) {
-                btn.addEventListener('click', async function() {
-                    const id = this.dataset.id;
-                    document.getElementById('logModalBody').textContent = 'Loading…';
-                    $('#logModal').modal('show');
-                    const data = await fetch('/gl/api/batch-requests/' + id + '/log').then(r => r.json());
-                    document.getElementById('logModalLabel').textContent =
-                        `Run #${data.request_id} — ${data.request_type} (${data.status})`;
-                    document.getElementById('logModalBody').textContent =
-                        data.log_text || '(no log)';
-                });
-            });
-        }
-
-        document.getElementById('btnRefreshRuns').addEventListener('click', loadRecentRuns);
-        bindLogButtons();
