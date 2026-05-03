@@ -37,7 +37,9 @@ const BOWSER_BOUND_TYPES = new Set(['BOWSER_CREDIT_SALE', 'BOWSER_CASH_SALE', 'B
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-async function processEvents(locationCode, fromDate, toDate, processedBy) {
+async function processEvents(locationCode, fromDate, toDate, processedBy, logger) {
+    const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
+
     const [events, openShiftDates, openBowserDates] = await Promise.all([
         db.sequelize.query(`
             SELECT * FROM gl_accounting_events
@@ -50,6 +52,8 @@ async function processEvents(locationCode, fromDate, toDate, processedBy) {
         getOpenBowserDates(locationCode, fromDate, toDate)
     ]);
 
+    log.info(`Create Accounting started: ${locationCode} ${fromDate} → ${toDate}, ${events.length} unprocessed events`);
+
     const summary = { processed: 0, errors: 0, skipped: 0, blocked: 0, blockedDates: [], details: [] };
 
     for (const event of events) {
@@ -60,6 +64,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy) {
         if (SHIFT_BOUND_TYPES.has(event.source_type) && openShiftDates.has(eventDate)) {
             summary.blocked++;
             if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
+            log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — shift on ${eventDate} is DRAFT`);
             summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Shift on ${eventDate} is still DRAFT` });
             continue;
         }
@@ -67,6 +72,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy) {
         if (BOWSER_BOUND_TYPES.has(event.source_type) && openBowserDates.has(eventDate)) {
             summary.blocked++;
             if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
+            log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — bowser on ${eventDate} is DRAFT`);
             summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Bowser closing on ${eventDate} is still DRAFT` });
             continue;
         }
@@ -74,19 +80,26 @@ async function processEvents(locationCode, fromDate, toDate, processedBy) {
         try {
             const result = await processEvent(event, processedBy);
             summary.processed += result.voucherCount;
+            log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
             summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
         } catch (err) {
             await markEventError(event.event_id, err.message);
             summary.errors++;
+            log.error(`ERROR event_id=${event.event_id} ${event.source_type}#${event.source_id}: ${err.message}`);
             summary.details.push({ event_id: event.event_id, status: 'ERROR', message: err.message });
         }
     }
 
+    log.info(`Create Accounting done — processed=${summary.processed} blocked=${summary.blocked} errors=${summary.errors} skipped=${summary.skipped}`);
+    if (summary.blockedDates.length) log.info(`Blocked dates (DRAFT shifts): ${summary.blockedDates.join(', ')}`);
+
     return summary;
 }
 
-async function reprocessEvents(locationCode, fromDate, toDate, processedBy) {
-    await db.sequelize.query(`
+async function reprocessEvents(locationCode, fromDate, toDate, processedBy, logger) {
+    const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
+
+    const [, meta] = await db.sequelize.query(`
         UPDATE gl_accounting_events
         SET event_status  = 'UNPROCESSED',
             event_type    = 'UPDATE',
@@ -102,7 +115,9 @@ async function reprocessEvents(locationCode, fromDate, toDate, processedBy) {
         type: QueryTypes.UPDATE
     });
 
-    return await processEvents(locationCode, fromDate, toDate, processedBy);
+    log.info(`Reprocess: reset ${meta?.affectedRows || 0} events to UNPROCESSED for ${fromDate} → ${toDate}`);
+
+    return await processEvents(locationCode, fromDate, toDate, processedBy, log);
 }
 
 module.exports = { processEvents, reprocessEvents, generateMissingEvents };
@@ -111,9 +126,12 @@ module.exports = { processEvents, reprocessEvents, generateMissingEvents };
 // Backfill tool: scan each source table for records with no event and INSERT them.
 // Safe to run multiple times — NOT EXISTS guard prevents duplicates.
 
-async function generateMissingEvents(locationCode, fromDate, toDate, createdBy) {
+async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, logger) {
+    const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
     const counts = {};
     let total = 0;
+
+    log.info(`Generate Events started: ${locationCode} ${fromDate} → ${toDate}`);
 
     const run = async (sourceType, sql) => {
         const [, meta] = await db.sequelize.query(sql, {
@@ -123,6 +141,7 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy) 
         const n = meta?.affectedRows || 0;
         counts[sourceType] = n;
         total += n;
+        log.debug(`${sourceType}: inserted ${n} missing event(s)`);
     };
 
     await run('CREDIT_SALE', `
@@ -274,6 +293,9 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy) 
               WHERE e.source_type = 'TANK_INVOICE' AND e.source_id = ti.id
           )
     `);
+
+    log.info(`Generate Events done — total inserted=${total}` +
+        (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
     return { counts, total };
 }

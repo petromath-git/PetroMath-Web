@@ -1,0 +1,175 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Dev DB Refresh Control
+            span.badge.badge-warning.ml-2(style="font-size:0.85rem") DEV ONLY
+
+        //- Last Refresh Info
+        .card.mb-3
+            .card-body.py-2
+                .row.align-items-center
+                    .col-auto
+                        .small.text-muted Last Refresh
+                        if lastRefresh
+                            .font-weight-bold= new Date(lastRefresh.restored_at).toLocaleString('en-IN')
+                        else
+                            .text-muted.small Unknown
+                    .col-auto
+                        .small.text-muted Backup Taken At (Prod)
+                        if lastRefresh
+                            .font-weight-bold= new Date(lastRefresh.backup_taken_at).toLocaleString('en-IN')
+                        else
+                            span.text-muted.small —
+                    .col-auto
+                        .small.text-muted Backup File
+                        if lastRefresh
+                            .small.text-monospace= lastRefresh.backup_filename
+                        else
+                            span.text-muted.small —
+                    .col-auto.ml-auto
+                        .small.text-muted Cron Schedule
+                        .small Every 4 hours
+
+        //- Controls
+        .card.mb-3
+            .card-body.py-2
+                .row.align-items-center
+
+                    .col-auto
+                        .small.text-muted.mb-1 Auto-Refresh Status
+                        if isRunning
+                            span.badge.badge-primary(style="font-size:0.9rem")
+                                i.bi.bi-arrow-repeat.mr-1
+                                | RUNNING
+                        else if isPaused
+                            span.badge.badge-warning(style="font-size:0.9rem")
+                                i.bi.bi-pause-fill.mr-1
+                                | PAUSED
+                        else
+                            span.badge.badge-success(style="font-size:0.9rem")
+                                i.bi.bi-play-fill.mr-1
+                                | ACTIVE (every 4h)
+
+                    .col-auto
+                        if isPaused
+                            button.btn.btn-success.btn-sm#btnResume(type="button")
+                                i.bi.bi-play-fill.mr-1
+                                | Resume Auto-Refresh
+                        else
+                            button.btn.btn-warning.btn-sm#btnPause(type="button")
+                                i.bi.bi-pause-fill.mr-1
+                                | Pause Auto-Refresh
+
+                    .col-auto
+                        button.btn.btn-danger.btn-sm#btnRefreshNow(type="button" disabled=isRunning)
+                            i.bi.bi-arrow-clockwise.mr-1
+                            | Refresh Now (from S3)
+
+                    .col-auto.ml-auto
+                        button.btn.btn-outline-secondary.btn-sm#btnRefreshStatus(type="button")
+                            i.bi.bi-arrow-repeat.mr-1
+                            | Refresh Status
+
+        .alert.alert-warning.py-2.small.mb-3
+            i.bi.bi-exclamation-triangle-fill.mr-1
+            | &ldquo;Refresh Now&rdquo; drops and recreates the dev DB from the latest prod S3 backup.
+            | The app will lose DB connection for 1&ndash;2 minutes while the import runs.
+            | All unsaved test data will be lost.
+
+        //- Log Tail
+        .card
+            .card-header.py-2.d-flex.justify-content-between.align-items-center
+                span.small.font-weight-bold Refresh Log (last 30 lines)
+                span.small.text-muted#logStatus
+                    if isRunning
+                        | Auto-refreshing…
+            .card-body.p-0
+                pre.small.mb-0(style="max-height:350px;overflow-y:auto;padding:10px;background:#f8f9fa;border-radius:0 0 4px 4px;white-space:pre-wrap" id="logBox")= logTail || '(no log yet)'
+
+    script.
+        let pollTimer = null;
+
+        function setStatus(isPaused, isRunning) {
+            const badge = document.querySelector('.badge[class*="badge-"]');
+            const btnPause   = document.getElementById('btnPause');
+            const btnResume  = document.getElementById('btnResume');
+            const btnNow     = document.getElementById('btnRefreshNow');
+
+            if (isRunning) {
+                if (badge) { badge.className = 'badge badge-primary'; badge.innerHTML = '<i class="bi bi-arrow-repeat mr-1"></i> RUNNING'; }
+                if (btnNow) btnNow.disabled = true;
+            } else if (isPaused) {
+                if (badge) { badge.className = 'badge badge-warning'; badge.innerHTML = '<i class="bi bi-pause-fill mr-1"></i> PAUSED'; }
+                if (btnNow) btnNow.disabled = false;
+            } else {
+                if (badge) { badge.className = 'badge badge-success'; badge.innerHTML = '<i class="bi bi-play-fill mr-1"></i> ACTIVE (every 4h)'; }
+                if (btnNow) btnNow.disabled = false;
+            }
+        }
+
+        async function pollStatus() {
+            const data = await fetch('/dev-db-refresh/status').then(r => r.json());
+            setStatus(data.isPaused, data.isRunning);
+
+            if (data.logTail) document.getElementById('logBox').textContent = data.logTail;
+            document.getElementById('logStatus').textContent = data.isRunning ? 'Auto-refreshing…' : '';
+
+            // Show pause/resume button correctly
+            const btnPause  = document.getElementById('btnPause');
+            const btnResume = document.getElementById('btnResume');
+            if (btnPause)  btnPause.style.display  = data.isPaused ? 'none' : '';
+            if (btnResume) btnResume.style.display  = data.isPaused ? '' : 'none';
+
+            if (data.isRunning) {
+                pollTimer = setTimeout(pollStatus, 3000);
+            } else {
+                clearTimeout(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        const btnPause = document.getElementById('btnPause');
+        if (btnPause) {
+            btnPause.addEventListener('click', async function() {
+                this.disabled = true;
+                await fetch('/dev-db-refresh/pause', { method: 'POST' });
+                pollStatus();
+                this.disabled = false;
+            });
+        }
+
+        const btnResume = document.getElementById('btnResume');
+        if (btnResume) {
+            btnResume.addEventListener('click', async function() {
+                this.disabled = true;
+                await fetch('/dev-db-refresh/resume', { method: 'POST' });
+                pollStatus();
+                this.disabled = false;
+            });
+        }
+
+        document.getElementById('btnRefreshNow').addEventListener('click', async function() {
+            if (!confirm('This will drop and recreate the dev DB from the latest prod S3 backup.\nAll current test data will be lost.\n\nProceed?')) return;
+            this.disabled = true;
+            this.textContent = 'Starting…';
+            const data = await fetch('/dev-db-refresh/run-now', { method: 'POST' }).then(r => r.json());
+            if (data.success) {
+                document.getElementById('logStatus').textContent = 'Auto-refreshing…';
+                pollTimer = setTimeout(pollStatus, 3000);
+            } else {
+                alert('Error: ' + data.error);
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-arrow-clockwise mr-1"></i> Refresh Now (from S3)';
+            }
+        });
+
+        document.getElementById('btnRefreshStatus').addEventListener('click', pollStatus);
+
+        // Auto-poll if already running on page load
+        if (#{isRunning ? 'true' : 'false'}) {
+            pollTimer = setTimeout(pollStatus, 3000);
+        }

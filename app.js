@@ -165,6 +165,17 @@ const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
 const billController = require("./controllers/bill-controller");
 const lubesInvoiceController = require("./controllers/lubes-invoice-controller");
+const multer = require('multer');
+const lubeInvoiceUploadDir = path.join(__dirname, 'uploads', 'lube-invoices');
+if (!fs.existsSync(lubeInvoiceUploadDir)) fs.mkdirSync(lubeInvoiceUploadDir, { recursive: true });
+const lubeInvoiceUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, lubeInvoiceUploadDir),
+        filename:    (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`)
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => file.mimetype === 'application/pdf' ? cb(null, true) : cb(new Error('Only PDF files are accepted'))
+});
 const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
 const passwordResetController = require('./controllers/password-reset-controller');
@@ -238,6 +249,7 @@ const employeeRoutes  = require('./routes/employee-routes');
 const documentRoutes  = require('./routes/document-routes');
 const tankReceiptRoutes = require('./routes/tank-receipt-routes');
 const purchasesRoutes   = require('./routes/purchases-routes');
+const devDbRefreshRoutes = require('./routes/dev-db-refresh-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -409,6 +421,7 @@ app.use('/purchases',    purchasesRoutes);
 app.use('/employees', employeeRoutes);
 app.use('/documents', documentRoutes);
 app.use('/gl', glRoutes);
+app.use('/dev-db-refresh', devDbRefreshRoutes);
 app.use('/bowser', bowserRoutes);
 
 
@@ -1468,6 +1481,17 @@ app.get('/lubes-invoice/suppliers-with-dates', isLoginEnsured, function(req, res
 // Get suppliers active on a specific date (alternative server-side approach)
 app.get('/lubes-invoice/suppliers-active-on-date', isLoginEnsured, function(req, res, next) {
     lubesInvoiceController.getSuppliersActiveOnDate(req, res, next);
+});
+
+// Lube Invoice PDF Upload
+app.get('/lubes-invoice/upload', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.getUploadPage(req, res, next);
+});
+app.post('/lubes-invoice/parse-pdf', isLoginEnsured, lubeInvoiceUpload.single('lubeInvoicePdf'), function(req, res, next) {
+    lubesInvoiceController.parseLubeInvoicePdf(req, res, next);
+});
+app.post('/lubes-invoice/save-from-pdf', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.saveLubeInvoiceFromPdf(req, res, next);
 });
 
 

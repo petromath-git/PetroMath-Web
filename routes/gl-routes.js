@@ -6,6 +6,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 const security = require('../utils/app-security');
 const db = require('../db/db-connection');
 const createAccountingService = require('../services/create-accounting-service');
+const glBatchService = require('../services/gl-batch-service');
 
 // GET /gl/api/ledgers/search?location=&group=&q=
 // Returns [{ledger_id, ledger_name}] — used by Select2 ajax typeahead on product ledger fields
@@ -43,24 +44,35 @@ router.get('/api/ledgers/search', [isLoginEnsured, security.isAdmin()], async fu
 });
 
 // POST /gl/api/create-accounting
-// Body: { from_date, to_date }
-// Runs Create Accounting for the location and date range.
+// Body: { from_date, to_date, reprocess }
+// Runs Create Accounting wrapped in a gl_batch_requests record.
 router.post('/api/create-accounting', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
-    const processedBy  = req.user.username;
+    const processedBy  = req.user.username || String(req.user.Person_id);
     const { from_date, to_date, reprocess } = req.body;
 
     if (!from_date || !to_date) {
         return res.status(400).json({ error: 'from_date and to_date are required' });
     }
 
-    try {
-        const fn = reprocess === true || reprocess === 'true'
-            ? createAccountingService.reprocessEvents
-            : createAccountingService.processEvents;
+    const isReprocess = reprocess === true || reprocess === 'true';
+    const requestType = isReprocess ? 'REPROCESS_ACCOUNTING' : 'CREATE_ACCOUNTING';
 
-        const summary = await fn(locationCode, from_date, to_date, processedBy);
-        res.json({ success: true, summary });
+    try {
+        const requestId = await glBatchService.submitRequest(
+            requestType, locationCode, from_date, to_date,
+            isReprocess ? { reprocess: true } : null,
+            processedBy
+        );
+
+        const { summary } = await glBatchService.runRequest(requestId, locationCode, async (logger) => {
+            const fn = isReprocess
+                ? createAccountingService.reprocessEvents
+                : createAccountingService.processEvents;
+            return fn(locationCode, from_date, to_date, processedBy, logger);
+        });
+
+        res.json({ success: true, summary, request_id: requestId });
     } catch (err) {
         console.error('Create Accounting error:', err);
         res.status(500).json({ error: err.message });
@@ -998,17 +1010,34 @@ router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async functi
 // ── GL Control ────────────────────────────────────────────────────────────────
 // GET /gl/control — admin dashboard: events monitor + create accounting + generate events
 
-router.get('/control', [isLoginEnsured, security.isAdmin()], function(req, res) {
-    const today = new Date().toISOString().substring(0, 10);
+router.get('/control', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const today    = new Date().toISOString().substring(0, 10);
     const fromDate = today.substring(0, 8) + '01';
-    res.render('gl-control', {
-        title:    'GL Control',
-        user:     req.user,
-        config:   require('../config/app-config').APP_CONFIGS,
-        fromDate,
-        toDate:   today,
-        messages: req.flash()
-    });
+    try {
+        await glBatchService.recoverStaleRequests(locationCode);
+        const recentRequests = await glBatchService.getRecentRequests(locationCode, 10);
+        res.render('gl-control', {
+            title:    'GL Control',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            fromDate,
+            toDate:   today,
+            recentRequests,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('GL Control error:', err);
+        res.render('gl-control', {
+            title:    'GL Control',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            fromDate,
+            toDate:   today,
+            recentRequests: [],
+            messages: req.flash()
+        });
+    }
 });
 
 // GET /gl/api/event-summary?from_date=&to_date=
@@ -1084,7 +1113,7 @@ router.post('/api/retry-event/:id', [isLoginEnsured, security.isAdmin()], async 
     }
 });
 
-// POST /gl/api/generate-events — backfill missing events for date range
+// POST /gl/api/generate-events — backfill missing events wrapped in a batch request record
 router.post('/api/generate-events', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
     const createdBy    = req.user.username || String(req.user.Person_id);
@@ -1095,11 +1124,42 @@ router.post('/api/generate-events', [isLoginEnsured, security.isAdmin()], async 
     }
 
     try {
-        const result = await createAccountingService.generateMissingEvents(locationCode, from_date, to_date, createdBy);
-        res.json({ success: true, ...result });
+        const requestId = await glBatchService.submitRequest(
+            'GENERATE_EVENTS', locationCode, from_date, to_date, null, createdBy
+        );
+
+        const { summary: result } = await glBatchService.runRequest(requestId, locationCode, async (logger) => {
+            return createAccountingService.generateMissingEvents(locationCode, from_date, to_date, createdBy, logger);
+        });
+
+        res.json({ success: true, ...result, request_id: requestId });
     } catch (err) {
         console.error('Generate events error:', err);
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /gl/api/batch-requests — recent batch requests for this location
+router.get('/api/batch-requests', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const requests = await glBatchService.getRecentRequests(locationCode, 20);
+        res.json(requests);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /gl/api/batch-requests/:id/log — full log for a single request
+router.get('/api/batch-requests/:id/log', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const requestId    = parseInt(req.params.id);
+    try {
+        const row = await glBatchService.getRequestLog(requestId, locationCode);
+        if (!row) return res.status(404).json({ error: 'Request not found' });
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
