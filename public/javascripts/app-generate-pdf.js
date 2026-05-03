@@ -65,6 +65,11 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.fromDate = document.getElementById('fromDate').value;
         requestBody.toDate = document.getElementById('toDate').value;
         requestBody.productId = document.getElementById('productId').value;
+    }else if (currentPage.includes('reports/stock/intercompany-ledger')) {
+        requestBody.reportType = 'IntercompanyLedger';
+        requestBody.fromDate = document.getElementById('fromDate').value;
+        requestBody.toDate = document.getElementById('toDate').value;
+        requestBody.bowserId = document.getElementById('bowserId').value;
     }else if (currentPage.includes('reports-digital-recon')) {
         requestBody.reportType = 'DigitalRecon';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
