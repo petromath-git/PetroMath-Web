@@ -187,10 +187,17 @@ block content
                                                     if isClosed
                                                         span= item.vehicle_number || '—'
                                                     else
-                                                        select.form-control.form-control-sm.cred-vehicle
-                                                            option(value='')
-                                                            if item.vehicle_id
-                                                                option(value=item.vehicle_id selected)= item.vehicle_number
+                                                        .d-flex.align-items-center
+                                                            select.form-control.form-control-sm.cred-vehicle
+                                                                option(value='')
+                                                                if item.vehicle_id
+                                                                    option(value=item.vehicle_id selected)= item.vehicle_number
+                                                            button.btn.btn-outline-primary.btn-sm.ml-2.cred-add-vehicle(
+                                                                type='button'
+                                                                title='Add new vehicle'
+                                                                style=item.creditlist_id ? '' : 'display:none'
+                                                                onclick='openBowserQuickAddVehicleModal(this)'
+                                                            ) +
                                                 td
                                                     if isClosed
                                                         span= item.quantity
@@ -226,6 +233,26 @@ block content
                             button.btn.btn-primary(type='button' onclick='bowserNav("digital_tab")') Next &raquo;
 
             //- ── TAB 4: DIGITAL ──────────────────────────────────────────────
+                if !isClosed
+                    .modal.fade#bowserQuickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='bowserQuickAddVehicleModalLabel' aria-hidden='true')
+                        .modal-dialog(role='document')
+                            .modal-content
+                                .modal-header
+                                    h5.modal-title#bowserQuickAddVehicleModalLabel Add New Vehicle
+                                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                                        span(aria-hidden='true') &times;
+                                .modal-body
+                                    .form-group
+                                        label Vehicle Number *
+                                        input.form-control.text-uppercase#bowserQuickVehicleNumber(type='text' maxlength='20' placeholder='e.g., TN01AB1234' autocomplete='off')
+                                        small.form-text.text-danger.d-none#bowserQuickVehicleDupMsg Vehicle already exists for this customer
+                                    .form-group
+                                        label Vehicle Type
+                                        input.form-control.text-uppercase#bowserQuickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                                .modal-footer
+                                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                                    button.btn.btn-success#bowserQuickAddVehicleSaveBtn(type='button' onclick='quickSaveBowserVehicle()') Add Vehicle
+
             div.tab-pane.fade#tab-digital
                 div.mt-2.mb-1.px-3
                     span.text-muted Meter Diff:&nbsp;
@@ -398,6 +425,7 @@ block content
         let   bc_productId      = !{JSON.stringify(closing ? closing.product_id : (singleBowser ? singleBowser.product_id : 0))};
         const bc_isClosed       = !{JSON.stringify(!!isClosed)};
         const bc_vehicleCache   = {};
+        let   bc_quickAddContext = null;
 
         // ── Init ──────────────────────────────────────────────────────────────
         window.addEventListener('DOMContentLoaded', () => {
@@ -585,6 +613,13 @@ block content
             if (typeof $ !== 'undefined' && $.fn.select2) {
                 $(vehSel).val(selectedVehicleId ? String(selectedVehicleId) : '').trigger('change.select2');
             }
+            updateBowserQuickAddButton(row);
+        }
+
+        function updateBowserQuickAddButton(row) {
+            const btn = row.querySelector('.cred-add-vehicle');
+            const customerId = row.querySelector('.cred-customer')?.value;
+            if (btn) btn.style.display = customerId ? '' : 'none';
         }
 
         function setCustomerFromVehicle(row, vehicleId) {
@@ -617,6 +652,7 @@ block content
             if (!customerSel || !vehicleSel || row.dataset.vehicleBound === 'Y') return;
 
             customerSel.addEventListener('change', function() {
+                updateBowserQuickAddButton(row);
                 ensureVehiclesLoaded(this.value).then(vehicles => {
                     populateVehicleOptions(row, this.value ? vehicles : getAllVehiclesFlat(), null);
                 });
@@ -639,6 +675,92 @@ block content
             }
 
             row.dataset.vehicleBound = 'Y';
+            updateBowserQuickAddButton(row);
+        }
+
+        function openBowserQuickAddVehicleModal(triggerBtn) {
+            const row = triggerBtn.closest('tr');
+            const creditListId = row.querySelector('.cred-customer')?.value;
+            if (!creditListId) return;
+
+            bc_quickAddContext = {
+                row,
+                creditListId: String(creditListId)
+            };
+
+            document.getElementById('bowserQuickVehicleNumber').value = '';
+            document.getElementById('bowserQuickVehicleType').value = '';
+            document.getElementById('bowserQuickVehicleDupMsg').classList.add('d-none');
+            document.getElementById('bowserQuickAddVehicleModalLabel').textContent =
+                'Add New Vehicle' + (getCustomerName(creditListId) ? ' for ' + getCustomerName(creditListId) : '');
+
+            const saveBtn = document.getElementById('bowserQuickAddVehicleSaveBtn');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Add Vehicle';
+            $('#bowserQuickAddVehicleModal').modal('show');
+        }
+
+        function quickSaveBowserVehicle() {
+            if (!bc_quickAddContext) return;
+
+            const vehicleNumber = document.getElementById('bowserQuickVehicleNumber').value.trim().toUpperCase();
+            const vehicleType = document.getElementById('bowserQuickVehicleType').value.trim().toUpperCase();
+            if (!vehicleNumber) {
+                document.getElementById('bowserQuickVehicleNumber').focus();
+                return;
+            }
+
+            const saveBtn = document.getElementById('bowserQuickAddVehicleSaveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            document.getElementById('bowserQuickVehicleDupMsg').classList.add('d-none');
+
+            fetch('/vehicles/api/quick-add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    creditlist_id: bc_quickAddContext.creditListId,
+                    vehicle_number: vehicleNumber,
+                    vehicle_type: vehicleType
+                })
+            })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    if ((data.error || '').includes('already exists')) {
+                        document.getElementById('bowserQuickVehicleDupMsg').classList.remove('d-none');
+                    } else {
+                        alert(data.error || 'Could not add vehicle');
+                    }
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Add Vehicle';
+                    return;
+                }
+
+                const created = {
+                    vehicle_id: data.vehicle.vehicleId,
+                    vehicle_number: data.vehicle.vehicleNumber,
+                    vehicle_type: data.vehicle.vehicleType,
+                    creditlist_id: bc_quickAddContext.creditListId,
+                    customer_name: getCustomerName(bc_quickAddContext.creditListId)
+                };
+
+                if (!bc_vehicleCache[bc_quickAddContext.creditListId]) {
+                    bc_vehicleCache[bc_quickAddContext.creditListId] = [];
+                }
+                bc_vehicleCache[bc_quickAddContext.creditListId].push(created);
+                populateVehicleOptions(
+                    bc_quickAddContext.row,
+                    bc_vehicleCache[bc_quickAddContext.creditListId],
+                    created.vehicle_id
+                );
+                $('#bowserQuickAddVehicleModal').modal('hide');
+            })
+            .catch(() => {
+                alert('Network error while adding vehicle.');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Add Vehicle';
+            });
         }
 
         function preloadExistingCreditVehicles() {
@@ -774,9 +896,12 @@ block content
                     </select>
                 </td>
                 <td>
-                    <select class="form-control form-control-sm cred-vehicle">
-                        <option value=""></option>
-                    </select>
+                    <div class="d-flex align-items-center">
+                        <select class="form-control form-control-sm cred-vehicle">
+                            <option value=""></option>
+                        </select>
+                        <button class="btn btn-outline-primary btn-sm ml-2 cred-add-vehicle" type="button" title="Add new vehicle" style="display:none" onclick="openBowserQuickAddVehicleModal(this)">+</button>
+                    </div>
                 </td>
                 <td><input class="form-control form-control-sm cred-qty" type="number" min="0" step="0.001" oninput="computeDeliveryRow(this,'cred'); updateAllTotals()"></td>
                 <td><input class="form-control form-control-sm cred-rate" type="number" min="0.0001" step="0.0001" value="${rate.toFixed(4)}" readonly></td>
