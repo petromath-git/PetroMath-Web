@@ -1122,6 +1122,43 @@ router.post('/api/retry-event/:id', [isLoginEnsured, security.isAdmin()], async 
     }
 });
 
+// POST /gl/api/retry-events — bulk reset ERROR events back to UNPROCESSED
+router.post('/api/retry-events', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { event_ids } = req.body;
+
+    if (!Array.isArray(event_ids) || !event_ids.length) {
+        return res.status(400).json({ success: false, error: 'event_ids array required' });
+    }
+
+    const ids = event_ids.map(id => parseInt(id)).filter(id => !isNaN(id));
+    if (!ids.length) {
+        return res.status(400).json({ success: false, error: 'No valid event IDs provided' });
+    }
+
+    try {
+        const placeholders = ids.map((_, i) => `:id${i}`).join(', ');
+        const replacements = { locationCode };
+        ids.forEach((id, i) => { replacements[`id${i}`] = id; });
+
+        const [, meta] = await db.sequelize.query(`
+            UPDATE gl_accounting_events
+            SET event_status  = 'UNPROCESSED',
+                error_message = NULL,
+                processed_at  = NULL,
+                processed_by  = NULL
+            WHERE event_id      IN (${placeholders})
+              AND location_code = :locationCode
+              AND event_status  = 'ERROR'
+        `, { replacements, type: db.Sequelize.QueryTypes.UPDATE });
+
+        res.json({ success: true, updated: meta?.affectedRows || 0 });
+    } catch (err) {
+        console.error('Bulk retry events error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // POST /gl/api/generate-events — backfill missing events wrapped in a batch request record
 router.post('/api/generate-events', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
