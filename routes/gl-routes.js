@@ -946,7 +946,7 @@ router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req,
     try {
         const [ledgers, groups] = await Promise.all([
             db.sequelize.query(`
-                SELECT l.ledger_id, l.ledger_name, l.active_flag,
+                SELECT l.ledger_id, l.ledger_name, l.tally_ledger_name, l.active_flag,
                        g.group_id, g.group_name, g.group_nature
                 FROM gl_ledgers l
                 JOIN gl_ledger_groups g ON g.group_id = l.group_id
@@ -1000,19 +1000,141 @@ router.post('/api/ledger', [isLoginEnsured, security.isAdmin()], async function(
 router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
     const ledgerId = parseInt(req.params.id);
-    const { ledger_name, group_id, active_flag } = req.body;
+    const { ledger_name, group_id, active_flag, tally_ledger_name } = req.body;
     if (!ledger_name || !group_id) return res.status(400).json({ success: false, error: 'ledger_name and group_id are required' });
     try {
         await db.sequelize.query(`
-            UPDATE gl_ledgers SET ledger_name=:ledger_name, group_id=:group_id, active_flag=:active_flag, updated_by=:user
+            UPDATE gl_ledgers SET ledger_name=:ledger_name, group_id=:group_id, active_flag=:active_flag,
+                tally_ledger_name=:tally_ledger_name, updated_by=:user
             WHERE ledger_id=:ledgerId AND location_code=:locationCode
         `, {
-            replacements: { ledgerId, locationCode, ledger_name, group_id: parseInt(group_id), active_flag: active_flag === 'Y' ? 'Y' : 'N', user: req.user.username },
+            replacements: {
+                ledgerId, locationCode, ledger_name, group_id: parseInt(group_id),
+                active_flag: active_flag === 'Y' ? 'Y' : 'N',
+                tally_ledger_name: tally_ledger_name || null,
+                user: req.user.username
+            },
             type: db.Sequelize.QueryTypes.UPDATE
         });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ── Tally Import ──────────────────────────────────────────────────────────────
+// GET  /gl/tally-import  — upload page
+// POST /gl/tally-import  — parse file, return reconcile data as JSON
+
+const multer  = require('multer');
+const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+function parseTallyMasterTxt(buf) {
+    // Auto-detect UTF-16 LE (BOM: FF FE) vs UTF-8/ASCII
+    const isUtf16 = buf[0] === 0xFF && buf[1] === 0xFE;
+    const content = buf.toString(isUtf16 ? 'utf16le' : 'utf8');
+    // Extract all double-quoted strings
+    const names = [];
+    const re = /"([^"]+)"/g;
+    let m;
+    while ((m = re.exec(content)) !== null) {
+        const name = m[1].trim();
+        if (name) names.push(name);
+    }
+    return names;
+}
+
+router.get('/tally-import', [isLoginEnsured, security.isAdmin()], function(req, res) {
+    res.render('gl-tally-import', {
+        title:   'Tally Ledger Import',
+        user:    req.user,
+        config:  require('../config/app-config').APP_CONFIGS,
+        messages: req.flash()
+    });
+});
+
+router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.single('tally_file'), async function(req, res) {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const locationCode = req.user.location_code;
+    try {
+        const tallyNames = parseTallyMasterTxt(req.file.buffer);
+
+        // Load PetroMath ledgers and groups
+        const [ledgers, groups] = await Promise.all([
+            db.sequelize.query(`
+                SELECT l.ledger_id, l.ledger_name, l.tally_ledger_name, l.active_flag,
+                       g.group_name
+                FROM gl_ledgers l
+                JOIN gl_ledger_groups g ON g.group_id = l.group_id
+                WHERE l.location_code = :locationCode
+                ORDER BY l.ledger_name
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+            db.sequelize.query(`
+                SELECT group_name FROM gl_ledger_groups WHERE location_code = :locationCode
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
+        ]);
+
+        const groupNames = new Set(groups.map(g => g.group_name.toLowerCase()));
+
+        // Build lookup map: lowercase ledger_name → ledger
+        const ledgerByName = new Map();
+        for (const l of ledgers) ledgerByName.set(l.ledger_name.toLowerCase(), l);
+
+        // Filter out Tally group names, deduplicate, reconcile
+        const seen = new Set();
+        const rows = [];
+        for (const tallyName of tallyNames) {
+            const key = tallyName.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (groupNames.has(key)) continue; // skip Tally group names
+
+            const matched = ledgerByName.get(key) || null;
+            rows.push({
+                tally_name:  tallyName,
+                ledger_id:   matched ? matched.ledger_id   : null,
+                ledger_name: matched ? matched.ledger_name : null,
+                tally_ledger_name: matched ? matched.tally_ledger_name : null,
+                match:       matched ? 'exact' : 'none'
+            });
+        }
+
+        res.json({ rows, ledgers });
+    } catch (err) {
+        console.error('Tally import parse error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { mappings } = req.body; // [{ ledger_id, tally_name }]
+
+    if (!Array.isArray(mappings) || !mappings.length) {
+        return res.status(400).json({ error: 'No mappings provided' });
+    }
+
+    try {
+        let updated = 0;
+        for (const m of mappings) {
+            const ledgerId  = parseInt(m.ledger_id);
+            const tallyName = (m.tally_name || '').trim() || null;
+            if (!ledgerId) continue;
+            await db.sequelize.query(`
+                UPDATE gl_ledgers
+                SET tally_ledger_name = :tallyName, updated_by = :user
+                WHERE ledger_id = :ledgerId AND location_code = :locationCode
+            `, {
+                replacements: { ledgerId, locationCode, tallyName, user: req.user.username },
+                type: db.Sequelize.QueryTypes.UPDATE
+            });
+            updated++;
+        }
+        res.json({ success: true, updated });
+    } catch (err) {
+        console.error('Tally import save error:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 
