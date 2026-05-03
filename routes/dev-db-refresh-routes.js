@@ -124,7 +124,9 @@ router.get('/status', [isLoginEnsured, security.isAdmin()], async function(req, 
 
 function checkRunning() {
     return new Promise((resolve) => {
-        exec('pgrep -f refresh_dev_from_s3.sh', (err, stdout) => {
+        // Use -x with bash to match only actual bash processes running the script,
+        // excluding pgrep itself and the node process checking for it.
+        exec("pgrep -f 'bash.*refresh_dev_from_s3\\.sh'", (err, stdout) => {
             resolve(!!stdout.trim());
         });
     });
