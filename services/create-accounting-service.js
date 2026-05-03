@@ -929,16 +929,16 @@ async function processLubesInvoiceEvent(event, processedBy) {
 
     const lines_rows = await db.sequelize.query(`
         SELECT
-            l.line_id,
+            l.lubes_line_id,
             l.product_id,
             p.product_name,
-            l.taxable_value,
-            l.cgst_amount,
-            l.sgst_amount
+            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100), 2) AS taxable_value,
+            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.cgst_percent,0) / 100, 2) AS cgst_amount,
+            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.sgst_percent,0) / 100, 2) AS sgst_amount
         FROM t_lubes_inv_lines l
         JOIN m_product p ON p.product_id = l.product_id
         WHERE l.lubes_hdr_id = :lubesHdrId
-          AND l.taxable_value > 0
+          AND l.amount > 0
     `, { replacements: { lubesHdrId }, type: QueryTypes.SELECT });
 
     if (!lines_rows.length) throw new Error(`No lines found for lubes invoice lubes_hdr_id=${lubesHdrId}`);
