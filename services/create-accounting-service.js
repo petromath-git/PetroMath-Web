@@ -536,7 +536,7 @@ async function processDayBillEvent(event, processedBy) {
                 p.product_name,
                 dbi.quantity,
                 dbi.total_amount,
-                dbi.base_amount,
+                dbi.taxable_amount,
                 dbi.cgst_amount,
                 dbi.sgst_amount
             FROM t_day_bill_items dbi
@@ -564,7 +564,7 @@ async function processDayBillEvent(event, processedBy) {
             if (!salesLedgerId) throw new Error(`Sales ledger not configured for product ${item.product_name} (id:${item.product_id})`);
 
             const itemTotal   = parseFloat(item.total_amount);
-            const itemBase    = parseFloat(item.base_amount  || itemTotal);
+            const itemBase    = parseFloat(item.taxable_amount || itemTotal);
             const itemCgst    = parseFloat(item.cgst_amount  || 0);
             const itemSgst    = parseFloat(item.sgst_amount  || 0);
             const itemNarration = `${parseFloat(item.quantity).toFixed(3)} ${item.product_name} | ₹${itemTotal.toFixed(2)} | ${headerNarration}`;
@@ -910,7 +910,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
             h.lubes_hdr_id,
             h.closing_status,
             h.invoice_date,
-            h.invoice_no,
+            h.invoice_number,
             s.supplier_name,
             h.supplier_id
         FROM t_lubes_inv_hdr h
@@ -946,7 +946,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
     const supplierLedgerId = await resolveLedger(location_code, 'SUPPLIER', hdr.supplier_id);
     if (!supplierLedgerId) throw new Error(`Supplier GL ledger not found for ${hdr.supplier_name} (supplier_id:${hdr.supplier_id})`);
 
-    const narration = `Lubes Invoice ${hdr.invoice_no || lubesHdrId} | ${hdr.supplier_name} | ${event_date}`;
+    const narration = `Lubes Invoice ${hdr.invoice_number || lubesHdrId} | ${hdr.supplier_name} | ${event_date}`;
     const journalLines = [];
     let totalCr = 0;
 
@@ -1007,7 +1007,7 @@ async function processTankInvoiceEvent(event, processedBy) {
     const hdrs = await db.sequelize.query(`
         SELECT
             ti.id,
-            ti.invoice_no,
+            ti.invoice_number,
             ti.invoice_date,
             ti.supplier_id,
             s.supplier_name
@@ -1022,7 +1022,7 @@ async function processTankInvoiceEvent(event, processedBy) {
     const supplierLedgerId = await resolveLedger(location_code, 'SUPPLIER', hdr.supplier_id);
     if (!supplierLedgerId) throw new Error(`Supplier GL ledger not found for ${hdr.supplier_name} (supplier_id:${hdr.supplier_id})`);
 
-    const narration = `Tank Invoice ${hdr.invoice_no || invoiceId} | ${hdr.supplier_name} | ${event_date}`;
+    const narration = `Tank Invoice ${hdr.invoice_number || invoiceId} | ${hdr.supplier_name} | ${event_date}`;
     const journalLines = [];
     let totalCr = 0;
 
