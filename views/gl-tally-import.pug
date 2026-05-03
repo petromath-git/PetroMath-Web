@@ -17,9 +17,9 @@ block content
                 .card-body
                     p.text-muted.small.mb-3
                         | Export ledger master from Tally:
-                        strong Gateway → Display → List of Accounts → Ledgers → Export → ASCII (Comma Delimited)
+                        strong  Gateway → Display → List of Accounts → Ledgers → Export → ASCII (Comma Delimited)
                         | . Upload the resulting
-                        code Master.txt
+                        code  Master.txt
                         |  below. Works with all Tally versions.
                     .form-group
                         label.small.font-weight-bold Tally Master File (Master.txt)
@@ -40,17 +40,23 @@ block content
                     button.btn.btn-sm.btn-outline-secondary#btnBack(type="button") &larr; Upload Different File
                     button.btn.btn-success#btnSave(type="button")
                         i.bi.bi-check2-all.mr-1
-                        | Save Matched
+                        | Save All
 
             .alert.alert-info.small.py-2.mb-2
-                | Exact matches are pre-confirmed. For mismatches, select the correct PetroMath ledger or leave blank to skip.
+                | Matched rows will save automatically. For unmatched rows — map to an existing ledger or click
+                strong  Create
+                |  to add it as a new ledger.
+
+            .input-group.input-group-sm.mb-2(style="max-width:320px")
+                .input-group-prepend
+                    span.input-group-text
+                        i.bi.bi-search
+                input.form-control#ledgerSearch(type="text" placeholder="Search tally ledger name…")
 
             .table-responsive
                 table.table.table-sm.table-bordered#reconcileTable
                     thead.thead-dark
                         tr
-                            th(style="width:32px")
-                                input(type="checkbox" id="chkAll" title="Select all matched" checked)
                             th Tally Ledger Name
                             th PetroMath Ledger
                             th(style="width:90px") Status
@@ -59,52 +65,69 @@ block content
             .mt-3
                 button.btn.btn-success#btnSave2(type="button")
                     i.bi.bi-check2-all.mr-1
-                    | Save Matched
+                    | Save All
 
         //- Result
         .alert.alert-success.mt-3(id="saveResult" style="display:none")
 
+    //- Create Ledger Modal
+    .modal.fade#createLedgerModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Create New Ledger
+                    button.close(data-dismiss="modal") &times;
+                .modal-body
+                    p.small.mb-2
+                        | Creating ledger:
+                        strong#createLedgerName
+                    p.small.text-muted.mb-2#createTallyGroup(style="display:none")
+                    .form-group.mb-0
+                        label.small Group *
+                        select.form-control.form-control-sm#createGroupId
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-success.btn-sm#btnConfirmCreate Create Ledger
+
     script.
         let parsedLedgers = [];
         let parsedRows    = [];
+        let allGroups     = [];
+        let pendingCreateRow = null;
 
-        // File input label
+        // File input label + enable button
         document.getElementById('tallyFile').addEventListener('change', function() {
-            const label = this.nextElementSibling;
-            label.textContent = this.files[0] ? this.files[0].name : 'Choose file…';
+            this.nextElementSibling.textContent = this.files[0] ? this.files[0].name : 'Choose file…';
             document.getElementById('btnParse').disabled = !this.files[0];
         });
 
         document.getElementById('btnParse').addEventListener('click', async function() {
             const file = document.getElementById('tallyFile').files[0];
             if (!file) return;
-
             this.disabled = true;
             this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span> Parsing…';
 
             const fd = new FormData();
             fd.append('tally_file', file);
-
             const resp = await fetch('/gl/tally-import/parse', { method: 'POST', body: fd });
             const data = await resp.json();
 
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-upload mr-1"></i> Upload & Parse';
 
-            if (!resp.ok || data.error) {
-                alert('Error: ' + (data.error || 'Unknown error'));
-                return;
-            }
+            if (!resp.ok || data.error) { alert('Error: ' + (data.error || 'Unknown')); return; }
 
             parsedRows    = data.rows;
             parsedLedgers = data.ledgers;
+            allGroups     = data.groups;
             renderReconcile();
         });
 
         document.getElementById('btnBack').addEventListener('click', function() {
-            document.getElementById('stepUpload').style.display = '';
+            document.getElementById('stepUpload').style.display    = '';
             document.getElementById('stepReconcile').style.display = 'none';
-            document.getElementById('saveResult').style.display = 'none';
+            document.getElementById('saveResult').style.display    = 'none';
+            document.getElementById('ledgerSearch').value          = '';
         });
 
         function renderReconcile() {
@@ -115,59 +138,146 @@ block content
                 .map(l => `<option value="${l.ledger_id}">${l.ledger_name} (${l.group_name})</option>`)
                 .join('');
 
-            let exactCount = 0, noneCount = 0;
+            let matchedCount = 0, unmatchedCount = 0;
 
             parsedRows.forEach(function(r, i) {
                 const isExact = r.match === 'exact';
-                if (isExact) exactCount++; else noneCount++;
+                if (isExact) matchedCount++; else unmatchedCount++;
 
                 const statusBadge = isExact
                     ? '<span class="badge badge-success">Matched</span>'
                     : '<span class="badge badge-warning">No match</span>';
 
-                const ledgerCell = isExact
-                    ? `<span class="small">${r.ledger_name}</span><input type="hidden" class="row-ledger-id" value="${r.ledger_id}">`
-                    : `<select class="form-control form-control-sm row-ledger-id" style="min-width:200px">
-                           <option value="">— skip —</option>
-                           ${ledgerOptions}
-                       </select>`;
+                let ledgerCell;
+                if (isExact) {
+                    ledgerCell = `<span class="small text-success">${escHtml(r.ledger_name)}</span>
+                                  <input type="hidden" class="row-ledger-id" value="${r.ledger_id}">
+                                  <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">`;
+                } else {
+                    ledgerCell = `<div class="d-flex align-items-center gap-2">
+                        <select class="form-control form-control-sm row-ledger-id" style="min-width:180px">
+                            <option value="">— skip —</option>
+                            ${ledgerOptions}
+                        </select>
+                        <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">
+                        <button class="btn btn-outline-success btn-sm btn-create ml-1"
+                            data-tally="${escHtml(r.tally_name)}"
+                            data-suggested-group="${r.suggested_group_id || ''}"
+                            data-tally-group="${escHtml(r.tally_group_name || '')}"
+                            data-idx="${i}" type="button" title="Create new ledger">+ Create</button>
+                    </div>`;
+                }
 
                 const tr = document.createElement('tr');
+                tr.dataset.idx = i;
                 tr.innerHTML = `
-                    <td class="text-center"><input type="checkbox" class="chk-row" ${isExact ? 'checked' : ''}></td>
-                    <td class="small">${r.tally_name}</td>
+                    <td class="small">${escHtml(r.tally_name)}</td>
                     <td>${ledgerCell}</td>
                     <td class="text-center">${statusBadge}</td>`;
                 tbody.appendChild(tr);
             });
 
             document.getElementById('reconcileSummary').textContent =
-                `${exactCount} matched, ${noneCount} unmatched`;
-
-            document.getElementById('stepUpload').style.display = 'none';
+                `${matchedCount} matched, ${unmatchedCount} unmatched`;
+            document.getElementById('stepUpload').style.display    = 'none';
             document.getElementById('stepReconcile').style.display = '';
-            document.getElementById('saveResult').style.display = 'none';
+            document.getElementById('saveResult').style.display    = 'none';
+            document.getElementById('ledgerSearch').value = '';
+
+            // Init Select2 on all ledger dropdowns
+            $('#reconcileBody select.row-ledger-id').select2({
+                width: '100%',
+                placeholder: '— skip —'
+            });
+
+            // Wire up Create buttons
+            tbody.querySelectorAll('.btn-create').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const suggestedGroupId = this.dataset.suggestedGroup || '';
+                    const tallyGroup       = this.dataset.tallyGroup     || '';
+                    pendingCreateRow = { tally_name: this.dataset.tally, idx: parseInt(this.dataset.idx), btn: this };
+                    document.getElementById('createLedgerName').textContent = ' ' + this.dataset.tally;
+
+                    const hintEl = document.getElementById('createTallyGroup');
+                    if (tallyGroup) {
+                        hintEl.textContent = 'Tally group: ' + tallyGroup;
+                        hintEl.style.display = '';
+                    } else {
+                        hintEl.style.display = 'none';
+                    }
+
+                    const sel = document.getElementById('createGroupId');
+                    sel.innerHTML = allGroups.map(g =>
+                        `<option value="${g.group_id}">${g.group_name} (${g.group_nature})</option>`
+                    ).join('');
+                    if (suggestedGroupId) {
+                        sel.value = suggestedGroupId;
+                        // If value didn't match (group not in PM), sel stays at first option — user picks manually
+                    }
+                    $('#createLedgerModal').modal('show');
+                });
+            });
+
+            // Live search
+            document.getElementById('ledgerSearch').oninput = function() {
+                const q = this.value.toLowerCase();
+                document.querySelectorAll('#reconcileBody tr').forEach(function(tr) {
+                    const name = (tr.querySelector('td') || {}).textContent || '';
+                    tr.style.display = name.toLowerCase().includes(q) ? '' : 'none';
+                });
+            };
         }
 
-        // Select all checkbox
-        document.getElementById('chkAll').addEventListener('change', function() {
-            document.querySelectorAll('.chk-row').forEach(c => c.checked = this.checked);
+        // Confirm Create
+        document.getElementById('btnConfirmCreate').addEventListener('click', async function() {
+            if (!pendingCreateRow) return;
+            const groupId = document.getElementById('createGroupId').value;
+            this.disabled = true;
+            this.textContent = 'Creating…';
+
+            const resp = await fetch('/gl/tally-import/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tally_name: pendingCreateRow.tally_name, group_id: groupId })
+            });
+            const data = await resp.json();
+            this.disabled = false;
+            this.textContent = 'Create Ledger';
+
+            if (!data.success) { alert('Error: ' + data.error); return; }
+
+            // Update the row — replace dropdown with the new ledger name
+            const tbody = document.getElementById('reconcileBody');
+            const tr = tbody.querySelector(`tr[data-idx="${pendingCreateRow.idx}"]`);
+            if (tr) {
+                const cell = tr.querySelector('td:nth-child(2)');
+                cell.innerHTML = `<span class="small text-success">${escHtml(data.ledger_name)}</span>
+                                  <input type="hidden" class="row-ledger-id" value="${data.ledger_id}">
+                                  <input type="hidden" class="row-tally-name" value="${escHtml(pendingCreateRow.tally_name)}">`;
+                tr.querySelector('td:nth-child(3)').innerHTML = '<span class="badge badge-success">Created</span>';
+            }
+
+            // Add to parsedLedgers for future dropdowns
+            parsedLedgers.push({ ledger_id: data.ledger_id, ledger_name: data.ledger_name, group_name: '' });
+
+            $('#createLedgerModal').modal('hide');
+            pendingCreateRow = null;
         });
 
         async function doSave() {
             const rows = document.querySelectorAll('#reconcileBody tr');
             const mappings = [];
             rows.forEach(function(tr) {
-                const chk      = tr.querySelector('.chk-row');
-                const ledgerEl = tr.querySelector('.row-ledger-id');
-                const tallyTd  = tr.querySelectorAll('td')[1];
-                if (!chk || !chk.checked || !ledgerEl) return;
-                const ledgerId = ledgerEl.value;
+                const ledgerEl  = tr.querySelector('.row-ledger-id');
+                const tallyEl   = tr.querySelector('.row-tally-name');
+                if (!ledgerEl || !tallyEl) return;
+                const ledgerId  = ledgerEl.value;
+                const tallyName = tallyEl.value;
                 if (!ledgerId) return;
-                mappings.push({ ledger_id: ledgerId, tally_name: tallyTd.textContent.trim() });
+                mappings.push({ ledger_id: ledgerId, tally_name: tallyName });
             });
 
-            if (!mappings.length) { alert('No rows selected.'); return; }
+            if (!mappings.length) { alert('No ledgers to save.'); return; }
 
             document.getElementById('btnSave').disabled  = true;
             document.getElementById('btnSave2').disabled = true;
@@ -178,13 +288,12 @@ block content
                 body:    JSON.stringify({ mappings })
             });
             const data = await resp.json();
-
             document.getElementById('btnSave').disabled  = false;
             document.getElementById('btnSave2').disabled = false;
 
             if (data.success) {
                 const el = document.getElementById('saveResult');
-                el.textContent = `✓ ${data.updated} ledger(s) updated with Tally name.`;
+                el.textContent = '✓ ' + data.updated + ' ledger(s) updated with Tally name.';
                 el.style.display = '';
             } else {
                 alert('Error: ' + data.error);
@@ -193,3 +302,7 @@ block content
 
         document.getElementById('btnSave').addEventListener('click', doSave);
         document.getElementById('btnSave2').addEventListener('click', doSave);
+
+        function escHtml(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
