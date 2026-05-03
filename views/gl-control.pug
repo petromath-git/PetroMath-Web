@@ -84,10 +84,17 @@ block content
 
                 #eventsTableWrap(style="display:none")
                     .alert.alert-warning.py-2.small.mb-2(id="eventsLimitWarn" style="display:none")
+                    .d-flex.align-items-center.mb-2(id="bulkBar" style="display:none !important")
+                        span.small.mr-2#bulkCount 0 selected
+                        button.btn.btn-warning.btn-sm(type="button" id="btnBulkRetry")
+                            i.bi.bi-arrow-repeat.mr-1
+                            | Retry Selected
                     .table-responsive
                         table.table.table-sm.table-bordered.table-hover#eventsTable
                             thead.thead-dark
                                 tr
+                                    th(style="width:32px")
+                                        input(type="checkbox" id="chkSelectAll" title="Select all errors")
                                     th(style="width:60px") ID
                                     th(style="width:90px") Date
                                     th Source Type
@@ -223,12 +230,20 @@ block content
                 warn.style.display = 'none';
             }
 
+            document.getElementById('chkSelectAll').checked = false;
+            document.getElementById('bulkBar').style.display = 'none';
+
             rows.forEach(function(r) {
                 const tr = document.createElement('tr');
-                const retryBtn = r.event_status === 'ERROR'
+                const isError = r.event_status === 'ERROR';
+                const chk = isError
+                    ? `<input type="checkbox" class="chk-error-row" data-id="${r.event_id}">`
+                    : '';
+                const retryBtn = isError
                     ? `<button class="btn btn-outline-warning btn-sm btn-retry" data-id="${r.event_id}" title="Retry"><i class="bi bi-arrow-repeat"></i></button>`
                     : '';
                 tr.innerHTML = `
+                    <td class="text-center">${chk}</td>
                     <td class="small">${r.event_id}</td>
                     <td class="small">${r.event_date ? r.event_date.substring(0,10) : ''}</td>
                     <td class="small">${r.source_type}</td>
@@ -242,21 +257,77 @@ block content
             });
             document.getElementById('eventsTableWrap').style.display = '';
 
+            function updateBulkBar() {
+                const checked = tbody.querySelectorAll('.chk-error-row:checked');
+                const bar = document.getElementById('bulkBar');
+                if (checked.length > 0) {
+                    document.getElementById('bulkCount').textContent = checked.length + ' selected';
+                    bar.style.display = '';
+                } else {
+                    bar.style.display = 'none';
+                }
+            }
+
+            tbody.querySelectorAll('.chk-error-row').forEach(function(chk) {
+                chk.addEventListener('change', updateBulkBar);
+            });
+
+            document.getElementById('chkSelectAll').onchange = function() {
+                tbody.querySelectorAll('.chk-error-row').forEach(function(chk) {
+                    chk.checked = document.getElementById('chkSelectAll').checked;
+                });
+                updateBulkBar();
+            };
+
             tbody.querySelectorAll('.btn-retry').forEach(function(btn) {
                 btn.addEventListener('click', async function() {
                     const id = this.dataset.id;
                     this.disabled = true;
                     const data = await fetch('/gl/api/retry-event/' + id, { method: 'POST' }).then(r => r.json());
                     if (data.success) {
-                        this.closest('tr').querySelector('.badge').className = 'badge badge-warning';
-                        this.closest('tr').querySelector('.badge').textContent = 'UNPROCESSED';
+                        const tr = this.closest('tr');
+                        tr.querySelector('.badge').className = 'badge badge-warning';
+                        tr.querySelector('.badge').textContent = 'UNPROCESSED';
+                        const chk = tr.querySelector('.chk-error-row');
+                        if (chk) chk.remove();
                         this.remove();
+                        updateBulkBar();
                     } else {
                         alert('Error: ' + data.error);
                         this.disabled = false;
                     }
                 });
             });
+
+            document.getElementById('btnBulkRetry').onclick = async function() {
+                const checked = Array.from(tbody.querySelectorAll('.chk-error-row:checked'));
+                if (!checked.length) return;
+                const ids = checked.map(c => parseInt(c.dataset.id));
+                this.disabled = true;
+                this.textContent = 'Retrying…';
+                const data = await fetch('/gl/api/retry-events', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event_ids: ids })
+                }).then(r => r.json());
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-arrow-repeat mr-1"></i>Retry Selected';
+                if (data.success) {
+                    checked.forEach(function(chk) {
+                        const tr = chk.closest('tr');
+                        const badge = tr.querySelector('.badge');
+                        if (badge) { badge.className = 'badge badge-warning'; badge.textContent = 'UNPROCESSED'; }
+                        const retryBtn = tr.querySelector('.btn-retry');
+                        if (retryBtn) retryBtn.remove();
+                        chk.remove();
+                    });
+                    document.getElementById('chkSelectAll').checked = false;
+                    updateBulkBar();
+                    alert(data.updated + ' event(s) queued for reprocessing.');
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            };
         }
 
         document.getElementById('btnLoadEvents').addEventListener('click', loadEvents);
