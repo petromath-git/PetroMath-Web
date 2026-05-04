@@ -926,10 +926,10 @@ router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req,
                 SELECT l.ledger_id, l.ledger_name, l.tally_ledger_name, l.active_flag,
                        g.group_id, g.group_name, g.group_nature,
                        l.source_type, l.source_id,
-                       cl.cust_name AS linked_customer_name
+                       cl.Company_Name AS linked_customer_name
                 FROM gl_ledgers l
                 JOIN gl_ledger_groups g ON g.group_id = l.group_id
-                LEFT JOIN m_credit_list cl ON cl.creditlist_id = l.source_id AND l.source_type = 'CUSTOMER'
+                LEFT JOIN m_credit_list cl ON cl.creditlist_id = l.source_id AND l.source_type IN ('CUSTOMER','CREDIT')
                 WHERE l.location_code = :locationCode
                 ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name, l.ledger_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
