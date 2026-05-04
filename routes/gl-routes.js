@@ -850,31 +850,8 @@ router.post('/api/journal/:id/reverse', [isLoginEnsured, security.isAdmin()], as
 // ── Ledger Groups ─────────────────────────────────────────────────────────────
 // GET /gl/ledger-groups
 
-router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
-    const locationCode = req.user.location_code;
-    try {
-        const groups = await db.sequelize.query(`
-            SELECT g.group_id, g.group_name, g.group_nature,
-                   COUNT(l.ledger_id) AS ledger_count
-            FROM gl_ledger_groups g
-            LEFT JOIN gl_ledgers l ON l.group_id = g.group_id AND l.active_flag = 'Y'
-            WHERE g.location_code = :locationCode
-            GROUP BY g.group_id
-            ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name
-        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
-
-        res.render('gl-ledger-groups', {
-            title:    'Ledger Groups',
-            user:     req.user,
-            config:   require('../config/app-config').APP_CONFIGS,
-            groups,
-            messages: req.flash()
-        });
-    } catch (err) {
-        console.error('Ledger groups error:', err);
-        req.flash('error', err.message);
-        res.redirect('/gl/day-book');
-    }
+router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], function(req, res) {
+    res.redirect('/gl/ledgers#tab-groups');
 });
 
 router.post('/api/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
@@ -954,15 +931,18 @@ router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req,
                 ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name, l.ledger_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
             db.sequelize.query(`
-                SELECT group_id, group_name, group_nature
-                FROM gl_ledger_groups
-                WHERE location_code = :locationCode
-                ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
+                SELECT g.group_id, g.group_name, g.group_nature,
+                       COUNT(l.ledger_id) AS ledger_count
+                FROM gl_ledger_groups g
+                LEFT JOIN gl_ledgers l ON l.group_id = g.group_id AND l.active_flag = 'Y'
+                WHERE g.location_code = :locationCode
+                GROUP BY g.group_id
+                ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
         ]);
 
         res.render('gl-ledgers', {
-            title:    'Ledgers',
+            title:    'Ledger Master',
             user:     req.user,
             config:   require('../config/app-config').APP_CONFIGS,
             ledgers,
@@ -1030,10 +1010,8 @@ const multer  = require('multer');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 function parseTallyMasterTxt(buf) {
-    // Auto-detect UTF-16 LE (BOM: FF FE) vs UTF-8/ASCII
     const isUtf16 = buf[0] === 0xFF && buf[1] === 0xFE;
     const content = buf.toString(isUtf16 ? 'utf16le' : 'utf8');
-    // Extract all double-quoted strings
     const names = [];
     const re = /"([^"]+)"/g;
     let m;
@@ -1045,12 +1023,7 @@ function parseTallyMasterTxt(buf) {
 }
 
 router.get('/tally-import', [isLoginEnsured, security.isAdmin()], function(req, res) {
-    res.render('gl-tally-import', {
-        title:   'Tally Ledger Import',
-        user:    req.user,
-        config:  require('../config/app-config').APP_CONFIGS,
-        messages: req.flash()
-    });
+    res.redirect('/gl/ledgers#tab-tally');
 });
 
 router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.single('tally_file'), async function(req, res) {
@@ -1071,36 +1044,52 @@ router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.
                 ORDER BY l.ledger_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
             db.sequelize.query(`
-                SELECT group_name FROM gl_ledger_groups WHERE location_code = :locationCode
+                SELECT group_id, group_name, group_nature FROM gl_ledger_groups
+                WHERE location_code = :locationCode
+                ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
         ]);
 
-        const groupNames = new Set(groups.map(g => g.group_name.toLowerCase()));
+        const groupByName = new Map(groups.map(g => [g.group_name.toLowerCase(), g]));
+        const groupNames  = new Set(groupByName.keys());
 
-        // Build lookup map: lowercase ledger_name → ledger
-        const ledgerByName = new Map();
-        for (const l of ledgers) ledgerByName.set(l.ledger_name.toLowerCase(), l);
+        // Build lookup maps: by ledger_name and by tally_ledger_name
+        const ledgerByName      = new Map();
+        const ledgerByTallyName = new Map();
+        for (const l of ledgers) {
+            ledgerByName.set(l.ledger_name.toLowerCase(), l);
+            if (l.tally_ledger_name) ledgerByTallyName.set(l.tally_ledger_name.toLowerCase(), l);
+        }
 
-        // Filter out Tally group names, deduplicate, reconcile
+        // Walk names in order, tracking current Tally group for context
         const seen = new Set();
         const rows = [];
+        let currentTallyGroup = null;
+
         for (const tallyName of tallyNames) {
             const key = tallyName.toLowerCase();
             if (seen.has(key)) continue;
             seen.add(key);
-            if (groupNames.has(key)) continue; // skip Tally group names
 
-            const matched = ledgerByName.get(key) || null;
+            if (groupNames.has(key)) {
+                currentTallyGroup = tallyName; // update group context
+                continue;                      // don't emit group rows
+            }
+
+            const matched = ledgerByName.get(key) || ledgerByTallyName.get(key) || null;
+            const pmGroup = currentTallyGroup ? (groupByName.get(currentTallyGroup.toLowerCase()) || null) : null;
+
             rows.push({
-                tally_name:  tallyName,
-                ledger_id:   matched ? matched.ledger_id   : null,
-                ledger_name: matched ? matched.ledger_name : null,
-                tally_ledger_name: matched ? matched.tally_ledger_name : null,
-                match:       matched ? 'exact' : 'none'
+                tally_name:         tallyName,
+                tally_group_name:   currentTallyGroup,
+                suggested_group_id: pmGroup ? pmGroup.group_id : null,
+                ledger_id:          matched ? matched.ledger_id   : null,
+                ledger_name:        matched ? matched.ledger_name : null,
+                match:              matched ? 'exact' : 'none'
             });
         }
 
-        res.json({ rows, ledgers });
+        res.json({ rows, ledgers, groups });
     } catch (err) {
         console.error('Tally import parse error:', err);
         res.status(500).json({ error: err.message });
@@ -1109,6 +1098,7 @@ router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.
 
 router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
     const { mappings } = req.body; // [{ ledger_id, tally_name }]
 
     if (!Array.isArray(mappings) || !mappings.length) {
@@ -1116,24 +1106,62 @@ router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async fu
     }
 
     try {
-        let updated = 0;
-        for (const m of mappings) {
-            const ledgerId  = parseInt(m.ledger_id);
-            const tallyName = (m.tally_name || '').trim() || null;
-            if (!ledgerId) continue;
-            await db.sequelize.query(`
-                UPDATE gl_ledgers
-                SET tally_ledger_name = :tallyName, updated_by = :user
-                WHERE ledger_id = :ledgerId AND location_code = :locationCode
-            `, {
-                replacements: { ledgerId, locationCode, tallyName, user: req.user.username },
-                type: db.Sequelize.QueryTypes.UPDATE
-            });
-            updated++;
-        }
-        res.json({ success: true, updated });
+        // Build a single batch UPDATE using CASE
+        const valid = mappings
+            .map(m => ({ ledger_id: parseInt(m.ledger_id), tally_name: (m.tally_name || '').trim() || null }))
+            .filter(m => m.ledger_id);
+
+        if (!valid.length) return res.json({ success: true, updated: 0 });
+
+        const replacements = { locationCode, user };
+        const cases = valid.map((m, i) => {
+            replacements[`lid_${i}`]  = m.ledger_id;
+            replacements[`tn_${i}`]   = m.tally_name;
+            return `WHEN :lid_${i} THEN :tn_${i}`;
+        }).join(' ');
+        const ids = valid.map((_, i) => `:lid_${i}`).join(',');
+
+        await db.sequelize.query(`
+            UPDATE gl_ledgers
+            SET tally_ledger_name = CASE ledger_id ${cases} END,
+                updated_by = :user
+            WHERE ledger_id IN (${ids}) AND location_code = :locationCode
+        `, { replacements, type: db.Sequelize.QueryTypes.UPDATE });
+
+        res.json({ success: true, updated: valid.length });
     } catch (err) {
         console.error('Tally import save error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /gl/tally-import/create — create a new GL ledger from an unmatched Tally name
+router.post('/tally-import/create', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
+    const { tally_name, group_id } = req.body;
+
+    if (!tally_name || !group_id) {
+        return res.status(400).json({ error: 'tally_name and group_id are required' });
+    }
+
+    try {
+        const [exists] = await db.sequelize.query(
+            `SELECT ledger_id FROM gl_ledgers WHERE location_code=:locationCode AND ledger_name=:tally_name LIMIT 1`,
+            { replacements: { locationCode, tally_name }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (exists) return res.status(400).json({ error: 'A ledger with this name already exists' });
+
+        const [ledgerId] = await db.sequelize.query(`
+            INSERT INTO gl_ledgers (location_code, ledger_name, tally_ledger_name, group_id, source_type, active_flag, created_by, updated_by)
+            VALUES (:locationCode, :tally_name, :tally_name, :group_id, 'STATIC', 'Y', :user, :user)
+        `, {
+            replacements: { locationCode, tally_name, group_id: parseInt(group_id), user },
+            type: db.Sequelize.QueryTypes.INSERT
+        });
+        res.json({ success: true, ledger_id: ledgerId, ledger_name: tally_name });
+    } catch (err) {
+        console.error('Tally import create error:', err);
         res.status(500).json({ error: err.message });
     }
 });
