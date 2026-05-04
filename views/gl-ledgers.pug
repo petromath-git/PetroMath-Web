@@ -61,6 +61,9 @@ block content
                                                         data-tally=l.tally_ledger_name || ''
                                                         data-group=l.group_id
                                                         data-active=l.active_flag
+                                                        data-source-type=l.source_type || ''
+                                                        data-source-id=l.source_id || ''
+                                                        data-linked-customer=l.linked_customer_name || ''
                                                         title="Edit")
                                                         i.bi.bi-pencil
 
@@ -175,6 +178,9 @@ block content
                     button.close(data-dismiss="modal" aria-label="Close")
                         span &times;
                 .modal-body
+                    .alert.alert-light.border.py-1.px-2.small.mb-3#lSourceInfo(style="display:none")
+                        span.text-muted Source:
+                        strong.ml-1#lSourceLabel
                     .form-group
                         label.small Ledger Name *
                         input.form-control.form-control-sm#lName(type="text" maxlength="150")
@@ -261,6 +267,7 @@ block content
             document.getElementById('lGroup').selectedIndex = 0;
             document.getElementById('lActive').checked = true;
             document.getElementById('lActiveWrap').style.display = 'none';
+            document.getElementById('lSourceInfo').style.display = 'none';
             $('#ledgerModal').modal('show');
         });
 
@@ -273,6 +280,24 @@ block content
                 document.getElementById('lGroup').value = this.dataset.group;
                 document.getElementById('lActive').checked = this.dataset.active === 'Y';
                 document.getElementById('lActiveWrap').style.display = '';
+
+                // Source linkage info
+                const srcType     = this.dataset.sourceType || '';
+                const srcId       = this.dataset.sourceId   || '';
+                const linkedCust  = this.dataset.linkedCustomer || '';
+                const infoEl      = document.getElementById('lSourceInfo');
+                const labelEl     = document.getElementById('lSourceLabel');
+                if (srcType) {
+                    let label = srcType;
+                    if (srcType === 'CUSTOMER' && linkedCust) label = 'Customer — ' + linkedCust + ' (ID: ' + srcId + ')';
+                    else if (srcType === 'CUSTOMER' && srcId)  label = 'Customer (ID: ' + srcId + ')';
+                    else if (srcType === 'STATIC' && srcId)    label = 'Static account (ID: ' + srcId + ')';
+                    labelEl.textContent  = label;
+                    infoEl.style.display = '';
+                } else {
+                    infoEl.style.display = 'none';
+                }
+
                 $('#ledgerModal').modal('show');
             });
         });
