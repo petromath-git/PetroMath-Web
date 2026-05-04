@@ -4,16 +4,7 @@ include mixins/mixins
 block content
     .container-fluid.pt-3
 
-        .d-flex.justify-content-between.align-items-center.mb-3
-            h4.mb-0 Ledgers
-            .d-flex.gap-2
-                a.btn.btn-sm.btn-outline-secondary.mr-2(href="/gl/ledger-groups") &larr; Groups
-                a.btn.btn-sm.btn-outline-info.mr-2(href="/gl/tally-import")
-                    i.bi.bi-upload.mr-1
-                    | Tally Import
-                button.btn.btn-sm.btn-success#btnAddLedger
-                    i.bi.bi-plus-lg.mr-1
-                    | Add Ledger
+        h4.mb-3 Ledger Master
 
         if messages && messages.error && messages.error.length
             .alert.alert-danger.py-2= messages.error[0]
@@ -21,39 +12,161 @@ block content
         - const natures = ['ASSETS','LIABILITIES','INCOME','EXPENSES']
         - const natureBadge = { ASSETS:'primary', LIABILITIES:'warning', INCOME:'success', EXPENSES:'danger' }
 
-        - const byNature = {}
-        - natures.forEach(n => { byNature[n] = {} })
-        - ledgers.forEach(function(l) { if (!byNature[l.group_nature]) byNature[l.group_nature] = {}; if (!byNature[l.group_nature][l.group_name]) byNature[l.group_nature][l.group_name] = []; byNature[l.group_nature][l.group_name].push(l); })
+        ul.nav.nav-tabs#masterTabs(role="tablist")
+            li.nav-item
+                a.nav-link.active(data-toggle="tab" href="#tab-ledgers" role="tab") Ledger Master
+            li.nav-item
+                a.nav-link(data-toggle="tab" href="#tab-groups" role="tab") Groups
+            li.nav-item
+                a.nav-link(data-toggle="tab" href="#tab-tally" role="tab")
+                    i.bi.bi-upload.mr-1
+                    | Tally Import
 
-        each nat in natures
-            - const grpMap = byNature[nat]
-            - const grpNames = Object.keys(grpMap)
-            if grpNames.length
-                h6.border-bottom.pb-1.mt-3
-                    span.badge(class='badge-'+natureBadge[nat])= nat
-                each grpName in grpNames
-                    h6.small.text-muted.mt-2.mb-1= grpName
-                    .table-responsive.mb-1
+        .tab-content.border.border-top-0.p-3
+
+            //- ── TAB 1: Ledger Master ────────────────────────────────────────
+            #tab-ledgers.tab-pane.fade.show.active(role="tabpanel")
+
+                .d-flex.justify-content-end.mb-3
+                    button.btn.btn-sm.btn-success#btnAddLedger
+                        i.bi.bi-plus-lg.mr-1
+                        | Add Ledger
+
+                - const byNature = {}
+                - natures.forEach(n => { byNature[n] = {} })
+                - ledgers.forEach(function(l) { if (!byNature[l.group_nature]) byNature[l.group_nature] = {}; if (!byNature[l.group_nature][l.group_name]) byNature[l.group_nature][l.group_name] = []; byNature[l.group_nature][l.group_name].push(l); })
+
+                each nat in natures
+                    - const grpMap = byNature[nat]
+                    - const grpNames = Object.keys(grpMap)
+                    if grpNames.length
+                        h6.border-bottom.pb-1.mt-2
+                            span.badge(class='badge-'+natureBadge[nat])= nat
+                        each grpName in grpNames
+                            h6.small.text-muted.mt-2.mb-1= grpName
+                            .table-responsive.mb-1
+                                table.table.table-sm.table-bordered
+                                    tbody
+                                        each l in grpMap[grpName]
+                                            tr(class=(l.active_flag === 'N' ? 'table-secondary text-muted' : ''))
+                                                td= l.ledger_name
+                                                td.text-muted.small= l.tally_ledger_name || ''
+                                                td.text-center(style="width:60px")
+                                                    if l.active_flag === 'N'
+                                                        span.badge.badge-secondary Inactive
+                                                td.text-center(style="width:80px")
+                                                    button.btn.btn-outline-primary.btn-sm.btn-edit-ledger(
+                                                        data-id=l.ledger_id
+                                                        data-name=l.ledger_name
+                                                        data-tally=l.tally_ledger_name || ''
+                                                        data-group=l.group_id
+                                                        data-active=l.active_flag
+                                                        title="Edit")
+                                                        i.bi.bi-pencil
+
+            //- ── TAB 2: Groups ───────────────────────────────────────────────
+            #tab-groups.tab-pane.fade(role="tabpanel")
+
+                .d-flex.justify-content-end.mb-3
+                    button.btn.btn-sm.btn-success#btnAddGroup
+                        i.bi.bi-plus-lg.mr-1
+                        | Add Group
+
+                each nat in natures
+                    - const grps = groups.filter(g => g.group_nature === nat)
+                    if grps.length
+                        h6.border-bottom.pb-1.mt-2
+                            span.badge(class='badge-'+natureBadge[nat])= nat
+                        .table-responsive.mb-2
+                            table.table.table-sm.table-bordered
+                                thead.thead-light
+                                    tr
+                                        th Group Name
+                                        th.text-center(style="width:120px") Active Ledgers
+                                        th.text-center(style="width:80px")
+                                tbody
+                                    each g in grps
+                                        tr
+                                            td= g.group_name
+                                            td.text-center.small= g.ledger_count
+                                            td.text-center
+                                                button.btn.btn-outline-primary.btn-sm.btn-edit-group.mr-1(
+                                                    data-id=g.group_id
+                                                    data-name=g.group_name
+                                                    data-nature=g.group_nature
+                                                    title="Edit")
+                                                    i.bi.bi-pencil
+                                                if g.ledger_count == 0
+                                                    button.btn.btn-outline-danger.btn-sm.btn-del-group(
+                                                        data-id=g.group_id
+                                                        data-name=g.group_name
+                                                        title="Delete")
+                                                        i.bi.bi-trash
+
+            //- ── TAB 3: Tally Import ─────────────────────────────────────────
+            #tab-tally.tab-pane.fade(role="tabpanel")
+
+                //- Step 1: Upload
+                #stepUpload
+                    .card.mb-4
+                        .card-body
+                            p.text-muted.small.mb-3
+                                | Export ledger master from Tally:
+                                strong  Gateway → Display → List of Accounts → Ledgers → Export → ASCII (Comma Delimited)
+                                | . Upload the resulting
+                                code  Master.txt
+                                |  below. Works with all Tally versions.
+                            .form-group
+                                label.small.font-weight-bold Tally Master File (Master.txt)
+                                .custom-file
+                                    input.custom-file-input#tallyFile(type="file" accept=".txt,.csv")
+                                    label.custom-file-label(for="tallyFile") Choose file…
+                            button.btn.btn-primary#btnParse(type="button" disabled)
+                                i.bi.bi-upload.mr-1
+                                | Upload & Parse
+
+                //- Step 2: Reconcile
+                #stepReconcile(style="display:none")
+                    .d-flex.justify-content-between.align-items-center.mb-2
+                        div
+                            span.font-weight-bold Reconcile Results
+                            span.text-muted.small.ml-2#reconcileSummary
+                        .d-flex.gap-2
+                            button.btn.btn-sm.btn-outline-secondary#btnBack(type="button") &larr; Upload Different File
+                            button.btn.btn-success#btnSave(type="button")
+                                i.bi.bi-check2-all.mr-1
+                                | Save All
+
+                    .alert.alert-info.small.py-2.mb-2
+                        | Matched rows will save automatically. For unmatched rows — map to an existing ledger or click
+                        strong  Create
+                        |  to add it as a new ledger.
+
+                    .input-group.input-group-sm.mb-2(style="max-width:320px")
+                        .input-group-prepend
+                            span.input-group-text
+                                i.bi.bi-search
+                        input.form-control#ledgerSearch(type="text" placeholder="Search tally ledger name…")
+
+                    .table-responsive
                         table.table.table-sm.table-bordered
-                            tbody
-                                each l in grpMap[grpName]
-                                    tr(class=(l.active_flag === 'N' ? 'table-secondary text-muted' : ''))
-                                        td= l.ledger_name
-                                        td.text-muted.small= l.tally_ledger_name || ''
-                                        td.text-center(style="width:60px")
-                                            if l.active_flag === 'N'
-                                                span.badge.badge-secondary Inactive
-                                        td.text-center(style="width:80px")
-                                            button.btn.btn-outline-primary.btn-sm.btn-edit-ledger(
-                                                data-id=l.ledger_id
-                                                data-name=l.ledger_name
-                                                data-tally=l.tally_ledger_name || ''
-                                                data-group=l.group_id
-                                                data-active=l.active_flag
-                                                title="Edit")
-                                                i.bi.bi-pencil
+                            thead.thead-dark
+                                tr
+                                    th Tally Ledger Name
+                                    th PetroMath Ledger
+                                    th(style="width:90px") Status
+                            tbody#reconcileBody
 
-    //- Add / Edit Modal
+                    .mt-3
+                        button.btn.btn-success#btnSave2(type="button")
+                            i.bi.bi-check2-all.mr-1
+                            | Save All
+
+                .alert.alert-success.mt-3(id="saveResult" style="display:none")
+
+    //- ── Modals ──────────────────────────────────────────────────────────────
+
+    //- Add/Edit Ledger
     .modal.fade#ledgerModal(tabindex="-1")
         .modal-dialog
             .modal-content
@@ -82,7 +195,62 @@ block content
                     button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
                     button.btn.btn-primary.btn-sm#btnSaveLedger Save
 
+    //- Add/Edit Group
+    .modal.fade#groupModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#groupModalTitle Add Ledger Group
+                    button.close(data-dismiss="modal" aria-label="Close")
+                        span &times;
+                .modal-body
+                    .form-group
+                        label.small Group Name *
+                        input.form-control.form-control-sm#gName(type="text" maxlength="100")
+                    .form-group.mb-0
+                        label.small Nature *
+                        select.form-control.form-control-sm#gNature
+                            option(value="ASSETS") ASSETS
+                            option(value="LIABILITIES") LIABILITIES
+                            option(value="INCOME") INCOME
+                            option(value="EXPENSES") EXPENSES
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-primary.btn-sm#btnSaveGroup Save
+
+    //- Create Ledger from Tally
+    .modal.fade#createLedgerModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Create New Ledger
+                    button.close(data-dismiss="modal") &times;
+                .modal-body
+                    p.small.mb-2
+                        | Creating ledger:
+                        strong#createLedgerName
+                    p.small.text-muted.mb-2#createTallyGroup(style="display:none")
+                    .form-group.mb-0
+                        label.small Group *
+                        select.form-control.form-control-sm#createGroupId
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-success.btn-sm#btnConfirmCreate Create Ledger
+
     script.
+        // ── Tab persistence ──────────────────────────────────────────────────
+        (function() {
+            const hash = window.location.hash;
+            if (hash) {
+                const link = document.querySelector('#masterTabs a[href="' + hash + '"]');
+                if (link) $(link).tab('show');
+            }
+        })();
+        $('#masterTabs a').on('shown.bs.tab', function(e) {
+            history.replaceState(null, null, e.target.getAttribute('href'));
+        });
+
+        // ── Ledger Master ────────────────────────────────────────────────────
         let editingLedgerId = null;
 
         document.getElementById('btnAddLedger').addEventListener('click', function() {
@@ -110,33 +278,226 @@ block content
         });
 
         document.getElementById('btnSaveLedger').addEventListener('click', async function() {
-            const name      = document.getElementById('lName').value.trim();
-            const group_id  = document.getElementById('lGroup').value;
-            const active    = document.getElementById('lActive').checked ? 'Y' : 'N';
+            const name     = document.getElementById('lName').value.trim();
+            const group_id = document.getElementById('lGroup').value;
+            const active   = document.getElementById('lActive').checked ? 'Y' : 'N';
             if (!name) { alert('Ledger name is required.'); return; }
-
             this.disabled = true;
             try {
-                const url    = editingLedgerId ? '/gl/api/ledger/' + editingLedgerId : '/gl/api/ledger';
-                const method = editingLedgerId ? 'PUT' : 'POST';
+                const url       = editingLedgerId ? '/gl/api/ledger/' + editingLedgerId : '/gl/api/ledger';
+                const method    = editingLedgerId ? 'PUT' : 'POST';
                 const tallyName = document.getElementById('lTallyName').value.trim();
-                const body   = { ledger_name: name, group_id, tally_ledger_name: tallyName || null };
+                const body      = { ledger_name: name, group_id, tally_ledger_name: tallyName || null };
                 if (editingLedgerId) body.active_flag = active;
-
-                const resp = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
+                const resp = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 const data = await resp.json();
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Error: ' + data.error);
-                    this.disabled = false;
-                }
-            } catch (e) {
-                alert('Network error.');
-                this.disabled = false;
-            }
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+            } catch (e) { alert('Network error.'); this.disabled = false; }
         });
+
+        // ── Groups ───────────────────────────────────────────────────────────
+        let editingGroupId = null;
+
+        document.getElementById('btnAddGroup').addEventListener('click', function() {
+            editingGroupId = null;
+            document.getElementById('groupModalTitle').textContent = 'Add Ledger Group';
+            document.getElementById('gName').value = '';
+            document.getElementById('gNature').value = 'ASSETS';
+            $('#groupModal').modal('show');
+        });
+
+        document.querySelectorAll('.btn-edit-group').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                editingGroupId = this.dataset.id;
+                document.getElementById('groupModalTitle').textContent = 'Edit Ledger Group';
+                document.getElementById('gName').value = this.dataset.name;
+                document.getElementById('gNature').value = this.dataset.nature;
+                $('#groupModal').modal('show');
+            });
+        });
+
+        document.getElementById('btnSaveGroup').addEventListener('click', async function() {
+            const name   = document.getElementById('gName').value.trim();
+            const nature = document.getElementById('gNature').value;
+            if (!name) { alert('Group name is required.'); return; }
+            this.disabled = true;
+            try {
+                const url    = editingGroupId ? '/gl/api/ledger-groups/' + editingGroupId : '/gl/api/ledger-groups';
+                const method = editingGroupId ? 'PUT' : 'POST';
+                const resp   = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: name, group_nature: nature }) });
+                const data   = await resp.json();
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+            } catch (e) { alert('Network error.'); this.disabled = false; }
+        });
+
+        document.querySelectorAll('.btn-del-group').forEach(function(btn) {
+            btn.addEventListener('click', async function() {
+                if (!confirm('Delete group "' + this.dataset.name + '"?')) return;
+                const resp = await fetch('/gl/api/ledger-groups/' + this.dataset.id, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); }
+            });
+        });
+
+        // ── Tally Import ─────────────────────────────────────────────────────
+        let parsedLedgers    = [];
+        let parsedRows       = [];
+        let allGroups        = [];
+        let pendingCreateRow = null;
+
+        document.getElementById('tallyFile').addEventListener('change', function() {
+            this.nextElementSibling.textContent = this.files[0] ? this.files[0].name : 'Choose file…';
+            document.getElementById('btnParse').disabled = !this.files[0];
+        });
+
+        document.getElementById('btnParse').addEventListener('click', async function() {
+            const file = document.getElementById('tallyFile').files[0];
+            if (!file) return;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span> Parsing…';
+            const fd = new FormData();
+            fd.append('tally_file', file);
+            const resp = await fetch('/gl/tally-import/parse', { method: 'POST', body: fd });
+            const data = await resp.json();
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-upload mr-1"></i> Upload & Parse';
+            if (!resp.ok || data.error) { alert('Error: ' + (data.error || 'Unknown')); return; }
+            parsedRows    = data.rows;
+            parsedLedgers = data.ledgers;
+            allGroups     = data.groups;
+            renderReconcile();
+        });
+
+        document.getElementById('btnBack').addEventListener('click', function() {
+            document.getElementById('stepUpload').style.display    = '';
+            document.getElementById('stepReconcile').style.display = 'none';
+            document.getElementById('saveResult').style.display    = 'none';
+            document.getElementById('ledgerSearch').value          = '';
+        });
+
+        function renderReconcile() {
+            const tbody = document.getElementById('reconcileBody');
+            tbody.innerHTML = '';
+            const ledgerOptions = parsedLedgers
+                .map(l => `<option value="${l.ledger_id}">${l.ledger_name} (${l.group_name})</option>`)
+                .join('');
+            let matchedCount = 0, unmatchedCount = 0;
+            parsedRows.forEach(function(r, i) {
+                const isExact = r.match === 'exact';
+                if (isExact) matchedCount++; else unmatchedCount++;
+                const statusBadge = isExact
+                    ? '<span class="badge badge-success">Matched</span>'
+                    : '<span class="badge badge-warning">No match</span>';
+                let ledgerCell;
+                if (isExact) {
+                    ledgerCell = `<span class="small text-success">${escHtml(r.ledger_name)}</span>
+                        <input type="hidden" class="row-ledger-id" value="${r.ledger_id}">
+                        <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">`;
+                } else {
+                    ledgerCell = `<div class="d-flex align-items-center gap-2">
+                        <select class="form-control form-control-sm row-ledger-id" style="min-width:180px">
+                            <option value="">— skip —</option>${ledgerOptions}
+                        </select>
+                        <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">
+                        <button class="btn btn-outline-success btn-sm btn-create ml-1"
+                            data-tally="${escHtml(r.tally_name)}"
+                            data-suggested-group="${r.suggested_group_id || ''}"
+                            data-tally-group="${escHtml(r.tally_group_name || '')}"
+                            data-idx="${i}" type="button">+ Create</button>
+                    </div>`;
+                }
+                const tr = document.createElement('tr');
+                tr.dataset.idx = i;
+                tr.innerHTML = `<td class="small">${escHtml(r.tally_name)}</td><td>${ledgerCell}</td><td class="text-center">${statusBadge}</td>`;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('reconcileSummary').textContent = `${matchedCount} matched, ${unmatchedCount} unmatched`;
+            document.getElementById('stepUpload').style.display    = 'none';
+            document.getElementById('stepReconcile').style.display = '';
+            document.getElementById('saveResult').style.display    = 'none';
+            document.getElementById('ledgerSearch').value          = '';
+            $('#reconcileBody select.row-ledger-id').select2({ width: '100%', placeholder: '— skip —', dropdownParent: $('body') });
+            tbody.querySelectorAll('.btn-create').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const suggestedGroupId = this.dataset.suggestedGroup || '';
+                    const tallyGroup       = this.dataset.tallyGroup     || '';
+                    pendingCreateRow = { tally_name: this.dataset.tally, idx: parseInt(this.dataset.idx) };
+                    document.getElementById('createLedgerName').textContent = ' ' + this.dataset.tally;
+                    const hintEl = document.getElementById('createTallyGroup');
+                    hintEl.textContent   = tallyGroup ? 'Tally group: ' + tallyGroup : '';
+                    hintEl.style.display = tallyGroup ? '' : 'none';
+                    const sel = document.getElementById('createGroupId');
+                    sel.innerHTML = allGroups.map(g => `<option value="${g.group_id}">${g.group_name} (${g.group_nature})</option>`).join('');
+                    if (suggestedGroupId) sel.value = suggestedGroupId;
+                    $('#createLedgerModal').modal('show');
+                });
+            });
+            document.getElementById('ledgerSearch').oninput = function() {
+                const q = this.value.toLowerCase();
+                document.querySelectorAll('#reconcileBody tr').forEach(function(tr) {
+                    const name = (tr.querySelector('td') || {}).textContent || '';
+                    tr.style.display = name.toLowerCase().includes(q) ? '' : 'none';
+                });
+            };
+        }
+
+        document.getElementById('btnConfirmCreate').addEventListener('click', async function() {
+            if (!pendingCreateRow) return;
+            const groupId = document.getElementById('createGroupId').value;
+            this.disabled = true;
+            this.textContent = 'Creating…';
+            const resp = await fetch('/gl/tally-import/create', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tally_name: pendingCreateRow.tally_name, group_id: groupId })
+            });
+            const data = await resp.json();
+            this.disabled = false;
+            this.textContent = 'Create Ledger';
+            if (!data.success) { alert('Error: ' + data.error); return; }
+            const tbody = document.getElementById('reconcileBody');
+            const tr    = tbody.querySelector(`tr[data-idx="${pendingCreateRow.idx}"]`);
+            if (tr) {
+                tr.querySelector('td:nth-child(2)').innerHTML =
+                    `<span class="small text-success">${escHtml(data.ledger_name)}</span>
+                     <input type="hidden" class="row-ledger-id" value="${data.ledger_id}">
+                     <input type="hidden" class="row-tally-name" value="${escHtml(pendingCreateRow.tally_name)}">`;
+                tr.querySelector('td:nth-child(3)').innerHTML = '<span class="badge badge-success">Created</span>';
+            }
+            parsedLedgers.push({ ledger_id: data.ledger_id, ledger_name: data.ledger_name, group_name: '' });
+            $('#createLedgerModal').modal('hide');
+            pendingCreateRow = null;
+        });
+
+        async function doSave() {
+            const mappings = [];
+            document.querySelectorAll('#reconcileBody tr').forEach(function(tr) {
+                const ledgerEl = tr.querySelector('.row-ledger-id');
+                const tallyEl  = tr.querySelector('.row-tally-name');
+                if (!ledgerEl || !tallyEl || !ledgerEl.value) return;
+                mappings.push({ ledger_id: ledgerEl.value, tally_name: tallyEl.value });
+            });
+            if (!mappings.length) { alert('No ledgers to save.'); return; }
+            document.getElementById('btnSave').disabled  = true;
+            document.getElementById('btnSave2').disabled = true;
+            const resp = await fetch('/gl/tally-import/save', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mappings })
+            });
+            const data = await resp.json();
+            document.getElementById('btnSave').disabled  = false;
+            document.getElementById('btnSave2').disabled = false;
+            if (data.success) {
+                const el = document.getElementById('saveResult');
+                el.textContent = '✓ ' + data.updated + ' ledger(s) updated with Tally name.';
+                el.style.display = '';
+            } else {
+                alert('Error: ' + data.error);
+            }
+        }
+
+        document.getElementById('btnSave').addEventListener('click', doSave);
+        document.getElementById('btnSave2').addEventListener('click', doSave);
+
+        function escHtml(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }

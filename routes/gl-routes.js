@@ -850,31 +850,8 @@ router.post('/api/journal/:id/reverse', [isLoginEnsured, security.isAdmin()], as
 // ── Ledger Groups ─────────────────────────────────────────────────────────────
 // GET /gl/ledger-groups
 
-router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
-    const locationCode = req.user.location_code;
-    try {
-        const groups = await db.sequelize.query(`
-            SELECT g.group_id, g.group_name, g.group_nature,
-                   COUNT(l.ledger_id) AS ledger_count
-            FROM gl_ledger_groups g
-            LEFT JOIN gl_ledgers l ON l.group_id = g.group_id AND l.active_flag = 'Y'
-            WHERE g.location_code = :locationCode
-            GROUP BY g.group_id
-            ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name
-        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
-
-        res.render('gl-ledger-groups', {
-            title:    'Ledger Groups',
-            user:     req.user,
-            config:   require('../config/app-config').APP_CONFIGS,
-            groups,
-            messages: req.flash()
-        });
-    } catch (err) {
-        console.error('Ledger groups error:', err);
-        req.flash('error', err.message);
-        res.redirect('/gl/day-book');
-    }
+router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], function(req, res) {
+    res.redirect('/gl/ledgers#tab-groups');
 });
 
 router.post('/api/ledger-groups', [isLoginEnsured, security.isAdmin()], async function(req, res) {
@@ -954,15 +931,18 @@ router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req,
                 ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name, l.ledger_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
             db.sequelize.query(`
-                SELECT group_id, group_name, group_nature
-                FROM gl_ledger_groups
-                WHERE location_code = :locationCode
-                ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
+                SELECT g.group_id, g.group_name, g.group_nature,
+                       COUNT(l.ledger_id) AS ledger_count
+                FROM gl_ledger_groups g
+                LEFT JOIN gl_ledgers l ON l.group_id = g.group_id AND l.active_flag = 'Y'
+                WHERE g.location_code = :locationCode
+                GROUP BY g.group_id
+                ORDER BY FIELD(g.group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), g.group_name
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
         ]);
 
         res.render('gl-ledgers', {
-            title:    'Ledgers',
+            title:    'Ledger Master',
             user:     req.user,
             config:   require('../config/app-config').APP_CONFIGS,
             ledgers,
@@ -1043,12 +1023,7 @@ function parseTallyMasterTxt(buf) {
 }
 
 router.get('/tally-import', [isLoginEnsured, security.isAdmin()], function(req, res) {
-    res.render('gl-tally-import', {
-        title:   'Tally Ledger Import',
-        user:    req.user,
-        config:  require('../config/app-config').APP_CONFIGS,
-        messages: req.flash()
-    });
+    res.redirect('/gl/ledgers#tab-tally');
 });
 
 router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.single('tally_file'), async function(req, res) {
