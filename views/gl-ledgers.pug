@@ -289,9 +289,14 @@ block content
                 const labelEl     = document.getElementById('lSourceLabel');
                 if (srcType) {
                     let label = srcType;
-                    if (srcType === 'CUSTOMER' && linkedCust) label = 'Customer — ' + linkedCust + ' (ID: ' + srcId + ')';
-                    else if (srcType === 'CUSTOMER' && srcId)  label = 'Customer (ID: ' + srcId + ')';
-                    else if (srcType === 'STATIC' && srcId)    label = 'Static account (ID: ' + srcId + ')';
+                    if ((srcType === 'CUSTOMER' || srcType === 'CREDIT') && linkedCust)
+                        label = 'Credit customer — ' + linkedCust + ' (ID: ' + srcId + ')';
+                    else if ((srcType === 'CUSTOMER' || srcType === 'CREDIT') && srcId)
+                        label = 'Credit customer (ID: ' + srcId + ')';
+                    else if (srcType === 'STATIC' && srcId)
+                        label = 'Static account (ID: ' + srcId + ')';
+                    else if (srcType === 'STATIC')
+                        label = 'Static (manually created)';
                     labelEl.textContent  = label;
                     infoEl.style.display = '';
                 } else {
@@ -442,6 +447,11 @@ block content
             document.getElementById('saveResult').style.display    = 'none';
             document.getElementById('ledgerSearch').value          = '';
             $('#reconcileBody select.row-ledger-id').select2({ width: '100%', placeholder: '— skip —', dropdownParent: $('body') });
+            // Hide + Create when a ledger is selected; show when cleared
+            $('#reconcileBody').on('change', 'select.row-ledger-id', function() {
+                const btn = $(this).closest('div').find('.btn-create');
+                btn.toggle(!this.value);
+            });
             tbody.querySelectorAll('.btn-create').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     const suggestedGroupId = this.dataset.suggestedGroup || '';
