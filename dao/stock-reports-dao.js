@@ -243,6 +243,115 @@ getStockSummaryOptimized: async (locationCode, fromDate, toDate) => {
     }
 },
 
+getIntercompanyBowsers: async (locationCode) => {
+    try {
+        return await db.sequelize.query(
+            `SELECT b.bowser_id, b.bowser_name, b.location_code, b.product_id,
+                    p.product_name, p.unit, b.is_active
+             FROM m_bowser b
+             JOIN m_product p ON p.product_id = b.product_id
+             WHERE b.location_code = :locationCode
+             ORDER BY b.bowser_name`,
+            {
+                replacements: { locationCode },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+    } catch (error) {
+        console.error('Error fetching intercompany bowsers:', error);
+        throw error;
+    }
+},
+
+getIntercompanyLedgerOpening: async (bowserId, locationCode, fromDate) => {
+    try {
+        const query = `
+            SELECT ROUND(
+                COALESCE((
+                    SELECT SUM(tci.quantity)
+                    FROM t_closing_intercompany tci
+                    WHERE tci.bowser_id = :bowserId
+                      AND tci.location_code = :locationCode
+                      AND DATE(tci.closing_date) < :fromDate
+                ), 0)
+                -
+                COALESCE((
+                    SELECT SUM(bcl.closing_meter - bcl.opening_meter - COALESCE(bcl.testing_qty, 0))
+                    FROM t_bowser_closing bcl
+                    WHERE bcl.bowser_id = :bowserId
+                      AND bcl.location_code = :locationCode
+                      AND bcl.status = 'CLOSED'
+                      AND DATE(bcl.closing_date) < :fromDate
+                ), 0)
+            , 3) AS opening_qty
+        `;
+
+        const rows = await db.sequelize.query(query, {
+            replacements: { bowserId, locationCode, fromDate },
+            type: Sequelize.QueryTypes.SELECT
+        });
+
+        return parseFloat(rows[0]?.opening_qty || 0);
+    } catch (error) {
+        console.error('Error fetching intercompany ledger opening:', error);
+        throw error;
+    }
+},
+
+getIntercompanyLedger: async (bowserId, locationCode, fromDate, toDate) => {
+    try {
+        const query = `
+            SELECT
+                txn_date,
+                txn_type,
+                reference_no,
+                particulars,
+                qty_in AS in_qty,
+                qty_out AS out_qty,
+                sort_order
+            FROM (
+                SELECT
+                    DATE(tci.closing_date) AS txn_date,
+                    CONVERT('FILL IN' USING utf8mb4) AS txn_type,
+                    CONVERT(CAST(tci.closing_id AS CHAR) USING utf8mb4) AS reference_no,
+                    CONVERT(CONCAT('Shift Closing #', tci.closing_id) USING utf8mb4) AS particulars,
+                    ROUND(tci.quantity, 3) AS qty_in,
+                    CAST(0 AS DECIMAL(12,3)) AS qty_out,
+                    1 AS sort_order
+                FROM t_closing_intercompany tci
+                WHERE tci.bowser_id = :bowserId
+                  AND tci.location_code = :locationCode
+                  AND DATE(tci.closing_date) BETWEEN :fromDate AND :toDate
+
+                UNION ALL
+
+                SELECT
+                    DATE(bcl.closing_date) AS txn_date,
+                    CONVERT('SALE OUT' USING utf8mb4) AS txn_type,
+                    CONVERT(CAST(bcl.bowser_closing_id AS CHAR) USING utf8mb4) AS reference_no,
+                    CONVERT(CONCAT('Bowser Closing #', bcl.bowser_closing_id) USING utf8mb4) AS particulars,
+                    CAST(0 AS DECIMAL(12,3)) AS qty_in,
+                    ROUND(bcl.closing_meter - bcl.opening_meter - COALESCE(bcl.testing_qty, 0), 3) AS qty_out,
+                    2 AS sort_order
+                FROM t_bowser_closing bcl
+                WHERE bcl.bowser_id = :bowserId
+                  AND bcl.location_code = :locationCode
+                  AND bcl.status = 'CLOSED'
+                  AND DATE(bcl.closing_date) BETWEEN :fromDate AND :toDate
+            ) ledger
+            ORDER BY txn_date, sort_order, reference_no
+        `;
+
+        return await db.sequelize.query(query, {
+            replacements: { bowserId, locationCode, fromDate, toDate },
+            type: Sequelize.QueryTypes.SELECT
+        });
+    } catch (error) {
+        console.error('Error fetching intercompany ledger:', error);
+        throw error;
+    }
+},
+
 // Tank variance input data (tank dips + dip chart + pump readings + receipts)
 getTankVarianceInputs: async (locationCode, fromDate, toDate) => {
     try {

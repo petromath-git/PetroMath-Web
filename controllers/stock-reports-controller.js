@@ -345,6 +345,95 @@ getStockLedgerReport: async (req, res, next) => {
     }
 },
 
+getIntercompanyLedgerReport: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const caller = req.body.caller || 'notpdf';
+        const bowserId = req.body.bowserId || req.query.bowserId || null;
+        let fromDate = req.body.fromDate || req.query.fromDate;
+        let toDate = req.body.toDate || req.query.toDate;
+
+        if (fromDate instanceof Date) {
+            fromDate = moment(fromDate).format('YYYY-MM-DD');
+        } else if (fromDate) {
+            fromDate = moment(fromDate).format('YYYY-MM-DD');
+        }
+
+        if (toDate instanceof Date) {
+            toDate = moment(toDate).format('YYYY-MM-DD');
+        } else if (toDate) {
+            toDate = moment(toDate).format('YYYY-MM-DD');
+        }
+
+        const bowsers = await stockReportsDao.getIntercompanyBowsers(locationCode);
+
+        let ledgerData = [];
+        let bowserInfo = null;
+        let openingBalance = 0;
+        let closingBalance = 0;
+        let totalIn = 0;
+        let totalOut = 0;
+
+        if (bowserId && fromDate && toDate) {
+            bowserInfo = bowsers.find(b => String(b.bowser_id) === String(bowserId)) || null;
+            openingBalance = await stockReportsDao.getIntercompanyLedgerOpening(
+                bowserId,
+                locationCode,
+                fromDate
+            );
+            ledgerData = await stockReportsDao.getIntercompanyLedger(
+                bowserId,
+                locationCode,
+                fromDate,
+                toDate
+            );
+            totalIn = ledgerData.reduce((sum, txn) => sum + parseFloat(txn.in_qty || 0), 0);
+            totalOut = ledgerData.reduce((sum, txn) => sum + parseFloat(txn.out_qty || 0), 0);
+            closingBalance = openingBalance + totalIn - totalOut;
+        }
+
+        const formattedFromDate = fromDate ? moment(fromDate).format('DD-MMM-YYYY') : '';
+        const formattedToDate = toDate ? moment(toDate).format('DD-MMM-YYYY') : '';
+        const currentDate = moment().format('YYYY-MM-DD');
+        const renderData = {
+            title: 'Intercompany Ledger Report',
+            user: req.user,
+            bowsers,
+            ledgerData,
+            bowserInfo,
+            openingBalance: openingBalance.toFixed(3),
+            closingBalance: closingBalance.toFixed(3),
+            totalIn: totalIn.toFixed(3),
+            totalOut: totalOut.toFixed(3),
+            fromDate,
+            toDate,
+            formattedFromDate,
+            formattedToDate,
+            selectedBowserId: bowserId,
+            currentDate
+        };
+
+        if (caller === 'notpdf') {
+            res.render('reports-intercompany-ledger', renderData);
+        } else {
+            return new Promise((resolve, reject) => {
+                res.render('reports-intercompany-ledger', renderData, (err, html) => {
+                    if (err) {
+                        console.error('getIntercompanyLedgerReport: Error in res.render:', err);
+                        reject(err);
+                    } else {
+                        resolve(html);
+                    }
+                });
+            });
+        }
+    } catch (error) {
+        console.error('Error in getIntercompanyLedgerReport:', error);
+        req.flash('error', 'Failed to generate intercompany ledger report');
+        res.redirect('/home');
+    }
+},
+
 getTankVarianceReport: async (req, res, next) => {
     try {
         const locationCode = req.user.location_code;

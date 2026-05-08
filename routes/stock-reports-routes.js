@@ -37,6 +37,19 @@ router.post('/ledger', isLoginEnsured, function (req, res, next) {
     stockReportsController.getStockLedgerReport(req, res, next);
 });
 
+// Intercompany Ledger Report - GET (initial load)
+router.get('/intercompany-ledger', isLoginEnsured, function (req, res, next) {
+    req.body.fromDate = new Date(Date.now());
+    req.body.toDate = new Date(Date.now());
+    req.body.caller = 'notpdf';
+    stockReportsController.getIntercompanyLedgerReport(req, res, next);
+});
+
+// Intercompany Ledger Report - POST (form submit / PDF generation)
+router.post('/intercompany-ledger', isLoginEnsured, function (req, res, next) {
+    stockReportsController.getIntercompanyLedgerReport(req, res, next);
+});
+
 // Tank Variance Report - GET (initial load)
 router.get('/tank-variance', isLoginEnsured, function (req, res, next) {
     req.body.fromDate = new Date(Date.now());
