@@ -17,17 +17,20 @@ block content
                         // Search Filters
                         form#searchForm.mb-4
                             .row.g-3
-                                .col-md-3
+                                .col-md-2
                                     label.form-label From Date:
                                     input#fromDate.form-control(type='date' name='fromDate' required)
-                                .col-md-3
+                                .col-md-2
                                     label.form-label To Date:
                                     input#toDate.form-control(type='date' name='toDate' required)
                                 if userRole !== 'Customer'
-                                    .col-md-4
+                                    .col-md-3
                                         label.form-label Customer:
                                         select#customerFilter.form-control(name='customerFilter')
                                             option(value='') All Customers
+                                .col-md-3
+                                    label.form-label Vehicle No:
+                                    input#vehicleFilter.form-control(type='text' name='vehicleFilter' placeholder='e.g. TN01AB1234')
                                 .col-md-2.d-flex.align-items-end
                                     button#searchBtn.btn.btn-primary.w-100(type='submit')
                                         i.bi.bi-search.me-2
@@ -116,19 +119,21 @@ block content
                 const fromDate = document.getElementById('fromDate').value;
                 const toDate = document.getElementById('toDate').value;
                 const customerFilter = document.getElementById('customerFilter')?.value || '';
-                
+                const vehicleFilter = document.getElementById('vehicleFilter')?.value.trim() || '';
+
                 if (!fromDate || !toDate) {
                     showAlert('warning', 'Please select both from and to dates');
                     return;
                 }
-                
+
                 showLoading(true);
-                
+
                 try {
                     const params = new URLSearchParams({
                         fromDate: fromDate,
                         toDate: toDate,
-                        customerFilter: customerFilter
+                        customerFilter: customerFilter,
+                        vehicleFilter: vehicleFilter
                     });
                     
                     const response = await fetch(`/api/transaction-corrections/search?${params}`);

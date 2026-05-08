@@ -29,21 +29,21 @@ module.exports = {
 
         searchTransactions: async (req, res) => {
         try {
-            const { fromDate, toDate, customerFilter } = req.query;
+            const { fromDate, toDate, customerFilter, vehicleFilter } = req.query;
             const user = req.session.user || req.user;
             const userRole = user?.Role || user?.role;
             const userLocation = user?.location_code || user?.location;
-            
+
             // Build WHERE conditions based on user role
             let whereConditions = [];
             let replacements = { fromDate, toDate, userLocation };
-            
+
             // Date range filter
             whereConditions.push('COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) BETWEEN :fromDate AND :toDate');
-            
+
             // Location filter
             whereConditions.push('tcl.location_code = :userLocation');
-            
+
             // Role-based filtering
             if (userRole === 'Customer') {
                 whereConditions.push('tc.creditlist_id = :customerCreditlistId');
@@ -51,6 +51,12 @@ module.exports = {
             } else if (customerFilter) {
                 whereConditions.push('tc.creditlist_id = :customerFilter');
                 replacements.customerFilter = customerFilter;
+            }
+
+            // Vehicle number filter (partial match, case-insensitive)
+            if (vehicleFilter) {
+                whereConditions.push('mv.vehicle_number LIKE :vehicleFilter');
+                replacements.vehicleFilter = `%${vehicleFilter}%`;
             }
             
             // Only show closed transactions
