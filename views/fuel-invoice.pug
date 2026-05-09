@@ -75,8 +75,9 @@ block content
                             tr
                                 th Invoice Product Name
                                 th Map to Product #[span.text-danger *]
-                                th Qty (KL)
-                                th Rate/KL
+                                th Qty
+                                th Unit
+                                th Rate
                                 th Density
                                 th HSN Code
                                 th Amount
@@ -119,6 +120,8 @@ block content
             const removeBtn = FI_EDIT_DISABLED ? '' :
                 `<button type="button" class="btn btn-sm btn-link text-danger" onclick="fuelInvoiceRemoveLine(${i})">&times;</button>`;
 
+            const unit = d.qty_unit || 'KL';
+            const unitOpts = ['KL', 'KG'].map(u => `<option value="${u}" ${unit === u ? 'selected' : ''}>${u}</option>`).join('');
             const row = `<tr id="fi_line_${i}">
                 <td><input type="text" class="form-control form-control-sm fi-product-name" value="${d.product_name || ''}" placeholder="As on invoice" ${ro}></td>
                 <td>
@@ -127,6 +130,9 @@ block content
                     </select>
                 </td>
                 <td><input type="number" class="form-control form-control-sm fi-quantity" step="0.001" min="0" value="${d.quantity || ''}" ${ro}></td>
+                <td>
+                    <select class="form-control form-control-sm fi-unit" ${ro ? 'disabled' : ''}>${unitOpts}</select>
+                </td>
                 <td><input type="number" class="form-control form-control-sm fi-rate" step="0.001" min="0" value="${d.rate_per_kl || ''}" ${ro}></td>
                 <td><input type="number" class="form-control form-control-sm fi-density" step="0.001" min="0" value="${d.density || ''}" ${ro}></td>
                 <td><input type="text" class="form-control form-control-sm fi-hsn" value="${d.hsn_code || ''}" ${ro}></td>
@@ -204,6 +210,7 @@ block content
                     product_name:      row.querySelector('.fi-product-name').value.trim(),
                     product_id:        row.querySelector('.fi-product-id').value,
                     quantity:          row.querySelector('.fi-quantity').value,
+                    qty_unit:          row.querySelector('.fi-unit') ? row.querySelector('.fi-unit').value : 'KL',
                     rate_per_kl:       row.querySelector('.fi-rate').value,
                     density:           row.querySelector('.fi-density').value,
                     hsn_code:          row.querySelector('.fi-hsn').value,
@@ -323,6 +330,7 @@ block content
                     product_name:      line.product_name,
                     product_id:        mappedId,
                     quantity:          line.quantity,
+                    qty_unit:          line.qty_unit || json.qty_unit || 'KL',
                     rate_per_kl:       line.rate_per_kl,
                     density:           line.density,
                     hsn_code:          line.hsn_code,

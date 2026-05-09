@@ -4,10 +4,16 @@ const lubesInvoiceDao = require("../dao/lubes-invoice-dao");
 const supplierDao = require("../dao/supplier-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
-// Add these imports
 const db = require("../db/db-connection");
 const LubesInvoiceHeader = db.t_lubes_inv_hdr;
 const LubesInvoiceLine = db.t_lubes_inv_lines;
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const InvoiceParserService = require('../services/invoice-parser-service');
+const InvoiceProductMapDao = require('../dao/invoice-product-map-dao');
+
+// Short-lived store for uploaded PDF buffers pending user confirmation (30 min TTL)
+const tempLubeInvoiceStore = new Map();
 
 
 module.exports = {
@@ -342,7 +348,7 @@ getSuppliersActiveOnDate: (req, res, next) => {
 // Get all suppliers with their effective dates for client-side filtering
 getSuppliersWithDates: (req, res, next) => {
     const locationCode = req.user.location_code;
-    
+
     supplierDao.getAllSuppliersWithDates(locationCode)
         .then(suppliers => {
             res.json({
@@ -358,6 +364,139 @@ getSuppliersWithDates: (req, res, next) => {
                 error: err.message
             });
         });
+},
+
+// Render the PDF upload + review page
+getUploadPage: async (req, res, next) => {
+    try {
+        const locationCode = req.user.location_code;
+        const [products, suppliers] = await Promise.all([
+            lubesInvoiceDao.getProducts(locationCode),
+            lubesInvoiceDao.getSuppliers(locationCode)
+        ]);
+        res.render('lube-invoice-upload', {
+            title: 'Upload Lube Invoice',
+            user: req.user,
+            config,
+            products,
+            suppliers,
+            currentDate: utils.currentDate()
+        });
+    } catch (err) {
+        console.error('Error loading lube upload page:', err);
+        next(err);
+    }
+},
+
+// Parse uploaded lube PDF and return structured data + existing product mappings
+parseLubeInvoicePdf: async (req, res, next) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No PDF file uploaded.' });
+        }
+
+        const locationCode = req.user.location_code;
+        const pdfBuffer = fs.readFileSync(req.file.path);
+        fs.unlink(req.file.path, () => {});
+
+        const rawText = await InvoiceParserService.extractText(pdfBuffer);
+        if (!rawText || rawText.trim().length < 50) {
+            return res.status(400).json({ success: false, error: 'No readable text in PDF. File may be a scanned image.' });
+        }
+
+        // Log raw text — useful for parser tuning during rollout
+        console.log('[LUBE PDF RAW TEXT]\n', rawText);
+
+        // Supplier: user-selected from dropdown takes priority over PDF text detection
+        const userSupplierId = req.body.supplierId ? Number(req.body.supplierId) : null;
+        let supplierRow = null;
+        if (userSupplierId) {
+            const rows = await db.sequelize.query(
+                `SELECT supplier_id, supplier_name, supplier_short_name FROM m_supplier WHERE supplier_id = :id AND location_code = :loc LIMIT 1`,
+                { replacements: { id: userSupplierId, loc: locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            supplierRow = rows[0] || null;
+        }
+        if (!supplierRow) {
+            return res.status(400).json({ success: false, error: 'Supplier not found. Please select a valid supplier.' });
+        }
+
+        // Determine parser from supplier short name
+        const shortName = (supplierRow.supplier_short_name || '').toUpperCase().trim();
+        let parsed;
+        if (shortName === 'BPCL' || /BHARAT\s*PETROLEUM/i.test(rawText)) {
+            parsed = InvoiceParserService.parseBpclLubeInvoice(rawText);
+            parsed.supplierKey = 'BPCL';
+        } else {
+            return res.status(400).json({ success: false, error: `No lube invoice parser available for supplier "${supplierRow.supplier_name}" yet. BPCL is currently supported.` });
+        }
+
+        // Stash PDF buffer (30 min TTL)
+        const tempId = uuidv4();
+        tempLubeInvoiceStore.set(tempId, { buffer: pdfBuffer, expires: Date.now() + 30 * 60 * 1000 });
+        for (const [k, v] of tempLubeInvoiceStore) { if (v.expires < Date.now()) tempLubeInvoiceStore.delete(k); }
+
+        const [products, mappings] = await Promise.all([
+            lubesInvoiceDao.getProducts(locationCode),
+            InvoiceProductMapDao.getLubesMappings(locationCode, supplierRow.supplier_id)
+        ]);
+
+        return res.json({
+            success: true,
+            supplierKey: parsed.supplierKey,
+            supplierId: supplierRow.supplier_id,
+            supplierName: supplierRow.supplier_name,
+            tempId,
+            products,
+            mappings,
+            data: { header: parsed.header, lines: parsed.lines }
+        });
+    } catch (err) {
+        console.error('Error parsing lube invoice PDF:', err);
+        return res.status(500).json({ success: false, error: 'Failed to read invoice: ' + err.message });
+    }
+},
+
+// Save a lube invoice that was parsed from PDF
+saveLubeInvoiceFromPdf: async (req, res, next) => {
+    try {
+        const { tempId, supplierId, header, lines } = req.body;
+        const locationCode = req.user.location_code;
+
+        if (!supplierId) return res.status(400).json({ success: false, error: 'Supplier is required.' });
+        if (!lines || !lines.length) return res.status(400).json({ success: false, error: 'At least one product line is required.' });
+        if (lines.some(l => !l.product_id)) return res.status(400).json({ success: false, error: 'All lines must have a product selected.' });
+
+        const temp = tempLubeInvoiceStore.get(tempId);
+        if (temp) tempLubeInvoiceStore.delete(tempId);
+
+        const location = await lubesInvoiceDao.getLocationId(locationCode);
+
+        const result = await lubesInvoiceDao.saveLubeInvoiceFromPdf({
+            locationCode,
+            locationId: location ? location.location_id : null,
+            supplierId: Number(supplierId),
+            header,
+            lines,
+            createdBy: req.user.Person_id
+        });
+
+        // Save updated product mappings (including conversion_factor)
+        const mappingsToSave = lines.map(l => ({
+            invoice_product_name: l.invoice_product_name,
+            product_id: Number(l.product_id),
+            conversion_factor: l.conversion_factor != null ? l.conversion_factor : null
+        })).filter(m => m.invoice_product_name);
+
+        if (mappingsToSave.length) {
+            await InvoiceProductMapDao.saveLubesMappings(locationCode, Number(supplierId), mappingsToSave);
+        }
+
+        return res.json({ success: true, lubes_hdr_id: result.lubes_hdr_id });
+    } catch (err) {
+        console.error('Error saving lube invoice from PDF:', err);
+        return res.status(500).json({ success: false, error: 'Failed to save invoice: ' + err.message });
+    }
 }
 };
 
@@ -402,7 +541,7 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
     const lubesPromise = lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
     const fuelPromise = TankInvoice.findAll({
         where: { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } },
-        include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity'] }],
+        include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity', 'qty_unit'] }],
         order: [['invoice_date', 'DESC'], ['id', 'DESC']]
     });
 
@@ -430,6 +569,7 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
             if (fuelInvoices && fuelInvoices.length > 0) {
                 fuelInvoices.forEach(f => {
                     const qty = (f.lines || []).reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+                    const qty_unit = (f.lines || []).some(l => l.qty_unit === 'KG') ? 'KG' : 'KL';
                     invoiceValues.push({
                         type: 'FUEL',
                         fuel_id: f.id,
@@ -441,7 +581,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
                         invoice_date_raw: f.invoice_date,
                         amount: parseFloat(f.total_invoice_amount) || 0,
                         total_lines: (f.lines || []).length,
-                        qty_kl: qty > 0 ? qty.toFixed(3) : ''
+                        qty_kl: qty > 0 ? qty.toFixed(3) : '',
+                        qty_unit: qty_unit
                     });
                 });
             }
