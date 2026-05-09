@@ -208,6 +208,7 @@ module.exports = {
                 product_id:        Number(l.product_id),
                 product_name:      l.product_name      || null,
                 quantity:          l.quantity          || null,
+                qty_unit:          l.qty_unit && ['KL', 'KG'].includes(l.qty_unit.toUpperCase()) ? l.qty_unit.toUpperCase() : 'KL',
                 rate_per_kl:       l.rate_per_kl       || null,
                 density:           l.density           || null,
                 hsn_code:          l.hsn_code          || null,

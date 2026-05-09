@@ -180,7 +180,7 @@ module.exports = {
                     charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
                 if (l.delivery_charge != null)
                     charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
-                return { ...l, charges };
+                return { ...l, charges, qty_unit: result.qty_unit || 'KL' };
             });
 
             return res.json({
@@ -191,6 +191,7 @@ module.exports = {
                 tempId,
                 products,
                 mappings,
+                qty_unit: result.qty_unit || 'KL',
                 data: { header: result.header, lines: linesWithCharges }
             });
         } catch (err) {
@@ -241,6 +242,7 @@ module.exports = {
                     product_id: Number(l.product_id),
                     product_name: l.product_name || null,
                     quantity: l.quantity || null,
+                    qty_unit: l.qty_unit && ['KL', 'KG'].includes(l.qty_unit.toUpperCase()) ? l.qty_unit.toUpperCase() : 'KL',
                     rate_per_kl: l.rate_per_kl || null,
                     density: l.density || null,
                     hsn_code: l.hsn_code || null,

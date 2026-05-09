@@ -2224,7 +2224,7 @@ function renderInvoicePreview(inv) {
     <table class="table table-sm table-hover">
         <thead class="thead-light">
             <tr>
-                <th>Product</th><th class="text-right">Qty (KL)</th><th class="text-right">Rate/KL</th>
+                <th>Product</th><th class="text-right">Qty</th><th>Unit</th><th class="text-right">Rate</th>
                 <th class="text-right">Density</th><th>HSN</th><th class="text-right">Line Total</th>
             </tr>
         </thead>
@@ -2234,6 +2234,7 @@ function renderInvoicePreview(inv) {
         html += `<tr>
             <td>${line.product_name || '—'}</td>
             <td class="text-right">${line.quantity != null ? parseFloat(line.quantity).toFixed(3) : '—'}</td>
+            <td>${line.qty_unit || 'KL'}</td>
             <td class="text-right">${fmtN(line.rate_per_kl)}</td>
             <td class="text-right">${line.density != null ? parseFloat(line.density).toFixed(1) : '—'}</td>
             <td>${line.hsn_code || '—'}</td>
@@ -3309,6 +3310,7 @@ function renderInvoiceConfirmForm(data, products, mappings, tempId, supplier, su
                 </select>
             </td>
             <td>${line.quantity != null ? line.quantity : '—'}</td>
+            <td>${line.qty_unit || 'KL'}</td>
             <td>${line.rate_per_kl != null ? fmtN(line.rate_per_kl) : '—'}</td>
             <td>${fmtN(line.total_line_amount)}</td>
         </tr>`;
@@ -3342,8 +3344,9 @@ function renderInvoiceConfirmForm(data, products, mappings, tempId, supplier, su
                 <tr>
                     <th>Invoice Product</th>
                     <th>Map to Product <span class="text-danger">*</span></th>
-                    <th>Qty (KL)</th>
-                    <th>Rate/KL</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Rate</th>
                     <th>Amount</th>
                 </tr>
             </thead>
