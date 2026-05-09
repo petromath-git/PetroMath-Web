@@ -409,7 +409,8 @@ async function parseInvoice(pdfBuffer, companyName) {
         supplier: supplierKey,
         header,
         lines: productLines,
-        rawText
+        rawText,
+        qty_unit: configKey === 'BPCL_CNG' ? 'KG' : 'KL'
     };
 }
 

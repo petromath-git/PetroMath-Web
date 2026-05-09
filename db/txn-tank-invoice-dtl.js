@@ -27,6 +27,12 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.DECIMAL(8, 3),
             allowNull: true
         },
+        qty_unit: {
+            field: 'qty_unit',
+            type: DataTypes.STRING(5),
+            allowNull: false,
+            defaultValue: 'KL'
+        },
         rate_per_kl: {
             field: 'rate_per_kl',
             type: DataTypes.DECIMAL(10, 3),

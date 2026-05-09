@@ -83,7 +83,7 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
     try {
         const query = `
             SELECT * FROM (
-                -- Purchases
+                -- Lube invoice purchases
                 SELECT
                     hdr.invoice_date as txn_date,
                     CONVERT('PURCHASE' USING utf8mb4) as txn_type,
@@ -100,6 +100,25 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 WHERE li.product_id = ?
                 AND hdr.location_code = ?
                 AND DATE(hdr.invoice_date) BETWEEN ? AND ?
+
+                UNION ALL
+
+                -- Fuel invoice purchases (tank products: MS, HSD, CNG, etc.)
+                SELECT
+                    ti.invoice_date as txn_date,
+                    CONVERT('PURCHASE' USING utf8mb4) as txn_type,
+                    CONVERT(COALESCE(ti.invoice_number, '') USING utf8mb4) as reference_no,
+                    IF(COALESCE(tid.qty_unit, 'KL') = 'KL', tid.quantity * 1000, tid.quantity) as quantity,
+                    0 as out_qty,
+                    IF(COALESCE(tid.qty_unit, 'KL') = 'KL', tid.quantity * 1000, tid.quantity) as in_qty,
+                    CONVERT(COALESCE(ti.supplier, '') USING utf8mb4) as party_name,
+                    tid.rate_per_kl as rate,
+                    tid.total_line_amount as amount
+                FROM t_tank_invoice_dtl tid
+                JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
+                WHERE tid.product_id = ?
+                AND ti.location_id = ?
+                AND DATE(ti.invoice_date) BETWEEN ? AND ?
 
                 UNION ALL
 
@@ -207,7 +226,8 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
         
         return await db.sequelize.query(query, {
             replacements: [
-                productId, locationCode, fromDate, toDate,  // Purchase
+                productId, locationCode, fromDate, toDate,  // Lube invoice purchases
+                productId, locationCode, fromDate, toDate,  // Fuel invoice purchases
                 productId, locationCode, fromDate, toDate,  // Cash Sales
                 productId, locationCode, fromDate, toDate,  // Credit Sales
                 productId, locationCode, fromDate, toDate,  // 2T Oil

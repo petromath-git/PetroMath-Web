@@ -185,7 +185,8 @@ block content
                             button.btn.btn-sm.btn-primary.dropdown-toggle(type='button' data-toggle='dropdown') New Purchase
                             div.dropdown-menu
                                 a.dropdown-item(href='/purchases/fuel-invoice/new') Fuel Invoice
-                                a.dropdown-item(href='/lubes-invoice/new') Lube Invoice
+                                a.dropdown-item(href='/lubes-invoice/upload') Lube Invoice (Upload PDF)
+                                a.dropdown-item(href='/lubes-invoice/new') Lube Invoice (Manual)
             
             input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
             input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
@@ -226,7 +227,7 @@ block content
                             td.text-right= val.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             td.text-center
                                 if val.type === 'FUEL'
-                                    = val.qty_kl ? val.qty_kl + ' KL' : val.total_lines + ' lines'
+                                    = val.qty_kl ? val.qty_kl + ' ' + (val.qty_unit || 'KL') : val.total_lines + ' lines'
                                 else
                                     span.badge.badge-info= val.total_lines
                             td

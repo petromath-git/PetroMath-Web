@@ -74,29 +74,17 @@ BEGIN
           AND DATE(hdr.invoice_date) >= l_stock_start_date
           AND DATE(hdr.invoice_date) <= p_closing_bal_date;
     ELSE
-        -- Tank stock receipts + fuel invoices (fuel products only), qty in KL → convert to litres
-        SELECT COALESCE(SUM(combined.qty), 0)
+        -- Fuel invoices only — KL quantities converted to litres, KG (e.g. CNG) used as-is
+        SELECT COALESCE(SUM(
+            IF(COALESCE(tid.qty_unit, 'KL') = 'KL', tid.quantity * 1000, tid.quantity)
+        ), 0)
         INTO l_total_purchases
-        FROM (
-            SELECT trd.quantity * 1000 AS qty
-            FROM t_tank_stk_rcpt_dtl trd
-            JOIN t_tank_stk_rcpt tr  ON trd.ttank_id  = tr.ttank_id
-            JOIN m_tank t            ON trd.tank_id   = t.tank_id
-            WHERE t.product_code   = (SELECT product_name FROM m_product WHERE product_id = p_product_id)
-              AND tr.location_code = p_location_code
-              AND DATE(tr.invoice_date) >= l_stock_start_date
-              AND DATE(tr.invoice_date) <= p_closing_bal_date
-
-            UNION ALL
-
-            SELECT tid.quantity * 1000 AS qty
-            FROM t_tank_invoice_dtl tid
-            JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
-            WHERE tid.product_id  = p_product_id
-              AND ti.location_id  = p_location_code
-              AND DATE(ti.invoice_date) >= l_stock_start_date
-              AND DATE(ti.invoice_date) <= p_closing_bal_date
-        ) AS combined;
+        FROM t_tank_invoice_dtl tid
+        JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
+        WHERE tid.product_id  = p_product_id
+          AND ti.location_id  = p_location_code
+          AND DATE(ti.invoice_date) >= l_stock_start_date
+          AND DATE(ti.invoice_date) <= p_closing_bal_date;
     END IF;
 
     -- ── Sales (lube-specific: cashsales, credits, 2T oil) ──────────────────────
@@ -280,21 +268,9 @@ BEGIN
 
                 UNION ALL
 
-                -- Tank receipts (fuel only: is_tank_product=1, is_lube_product=0)
-                SELECT trd.quantity * 1000 AS qty
-                FROM t_tank_stk_rcpt_dtl trd
-                JOIN t_tank_stk_rcpt tr ON trd.ttank_id = tr.ttank_id
-                JOIN m_tank t           ON trd.tank_id  = t.tank_id
-                WHERE t.product_code    = p.product_name
-                  AND tr.location_code  = p_location_code
-                  AND p.is_tank_product = 1
-                  AND p.is_lube_product = 0
-                  AND DATE(tr.invoice_date) BETWEEN p_from_date AND p_to_date
-
-                UNION ALL
-
                 -- Fuel invoices (fuel only: is_tank_product=1, is_lube_product=0)
-                SELECT tid.quantity * 1000 AS qty
+                -- KL quantities converted to litres; KG quantities (e.g. CNG) used as-is
+                SELECT IF(COALESCE(tid.qty_unit, 'KL') = 'KL', tid.quantity * 1000, tid.quantity) AS qty
                 FROM t_tank_invoice_dtl tid
                 JOIN t_tank_invoice ti ON tid.invoice_id = ti.id
                 WHERE tid.product_id   = p.product_id

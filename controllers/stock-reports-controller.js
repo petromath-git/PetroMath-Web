@@ -200,6 +200,7 @@ getStockLedgerReport: async (req, res, next) => {
         
         // Get parameters from body (POST) or query (GET)
         const productId = req.body.productId || req.query.productId || null;
+        const dateRange = req.body.dateRange || req.query.dateRange || 'custom';
         let fromDate = req.body.fromDate || req.query.fromDate;
         let toDate = req.body.toDate || req.query.toDate;
 
@@ -305,6 +306,7 @@ getStockLedgerReport: async (req, res, next) => {
                 formattedFromDate: formattedFromDate,
                 formattedToDate: formattedToDate,
                 selectedProductId: productId,
+                selectedDateRange: dateRange,
                 currentDate: currentDate
             });
         } else {
@@ -325,6 +327,7 @@ getStockLedgerReport: async (req, res, next) => {
                     formattedFromDate: formattedFromDate,
                     formattedToDate: formattedToDate,
                     selectedProductId: productId,
+                    selectedDateRange: dateRange,
                     currentDate: currentDate
                 }, (err, html) => {
                     if (err) {
