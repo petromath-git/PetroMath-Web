@@ -40,7 +40,9 @@ BEGIN
     FROM t_reading
     WHERE closing_id = p_closing_id;
 
-    -- Credit amount for pump products in this closing
+    -- Credit amount for pump products in this closing.
+    -- Excludes off_meter_sale = 1 (barrel/bulk handovers) because those were
+    -- never in the pump meter reading and must not be counted against meter revenue.
     SELECT COALESCE(SUM(tc.price * tc.qty), 0) INTO creditamt
     FROM t_credits tc
     INNER JOIN m_product mp ON tc.product_id = mp.product_id
@@ -50,7 +52,8 @@ BEGIN
         INNER JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
         WHERE tr.closing_id = p_closing_id
     ) pump_products ON mp.product_name = pump_products.product_code
-    WHERE tc.closing_id = p_closing_id;
+    WHERE tc.closing_id = p_closing_id
+      AND COALESCE(tc.off_meter_sale, 0) = 0;
 
     -- Cash sales for NON-PUMP products in this closing
     SELECT COALESCE(SUM((cs.price - cs.price_discount) * cs.qty), 0) INTO cashasaleamt
@@ -328,6 +331,7 @@ BEGIN
                                             WHERE session_id = l_session_id)
                       AND tc.closing_status = 'CLOSED'
                       AND mp.product_name = a.product_code
+                      AND COALESCE(tcr.off_meter_sale, 0) = 0
                     GROUP BY mp.product_name) AS crsaleamtwithoutdisc
             FROM (
                 SELECT mp.pump_code,

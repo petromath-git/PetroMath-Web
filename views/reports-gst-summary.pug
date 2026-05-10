@@ -8,6 +8,7 @@ block content
             var purchaseTransactionFromServer = !{JSON.stringify(purchaseTransactionlist)}
             var salesSummaryFromServer = !{JSON.stringify(salesSummaryList)}
             var nonFuelSalesSummaryFromServer = !{JSON.stringify(nonFuelSalesSummaryList)}
+            var nonFuelB2BSalesByBillFromServer = !{JSON.stringify(nonFuelB2BSalesByBill)}
             var groupedNonFuelSalesByGSTFromServer = !{JSON.stringify(groupedNonFuelSalesByGST)}
             var groupedNonFuelPurchaseInvoicesFromServer = !{JSON.stringify(groupedNonFuelPurchaseInvoices)}
 
@@ -96,18 +97,29 @@ block content
                     "col-sm-8 mx-auto"
                 );
                 
-                // 2. Non Fuel Sales - Item Wise (one table per GST rate)
-                let nonFuelSalesHtml = "";
-                Object.keys(groupedNonFuelSalesByGSTFromServer).sort().forEach(gstRate => {
-                    const rows = groupedNonFuelSalesByGSTFromServer[gstRate];
-                    nonFuelSalesHtml += renderTable(
-                        rows,
-                        `Non Fuel Sales - GST @ ${gstRate}`,
-                        ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
-                        "col-sm-10 mx-auto"
-                    );
-                });
-                document.getElementById('NonFuelSalesByItem-table-container').innerHTML = nonFuelSalesHtml;
+                // 2a. B2B Non Fuel Sales - invoice-level detail
+                document.getElementById('NonFuelB2BSales-table-container').innerHTML = renderTable(
+                    nonFuelB2BSalesByBillFromServer,
+                    'B2B Non-Fuel Sales',
+                    ['Qty', 'Amount', 'CGST', 'SGST'],
+                    "col-sm-12 mx-auto"
+                );
+
+                // 2b. B2C Non Fuel Sales - product summary grouped by GST rate
+                let nonFuelB2CHtml = "";
+                if (Object.keys(groupedNonFuelSalesByGSTFromServer).length === 0) {
+                    nonFuelB2CHtml = "<p class='text-center'><strong>*** No B2C Non-Fuel Sales ***</strong></p>";
+                } else {
+                    Object.keys(groupedNonFuelSalesByGSTFromServer).sort().forEach(gstRate => {
+                        nonFuelB2CHtml += renderTable(
+                            groupedNonFuelSalesByGSTFromServer[gstRate],
+                            `B2C Non-Fuel Sales - GST @ ${gstRate}`,
+                            ['Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'],
+                            "col-sm-10 mx-auto"
+                        );
+                    });
+                }
+                document.getElementById('NonFuelB2CSales-table-container').innerHTML = nonFuelB2CHtml;
                 
                 // 3. Fuel Purchase Invoice Details (grouped by product)
                 let fuelInvoiceHtml = "";
@@ -224,10 +236,19 @@ block content
                 div.row &nbsp;
                 div(id="FuelSales-table-container")
             
-            //- 2. Non Fuel Sales - Item Wise (grouped by GST rate)
+            //- 2a. B2B Non Fuel Sales (credit customers with GSTIN)
             div.col-md-12
                 div.row &nbsp;
-                div(id="NonFuelSalesByItem-table-container")
+                h5.text-center B2B Non-Fuel Sales
+                p.text-center.text-muted(style='font-size:0.85em') Credit customers with GSTIN
+                div(id="NonFuelB2BSales-table-container")
+
+            //- 2b. B2C Non Fuel Sales (cash sales & credit without GSTIN)
+            div.col-md-12
+                div.row &nbsp;
+                h5.text-center B2C Non-Fuel Sales
+                p.text-center.text-muted(style='font-size:0.85em') Cash sales &amp; credit customers without GSTIN
+                div(id="NonFuelB2CSales-table-container")
             
             //- 3. Purchase Invoice Details - Fuel (grouped by product)
             div.col-md-12

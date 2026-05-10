@@ -53,14 +53,16 @@ module.exports = {
       const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
       const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
       const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
+      const nonFuelB2BSalesByBillPromise = GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, fromDate, toDate);
       const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
       const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
 
       const [purchaseData, salesData, nonFuelSalesData,
-            nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
+            nonFuelB2BSalesByBill, nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
         purchaseDataPromise,
         salesDataPromise,
         nonFuelSalesDataPromise,
+        nonFuelB2BSalesByBillPromise,
         nonFuelSalesByItemPromise,
         nonFuelPurchaseInvoicesPromise
       ]);
@@ -95,7 +97,7 @@ module.exports = {
       });
       
 
-        // Group non-fuel sales item-wise by GST rate (one table per rate in the view)
+        // Group B2C non-fuel sales by GST rate
         const groupedNonFuelSalesByGST = nonFuelSalesByItem.reduce((acc, row) => {
           const key = row.gst_rate;
           if (!acc[key]) acc[key] = [];
@@ -136,6 +138,7 @@ module.exports = {
         purchaseTransactionlist: groupedTransactions,
         salesSummaryList: salesSummaryList,
         nonFuelSalesSummaryList: nonFuelSalesSummaryList,
+        nonFuelB2BSalesByBill: nonFuelB2BSalesByBill,
         groupedNonFuelSalesByGST: groupedNonFuelSalesByGST,
         groupedNonFuelPurchaseInvoices: groupedNonFuelPurchaseInvoices
       }
@@ -176,12 +179,15 @@ module.exports = {
         // Fetch all data
         const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
         const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
+        const nonFuelB2BSalesByBillPromise = GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, fromDate, toDate);
         const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
         const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
 
-        const [purchaseData, salesData, nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
+        const [purchaseData, salesData, nonFuelB2BSalesByBill,
+               nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
           purchaseDataPromise,
           salesDataPromise,
+          nonFuelB2BSalesByBillPromise,
           nonFuelSalesByItemPromise,
           nonFuelPurchaseInvoicesPromise
         ]);
@@ -256,7 +262,42 @@ module.exports = {
         
         currentRow++;
         
-        // Non-Fuel Sales - item-wise grouped by GST rate
+        // B2B Non-Fuel Sales - invoice-level detail
+        if (nonFuelB2BSalesByBill.length > 0) {
+            salesSheet.getCell(`A${currentRow}`).value = 'B2B NON-FUEL SALES (Invoice-wise)';
+            salesSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
+            currentRow++;
+
+            const b2bHeaderRow = salesSheet.getRow(currentRow);
+            b2bHeaderRow.values = ['Bill No', 'Date', 'Customer', 'GSTIN', 'Product', 'Qty', 'Amount', 'CGST', 'SGST'];
+            b2bHeaderRow.font = { bold: true };
+            b2bHeaderRow.eachCell((cell) => {
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+            });
+            currentRow++;
+
+            nonFuelB2BSalesByBill.forEach(row => {
+                const dataRow = salesSheet.getRow(currentRow);
+                dataRow.getCell(1).value = row['Bill No'];
+                dataRow.getCell(2).value = row['Date'];
+                dataRow.getCell(3).value = row['Customer'];
+                dataRow.getCell(4).value = row['GSTIN'];
+                dataRow.getCell(5).value = row['Product'];
+                dataRow.getCell(6).value = toNumber(row['Qty']);
+                dataRow.getCell(7).value = toNumber(row['Amount']);
+                dataRow.getCell(8).value = toNumber(row['CGST']);
+                dataRow.getCell(9).value = toNumber(row['SGST']);
+                for (let i = 6; i <= 9; i++) dataRow.getCell(i).numFmt = '#,##0.00';
+                dataRow.eachCell((cell) => {
+                    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                });
+                currentRow++;
+            });
+            currentRow++;
+        }
+
+        // B2C Non-Fuel Sales - product summary grouped by GST rate
         const nonFuelSalesGrouped = {};
         nonFuelSalesByItem.forEach(row => {
             const key = row.gst_rate || '0%';
@@ -264,36 +305,42 @@ module.exports = {
             nonFuelSalesGrouped[key].push(row);
         });
 
-        Object.keys(nonFuelSalesGrouped).sort().forEach(gstRate => {
-            salesSheet.getCell(`A${currentRow}`).value = `NON-FUEL SALES - GST @ ${gstRate}`;
+        if (Object.keys(nonFuelSalesGrouped).length > 0) {
+            salesSheet.getCell(`A${currentRow}`).value = 'B2C NON-FUEL SALES (Product Summary)';
             salesSheet.getCell(`A${currentRow}`).font = { bold: true, size: 12 };
             currentRow++;
 
-            const nonFuelSalesHeaderRow = salesSheet.getRow(currentRow);
-            nonFuelSalesHeaderRow.values = ['Product', 'Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'];
-            nonFuelSalesHeaderRow.font = { bold: true };
-            nonFuelSalesHeaderRow.eachCell((cell) => {
-                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
-            });
-            currentRow++;
+            Object.keys(nonFuelSalesGrouped).sort().forEach(gstRate => {
+                salesSheet.getCell(`A${currentRow}`).value = `GST @ ${gstRate}`;
+                salesSheet.getCell(`A${currentRow}`).font = { bold: true };
+                currentRow++;
 
-            nonFuelSalesGrouped[gstRate].forEach(row => {
-                const dataRow = salesSheet.getRow(currentRow);
-                dataRow.getCell(1).value = row.product_name;
-                dataRow.getCell(2).value = toNumber(row.total_qty);
-                dataRow.getCell(3).value = toNumber(row.total_amount);
-                dataRow.getCell(4).value = toNumber(row.total_cgst);
-                dataRow.getCell(5).value = toNumber(row.total_sgst);
-                dataRow.getCell(6).value = toNumber(row.total_cgst) + toNumber(row.total_sgst);
-                for (let i = 2; i <= 6; i++) dataRow.getCell(i).numFmt = '#,##0.00';
-                dataRow.eachCell((cell) => {
+                const nonFuelSalesHeaderRow = salesSheet.getRow(currentRow);
+                nonFuelSalesHeaderRow.values = ['Product', 'Quantity', 'Amount', 'CGST', 'SGST', 'Total GST'];
+                nonFuelSalesHeaderRow.font = { bold: true };
+                nonFuelSalesHeaderRow.eachCell((cell) => {
                     cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+                });
+                currentRow++;
+
+                nonFuelSalesGrouped[gstRate].forEach(row => {
+                    const dataRow = salesSheet.getRow(currentRow);
+                    dataRow.getCell(1).value = row.product_name;
+                    dataRow.getCell(2).value = toNumber(row.total_qty);
+                    dataRow.getCell(3).value = toNumber(row.total_amount);
+                    dataRow.getCell(4).value = toNumber(row.total_cgst);
+                    dataRow.getCell(5).value = toNumber(row.total_sgst);
+                    dataRow.getCell(6).value = toNumber(row.total_cgst) + toNumber(row.total_sgst);
+                    for (let i = 2; i <= 6; i++) dataRow.getCell(i).numFmt = '#,##0.00';
+                    dataRow.eachCell((cell) => {
+                        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                    });
+                    currentRow++;
                 });
                 currentRow++;
             });
-            currentRow++;
-        });
+        }
 
         // Set column widths
         salesSheet.columns = [
