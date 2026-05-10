@@ -181,25 +181,24 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
 
                 UNION ALL
 
-                -- Meter Sales (fuel + metered lubes like 2T LOOSE) — grouped by day
+                -- Day Bill Sales (cash + digital portions; credits are tracked separately above)
                 SELECT
-                    DATE(c.closing_date) as txn_date,
-                    CONVERT('METER SALE' USING utf8mb4) as txn_type,
+                    tdb.bill_date as txn_date,
+                    CONVERT('DAY BILL' USING utf8mb4) as txn_type,
                     CONVERT('' USING utf8mb4) as reference_no,
-                    SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as quantity,
-                    SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) as out_qty,
+                    SUM(tdi.quantity) as quantity,
+                    SUM(tdi.quantity) as out_qty,
                     0 as in_qty,
-                    CONVERT('Meter Sale' USING utf8mb4) as party_name,
-                    MAX(r.price) as rate,
-                    SUM((r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) * r.price) as amount
-                FROM t_reading r
-                JOIN t_closing c ON r.closing_id = c.closing_id
-                JOIN m_pump mp ON r.pump_id = mp.pump_id
-                JOIN m_product p ON mp.product_code = p.product_name AND p.product_id = ?
-                WHERE c.location_code = ?
-                AND DATE(c.closing_date) BETWEEN ? AND ?
-                AND (r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)) > 0
-                GROUP BY DATE(c.closing_date)
+                    CONVERT('Day Bill' USING utf8mb4) as party_name,
+                    MAX(tdi.rate) as rate,
+                    SUM(tdi.total_amount) as amount
+                FROM t_day_bill tdb
+                JOIN t_day_bill_header tdbh ON tdbh.day_bill_id = tdb.day_bill_id
+                JOIN t_day_bill_items tdi ON tdi.header_id = tdbh.header_id
+                WHERE tdi.product_id = ?
+                AND tdb.location_code = ?
+                AND tdb.bill_date BETWEEN ? AND ?
+                GROUP BY tdb.bill_date
 
                 UNION ALL
 
@@ -231,7 +230,7 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 productId, locationCode, fromDate, toDate,  // Cash Sales
                 productId, locationCode, fromDate, toDate,  // Credit Sales
                 productId, locationCode, fromDate, toDate,  // 2T Oil
-                productId, locationCode, fromDate, toDate,  // Meter Sales
+                productId, locationCode, fromDate, toDate,  // Day Bill Sales
                 productId, locationCode, fromDate, toDate   // Adjustments
             ],
             type: Sequelize.QueryTypes.SELECT

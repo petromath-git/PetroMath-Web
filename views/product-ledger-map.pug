@@ -58,12 +58,41 @@ block content
                     p.text-muted.small.mb-3 Changes are saved automatically on selection.
                     div#modalRows
                 .modal-footer
+                    button.btn.btn-outline-info.btn-sm.mr-auto#btnApplyTo(type="button")
+                        i.bi.bi-files.mr-1
+                        | Apply to other products…
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Close
+
+    //- Product picker modal for Apply To
+    .modal.fade#applyToModal(tabindex="-1" role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#applyToTitle Apply mappings to…
+                    button.close(type="button" data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    p.small.text-muted.mb-2#applyToSubtitle
+                    .mb-2
+                        .form-check
+                            input.form-check-input#chkSelectAll(type="checkbox")
+                            label.form-check-label.small.font-weight-bold(for="chkSelectAll") Select / Deselect all
+                    .border.rounded.p-2(style="max-height:320px;overflow-y:auto")
+                        #applyToList
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-primary.btn-sm#btnConfirmApply(type="button")
+                        i.bi.bi-check2-all.mr-1
+                        | Apply
 
     script.
         const MAP_TYPES = !{JSON.stringify(mapTypes)};
         const LEDGERS   = !{JSON.stringify(ledgers)};
         const MAPPINGS  = !{JSON.stringify(mappingLookup)};
+        const PRODUCTS  = !{JSON.stringify(products.map(function(p){ return { product_id: p.product_id, product_name: p.product_name }; }))};
+
+        let currentProductId   = null;
+        let currentProductName = null;
 
         document.querySelectorAll('.btn-configure').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -71,6 +100,8 @@ block content
                 const productName = this.dataset.productName;
                 const cgst        = parseFloat(this.dataset.cgst) || 0;
 
+                currentProductId   = productId;
+                currentProductName = productName;
                 document.getElementById('configureModalTitle').textContent = productName;
 
                 const container = document.getElementById('modalRows');
@@ -171,3 +202,71 @@ block content
                 cell.innerHTML = '<span class="badge badge-success">All set</span>';
             }
         }
+
+        // ── Apply to other products ───────────────────────────────────────────
+        document.getElementById('btnApplyTo').addEventListener('click', function() {
+            if (!currentProductId) return;
+            const total = MAP_TYPES.length;
+
+            document.getElementById('applyToTitle').textContent  = 'Apply mappings to…';
+            document.getElementById('applyToSubtitle').textContent =
+                'Mappings from "' + currentProductName + '" will be copied. ' +
+                'Products that already have a mapping for a given type will not be overwritten.';
+            document.getElementById('chkSelectAll').checked = false;
+
+            const list = document.getElementById('applyToList');
+            list.innerHTML = '';
+
+            PRODUCTS.forEach(function(p) {
+                if (String(p.product_id) === String(currentProductId)) return;
+                const count  = Object.keys(MAPPINGS[p.product_id] || {}).length;
+                const badge  = count === 0
+                    ? '<span class="badge badge-danger ml-1">None</span>'
+                    : count < total
+                        ? '<span class="badge badge-warning ml-1">' + count + '/' + total + '</span>'
+                        : '<span class="badge badge-success ml-1">All set</span>';
+
+                const div = document.createElement('div');
+                div.className = 'form-check py-1 border-bottom';
+                div.innerHTML =
+                    '<input class="form-check-input apply-to-chk" type="checkbox" ' +
+                    'id="chk_' + p.product_id + '" value="' + p.product_id + '">' +
+                    '<label class="form-check-label small" for="chk_' + p.product_id + '">' +
+                    p.product_name + badge + '</label>';
+                list.appendChild(div);
+            });
+
+            $('#applyToModal').modal('show');
+        });
+
+        document.getElementById('chkSelectAll').addEventListener('change', function() {
+            document.querySelectorAll('.apply-to-chk').forEach(function(chk) {
+                chk.checked = document.getElementById('chkSelectAll').checked;
+            });
+        });
+
+        document.getElementById('btnConfirmApply').addEventListener('click', async function() {
+            const checked = Array.from(document.querySelectorAll('.apply-to-chk:checked'))
+                                 .map(function(c) { return parseInt(c.value); });
+            if (!checked.length) { alert('Select at least one product.'); return; }
+
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span> Applying…';
+
+            const resp = await fetch('/products/api/ledger-maps/' + currentProductId + '/copy-to', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_product_ids: checked })
+            });
+            const data = await resp.json();
+
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-check2-all mr-1"></i> Apply';
+
+            if (!data.success) { alert('Error: ' + data.error); return; }
+
+            // Refresh page so badges reflect the new mappings
+            $('#applyToModal').modal('hide');
+            $('#configureModal').modal('hide');
+            location.reload();
+        });

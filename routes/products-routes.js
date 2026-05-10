@@ -6,6 +6,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
 const ProductDao = require('../dao/product-dao');
 const ProductLedgerMapDao = require('../dao/product-ledger-map-dao');
+const db        = require('../db/db-connection');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
@@ -282,6 +283,55 @@ router.get('/ledger-map', [isLoginEnsured, security.isAdmin()], async (req, res)
         console.error('Error loading product ledger map:', err);
         req.flash('error', 'Failed to load product ledger map: ' + err.message);
         res.redirect('/products');
+    }
+});
+
+// POST /products/api/ledger-maps/:productId/copy-to
+// Body: { target_product_ids: [id, id, ...] }
+// Copies all map types from the source product to the specified targets.
+// INSERT IGNORE — will not overwrite existing mappings on target products.
+router.post('/api/ledger-maps/:productId/copy-to', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const locationCode       = req.user.location_code;
+    const sourceId           = parseInt(req.params.productId);
+    const { target_product_ids } = req.body;
+    const user               = req.user.username || String(req.user.Person_id);
+
+    if (!Array.isArray(target_product_ids) || !target_product_ids.length)
+        return res.status(400).json({ success: false, error: 'No target products selected' });
+
+    try {
+        const sourceMaps = await db.sequelize.query(
+            `SELECT map_type, ledger_id FROM gl_product_ledger_map
+             WHERE location_code = :locationCode AND product_id = :sourceId`,
+            { replacements: { locationCode, sourceId }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!sourceMaps.length)
+            return res.status(400).json({ success: false, error: 'Source product has no mappings to copy' });
+
+        const values       = [];
+        const replacements = { locationCode, user };
+        let idx = 0;
+        for (const targetId of target_product_ids) {
+            for (const m of sourceMaps) {
+                replacements[`pid_${idx}`] = parseInt(targetId);
+                replacements[`mt_${idx}`]  = m.map_type;
+                replacements[`lid_${idx}`] = m.ledger_id;
+                values.push(`(:locationCode, :pid_${idx}, :mt_${idx}, :lid_${idx}, :user, :user)`);
+                idx++;
+            }
+        }
+
+        await db.sequelize.query(
+            `INSERT IGNORE INTO gl_product_ledger_map
+             (location_code, product_id, map_type, ledger_id, created_by, updated_by)
+             VALUES ${values.join(',')}`,
+            { replacements, type: db.Sequelize.QueryTypes.INSERT }
+        );
+
+        res.json({ success: true, applied_to: target_product_ids.length });
+    } catch (err) {
+        console.error('copy-to error:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
