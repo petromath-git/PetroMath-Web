@@ -132,6 +132,13 @@ function columnToIndex(column) {
 // }
 
 
+// Strips currency prefixes ("INR ", "USD " etc.) and commas before parsing
+function parseAmount(raw) {
+    if (raw === null || raw === undefined || raw === '') return 0;
+    const cleaned = String(raw).replace(/[A-Z]{2,3}\s*/g, '').replace(/,/g, '').trim();
+    return parseFloat(cleaned) || 0;
+}
+
 function parseExcelDate(value, dateFormat = 'AUTO') {
     if (!value) return null;
     
@@ -821,12 +828,19 @@ previewTransactions: async (req, res) => {
                 continue;
             }
 
-            const debitRaw = row[columnToIndex(template.debit_column)] || '';
-            const creditRaw = row[columnToIndex(template.credit_column)] || '';
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
 
-            const debitAmount = parseFloat(String(debitRaw).replace(/,/g, '')) || 0;
-            const creditAmount = parseFloat(String(creditRaw).replace(/,/g, '')) || 0;
+            let debitAmount, creditAmount;
+            if (template.transaction_type_column) {
+                // Single-amount column format (e.g. CSB Bank): type column says "Credit" or "Debit"
+                const txnType = String(row[columnToIndex(template.transaction_type_column)] || '').trim().toLowerCase();
+                const amount = parseAmount(row[columnToIndex(template.debit_column)]);
+                debitAmount = txnType === 'debit' ? amount : 0;
+                creditAmount = txnType === 'credit' ? amount : 0;
+            } else {
+                debitAmount = parseAmount(row[columnToIndex(template.debit_column)]);
+                creditAmount = parseAmount(row[columnToIndex(template.credit_column)]);
+            }
 
             // ===== SKIP TOTAL/SUMMARY ROWS =====
             // Rows with BOTH debit and credit are typically total/summary rows
@@ -845,8 +859,8 @@ previewTransactions: async (req, res) => {
                 description: row[columnToIndex(template.description_column)] || '',
                 debit_amount: debitAmount,
                 credit_amount: creditAmount,
-                balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
-                running_balance: parseFloat(String(balanceRaw).replace(/,/g, '')) || null,
+                balance_amount: parseAmount(balanceRaw),
+                running_balance: parseAmount(balanceRaw) || null,
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
                 source_file: req.file.originalname,
                 retained_file_name: retainedFileName,
