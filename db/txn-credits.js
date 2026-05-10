@@ -97,6 +97,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.DECIMAL(12, 2),
             allowNull: true,
             comment: 'Vehicle odometer reading at time of fuelling for mileage calculation'
+        },
+        off_meter_sale: {
+            field: 'off_meter_sale',
+            type: DataTypes.TINYINT(1),
+            defaultValue: 0
         }
     }, {
         timestamps: false,

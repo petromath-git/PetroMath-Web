@@ -159,7 +159,50 @@ module.exports = {
 
 
   
-  // Get Non-Fuel Sales item-wise (by product) with GST amounts
+  // B2B non-fuel sales: one row per bill × product, for customers with a GSTIN.
+  getNonFuelB2BSalesByBill: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT
+        tc.bill_no                                                                    AS \`Bill No\`,
+        DATE_FORMAT(COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), '%d-%b-%Y') AS \`Date\`,
+        COALESCE(mcl.Company_Name, '')                                                AS \`Customer\`,
+        mcl.gst                                                                       AS \`GSTIN\`,
+        mp.product_name                                                               AS \`Product\`,
+        SUM(tc.qty)                                                                   AS \`Qty\`,
+        SUM(tc.amount)                                                                AS \`Amount\`,
+        ROUND(SUM(tc.amount * COALESCE(mp.cgst_percent, 0)
+              / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))), 2) AS \`CGST\`,
+        ROUND(SUM(tc.amount * COALESCE(mp.sgst_percent, 0)
+              / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))), 2) AS \`SGST\`
+      FROM t_credits tc
+      JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+      LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+      JOIN m_product mp ON tc.product_id = mp.product_id
+      WHERE tcl.closing_status = 'CLOSED'
+        AND tcl.location_code = :locationCode
+        AND DATE(tcl.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND mcl.gst IS NOT NULL AND mcl.gst != ''
+        AND (
+          COALESCE(mp.is_lube_product, 0) = 1
+          OR mp.product_name NOT IN (
+              SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode
+          )
+        )
+      GROUP BY tc.bill_no,
+               COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)),
+               mcl.Company_Name, mcl.gst, mp.product_name
+      ORDER BY COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)), tc.bill_no;
+    `;
+
+    const result = await db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT,
+    });
+
+    return result;
+  },
+
+  // B2C non-fuel sales: product-level summary (credit without GSTIN + cash + metered lubes).
   getNonFuelSalesByItem: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT
@@ -170,32 +213,50 @@ module.exports = {
         SUM(total_cgst) AS total_cgst,
         SUM(total_sgst) AS total_sgst
       FROM (
-        -- Packed lube sales via t_credits / t_cashsales
+        -- Credit sales where customer has no GSTIN
         SELECT
           mp.product_name,
           CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
-          SUM(s.qty) AS total_qty,
-          SUM(s.amount) AS total_amount,
-          SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-          SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
-        FROM (
-          SELECT closing_id, product_id, qty, amount
-          FROM t_credits
-          UNION ALL
-          SELECT closing_id, product_id, qty, amount
-          FROM t_cashsales
-        ) s
-        JOIN t_closing tc ON s.closing_id = tc.closing_id
-        JOIN m_product mp ON s.product_id = mp.product_id
-        WHERE tc.closing_status = 'CLOSED'
-          AND tc.location_code = :locationCode
-          AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          SUM(tc.qty) AS total_qty,
+          SUM(tc.amount) AS total_amount,
+          SUM(tc.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+          SUM(tc.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        FROM t_credits tc
+        JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+        LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+        JOIN m_product mp ON tc.product_id = mp.product_id
+        WHERE tcl.closing_status = 'CLOSED'
+          AND tcl.location_code = :locationCode
+          AND DATE(tcl.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          AND (mcl.gst IS NULL OR mcl.gst = '')
           AND (
             COALESCE(mp.is_lube_product, 0) = 1
             OR mp.product_name NOT IN (
-                SELECT DISTINCT product_code
-                FROM m_pump
-                WHERE location_code = :locationCode
+                SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode
+            )
+          )
+        GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
+
+        UNION ALL
+
+        -- Cash sales
+        SELECT
+          mp.product_name,
+          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
+          SUM(tcs.qty) AS total_qty,
+          SUM(tcs.amount) AS total_amount,
+          SUM(tcs.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
+          SUM(tcs.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+        FROM t_cashsales tcs
+        JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
+        JOIN m_product mp ON tcs.product_id = mp.product_id
+        WHERE tcl.closing_status = 'CLOSED'
+          AND tcl.location_code = :locationCode
+          AND DATE(tcl.closing_date) BETWEEN :reportFromDate AND :reportToDate
+          AND (
+            COALESCE(mp.is_lube_product, 0) = 1
+            OR mp.product_name NOT IN (
+                SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode
             )
           )
         GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent

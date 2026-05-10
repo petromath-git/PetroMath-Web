@@ -203,7 +203,9 @@ generate_day_bill_sp: BEGIN
              digital_amount DESC
     LIMIT 1;
 
-    -- ── 8. Credit quantities for the day ────────────────────────────────────
+    -- ── 8. Credit quantities — exclude off-meter (barrel) sales ─────────────
+    --    off_meter_sale = 1 means the product was handed over physically without
+    --    going through the pump meter, so it must NOT be deducted from pumped_qty.
     CREATE TEMPORARY TABLE tmp_db_credit
     SELECT
         tc.product_id,
@@ -213,6 +215,7 @@ generate_day_bill_sp: BEGIN
     WHERE c.location_code = p_location_code
       AND DATE(c.closing_date) = p_bill_date
       AND c.closing_status = 'CLOSED'
+      AND COALESCE(tc.off_meter_sale, 0) = 0
     GROUP BY tc.product_id;
 
     -- ── 9. Proportionate digital items ───────────────────────────────────────
