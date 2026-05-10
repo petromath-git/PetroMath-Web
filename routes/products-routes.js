@@ -6,6 +6,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
 const ProductDao = require('../dao/product-dao');
 const ProductLedgerMapDao = require('../dao/product-ledger-map-dao');
+const db        = require('../db/db-connection');
 const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
