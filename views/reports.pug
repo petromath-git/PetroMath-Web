@@ -65,27 +65,30 @@ block content
             - var showPriceDiscountColumn = creditstmt.some(val => val['Price Discount'] != null && val['Price Discount'] != '' && val['Price Discount'] != 0)
             - var showVehicleColumn = creditstmt.some(val => val['Vehicle Number'] != null && val['Vehicle Number'] != '')
             - var showOdometerColumn = creditstmt.some(val => val['Odometer Reading'] != null && val['Odometer Reading'] != '')
+            - function displayBalance(bal) { var fmt = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); if (balanceCrDr) { var a = Math.abs(bal); var f = fmt.format(a); if (bal > 0) return f + ' DR'; if (bal < 0) return f + ' CR'; return '0.00'; } return fmt.format(bal); }
             div.row &nbsp;
-            h6.font-weight-bold.text-center= "Credit Detail Report"
+            h6.font-weight-bold.text-center= "Credit Statement"
             if(cidparam == -1)
                 h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
             else
                 h5.font-weight-bold.text-center.text-uppercase= companyName                 
-                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`      
+                h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
             h4.font-weight-bold.text-success.text-center
-            
+            if statementNumber
+                h6.text-center.text-muted= `Statement No: ${statementNumber}`
+
             .container
                 .row.justify-content-center
                     .col-12
                         // Period Summary Section
-                        if(cidparam != -1 && typeof totalDebits !== 'undefined' && typeof totalCredits !== 'undefined')
+                        if(cidparam != -1 && showPeriodSummary && typeof totalDebits !== 'undefined' && typeof totalCredits !== 'undefined')
                             .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
                                 div(style="font-size: 1.1em; color: #495057; line-height: 1.6;")
                                     div(style="text-align: center; margin-bottom: 15px;")
                                         strong(style="font-size: 1.2em; color: #212529;") Period Summary
                                     div(style="text-align: right; margin-bottom: 4px;")
                                         span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Opening:
-                                        span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                                        span(style="font-weight: 600;")= displayBalance(openingbalance)
                                     div(style="text-align: right; margin-bottom: 4px;")
                                         span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Invoices:
                                         span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
@@ -94,7 +97,7 @@ block content
                                         span(style="font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
                                     div(style="text-align: right; margin-bottom: 4px;")
                                         span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Closing:
-                                        span(style="color: #495057;font-weight: 600;") #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+                                        span(style="color: #495057;font-weight: 600;")= displayBalance(closingbalance)
 
                         // Detailed Transaction Table
                         table.table.table-bordered.border.table-sm
@@ -113,11 +116,12 @@ block content
                                     th.text-center Quantity
                                     th.text-center Debit (Rs.)
                                     th.text-center Credit (Rs.)
-                                    th.text-center Balance (Rs.)
+                                    if showBalance
+                                        th.text-center Balance (Rs.)
                                     th.text-center Narration
                             tbody
                                 if(cidparam != -1)
-                                    tr  
+                                    tr
                                         td &nbsp;
                                         td.text-left.font-weight-bold Opening Balance
                                         td &nbsp;
@@ -130,9 +134,10 @@ block content
                                             td &nbsp;
                                         td &nbsp;
                                         td &nbsp;
-                                        td &nbsp;                           
-                                        td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
-                                        td &nbsp;                      
+                                        td &nbsp;
+                                        td.text-right.font-weight-bold= displayBalance(openingbalance)
+                                        if showBalance
+                                            td &nbsp;
                                 each val in creditstmt
                                     tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
                                         td.text-center(scope="row")= val.Date                            
@@ -148,12 +153,13 @@ block content
                                         td.text-right(scope="row") #{val.Qty !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Qty) : ''}                                                        
                                         td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
                                         td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
-                                        td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
+                                        if showBalance
+                                            td.text-right(scope="row")= val.Balance !== null ? displayBalance(val.Balance) : ''
                                         td(scope="row")= val.Narration                                
                                 // Closing Balance Row
                                 if(cidparam != -1)
                                     tr
-                                        td &nbsp;                                     
+                                        td &nbsp;
                                         td.text-left.font-weight-bold Closing Balance
                                         td &nbsp;
                                         td &nbsp;
@@ -165,10 +171,11 @@ block content
                                             td &nbsp;
                                         td &nbsp;
                                         td &nbsp;
-                                        td &nbsp;                                                  
-                                        td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
-                                        td &nbsp;                      
-                        
+                                        td &nbsp;
+                                        td.text-right.font-weight-bold= displayBalance(closingbalance)
+                                        if showBalance
+                                            td &nbsp;
+
                         div.col-12
                         
                             // Vehicle Breakup Addendum

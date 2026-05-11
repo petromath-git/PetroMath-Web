@@ -136,10 +136,10 @@ module.exports = {
                  
                   // Helper function to format odometer reading with Indian number format
                 const formatOdometerReading = (reading) => {
-                  if (!reading || reading === null) return '';
-                  const formatted = new Intl.NumberFormat('en-IN', { 
-                    minimumFractionDigits: 2, 
-                    maximumFractionDigits: 2 
+                  if (!reading || reading === null || Number(reading) === 0) return '';
+                  const formatted = new Intl.NumberFormat('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
                   }).format(reading);
                   return formatted + ' km';
                 };
@@ -194,25 +194,46 @@ module.exports = {
               }
               
                         const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
-                        const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
-                        
+                        const formattedToDate = moment(toDate).format('DD/MM/YYYY');
+
+                        const showPeriodSummary = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_PERIOD_SUMMARY', 'Y');
+                        const showStatementNumber = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_STATEMENT_NUMBER', 'N');
+                        const balanceCrDrFormat = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_BALANCE_CRDR_FORMAT', 'N');
+                        const showBalanceCol = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_BALANCE', 'Y');
+                        let statementNumber = null;
+                        if (showStatementNumber === 'Y' && cid && cid != -1) {
+                            try {
+                                statementNumber = await ReportDao.createStatementRecord(
+                                    locationCode, cid, fromDate, toDate,
+                                    reportType || 'CreditDetails',
+                                    req.user ? req.user.username || req.user.email : null
+                                );
+                            } catch (stmtErr) {
+                                console.error('getCreditReport: failed to create statement record:', stmtErr.message);
+                            }
+                        }
+
                           // Prepare the render data
                       renderData ={
-                        title: 'Reports', 
-                        user: req.user, 
+                        title: 'Reports',
+                        user: req.user,
                         fromClosingDate: fromDate,
-                        toClosingDate: toDate, 
+                        toClosingDate: toDate,
                         formattedFromDate: formattedFromDate,
                         formattedToDate: formattedToDate,
-                        credits: credits, 
+                        credits: credits,
                         company_id: cid,
                         creditstmt: Creditstmtlist,
                         openingbalance: OpeningBal,
                         closingbalance: closingBal,
-                        cidparam: cid, 
+                        cidparam: cid,
                         totalDebits: totalDebits,
                         totalCredits: totalCredits,
                         showVehicleBreakup: showVehicleBreakup,
+                        showPeriodSummary: showPeriodSummary === 'Y',
+                        statementNumber: statementNumber,
+                        balanceCrDr: balanceCrDrFormat === 'Y',
+                        showBalance: showBalanceCol === 'Y',
                         enableCreditExcelDownload: (await locationConfig.getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')) === 'Y',
                       }
 
