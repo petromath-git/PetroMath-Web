@@ -248,6 +248,16 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
     );
 },
 
+createStatementRecord: (locationCode, creditlistId, fromDate, toDate, reportType, generatedBy) => {
+    return db.sequelize.query(
+        `INSERT INTO t_credit_statement (location_code, creditlist_id, from_date, to_date, report_type, generated_by)
+         VALUES (:locationCode, :creditlistId, :fromDate, :toDate, :reportType, :generatedBy)`,
+        {
+            replacements: { locationCode, creditlistId: creditlistId || null, fromDate, toDate, reportType, generatedBy: generatedBy || null },
+            type: db.Sequelize.QueryTypes.INSERT
+        }
+    ).then(([insertId]) => insertId);
+},
 
 
 // MODIFIED getDigitalStmt METHOD
