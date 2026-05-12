@@ -870,7 +870,7 @@ router.post('/api/ledger-groups', [isLoginEnsured, security.isAdmin()], async fu
         const [groupId] = await db.sequelize.query(`
             INSERT INTO gl_ledger_groups (location_code, group_name, group_nature, created_by, updated_by)
             VALUES (:locationCode, :group_name, :group_nature, :user, :user)
-        `, { replacements: { locationCode, group_name, group_nature, user: req.user.username }, type: db.Sequelize.QueryTypes.INSERT });
+        `, { replacements: { locationCode, group_name, group_nature, user: req.user.username || String(req.user.Person_id) }, type: db.Sequelize.QueryTypes.INSERT });
         res.json({ success: true, group_id: groupId });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -888,7 +888,7 @@ router.put('/api/ledger-groups/:id', [isLoginEnsured, security.isAdmin()], async
         await db.sequelize.query(`
             UPDATE gl_ledger_groups SET group_name=:group_name, group_nature=:group_nature, updated_by=:user
             WHERE group_id=:groupId AND location_code=:locationCode
-        `, { replacements: { groupId, locationCode, group_name, group_nature, user: req.user.username }, type: db.Sequelize.QueryTypes.UPDATE });
+        `, { replacements: { groupId, locationCode, group_name, group_nature, user: req.user.username || String(req.user.Person_id) }, type: db.Sequelize.QueryTypes.UPDATE });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -973,7 +973,7 @@ router.post('/api/ledger', [isLoginEnsured, security.isAdmin()], async function(
         const [ledgerId] = await db.sequelize.query(`
             INSERT INTO gl_ledgers (location_code, ledger_name, group_id, active_flag, created_by, updated_by)
             VALUES (:locationCode, :ledger_name, :group_id, 'Y', :user, :user)
-        `, { replacements: { locationCode, ledger_name, group_id: parseInt(group_id), user: req.user.username }, type: db.Sequelize.QueryTypes.INSERT });
+        `, { replacements: { locationCode, ledger_name, group_id: parseInt(group_id), user: req.user.username || String(req.user.Person_id) }, type: db.Sequelize.QueryTypes.INSERT });
         res.json({ success: true, ledger_id: ledgerId });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -995,7 +995,7 @@ router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async functi
                 ledgerId, locationCode, ledger_name, group_id: parseInt(group_id),
                 active_flag: active_flag === 'Y' ? 'Y' : 'N',
                 tally_ledger_name: tally_ledger_name || null,
-                user: req.user.username
+                user: req.user.username || String(req.user.Person_id)
             },
             type: db.Sequelize.QueryTypes.UPDATE
         });
