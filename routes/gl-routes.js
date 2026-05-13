@@ -1362,6 +1362,218 @@ router.get('/api/batch-requests/:id/log', [isLoginEnsured, security.isAdmin()], 
     }
 });
 
+// ── Event Source Detail (drill-down, info only) ───────────────────────────────
+// GET /gl/api/events/:eventId/source
+// Returns the source transaction details for a given accounting event.
+// All errors are caught and returned as { success: false, error } — never throws.
+router.get('/api/events/:eventId/source', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+    const locationCode = req.user.location_code;
+    const eventId      = parseInt(req.params.eventId);
+    try {
+        const [event] = await db.sequelize.query(
+            `SELECT event_id, source_type, source_id, event_date, event_status, event_type, error_message
+             FROM gl_accounting_events
+             WHERE event_id = :eventId AND location_code = :locationCode`,
+            { replacements: { eventId, locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+        let detail = null;
+
+        if (event.source_type === 'CREDIT_SALE') {
+            const rows = await db.sequelize.query(`
+                SELECT tc.tcredit_id, tc.bill_no, tc.qty, tc.amount, tc.base_amount,
+                       tc.cgst_amount, tc.sgst_amount, tc.cdate AS txn_date,
+                       p.product_name, cl.Company_Name AS customer_name
+                FROM t_credits tc
+                JOIN m_product p      ON p.product_id     = tc.product_id
+                JOIN m_credit_list cl ON cl.creditlist_id = tc.creditlist_id
+                WHERE tc.tcredit_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Credit Sale',
+                    fields: [
+                        { label: 'Bill No',     value: r.bill_no },
+                        { label: 'Date',        value: r.txn_date ? String(r.txn_date).substring(0,10) : '' },
+                        { label: 'Customer',    value: r.customer_name },
+                        { label: 'Product',     value: r.product_name },
+                        { label: 'Qty',         value: r.qty },
+                        { label: 'Amount',      value: r.amount },
+                        { label: 'Base Amount', value: r.base_amount },
+                        { label: 'CGST',        value: r.cgst_amount },
+                        { label: 'SGST',        value: r.sgst_amount },
+                    ]
+                };
+            }
+        } else if (event.source_type === 'CASH_SALE') {
+            const rows = await db.sequelize.query(`
+                SELECT cs.cashsales_id, cs.qty, cs.amount, cs.base_amount,
+                       cs.cgst_amount, cs.sgst_amount, cs.bill_no,
+                       p.product_name,
+                       c.closing_date AS txn_date
+                FROM t_cashsales cs
+                JOIN m_product p  ON p.product_id  = cs.product_id
+                JOIN t_closing c  ON c.closing_id  = cs.closing_id
+                WHERE cs.cashsales_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Cash Sale',
+                    fields: [
+                        { label: 'Bill No',     value: r.bill_no },
+                        { label: 'Date',        value: r.txn_date ? String(r.txn_date).substring(0,10) : '' },
+                        { label: 'Product',     value: r.product_name },
+                        { label: 'Qty',         value: r.qty },
+                        { label: 'Amount',      value: r.amount },
+                        { label: 'Base Amount', value: r.base_amount },
+                        { label: 'CGST',        value: r.cgst_amount },
+                        { label: 'SGST',        value: r.sgst_amount },
+                    ]
+                };
+            }
+        } else if (event.source_type === 'TANK_INVOICE') {
+            const rows = await db.sequelize.query(`
+                SELECT ti.id, ti.invoice_number, ti.invoice_date, ti.total_invoice_amount,
+                       s.supplier_name
+                FROM t_tank_invoice ti
+                JOIN m_supplier s ON s.supplier_id = ti.supplier_id
+                WHERE ti.id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            const lines = await db.sequelize.query(`
+                SELECT p.product_name, d.quantity, d.rate_per_kl, d.total_line_amount
+                FROM t_tank_invoice_dtl d
+                JOIN m_product p ON p.product_id = d.product_id
+                WHERE d.invoice_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            const charges = await db.sequelize.query(`
+                SELECT c.charge_type, SUM(c.charge_amount) AS charge_amount
+                FROM t_tank_invoice_charges c
+                JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id
+                WHERE d.invoice_id = :sid AND c.charge_amount > 0
+                GROUP BY c.charge_type`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Tank Invoice',
+                    fields: [
+                        { label: 'Invoice No',    value: r.invoice_number },
+                        { label: 'Date',          value: r.invoice_date ? String(r.invoice_date).substring(0,10) : '' },
+                        { label: 'Supplier',      value: r.supplier_name },
+                        { label: 'Total Amount',  value: r.total_invoice_amount },
+                    ],
+                    tables: [
+                        {
+                            heading: 'Products',
+                            cols: ['Product', 'Qty', 'Rate/KL', 'Amount'],
+                            rows: lines.map(l => [l.product_name, l.quantity, l.rate_per_kl, l.total_line_amount])
+                        },
+                        ...(charges.length ? [{
+                            heading: 'Charges',
+                            cols: ['Charge Type', 'Amount'],
+                            rows: charges.map(c => [c.charge_type, c.charge_amount])
+                        }] : [])
+                    ]
+                };
+            }
+        } else if (event.source_type === 'BANK_TXN') {
+            const rows = await db.sequelize.query(`
+                SELECT bt.t_bank_id, bt.trans_date, bt.credit_amount, bt.debit_amount,
+                       bt.remarks, bt.external_source, bt.external_id, bt.accounting_type,
+                       ba.bank_name, ba.account_number, ba.account_nickname
+                FROM t_bank_transaction bt
+                JOIN m_bank ba ON ba.bank_id = bt.bank_id
+                WHERE bt.t_bank_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                const amt = parseFloat(r.credit_amount) > 0
+                    ? `₹${parseFloat(r.credit_amount).toFixed(2)} (Credit)`
+                    : `₹${parseFloat(r.debit_amount).toFixed(2)} (Debit)`;
+                detail = {
+                    title: 'Bank Transaction',
+                    fields: [
+                        { label: 'Date',             value: r.trans_date ? String(r.trans_date).substring(0,10) : '' },
+                        { label: 'Bank',             value: `${r.bank_name} — ${r.account_nickname || r.account_number}` },
+                        { label: 'Amount',           value: amt },
+                        { label: 'Remarks',          value: r.remarks },
+                        { label: 'Accounting Type',  value: r.accounting_type },
+                        { label: 'Counterpart Type', value: r.external_source },
+                        { label: 'Counterpart ID',   value: r.external_id },
+                    ]
+                };
+            }
+        } else if (event.source_type === 'DAY_BILL') {
+            const rows = await db.sequelize.query(`
+                SELECT db.day_bill_id, db.bill_date, db.total_cash_amount,
+                       db.total_digital_amount, db.status
+                FROM t_day_bill db
+                WHERE db.day_bill_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Day Bill',
+                    fields: [
+                        { label: 'Date',            value: r.bill_date ? String(r.bill_date).substring(0,10) : '' },
+                        { label: 'Cash Amount',     value: r.total_cash_amount },
+                        { label: 'Digital Amount',  value: r.total_digital_amount },
+                        { label: 'Status',          value: r.status },
+                    ]
+                };
+            }
+        } else if (event.source_type === 'LUBES_INVOICE') {
+            const rows = await db.sequelize.query(`
+                SELECT li.invoice_id, li.invoice_no, li.invoice_date,
+                       li.total_amount, s.supplier_name
+                FROM t_lubes_invoice li
+                JOIN m_supplier s ON s.supplier_id = li.supplier_id
+                WHERE li.invoice_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Lubes Invoice',
+                    fields: [
+                        { label: 'Invoice No',   value: r.invoice_no },
+                        { label: 'Date',         value: r.invoice_date ? String(r.invoice_date).substring(0,10) : '' },
+                        { label: 'Supplier',     value: r.supplier_name },
+                        { label: 'Total Amount', value: r.total_amount },
+                    ]
+                };
+            }
+        }
+
+        res.json({
+            success: true,
+            event: {
+                event_id:      event.event_id,
+                source_type:   event.source_type,
+                source_id:     event.source_id,
+                event_date:    event.event_date,
+                event_status:  event.event_status,
+                event_type:    event.event_type,
+                error_message: event.error_message
+            },
+            detail: detail || { title: event.source_type, fields: [], note: 'No detail query available for this source type.' }
+        });
+    } catch (err) {
+        console.error('Event source detail error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;
 
 // Exported helper — used by products route to populate ledger dropdowns server-side

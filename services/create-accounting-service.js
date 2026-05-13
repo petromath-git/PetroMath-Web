@@ -1056,10 +1056,12 @@ async function processTankInvoiceEvent(event, processedBy) {
 
     // Charge lines (free-text charge_type → GL ledger by name)
     const chargeRows = await db.sequelize.query(`
-        SELECT charge_type, charge_amount AS amount
-        FROM t_tank_invoice_charges
-        WHERE invoice_id = :invoiceId
-          AND charge_amount > 0
+        SELECT c.charge_type, SUM(c.charge_amount) AS amount
+        FROM t_tank_invoice_charges c
+        JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id
+        WHERE d.invoice_id = :invoiceId
+          AND c.charge_amount > 0
+        GROUP BY c.charge_type
     `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
 
     for (const ch of chargeRows) {
