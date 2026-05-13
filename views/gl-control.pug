@@ -181,6 +181,22 @@ block content
                     .text-muted.small Loading…
 
 
+    //- ── Source Detail Modal ─────────────────────────────────────────────────
+    .modal.fade#sourceDetailModal(tabindex="-1" role="dialog")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header.py-2
+                    h6.modal-title.mb-0#srcDetailTitle Source Detail
+                    button.close(type="button" data-dismiss="modal")
+                        span &times;
+                .modal-body#srcDetailBody(style="min-height:120px")
+                    .text-center.text-muted.py-4
+                        i.bi.bi-hourglass-split.mr-1
+                        | Loading…
+                .modal-footer.py-2
+                    small.text-muted.mr-auto#srcDetailEventInfo
+                    button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+
     script.
         // ── Event Summary & List ──────────────────────────────────────────────
 
@@ -242,6 +258,7 @@ block content
                 const retryBtn = isError
                     ? `<button class="btn btn-outline-warning btn-sm btn-retry" data-id="${r.event_id}" title="Retry"><i class="bi bi-arrow-repeat"></i></button>`
                     : '';
+                const infoBtn = `<button class="btn btn-outline-info btn-sm btn-src-detail ml-1" data-id="${r.event_id}" title="View source transaction"><i class="bi bi-eye"></i></button>`;
                 tr.innerHTML = `
                     <td class="text-center">${chk}</td>
                     <td class="small">${r.event_id}</td>
@@ -252,7 +269,7 @@ block content
                     <td class="small">${badgeStatus(r.event_status)}</td>
                     <td class="small">${r.processed_by || ''}</td>
                     <td class="small text-danger" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.error_message||''}">${r.error_message||''}</td>
-                    <td class="text-center">${retryBtn}</td>`;
+                    <td class="text-center">${retryBtn}${infoBtn}</td>`;
                 tbody.appendChild(tr);
             });
             document.getElementById('eventsTableWrap').style.display = '';
@@ -299,6 +316,10 @@ block content
                 });
             });
 
+            tbody.querySelectorAll('.btn-src-detail').forEach(function(btn) {
+                btn.addEventListener('click', function() { openSourceDetail(this.dataset.id); });
+            });
+
             document.getElementById('btnBulkRetry').onclick = async function() {
                 const checked = Array.from(tbody.querySelectorAll('.chk-error-row:checked'));
                 if (!checked.length) return;
@@ -328,6 +349,75 @@ block content
                     alert('Error: ' + data.error);
                 }
             };
+        }
+
+        // ── Source Detail Modal ───────────────────────────────────────────────
+        function fmtVal(v) {
+            if (v === null || v === undefined || v === '') return '<span class="text-muted">—</span>';
+            return String(v);
+        }
+
+        async function openSourceDetail(eventId) {
+            const title = document.getElementById('srcDetailTitle');
+            const body  = document.getElementById('srcDetailBody');
+            const info  = document.getElementById('srcDetailEventInfo');
+            title.textContent = 'Source Detail';
+            info.textContent  = '';
+            body.innerHTML    = '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split mr-1"></i>Loading…</div>';
+            $('#sourceDetailModal').modal('show');
+
+            try {
+                const resp = await fetch('/gl/api/events/' + eventId + '/source');
+                const data = await resp.json();
+
+                if (!data.success) {
+                    body.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle mr-1"></i>' + (data.error || 'Could not load detail') + '</div>';
+                    return;
+                }
+
+                const ev = data.event;
+                const d  = data.detail;
+                title.textContent = d.title + ' — Event #' + ev.event_id;
+                info.textContent  = 'Source ID: ' + ev.source_id + ' | ' + ev.source_type + ' | ' + (ev.event_date ? String(ev.event_date).substring(0,10) : '');
+
+                let html = '';
+
+                // Event status / error banner
+                if (ev.event_status === 'ERROR' && ev.error_message) {
+                    html += '<div class="alert alert-danger py-2 small mb-3"><strong>Error:</strong> ' + ev.error_message + '</div>';
+                }
+
+                // Key-value fields
+                if (d.fields && d.fields.length) {
+                    html += '<table class="table table-sm table-bordered mb-3"><tbody>';
+                    d.fields.forEach(function(f) {
+                        html += '<tr><th class="small bg-light" style="width:35%">' + f.label + '</th><td class="small">' + fmtVal(f.value) + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                }
+
+                // Optional sub-tables (e.g. invoice lines, charges)
+                if (d.tables && d.tables.length) {
+                    d.tables.forEach(function(t) {
+                        html += '<h6 class="small font-weight-bold mt-2 mb-1">' + t.heading + '</h6>';
+                        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-3"><thead class="thead-light"><tr>';
+                        t.cols.forEach(function(c) { html += '<th class="small">' + c + '</th>'; });
+                        html += '</tr></thead><tbody>';
+                        t.rows.forEach(function(row) {
+                            html += '<tr>' + row.map(function(v) { return '<td class="small">' + fmtVal(v) + '</td>'; }).join('') + '</tr>';
+                        });
+                        html += '</tbody></table></div>';
+                    });
+                }
+
+                if (d.note) {
+                    html += '<p class="text-muted small mb-0">' + d.note + '</p>';
+                }
+
+                body.innerHTML = html || '<p class="text-muted small mb-0">No detail available.</p>';
+            } catch (e) {
+                body.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle mr-1"></i>Network error: ' + e.message + '</div>';
+            }
         }
 
         document.getElementById('btnLoadEvents').addEventListener('click', loadEvents);
