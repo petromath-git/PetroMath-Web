@@ -1,0 +1,127 @@
+extends ../layout
+include ../mixins/mixins
+
+block content
+    .container-fluid.py-4
+
+        .d-flex.justify-content-between.align-items-center.mb-4
+            h4.mb-0 Onboarding
+            button.btn.btn-primary(data-toggle="modal" data-target="#modalNewOnboarding") + New Onboarding
+
+        if onboardings.length === 0
+            .alert.alert-info No onboarding entries yet. Click "New Onboarding" to get started.
+        else
+            .card.shadow-sm
+                .table-responsive
+                    table.table.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Location Name
+                                th Status
+                                th Created
+                                th Onboarding URL
+                                th(width="100") Actions
+                        tbody
+                            each ob in onboardings
+                                tr
+                                    td
+                                        strong= ob.location_name
+                                    td
+                                        if ob.status === 'setup_done'
+                                            span.badge.badge-success Setup Done
+                                        else
+                                            span.badge.badge-warning.text-dark Active
+                                    td= ob.created_at ? new Date(ob.created_at).toLocaleDateString('en-IN') : ''
+                                    td
+                                        .input-group.input-group-sm
+                                            input.form-control.form-control-sm.onboard-url(
+                                                type="text"
+                                                readonly
+                                                value=`${baseUrl}/onboard/${ob.token}`
+                                                style="font-size:11px;"
+                                            )
+                                            .input-group-append
+                                                button.btn.btn-outline-secondary.btn-sm.btn-copy-url(
+                                                    type="button"
+                                                    data-token=ob.token
+                                                    title="Copy URL"
+                                                ) Copy
+                                    td
+                                        a.btn.btn-sm.btn-outline-primary(href=`/admin/onboarding/${ob.id}`) View
+
+    //- New Onboarding Modal
+    #modalNewOnboarding.modal.fade(tabindex="-1" role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title New Onboarding
+                    button.close(type="button" data-dismiss="modal")
+                        span &times;
+                .modal-body
+                    .form-group
+                        label Location / Business Name
+                        input#newLocationName.form-control(type="text" placeholder="e.g. Joveni Enterprises" maxlength="200")
+                        small.form-text.text-muted This is just for your reference – the actual RO name will be filled in by the customer.
+                    #newOnboardResult.alert.alert-success.d-none
+                        p.mb-1 #[strong Onboarding URL created!]
+                        p.mb-1 Share this URL with the petrol bunk:
+                        .input-group
+                            input#newOnboardUrl.form-control(type="text" readonly)
+                            .input-group-append
+                                button.btn.btn-outline-secondary#btnCopyNewUrl(type="button") Copy
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Close
+                    button.btn.btn-primary#btnCreateOnboarding(type="button") Create & Generate URL
+
+    script.
+        var BASE_URL = '!{baseUrl}';
+
+        document.getElementById('btnCreateOnboarding').addEventListener('click', async function() {
+            var name = document.getElementById('newLocationName').value.trim();
+            if (!name) { alert('Please enter a location name.'); return; }
+            this.disabled = true;
+            this.textContent = 'Creating…';
+            try {
+                var r = await fetch('/admin/onboarding', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location_name: name })
+                });
+                var data = await r.json();
+                if (!r.ok) throw new Error(data.error || 'Failed');
+                document.getElementById('newOnboardUrl').value = data.url;
+                document.getElementById('newOnboardResult').classList.remove('d-none');
+                this.textContent = 'Created!';
+            } catch(e) {
+                alert('Error: ' + e.message);
+                this.disabled = false;
+                this.textContent = 'Create & Generate URL';
+            }
+        });
+
+        document.getElementById('btnCopyNewUrl').addEventListener('click', function() {
+            var input = document.getElementById('newOnboardUrl');
+            navigator.clipboard.writeText(input.value).then(() => {
+                this.textContent = 'Copied!';
+                setTimeout(() => this.textContent = 'Copy', 2000);
+            });
+        });
+
+        document.querySelectorAll('.btn-copy-url').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var url = BASE_URL + '/onboard/' + this.dataset.token;
+                navigator.clipboard.writeText(url).then(() => {
+                    this.textContent = 'Copied!';
+                    setTimeout(() => this.textContent = 'Copy', 2000);
+                });
+            });
+        });
+
+        // Reset modal on close
+        document.getElementById('modalNewOnboarding').addEventListener('hidden.bs.modal', function() {
+            document.getElementById('newLocationName').value = '';
+            document.getElementById('newOnboardResult').classList.add('d-none');
+            var btn = document.getElementById('btnCreateOnboarding');
+            btn.disabled = false;
+            btn.textContent = 'Create & Generate URL';
+        });
