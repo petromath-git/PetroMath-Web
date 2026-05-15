@@ -1,6 +1,5 @@
 'use strict';
 
-// TOKEN injected by server in the Pug template
 const TOKEN = window.ONBOARD_TOKEN;
 
 // ── Save indicator ─────────────────────────────────────────────────────────────
@@ -164,87 +163,85 @@ function refreshTankDropdowns() {
 // ── Build HTML for a new empty row ────────────────────────────────────────────
 function buildNewRow(section, id) {
     const del = `<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteRow('${section}',${id},this)">×</button>`;
+    const a = `data-section="${section}" data-row-id="${id}"`;
 
     const productOpts = () => '<option value="">-- Select --</option>' +
         getProductOptions().map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join('');
-
     const tankOpts = () => '<option value="">-- Select --</option>' +
         getTankOptions().map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
 
-    const attr = `data-section="${section}" data-row-id="${id}"`;
-
     const rows = {
-        'employees': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="employee_name" placeholder="Name with Initial"></td>
-            <td><select class="form-control form-control-sm" data-field="designation">
+        'employees': `<tr ${a}>
+            <td data-label="Name"><input class="form-control form-control-sm" type="text" data-field="employee_name" placeholder="Name with Initial"></td>
+            <td data-label="Designation"><select class="form-control form-control-sm" data-field="designation">
                 <option value="">-- Select --</option>
                 <option>Manager</option><option>Cashier</option><option>Attendant</option>
                 <option>DSM</option><option>DSW</option><option>Owner</option>
             </select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'metered-products': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="As per Invoice e.g. EBMS"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="e.g. MS / HSD"></td>
+        'metered-products': `<tr ${a}>
+            <td data-label="Product Name"><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="As per Invoice e.g. EBMS"></td>
+            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="e.g. MS / HSD"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'tanks': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="tank_name" placeholder="Tank Name"></td>
-            <td><input class="form-control form-control-sm" type="number" data-field="tank_capacity" placeholder="15000"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="tank_short_name" placeholder="e.g. MS1"></td>
-            <td><select class="form-control form-control-sm" data-field="product_short_name">${productOpts()}</select></td>
+        'tanks': `<tr ${a}>
+            <td data-label="Tank Name"><input class="form-control form-control-sm" type="text" data-field="tank_name" placeholder="Tank Name"></td>
+            <td data-label="Capacity (L)"><input class="form-control form-control-sm" type="number" data-field="tank_capacity" placeholder="15000"></td>
+            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="tank_short_name" placeholder="e.g. MS1"></td>
+            <td data-label="Product"><select class="form-control form-control-sm" data-field="product_short_name">${productOpts()}</select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'nozzles': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="nozzle_name" placeholder="e.g. MS 1.1"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="nozzle_product" placeholder="Short Name"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="du_make" placeholder="Tokheim / Gilbarco"></td>
-            <td><select class="form-control form-control-sm" data-field="tank_connected">${tankOpts()}</select></td>
-            <td><input class="form-control form-control-sm" type="date" data-field="next_stamping_date"></td>
+        'nozzles': `<tr ${a}>
+            <td data-label="Nozzle Name"><input class="form-control form-control-sm" type="text" data-field="nozzle_name" placeholder="e.g. MS 1.1"></td>
+            <td data-label="Product"><input class="form-control form-control-sm" type="text" data-field="nozzle_product" placeholder="Short Name"></td>
+            <td data-label="DU Make"><input class="form-control form-control-sm" type="text" data-field="du_make" placeholder="Tokheim / Gilbarco"></td>
+            <td data-label="Tank"><select class="form-control form-control-sm" data-field="tank_connected">${tankOpts()}</select></td>
+            <td data-label="Stamping Date"><input class="form-control form-control-sm" type="date" data-field="next_stamping_date"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'lubes': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="e.g. Servo 10W-40 1L"></td>
-            <td><select class="form-control form-control-sm" data-field="unit">
+        'lubes': `<tr ${a}>
+            <td data-label="Product Name"><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="e.g. Servo 10W-40 1L"></td>
+            <td data-label="Unit"><select class="form-control form-control-sm" data-field="unit">
                 <option value="">-- Select --</option>
                 <option>Litres</option><option>Nos</option><option>Kgs</option>
             </select></td>
-            <td><input class="form-control form-control-sm" type="number" step="0.01" data-field="selling_price" placeholder="0.00"></td>
+            <td data-label="Price (₹)"><input class="form-control form-control-sm" type="number" step="0.01" data-field="selling_price" placeholder="0.00"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'banks': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="bank_name" placeholder="Bank Name"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="Short Name"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="branch" placeholder="Branch"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="account_name" placeholder="Account Name"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="account_last4" placeholder="Last 4" maxlength="4"></td>
-            <td><select class="form-control form-control-sm" data-field="account_type">
+        'banks': `<tr ${a}>
+            <td data-label="Bank Name"><input class="form-control form-control-sm" type="text" data-field="bank_name" placeholder="Bank Name"></td>
+            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="Short Name"></td>
+            <td data-label="Branch"><input class="form-control form-control-sm" type="text" data-field="branch" placeholder="Branch"></td>
+            <td data-label="Account Name"><input class="form-control form-control-sm" type="text" data-field="account_name" placeholder="Account Name"></td>
+            <td data-label="Last 4 Digits"><input class="form-control form-control-sm" type="text" data-field="account_last4" placeholder="Last 4" maxlength="4"></td>
+            <td data-label="Account Type"><select class="form-control form-control-sm" data-field="account_type">
                 <option value="">-- Select --</option>
                 <option>Current</option><option>Savings</option><option>Cash Credit</option><option>EDFS</option>
             </select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'digital': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="platform_name" placeholder="e.g. Paytm / PhonePe / XTRAREWARDS"></td>
+        'digital': `<tr ${a}>
+            <td data-label="Platform"><input class="form-control form-control-sm" type="text" data-field="platform_name" placeholder="e.g. Paytm / PhonePe / XTRAREWARDS"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'customers': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="customer_name" placeholder="Trade Name"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="address" placeholder="Billing Address"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="gstin" placeholder="GSTIN" maxlength="15"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="owner_name" placeholder="Owner Name"></td>
-            <td><input class="form-control form-control-sm" type="tel" data-field="owner_mobile" placeholder="10-digit" maxlength="10"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="manager_name" placeholder="Manager Name"></td>
-            <td><input class="form-control form-control-sm" type="tel" data-field="manager_mobile" placeholder="10-digit" maxlength="10"></td>
-            <td><select class="form-control form-control-sm" data-field="customer_type">
+        'customers': `<tr ${a}>
+            <td data-label="Customer Name"><input class="form-control form-control-sm" type="text" data-field="customer_name" placeholder="Trade Name"></td>
+            <td data-label="Address"><input class="form-control form-control-sm" type="text" data-field="address" placeholder="Billing Address"></td>
+            <td data-label="GSTIN"><input class="form-control form-control-sm" type="text" data-field="gstin" placeholder="GSTIN" maxlength="15"></td>
+            <td data-label="Owner Name"><input class="form-control form-control-sm" type="text" data-field="owner_name" placeholder="Owner Name"></td>
+            <td data-label="Owner Mobile"><input class="form-control form-control-sm" type="tel" data-field="owner_mobile" placeholder="10-digit" maxlength="10"></td>
+            <td data-label="Manager"><input class="form-control form-control-sm" type="text" data-field="manager_name" placeholder="Manager Name"></td>
+            <td data-label="Mgr Mobile"><input class="form-control form-control-sm" type="tel" data-field="manager_mobile" placeholder="10-digit" maxlength="10"></td>
+            <td data-label="Type"><select class="form-control form-control-sm" data-field="customer_type">
                 <option value="">-- Select --</option>
                 <option>Credit</option><option>Cash</option>
             </select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
-        'suppliers': `<tr ${attr}>
-            <td><input class="form-control form-control-sm" type="text" data-field="supplier_name" placeholder="As per Invoice"></td>
-            <td><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="Short Name"></td>
+        'suppliers': `<tr ${a}>
+            <td data-label="Supplier Name"><input class="form-control form-control-sm" type="text" data-field="supplier_name" placeholder="As per Invoice"></td>
+            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="Short Name"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
     };
     return rows[section] || '';
@@ -252,25 +249,20 @@ function buildNewRow(section, id) {
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    // Set initial save indicator
     const el = _indicator();
     if (el) { el.className = 'save-indicator saved'; el.textContent = 'All changes saved ✓'; }
 
-    // Init cross-ref dropdowns from server-rendered rows
     refreshProductDropdowns();
     refreshTankDropdowns();
 
-    // RO tab inputs
     document.getElementById('tab-ro')?.addEventListener('input', scheduleRoSave);
 
-    // All section table inputs (event delegation on the whole page)
     document.getElementById('onboarding-sections')?.addEventListener('input', e => {
         const tr = e.target.closest('tr[data-row-id]');
         if (!tr) return;
         scheduleRowSave(tr.dataset.section, tr.dataset.rowId);
     });
 
-    // Add-row buttons
     document.querySelectorAll('[data-add-section]').forEach(btn => {
         btn.addEventListener('click', () => addRow(btn.dataset.addSection));
     });
