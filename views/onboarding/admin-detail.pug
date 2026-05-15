@@ -1,0 +1,278 @@
+extends ../layout
+include ../mixins/mixins
+
+mixin detailSection(colId, label, open)
+    .card.mb-1
+        .card-header.py-2
+            button.btn.btn-link.btn-sm.font-weight-bold.text-left.w-100(
+                type="button"
+                data-toggle="collapse"
+                data-target='#' + colId
+                aria-expanded=(open ? 'true' : 'false')
+            )= label
+        div.collapse(id=colId class=(open ? 'show' : '') data-parent="#accordionData")
+            .card-body.py-2
+                block
+
+block content
+    .container-fluid.py-4
+
+        //- Header
+        .d-flex.justify-content-between.align-items-center.mb-3
+            div
+                a.text-muted.small(href="/admin/onboarding") ← All Onboardings
+                h4.mb-0= onboarding.location_name
+            div
+                if onboarding.status === 'setup_done'
+                    span.badge.badge-success.mr-2 Setup Done
+                    button.btn.btn-sm.btn-outline-secondary#btnMarkActive(type="button") Mark Active
+                else
+                    span.badge.badge-warning.text-dark.mr-2 Active
+                    button.btn.btn-sm.btn-success#btnMarkDone(type="button") Mark Setup Done
+
+        //- URL card
+        .card.shadow-sm.mb-3
+            .card-body.py-2
+                .d-flex.align-items-center.flex-wrap
+                    span.text-muted.mr-2.small Onboarding URL:
+                    .input-group.input-group-sm
+                        input.form-control#detailUrl(type="text" readonly value=`${baseUrl}/onboard/${onboarding.token}` style="font-size:12px;")
+                        .input-group-append
+                            button.btn.btn-outline-secondary#btnCopyDetail(type="button") Copy URL
+                            a.btn.btn-outline-primary(href=`/onboard/${onboarding.token}` target="_blank") Open Form
+
+        //- Notes
+        .card.shadow-sm.mb-3
+            .card-body
+                label.font-weight-bold Notes
+                textarea#adminNotes.form-control(rows="2" placeholder="Internal notes…")= onboarding.notes || ''
+                button.btn.btn-sm.btn-outline-secondary.mt-2#btnSaveNotes(type="button") Save Notes
+
+        //- Data accordion
+        #accordionData.accordion
+
+            +detailSection("colRo", "RO Details", true)
+                table.table.table-sm.mb-0
+                    tbody
+                        tr
+                            th(width="160") RO Name
+                            td= formData.ro.ro_name || '—'
+                        tr
+                            th Owner Contact
+                            td= formData.ro.owner_contact || '—'
+                        tr
+                            th RO Brand
+                            td= formData.ro.ro_brand || '—'
+                        tr
+                            th Address
+                            td= formData.ro.ro_address || '—'
+                        tr
+                            th Google Maps Link
+                            td
+                                if formData.ro.location_link
+                                    a(href=formData.ro.location_link target="_blank" style="word-break:break-all;")= formData.ro.location_link
+                                else
+                                    | —
+
+            +detailSection("colEmployees", `Employees (${formData.employees.length})`)
+                if formData.employees.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Employee Name
+                                th Designation
+                        tbody
+                            each e in formData.employees
+                                tr
+                                    td= e.employee_name || '—'
+                                    td= e.designation || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colProducts", `Metered Products (${formData.metered_products.length})`)
+                if formData.metered_products.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Product Name
+                                th Short Name
+                        tbody
+                            each p in formData.metered_products
+                                tr
+                                    td= p.product_name || '—'
+                                    td= p.short_name || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colTanks", `Tanks (${formData.tanks.length})`)
+                if formData.tanks.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Tank Name
+                                th Capacity (L)
+                                th Short Name
+                                th Product
+                        tbody
+                            each t in formData.tanks
+                                tr
+                                    td= t.tank_name || '—'
+                                    td= t.tank_capacity || '—'
+                                    td= t.tank_short_name || '—'
+                                    td= t.product_short_name || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colNozzles", `Nozzles (${formData.nozzles.length})`)
+                if formData.nozzles.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Nozzle Name
+                                th Product
+                                th DU Make
+                                th Tank Connected
+                                th Next Stamping
+                        tbody
+                            each n in formData.nozzles
+                                tr
+                                    td= n.nozzle_name || '—'
+                                    td= n.nozzle_product || '—'
+                                    td= n.du_make || '—'
+                                    td= n.tank_connected || '—'
+                                    td= n.next_stamping_date || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colLubes", `Lubes & Other Products (${formData.lubes.length})`)
+                if formData.lubes.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Product Name
+                                th Unit
+                                th Price (₹)
+                        tbody
+                            each l in formData.lubes
+                                tr
+                                    td= l.product_name || '—'
+                                    td= l.unit || '—'
+                                    td= l.selling_price || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colBanks", `Banks (${formData.banks.length})`)
+                if formData.banks.length
+                    .table-responsive
+                        table.table.table-sm.mb-0
+                            thead.thead-light
+                                tr
+                                    th Bank Name
+                                    th Short Name
+                                    th Branch
+                                    th Account Name
+                                    th Last 4
+                                    th Type
+                            tbody
+                                each b in formData.banks
+                                    tr
+                                        td= b.bank_name || '—'
+                                        td= b.short_name || '—'
+                                        td= b.branch || '—'
+                                        td= b.account_name || '—'
+                                        td= b.account_last4 || '—'
+                                        td= b.account_type || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colDigital", `Digital Platforms (${formData.digital.length})`)
+                if formData.digital.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Platform Name
+                        tbody
+                            each d in formData.digital
+                                tr
+                                    td= d.platform_name || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colCustomers", `Customers (${formData.customers.length})`)
+                if formData.customers.length
+                    .table-responsive
+                        table.table.table-sm.mb-0
+                            thead.thead-light
+                                tr
+                                    th Name
+                                    th GSTIN
+                                    th Owner
+                                    th Owner Mobile
+                                    th Type
+                            tbody
+                                each c in formData.customers
+                                    tr
+                                        td= c.customer_name || '—'
+                                        td= c.gstin || '—'
+                                        td= c.owner_name || '—'
+                                        td= c.owner_mobile || '—'
+                                        td= c.customer_type || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+            +detailSection("colSuppliers", `Suppliers (${formData.suppliers.length})`)
+                if formData.suppliers.length
+                    table.table.table-sm.mb-0
+                        thead.thead-light
+                            tr
+                                th Supplier Name
+                                th Short Name
+                        tbody
+                            each s in formData.suppliers
+                                tr
+                                    td= s.supplier_name || '—'
+                                    td= s.short_name || '—'
+                else
+                    p.text-muted.mb-0 No entries
+
+    script.
+        var OB_ID = !{onboarding.id};
+        var OB_STATUS = '!{onboarding.status}';
+
+        document.getElementById('btnCopyDetail').addEventListener('click', function() {
+            navigator.clipboard.writeText(document.getElementById('detailUrl').value).then(() => {
+                this.textContent = 'Copied!';
+                setTimeout(() => this.textContent = 'Copy URL', 2000);
+            });
+        });
+
+        async function updateStatus(status) {
+            var notes = document.getElementById('adminNotes').value;
+            var r = await fetch('/admin/onboarding/' + OB_ID + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status, notes: notes })
+            });
+            if (r.ok) location.reload();
+            else alert('Failed to update status.');
+        }
+
+        var btnDone = document.getElementById('btnMarkDone');
+        var btnActive = document.getElementById('btnMarkActive');
+        if (btnDone) btnDone.addEventListener('click', function() { updateStatus('setup_done'); });
+        if (btnActive) btnActive.addEventListener('click', function() { updateStatus('active'); });
+
+        document.getElementById('btnSaveNotes').addEventListener('click', async function() {
+            var notes = document.getElementById('adminNotes').value;
+            var r = await fetch('/admin/onboarding/' + OB_ID + '/status', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: OB_STATUS, notes: notes })
+            });
+            if (r.ok) {
+                this.textContent = 'Saved ✓';
+                setTimeout(() => this.textContent = 'Save Notes', 2000);
+            } else {
+                alert('Failed to save notes.');
+            }
+        });

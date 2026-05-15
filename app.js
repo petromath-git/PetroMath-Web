@@ -250,6 +250,8 @@ const documentRoutes  = require('./routes/document-routes');
 const tankReceiptRoutes = require('./routes/tank-receipt-routes');
 const purchasesRoutes   = require('./routes/purchases-routes');
 const devDbRefreshRoutes = require('./routes/dev-db-refresh-routes');
+const onboardingRoutes = require('./routes/onboarding-routes');
+const onboardingAdminRoutes = require('./routes/onboarding-admin-routes');
 
 //const auditingUtilitiesRoutes = require('./routes/auditing-utilities-routes');
 
@@ -423,6 +425,8 @@ app.use('/documents', documentRoutes);
 app.use('/gl', glRoutes);
 app.use('/dev-db-refresh', devDbRefreshRoutes);
 app.use('/bowser', bowserRoutes);
+app.use('/onboard', onboardingRoutes);
+app.use('/admin/onboarding', onboardingAdminRoutes);
 
 
 
