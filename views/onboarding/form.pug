@@ -9,27 +9,74 @@ html(lang="en")
             body { background: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
             .top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 1030;
                 background: #fff; border-bottom: 2px solid #F4C430; padding: 10px 20px;
-                display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+                display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,.08); }
             .top-bar .brand { font-weight: 700; color: #1a1a1a; font-size: 16px; }
-            .top-bar .location { color: #555; font-size: 13px; }
-            .save-indicator { font-size: 12px; padding: 4px 14px; border-radius: 20px; font-weight: 500; }
+            .top-bar .location { color: #555; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+            .save-indicator { font-size: 12px; padding: 4px 14px; border-radius: 20px; font-weight: 500; white-space: nowrap; }
             .save-indicator.saved  { background: #d4edda; color: #155724; }
             .save-indicator.saving { background: #cce5ff; color: #004085; }
             .save-indicator.error  { background: #f8d7da; color: #721c24; }
-            .main-content { margin-top: 70px; padding: 20px; }
-            .nav-tabs .nav-link { font-size: 13px; padding: 8px 14px; color: #555; }
+            .main-content { margin-top: 70px; padding: 16px; }
+            .nav-tabs .nav-link { font-size: 13px; padding: 8px 12px; color: #555; }
             .nav-tabs .nav-link.active { font-weight: 600; color: #0d6efd; }
             .tab-nav-wrap { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; border-bottom: 1px solid #dee2e6; }
             .tab-nav-wrap .nav-tabs { flex-wrap: nowrap; border-bottom: none; }
-            .section-card { background: #fff; border-radius: 6px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-            .section-hint { font-size: 12px; color: #6c757d; margin-bottom: 14px; }
-            .table th { font-size: 12px; font-weight: 600; background: #f8f9fa; white-space: nowrap; }
-            .table td { vertical-align: middle; }
+            .section-card { background: #fff; border-radius: 6px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+            .section-hint { font-size: 12px; color: #6c757d; margin-bottom: 12px; }
+            .ob-table th { font-size: 12px; font-weight: 600; background: #f8f9fa; white-space: nowrap; }
+            .ob-table td { vertical-align: middle; }
             .form-control-sm { font-size: 13px; }
             .setup-done-banner { background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; color: #155724; font-size: 14px; }
 
+            /* ── Mobile responsive tables ───────────────────────────────────── */
+            @media (max-width: 767px) {
+                .main-content { padding: 10px; }
+                .ob-table thead { display: none; }
+                .ob-table tbody tr {
+                    display: block;
+                    border: 1px solid #dee2e6;
+                    border-radius: 8px;
+                    margin-bottom: 10px;
+                    background: #fff;
+                    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+                }
+                .ob-table td {
+                    display: flex;
+                    align-items: center;
+                    padding: 9px 12px;
+                    border: none !important;
+                    border-bottom: 1px solid #f0f0f0 !important;
+                    min-height: 50px;
+                }
+                .ob-table td:last-child {
+                    border-bottom: none !important;
+                    justify-content: flex-end;
+                    min-height: 42px;
+                    padding: 6px 12px;
+                }
+                .ob-table td::before {
+                    content: attr(data-label);
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #888;
+                    min-width: 110px;
+                    flex-shrink: 0;
+                    margin-right: 8px;
+                }
+                .ob-table td:last-child::before { content: none; min-width: 0; }
+                .ob-table .form-control-sm { flex: 1; font-size: 16px !important; min-height: 38px; }
+                /* Prevent iOS zoom on inputs */
+                input.form-control, select.form-control, textarea.form-control { font-size: 16px; }
+                input.form-control-sm, select.form-control-sm { font-size: 16px !important; }
+                /* Section header stacking */
+                .section-row { flex-direction: column; align-items: flex-start !important; gap: 8px; }
+                .section-row .btn { align-self: stretch; text-align: center; }
+                /* Tab labels */
+                .nav-tabs .nav-link { font-size: 12px; padding: 7px 9px; }
+            }
+
     body
-        //- Fixed top bar
         .top-bar
             div
                 span.brand PetroMath
@@ -43,7 +90,6 @@ html(lang="en")
                     strong Setup in progress
                     |  – Your information has been received. You can still update details below.
 
-            //- Tab navigation
             .tab-nav-wrap
                 ul.nav.nav-tabs(role="tablist")
                     li.nav-item: a.nav-link.active(href="#tab-ro" data-toggle="tab" role="tab") RO Details
@@ -57,7 +103,6 @@ html(lang="en")
                     li.nav-item: a.nav-link(href="#tab-customers" data-toggle="tab" role="tab") Customers
                     li.nav-item: a.nav-link(href="#tab-suppliers" data-toggle="tab" role="tab") Suppliers
 
-            //- Tab content
             #onboarding-sections.tab-content.pt-3
 
                 //- ── RO Details ────────────────────────────────────────────────
@@ -91,13 +136,13 @@ html(lang="en")
                 //- ── Employees ─────────────────────────────────────────────────
                 #tab-employees.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Employees
                                 p.section-hint.mb-0 Access and usage rights will be based on details below.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="employees") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Employee Name
@@ -106,8 +151,8 @@ html(lang="en")
                                 tbody#tbody-employees
                                     each row in formData.employees
                                         tr(data-section="employees" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="employee_name" value=(row.employee_name||'') placeholder="Name with Initial")
-                                            td
+                                            td(data-label="Name"): input.form-control.form-control-sm(type="text" data-field="employee_name" value=(row.employee_name||'') placeholder="Name with Initial")
+                                            td(data-label="Designation")
                                                 select.form-control.form-control-sm(data-field="designation")
                                                     option(value="" selected=!row.designation) -- Select --
                                                     each d in ['Manager','Cashier','Attendant','DSM','DSW','Owner']
@@ -118,13 +163,13 @@ html(lang="en")
                 //- ── Metered Products ──────────────────────────────────────────
                 #tab-metered-products.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Metered Products
                                 p.section-hint.mb-0 Products sold through Dispensing Units. Short Name is used across Tanks and Nozzles tabs.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="metered-products") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Product Name (as per Invoice)
@@ -133,21 +178,21 @@ html(lang="en")
                                 tbody#tbody-metered-products
                                     each row in formData.metered_products
                                         tr(data-section="metered-products" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. EBMS, HSD")
-                                            td: input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. MS / HSD")
+                                            td(data-label="Product Name"): input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. EBMS, HSD")
+                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. MS / HSD")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('metered-products',${row.id},this)`) ×
 
                 //- ── Tanks ─────────────────────────────────────────────────────
                 #tab-tanks.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Tanks
                                 p.section-hint.mb-0 Present tank combination. Product dropdown is populated from the Metered Products tab.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="tanks") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Tank Name
@@ -158,10 +203,10 @@ html(lang="en")
                                 tbody#tbody-tanks
                                     each row in formData.tanks
                                         tr(data-section="tanks" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="tank_name" value=(row.tank_name||'') placeholder="Tank Name")
-                                            td: input.form-control.form-control-sm(type="number" data-field="tank_capacity" value=(row.tank_capacity||'') placeholder="15000")
-                                            td: input.form-control.form-control-sm(type="text" data-field="tank_short_name" value=(row.tank_short_name||'') placeholder="e.g. MS1")
-                                            td
+                                            td(data-label="Tank Name"): input.form-control.form-control-sm(type="text" data-field="tank_name" value=(row.tank_name||'') placeholder="Tank Name")
+                                            td(data-label="Capacity (L)"): input.form-control.form-control-sm(type="number" data-field="tank_capacity" value=(row.tank_capacity||'') placeholder="15000")
+                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="tank_short_name" value=(row.tank_short_name||'') placeholder="e.g. MS1")
+                                            td(data-label="Product")
                                                 select.form-control.form-control-sm(data-field="product_short_name")
                                                     option(value="" selected=!row.product_short_name) -- Select --
                                                     each p in formData.metered_products
@@ -172,13 +217,13 @@ html(lang="en")
                 //- ── Nozzles ───────────────────────────────────────────────────
                 #tab-nozzles.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Nozzles / Dispensing Units
-                                p.section-hint.mb-0 Tank dropdown is populated from the Tanks tab. Opening Reading to be filled once nozzle-tank mapping is set up.
+                                p.section-hint.mb-0 Tank dropdown is populated from the Tanks tab.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="nozzles") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Nozzle Name
@@ -190,28 +235,28 @@ html(lang="en")
                                 tbody#tbody-nozzles
                                     each row in formData.nozzles
                                         tr(data-section="nozzles" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="nozzle_name" value=(row.nozzle_name||'') placeholder="e.g. MS 1.1")
-                                            td: input.form-control.form-control-sm(type="text" data-field="nozzle_product" value=(row.nozzle_product||'') placeholder="Short Name")
-                                            td: input.form-control.form-control-sm(type="text" data-field="du_make" value=(row.du_make||'') placeholder="Tokheim / Gilbarco")
-                                            td
+                                            td(data-label="Nozzle Name"): input.form-control.form-control-sm(type="text" data-field="nozzle_name" value=(row.nozzle_name||'') placeholder="e.g. MS 1.1")
+                                            td(data-label="Product"): input.form-control.form-control-sm(type="text" data-field="nozzle_product" value=(row.nozzle_product||'') placeholder="Short Name")
+                                            td(data-label="DU Make"): input.form-control.form-control-sm(type="text" data-field="du_make" value=(row.du_make||'') placeholder="Tokheim / Gilbarco")
+                                            td(data-label="Tank")
                                                 select.form-control.form-control-sm(data-field="tank_connected")
                                                     option(value="" selected=!row.tank_connected) -- Select --
                                                     each t in formData.tanks
                                                         option(value=t.tank_name selected=(row.tank_connected===t.tank_name))= t.tank_name
-                                            td: input.form-control.form-control-sm(type="date" data-field="next_stamping_date" value=(row.next_stamping_date||''))
+                                            td(data-label="Stamping Date"): input.form-control.form-control-sm(type="date" data-field="next_stamping_date" value=(row.next_stamping_date||''))
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('nozzles',${row.id},this)`) ×
 
                 //- ── Lubes & Other Products ────────────────────────────────────
                 #tab-lubes.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Lubes & Other Products
                                 p.section-hint.mb-0 All products stocked in the RO except those sold through DU. Include SKU name with pack size.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="lubes") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Product Name (SKU + Pack Size)
@@ -221,26 +266,26 @@ html(lang="en")
                                 tbody#tbody-lubes
                                     each row in formData.lubes
                                         tr(data-section="lubes" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. Servo 10W-40 1L")
-                                            td
+                                            td(data-label="Product Name"): input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. Servo 10W-40 1L")
+                                            td(data-label="Unit")
                                                 select.form-control.form-control-sm(data-field="unit")
                                                     option(value="" selected=!row.unit) -- Select --
                                                     each u in ['Litres','Nos','Kgs']
                                                         option(value=u selected=(row.unit===u))= u
-                                            td: input.form-control.form-control-sm(type="number" step="0.01" data-field="selling_price" value=(row.selling_price||'') placeholder="0.00")
+                                            td(data-label="Price (₹)"): input.form-control.form-control-sm(type="number" step="0.01" data-field="selling_price" value=(row.selling_price||'') placeholder="0.00")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('lubes',${row.id},this)`) ×
 
                 //- ── Banks ─────────────────────────────────────────────────────
                 #tab-banks.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Bank Accounts
                                 p.section-hint.mb-0 All bank accounts used by the RO.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="banks") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Bank Name
@@ -253,12 +298,12 @@ html(lang="en")
                                 tbody#tbody-banks
                                     each row in formData.banks
                                         tr(data-section="banks" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="bank_name" value=(row.bank_name||'') placeholder="e.g. State Bank of India")
-                                            td: input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. SBI")
-                                            td: input.form-control.form-control-sm(type="text" data-field="branch" value=(row.branch||'') placeholder="Branch Name")
-                                            td: input.form-control.form-control-sm(type="text" data-field="account_name" value=(row.account_name||'') placeholder="Name as per bank")
-                                            td: input.form-control.form-control-sm(type="text" data-field="account_last4" value=(row.account_last4||'') placeholder="Last 4" maxlength="4")
-                                            td
+                                            td(data-label="Bank Name"): input.form-control.form-control-sm(type="text" data-field="bank_name" value=(row.bank_name||'') placeholder="e.g. State Bank of India")
+                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. SBI")
+                                            td(data-label="Branch"): input.form-control.form-control-sm(type="text" data-field="branch" value=(row.branch||'') placeholder="Branch Name")
+                                            td(data-label="Account Name"): input.form-control.form-control-sm(type="text" data-field="account_name" value=(row.account_name||'') placeholder="Name as per bank")
+                                            td(data-label="Last 4 Digits"): input.form-control.form-control-sm(type="text" data-field="account_last4" value=(row.account_last4||'') placeholder="Last 4" maxlength="4")
+                                            td(data-label="Account Type")
                                                 select.form-control.form-control-sm(data-field="account_type")
                                                     option(value="" selected=!row.account_type) -- Select --
                                                     each at in ['Current','Savings','Cash Credit','EDFS']
@@ -269,13 +314,13 @@ html(lang="en")
                 //- ── Digital ───────────────────────────────────────────────────
                 #tab-digital.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Digital Payment Platforms
                                 p.section-hint.mb-0 Platforms used to receive customer payments (e.g. Paytm, PhonePe, XTRAREWARDS, ITPS).
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="digital") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Platform / Company Name
@@ -283,20 +328,20 @@ html(lang="en")
                                 tbody#tbody-digital
                                     each row in formData.digital
                                         tr(data-section="digital" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="platform_name" value=(row.platform_name||'') placeholder="e.g. Paytm / PhonePe / XTRAREWARDS")
+                                            td(data-label="Platform"): input.form-control.form-control-sm(type="text" data-field="platform_name" value=(row.platform_name||'') placeholder="e.g. Paytm / PhonePe / XTRAREWARDS")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('digital',${row.id},this)`) ×
 
                 //- ── Customers ─────────────────────────────────────────────────
                 #tab-customers.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Customers
                                 p.section-hint.mb-0 Customers for whom you maintain a ledger. Obtain RC copy for accurate GSTIN details.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="customers") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Customer / Org Name
@@ -311,14 +356,14 @@ html(lang="en")
                                 tbody#tbody-customers
                                     each row in formData.customers
                                         tr(data-section="customers" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="customer_name" value=(row.customer_name||'') placeholder="Trade Name")
-                                            td: input.form-control.form-control-sm(type="text" data-field="address" value=(row.address||'') placeholder="Billing Address")
-                                            td: input.form-control.form-control-sm(type="text" data-field="gstin" value=(row.gstin||'') placeholder="GSTIN" maxlength="15")
-                                            td: input.form-control.form-control-sm(type="text" data-field="owner_name" value=(row.owner_name||'') placeholder="Owner Name")
-                                            td: input.form-control.form-control-sm(type="tel" data-field="owner_mobile" value=(row.owner_mobile||'') placeholder="10-digit" maxlength="10")
-                                            td: input.form-control.form-control-sm(type="text" data-field="manager_name" value=(row.manager_name||'') placeholder="Manager Name")
-                                            td: input.form-control.form-control-sm(type="tel" data-field="manager_mobile" value=(row.manager_mobile||'') placeholder="10-digit" maxlength="10")
-                                            td
+                                            td(data-label="Customer Name"): input.form-control.form-control-sm(type="text" data-field="customer_name" value=(row.customer_name||'') placeholder="Trade Name")
+                                            td(data-label="Address"): input.form-control.form-control-sm(type="text" data-field="address" value=(row.address||'') placeholder="Billing Address")
+                                            td(data-label="GSTIN"): input.form-control.form-control-sm(type="text" data-field="gstin" value=(row.gstin||'') placeholder="GSTIN" maxlength="15")
+                                            td(data-label="Owner Name"): input.form-control.form-control-sm(type="text" data-field="owner_name" value=(row.owner_name||'') placeholder="Owner Name")
+                                            td(data-label="Owner Mobile"): input.form-control.form-control-sm(type="tel" data-field="owner_mobile" value=(row.owner_mobile||'') placeholder="10-digit" maxlength="10")
+                                            td(data-label="Manager"): input.form-control.form-control-sm(type="text" data-field="manager_name" value=(row.manager_name||'') placeholder="Manager Name")
+                                            td(data-label="Mgr Mobile"): input.form-control.form-control-sm(type="tel" data-field="manager_mobile" value=(row.manager_mobile||'') placeholder="10-digit" maxlength="10")
+                                            td(data-label="Type")
                                                 select.form-control.form-control-sm(data-field="customer_type")
                                                     option(value="" selected=!row.customer_type) -- Select --
                                                     each ct in ['Credit','Cash']
@@ -329,13 +374,13 @@ html(lang="en")
                 //- ── Suppliers ─────────────────────────────────────────────────
                 #tab-suppliers.tab-pane.fade(role="tabpanel")
                     .section-card
-                        .d-flex.justify-content-between.align-items-center.mb-2
+                        .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Suppliers
                                 p.section-hint.mb-0 All suppliers from whom product purchases are made.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="suppliers") + Add Row
                         .table-responsive
-                            table.table.table-sm.table-bordered
+                            table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
                                         th Supplier Name (as per Invoice)
@@ -344,8 +389,8 @@ html(lang="en")
                                 tbody#tbody-suppliers
                                     each row in formData.suppliers
                                         tr(data-section="suppliers" data-row-id=row.id)
-                                            td: input.form-control.form-control-sm(type="text" data-field="supplier_name" value=(row.supplier_name||'') placeholder="Full name as per invoice")
-                                            td: input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="Short Name")
+                                            td(data-label="Supplier Name"): input.form-control.form-control-sm(type="text" data-field="supplier_name" value=(row.supplier_name||'') placeholder="Full name as per invoice")
+                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="Short Name")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('suppliers',${row.id},this)`) ×
 
