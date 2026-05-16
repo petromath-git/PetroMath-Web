@@ -25,10 +25,11 @@ block content
             div
                 if onboarding.status === 'setup_done'
                     span.badge.badge-success.mr-2 Setup Done
-                    button.btn.btn-sm.btn-outline-secondary#btnMarkActive(type="button") Mark Active
+                    button.btn.btn-sm.btn-outline-secondary.mr-1#btnMarkActive(type="button") Mark Active
                 else
                     span.badge.badge-warning.text-dark.mr-2 Active
-                    button.btn.btn-sm.btn-success#btnMarkDone(type="button") Mark Setup Done
+                    button.btn.btn-sm.btn-success.mr-1#btnMarkDone(type="button") Mark Setup Done
+                button.btn.btn-sm.btn-outline-primary#btnMigrate(type="button" data-toggle="modal" data-target="#migrateModal") Migrate to PetroMath →
 
         //- URL card
         .card.shadow-sm.mb-3
@@ -60,6 +61,9 @@ block content
                         tr
                             th Owner Contact
                             td= formData.ro.owner_contact || '—'
+                        tr
+                            th GST Number
+                            td= formData.ro.gst_number || '—'
                         tr
                             th RO Brand
                             td= formData.ro.ro_brand || '—'
@@ -172,6 +176,8 @@ block content
                                     th Branch
                                     th Account Name
                                     th Last 4
+                                    th Account Number
+                                    th IFSC Code
                                     th Type
                             tbody
                                 each b in formData.banks
@@ -181,6 +187,8 @@ block content
                                         td= b.branch || '—'
                                         td= b.account_name || '—'
                                         td= b.account_last4 || '—'
+                                        td= b.account_number || '—'
+                                        td= b.ifsc_code || '—'
                                         td= b.account_type || '—'
                 else
                     p.text-muted.mb-0 No entries
@@ -235,9 +243,75 @@ block content
                 else
                     p.text-muted.mb-0 No entries
 
+    //- ── Migrate to PetroMath Modal ────────────────────────────────────────────
+    #migrateModal.modal.fade(tabindex="-1" role="dialog" aria-labelledby="migrateModalLabel" aria-hidden="true")
+        .modal-dialog.modal-lg(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#migrateModalLabel Migrate to PetroMath
+                    button.close(type="button" data-dismiss="modal" aria-label="Close")
+                        span(aria-hidden="true") ×
+                .modal-body
+                    p.text-muted.small.mb-3
+                        | Creates the location and inserts all masters into PetroMath. Safe to re-run — existing records are detected and skipped.
+                    .form-row
+                        .form-group.col-md-6
+                            label.font-weight-bold(for="migrateLocCode") Location Code
+                            input.form-control#migrateLocCode(type="text" placeholder="e.g. JOVENI001" autocomplete="off")
+                            small.form-text.text-muted 3–5 chars. Must be unique across all locations.
+                        .form-group.col-md-6
+                            label.font-weight-bold(for="migrateTemplateLocCode") Template Location
+                            input.form-control#migrateTemplateLocCode(type="text" placeholder="e.g. MUE or SFS" autocomplete="off")
+                            small.form-text.text-muted Used for Account Heads & Ledger Rules. Auto-suggested from RO brand.
+                    .alert.alert-warning.py-2.small
+                        strong Note:
+                        |  Banks with missing Account Number or IFSC Code will be skipped — fill those fields in the onboarding form first.
+                    details.mt-3
+                        summary.font-weight-bold.text-secondary(style="cursor:pointer;font-size:13px;") ⚙ Location Config Checklist — review & set up after migration
+                        .mt-2#configHintTable
+                            p.text-muted.small.mb-0 Loading…
+                    #migrateResults(style="display:none")
+                        hr.my-3
+                        h6.mb-2 Migration Results
+                        ul.list-group#migrateResultsList
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Close
+                    button.btn.btn-primary#btnRunMigrate(type="button") Run Migration
+
     script.
         var OB_ID = !{onboarding.id};
         var OB_STATUS = '!{onboarding.status}';
+        var OB_RO_BRAND = '!{formData.ro ? (formData.ro.ro_brand || "") : ""}';
+
+        // Auto-suggest template location + load config hints when modal opens
+        var TEMPLATE_SUGGESTIONS = { 'IOCL': 'MUE', 'BPCL': 'SFS' };
+        var configHintsLoaded = false;
+        document.getElementById('migrateModal').addEventListener('show.bs.modal', function() {
+            var templateInput = document.getElementById('migrateTemplateLocCode');
+            if (!templateInput.value && TEMPLATE_SUGGESTIONS[OB_RO_BRAND]) {
+                templateInput.value = TEMPLATE_SUGGESTIONS[OB_RO_BRAND];
+            }
+            if (!configHintsLoaded) {
+                configHintsLoaded = true;
+                fetch('/admin/onboarding/config-hints')
+                    .then(function(r) { return r.json(); })
+                    .then(function(hints) {
+                        var el = document.getElementById('configHintTable');
+                        if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location configs found.</p>'; return; }
+                        var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered table-striped mb-0" style="font-size:12px">';
+                        h += '<thead class="thead-light"><tr><th>Setting</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th></tr></thead><tbody>';
+                        hints.forEach(function(row) {
+                            h += '<tr><td>' + row.name + '</td><td>' + (row.MUE || '<span class="text-muted">—</span>') + '</td><td>' + (row.SFS || '<span class="text-muted">—</span>') + '</td><td>' + (row.AACBE || '<span class="text-muted">—</span>') + '</td></tr>';
+                        });
+                        h += '</tbody></table></div>';
+                        h += '<p class="text-muted mt-1 mb-0" style="font-size:11px">These settings are not migrated automatically. Insert into m_location_config for the new location after reviewing the values above.</p>';
+                        el.innerHTML = h;
+                    })
+                    .catch(function() {
+                        document.getElementById('configHintTable').innerHTML = '<p class="text-danger small mb-0">Failed to load config hints.</p>';
+                    });
+            }
+        });
 
         document.getElementById('btnCopyDetail').addEventListener('click', function() {
             navigator.clipboard.writeText(document.getElementById('detailUrl').value).then(() => {
@@ -274,5 +348,44 @@ block content
                 setTimeout(() => this.textContent = 'Save Notes', 2000);
             } else {
                 alert('Failed to save notes.');
+            }
+        });
+
+        document.getElementById('btnRunMigrate').addEventListener('click', async function() {
+            var locCode = document.getElementById('migrateLocCode').value.trim();
+            var templateLoc = document.getElementById('migrateTemplateLocCode').value.trim();
+            if (!locCode) { alert('Enter the PetroMath location code.'); return; }
+            if (!templateLoc) { alert('Enter the template location code (used for Account Heads & Ledger Rules).'); return; }
+            this.disabled = true;
+            this.textContent = 'Running…';
+            document.getElementById('migrateResults').style.display = 'none';
+            try {
+                var r = await fetch('/admin/onboarding/' + OB_ID + '/migrate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location_code: locCode, template_location: templateLoc })
+                });
+                var data = await r.json();
+                var resultsEl = document.getElementById('migrateResults');
+                var listEl = document.getElementById('migrateResultsList');
+                listEl.innerHTML = '';
+                if (data.results) {
+                    data.results.forEach(function(row) {
+                        var hasErrors = row.errors && row.errors.length > 0;
+                        var icon = hasErrors ? '⚠' : '✓';
+                        var cls = hasErrors ? 'list-group-item-warning' : (row.inserted > 0 ? 'list-group-item-success' : 'list-group-item-light');
+                        var detail = row.inserted + ' inserted, ' + row.skipped + ' skipped';
+                        var errHtml = hasErrors ? '<br><small class="text-danger">' + row.errors.join('<br>') + '</small>' : '';
+                        listEl.innerHTML += '<li class="list-group-item py-2 ' + cls + '">' + icon + ' <strong>' + row.section + '</strong>: ' + detail + errHtml + '</li>';
+                    });
+                } else {
+                    listEl.innerHTML = '<li class="list-group-item list-group-item-danger">' + (data.error || 'Migration failed') + '</li>';
+                }
+                resultsEl.style.display = '';
+            } catch (e) {
+                alert('Migration failed: ' + e.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = 'Run Migration';
             }
         });

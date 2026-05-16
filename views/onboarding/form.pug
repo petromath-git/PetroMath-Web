@@ -119,13 +119,16 @@ html(lang="en")
                                 small.text-muted  (10-digit mobile)
                                 input.form-control(type="tel" data-field="owner_contact" value=(formData.ro.owner_contact||'') placeholder="9876543210")
                         .form-row
-                            .form-group.col-md-4
+                            .form-group.col-md-3
                                 label RO Brand
                                 select.form-control(data-field="ro_brand")
                                     option(value="" selected=!formData.ro.ro_brand) -- Select --
                                     each b in ['IOCL','BPCL','HPCL','NAYARA','SHELL']
                                         option(value=b selected=(formData.ro.ro_brand===b))= b
-                            .form-group.col-md-8
+                            .form-group.col-md-3
+                                label GST Number (GSTIN)
+                                input.form-control(type="text" data-field="gst_number" value=(formData.ro.gst_number||'') placeholder="22AAAAA0000A1Z5" maxlength="15")
+                            .form-group.col-md-6
                                 label RO Address
                                 input.form-control(type="text" data-field="ro_address" value=(formData.ro.ro_address||'') placeholder="Full address")
                         .form-group
@@ -293,6 +296,8 @@ html(lang="en")
                                         th Branch
                                         th Account Name
                                         th Last 4 Digits
+                                        th Account Number
+                                        th IFSC Code
                                         th Account Type
                                         th(width="50")
                                 tbody#tbody-banks
@@ -303,6 +308,8 @@ html(lang="en")
                                             td(data-label="Branch"): input.form-control.form-control-sm(type="text" data-field="branch" value=(row.branch||'') placeholder="Branch Name")
                                             td(data-label="Account Name"): input.form-control.form-control-sm(type="text" data-field="account_name" value=(row.account_name||'') placeholder="Name as per bank")
                                             td(data-label="Last 4 Digits"): input.form-control.form-control-sm(type="text" data-field="account_last4" value=(row.account_last4||'') placeholder="Last 4" maxlength="4")
+                                            td(data-label="Account Number"): input.form-control.form-control-sm(type="text" data-field="account_number" value=(row.account_number||'') placeholder="Full account number")
+                                            td(data-label="IFSC Code"): input.form-control.form-control-sm(type="text" data-field="ifsc_code" value=(row.ifsc_code||'') placeholder="e.g. SBIN0001234" maxlength="15")
                                             td(data-label="Account Type")
                                                 select.form-control.form-control-sm(data-field="account_type")
                                                     option(value="" selected=!row.account_type) -- Select --

@@ -8,7 +8,7 @@ const SECTION_MAP = {
     'tanks':            { table: 't_onboarding_tanks',            fields: ['tank_name', 'tank_capacity', 'tank_short_name', 'product_short_name'] },
     'nozzles':          { table: 't_onboarding_nozzles',          fields: ['nozzle_name', 'nozzle_product', 'du_make', 'tank_connected', 'next_stamping_date'] },
     'lubes':            { table: 't_onboarding_lubes',            fields: ['product_name', 'unit', 'selling_price'] },
-    'banks':            { table: 't_onboarding_banks',            fields: ['bank_name', 'short_name', 'branch', 'account_name', 'account_last4', 'account_type'] },
+    'banks':            { table: 't_onboarding_banks',            fields: ['bank_name', 'short_name', 'branch', 'account_name', 'account_last4', 'ifsc_code', 'account_number', 'account_type'] },
     'digital':          { table: 't_onboarding_digital',          fields: ['platform_name'] },
     'customers':        { table: 't_onboarding_customers',        fields: ['customer_name', 'address', 'gstin', 'owner_name', 'owner_mobile', 'manager_name', 'manager_mobile', 'customer_type'] },
     'suppliers':        { table: 't_onboarding_suppliers',        fields: ['supplier_name', 'short_name'] },
@@ -64,13 +64,14 @@ module.exports = {
     },
 
     upsertRo: async (onboardingId, data) => {
-        const { ro_name, owner_contact, ro_brand, ro_address, location_link } = data;
+        const { ro_name, owner_contact, gst_number, ro_brand, ro_address, location_link } = data;
         await db.sequelize.query(`
-            INSERT INTO t_onboarding_ro (onboarding_id, ro_name, owner_contact, ro_brand, ro_address, location_link)
-            VALUES (:onboardingId, :ro_name, :owner_contact, :ro_brand, :ro_address, :location_link)
+            INSERT INTO t_onboarding_ro (onboarding_id, ro_name, owner_contact, gst_number, ro_brand, ro_address, location_link)
+            VALUES (:onboardingId, :ro_name, :owner_contact, :gst_number, :ro_brand, :ro_address, :location_link)
             ON DUPLICATE KEY UPDATE
                 ro_name       = VALUES(ro_name),
                 owner_contact = VALUES(owner_contact),
+                gst_number    = VALUES(gst_number),
                 ro_brand      = VALUES(ro_brand),
                 ro_address    = VALUES(ro_address),
                 location_link = VALUES(location_link)
@@ -79,6 +80,7 @@ module.exports = {
                 onboardingId,
                 ro_name:       ro_name       || null,
                 owner_contact: owner_contact || null,
+                gst_number:    gst_number    || null,
                 ro_brand:      ro_brand      || null,
                 ro_address:    ro_address    || null,
                 location_link: location_link || null,

@@ -2,6 +2,10 @@
 const { randomUUID } = require('crypto');
 const OnboardingDao = require('../dao/onboarding-dao');
 const dateFormat = require('dateformat');
+const db = require('../db/db-connection');
+const { QueryTypes } = require('sequelize');
+
+const CONFIG_HINT_LOCATIONS = ['MUE', 'SFS', 'AACBE'];
 
 function formatDateForInput(d) {
     if (!d) return '';
@@ -142,6 +146,30 @@ module.exports = {
             if (!['active', 'setup_done'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
             await OnboardingDao.updateStatus(req.params.id, status, notes);
             res.json({ ok: true });
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    adminConfigHints: async (req, res, next) => {
+        try {
+            const rows = await db.sequelize.query(
+                `SELECT location_code, setting_name, setting_value
+                 FROM m_location_config
+                 WHERE location_code IN (:locs) AND effective_end_date >= CURDATE()
+                 ORDER BY setting_name, location_code`,
+                { replacements: { locs: CONFIG_HINT_LOCATIONS }, type: QueryTypes.SELECT }
+            );
+            // Pivot: setting_name → { MUE: val, SFS: val, AACBE: val }
+            const map = {};
+            for (const row of rows) {
+                if (!map[row.setting_name]) map[row.setting_name] = {};
+                map[row.setting_name][row.location_code] = row.setting_value;
+            }
+            const hints = Object.entries(map)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, vals]) => ({ name, ...vals }));
+            res.json(hints);
         } catch (e) {
             next(e);
         }

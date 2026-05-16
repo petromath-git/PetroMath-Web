@@ -215,6 +215,8 @@ function buildNewRow(section, id) {
             <td data-label="Branch"><input class="form-control form-control-sm" type="text" data-field="branch" placeholder="Branch"></td>
             <td data-label="Account Name"><input class="form-control form-control-sm" type="text" data-field="account_name" placeholder="Account Name"></td>
             <td data-label="Last 4 Digits"><input class="form-control form-control-sm" type="text" data-field="account_last4" placeholder="Last 4" maxlength="4"></td>
+            <td data-label="Account Number"><input class="form-control form-control-sm" type="text" data-field="account_number" placeholder="Full account number"></td>
+            <td data-label="IFSC Code"><input class="form-control form-control-sm" type="text" data-field="ifsc_code" placeholder="e.g. SBIN0001234" maxlength="15"></td>
             <td data-label="Account Type"><select class="form-control form-control-sm" data-field="account_type">
                 <option value="">-- Select --</option>
                 <option>Current</option><option>Savings</option><option>Cash Credit</option><option>EDFS</option>
