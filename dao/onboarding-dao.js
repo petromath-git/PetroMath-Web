@@ -4,13 +4,13 @@ const { QueryTypes } = require('sequelize');
 
 const SECTION_MAP = {
     'employees':        { table: 't_onboarding_employees',        fields: ['employee_name', 'designation'] },
-    'metered-products': { table: 't_onboarding_metered_products', fields: ['product_name', 'short_name'] },
+    'metered-products': { table: 't_onboarding_metered_products', fields: ['product_name', 'short_name', 'hsn_code', 'cgst_percent', 'sgst_percent'] },
     'tanks':            { table: 't_onboarding_tanks',            fields: ['tank_name', 'tank_capacity', 'tank_short_name', 'product_short_name'] },
     'nozzles':          { table: 't_onboarding_nozzles',          fields: ['nozzle_name', 'nozzle_product', 'du_make', 'tank_connected', 'next_stamping_date'] },
-    'lubes':            { table: 't_onboarding_lubes',            fields: ['product_name', 'unit', 'selling_price'] },
+    'lubes':            { table: 't_onboarding_lubes',            fields: ['product_name', 'unit', 'selling_price', 'hsn_code', 'cgst_percent', 'sgst_percent'] },
     'banks':            { table: 't_onboarding_banks',            fields: ['bank_name', 'short_name', 'branch', 'account_name', 'account_last4', 'ifsc_code', 'account_number', 'account_type'] },
     'digital':          { table: 't_onboarding_digital',          fields: ['platform_name'] },
-    'customers':        { table: 't_onboarding_customers',        fields: ['customer_name', 'address', 'gstin', 'owner_name', 'owner_mobile', 'manager_name', 'manager_mobile', 'customer_type'] },
+    'customers':        { table: 't_onboarding_customers',        fields: ['customer_name', 'address', 'gstin', 'remittance_bank', 'customer_type'] },
     'suppliers':        { table: 't_onboarding_suppliers',        fields: ['supplier_name', 'short_name'] },
 };
 

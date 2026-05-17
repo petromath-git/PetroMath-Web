@@ -151,12 +151,34 @@ module.exports = {
         }
     },
 
+    hsnSuggestions: async (req, res, next) => {
+        try {
+            const q = (req.query.q || '').trim();
+            // Return distinct HSN codes; filter by product name if q provided
+            const rows = await db.sequelize.query(
+                `SELECT DISTINCT hsn_code,
+                        GROUP_CONCAT(DISTINCT product_name ORDER BY product_name SEPARATOR ', ') AS sample_products,
+                        COUNT(*) AS cnt
+                 FROM m_product
+                 WHERE hsn_code IS NOT NULL AND hsn_code != ''
+                   ${q ? 'AND product_name LIKE :pattern' : ''}
+                 GROUP BY hsn_code
+                 ORDER BY cnt DESC
+                 LIMIT 30`,
+                { replacements: { pattern: `%${q}%` }, type: QueryTypes.SELECT }
+            );
+            res.json(rows);
+        } catch (e) {
+            next(e);
+        }
+    },
+
     adminConfigHints: async (req, res, next) => {
         try {
             const rows = await db.sequelize.query(
                 `SELECT location_code, setting_name, setting_value
                  FROM m_location_config
-                 WHERE location_code IN (:locs) AND effective_end_date >= CURDATE()
+                 WHERE location_code IN (:locs)
                  ORDER BY setting_name, location_code`,
                 { replacements: { locs: CONFIG_HINT_LOCATIONS }, type: QueryTypes.SELECT }
             );

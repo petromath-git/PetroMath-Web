@@ -48,15 +48,19 @@ module.exports = {
             const onboarding = await OnboardingDao.findById(req.params.id);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
 
-            const { location_code, template_location } = req.body;
+            const { location_code, template_location, skip_supplier_ids } = req.body;
             if (!location_code?.trim()) return res.status(400).json({ error: 'location_code is required' });
             if (!template_location?.trim()) return res.status(400).json({ error: 'template_location is required' });
             const loc = location_code.trim();
             const tmpl = template_location.trim();
+            const skipSupplierIds = new Set((skip_supplier_ids || []).map(Number));
 
             const data = await OnboardingDao.getAllData(onboarding.id);
             const ro = data.ro;
             const results = [];
+
+            // Helper: uppercase a string value safely
+            const up = (v) => (typeof v === 'string' && v.trim() ? v.trim().toUpperCase() : (v || null));
 
             // ── Step 1: Create Location ──────────────────────────────────────────
             {
@@ -72,11 +76,11 @@ module.exports = {
                              VALUES (:loc, :name, :address, :company, :phone, :gst, CURDATE(), '9999-12-31', 'onboarding')`,
                             {
                                 loc,
-                                name:    ro.ro_name    || onboarding.location_name,
-                                address: ro.ro_address || '',
-                                company: ro.ro_brand   || null,
-                                phone:   ro.owner_contact || null,
-                                gst:     ro.gst_number || null,
+                                name:    up(ro.ro_name    || onboarding.location_name),
+                                address: up(ro.ro_address) || '',
+                                company: up(ro.ro_brand)   || null,
+                                phone:   ro.owner_contact  || null,
+                                gst:     up(ro.gst_number) || null,
                             }
                         );
                         // Trigger auto-seeds: expenses, CashFlow lookups, oil company supplier + SAP bank
@@ -90,15 +94,16 @@ module.exports = {
             // ── Step 2: Suppliers ────────────────────────────────────────────────
             results.push(await runSection('Suppliers', data.suppliers, async (s) => {
                 if (!s.supplier_name) return 'skipped';
+                if (skipSupplierIds.has(s.id)) return 'skipped';
                 const exists = await selectOne(
                     'SELECT supplier_id FROM m_supplier WHERE supplier_name = :name AND location_code = :loc',
-                    { name: s.supplier_name, loc }
+                    { name: up(s.supplier_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
                     `INSERT INTO m_supplier (supplier_name, supplier_short_name, location_code, effective_start_date, effective_end_date, created_by)
                      VALUES (:name, :short, :loc, CURDATE(), '9999-12-31', 'onboarding')`,
-                    { name: s.supplier_name, short: s.short_name || s.supplier_name, loc }
+                    { name: up(s.supplier_name), short: up(s.short_name || s.supplier_name), loc }
                 );
             }));
 
@@ -107,14 +112,14 @@ module.exports = {
                 if (!p.product_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT product_id FROM m_product WHERE product_name = :name AND location_code = :loc AND is_tank_product = 1',
-                    { name: p.product_name, loc }
+                    { name: up(p.product_name), loc }
                 );
                 if (exists) return 'skipped';
                 const rgb = PRODUCT_RGB[(p.short_name || '').toUpperCase()] || '200,200,200';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, is_tank_product, rgb_color, created_by)
-                     VALUES (:name, :loc, 1, 'Litres', 1, :rgb, 'onboarding')`,
-                    { name: p.product_name, loc, rgb }
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by)
+                     VALUES (:name, :loc, 1, 'Litres', 1, :rgb, :hsn, :cgst, :sgst, 'onboarding')`,
+                    { name: up(p.product_name), loc, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
                 );
             }));
 
@@ -123,13 +128,13 @@ module.exports = {
                 if (!l.product_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT product_id FROM m_product WHERE product_name = :name AND location_code = :loc AND is_lube_product = 1',
-                    { name: l.product_name, loc }
+                    { name: up(l.product_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, created_by)
-                     VALUES (:name, :loc, 1, :unit, :price, 1, 'onboarding')`,
-                    { name: l.product_name, loc, unit: l.unit || 'Nos', price: l.selling_price || null }
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code, cgst_percent, sgst_percent, created_by)
+                     VALUES (:name, :loc, 1, :unit, :price, 1, :hsn, :cgst, :sgst, 'onboarding')`,
+                    { name: up(l.product_name), loc, unit: l.unit || 'Nos', price: l.selling_price || null, hsn: up(l.hsn_code) || null, cgst: l.cgst_percent ?? null, sgst: l.sgst_percent ?? null }
                 );
             }));
 
@@ -138,13 +143,13 @@ module.exports = {
                 if (!t.tank_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT tank_id FROM m_tank WHERE tank_code = :code AND location_code = :loc',
-                    { code: t.tank_name, loc }
+                    { code: up(t.tank_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
                     `INSERT INTO m_tank (tank_code, product_code, location_code, tank_orig_capacity, tank_opening_stock, effective_start_date, effective_end_date, created_by)
                      VALUES (:code, :product, :loc, :capacity, 0, CURDATE(), '9999-12-31', 'onboarding')`,
-                    { code: t.tank_name, product: t.product_short_name || '', loc, capacity: t.tank_capacity || 0 }
+                    { code: up(t.tank_name), product: up(t.product_short_name) || '', loc, capacity: t.tank_capacity || 0 }
                 );
             }));
 
@@ -153,7 +158,7 @@ module.exports = {
                 if (!n.nozzle_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT pump_id FROM m_pump WHERE pump_code = :code AND location_code = :loc',
-                    { code: n.nozzle_name, loc }
+                    { code: up(n.nozzle_name), loc }
                 );
                 if (exists) return 'skipped';
                 const stampingDue = n.next_stamping_date
@@ -163,12 +168,12 @@ module.exports = {
                     `INSERT INTO m_pump (pump_code, pump_make, product_code, opening_reading, location_code,
                         effective_start_date, effective_end_date, current_stamping_date, Stamping_due, created_by)
                      VALUES (:code, :make, :product, 0, :loc, CURDATE(), '9999-12-31', '0000-00-00 00:00:00', :stamping, 'onboarding')`,
-                    { code: n.nozzle_name, make: n.du_make || 'Unknown', product: n.nozzle_product || '', loc, stamping: stampingDue }
+                    { code: up(n.nozzle_name), make: up(n.du_make) || 'UNKNOWN', product: up(n.nozzle_product) || '', loc, stamping: stampingDue }
                 );
                 if (n.tank_connected) {
                     const tank = await selectOne(
                         'SELECT tank_id FROM m_tank WHERE tank_code = :code AND location_code = :loc',
-                        { code: n.tank_connected, loc }
+                        { code: up(n.tank_connected), loc }
                     );
                     if (tank) {
                         await insertRow(
@@ -187,20 +192,20 @@ module.exports = {
                 if (!b.account_number || !b.ifsc_code) return 'skipped';
                 const exists = await selectOne(
                     'SELECT bank_id FROM m_bank WHERE bank_name = :name AND location_code = :loc',
-                    { name: b.bank_name, loc }
+                    { name: up(b.bank_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
                     `INSERT INTO m_bank (bank_name, bank_branch, account_number, ifsc_code, location_code, type, account_nickname, internal_flag, created_by)
                      VALUES (:name, :branch, :accnum, :ifsc, :loc, :type, :nickname, 'Y', 'onboarding')`,
                     {
-                        name:     b.bank_name,
-                        branch:   b.branch || '',
+                        name:     up(b.bank_name),
+                        branch:   up(b.branch) || '',
                         accnum:   b.account_number,
-                        ifsc:     b.ifsc_code,
+                        ifsc:     up(b.ifsc_code),
                         loc,
                         type:     b.account_type || null,
-                        nickname: b.short_name || null,
+                        nickname: up(b.short_name || b.bank_name),
                     }
                 );
             }));
@@ -210,13 +215,13 @@ module.exports = {
                 if (!d.platform_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT creditlist_id FROM m_credit_list WHERE Company_Name = :name AND location_code = :loc',
-                    { name: d.platform_name, loc }
+                    { name: up(d.platform_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
                     `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, type, creation_date, created_by)
                      VALUES (:name, :loc, 'Y', 0, 'Digital', NOW(), 'onboarding')`,
-                    { name: d.platform_name, loc }
+                    { name: up(d.platform_name), loc }
                 );
             }));
 
@@ -225,13 +230,21 @@ module.exports = {
                 if (!c.customer_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT creditlist_id FROM m_credit_list WHERE Company_Name = :name AND location_code = :loc',
-                    { name: c.customer_name, loc }
+                    { name: up(c.customer_name), loc }
                 );
                 if (exists) return 'skipped';
+                let remitBankId = null;
+                if (c.remittance_bank) {
+                    const rb = await selectOne(
+                        `SELECT bank_id FROM m_bank WHERE location_code = :loc AND (account_nickname = :name OR bank_name = :name) LIMIT 1`,
+                        { loc, name: up(c.remittance_bank) }
+                    );
+                    if (rb) remitBankId = rb.bank_id;
+                }
                 await insertRow(
-                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, phoneno, type, creation_date, created_by)
-                     VALUES (:name, :loc, 'N', 0, :gst, :address, :phone, :type, NOW(), 'onboarding')`,
-                    { name: c.customer_name, loc, gst: c.gstin || null, address: c.address || null, phone: c.owner_mobile || null, type: c.customer_type || null }
+                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, remittance_bank_id, creation_date, created_by)
+                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :remitBankId, NOW(), 'onboarding')`,
+                    { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null, remitBankId }
                 );
             }));
 
