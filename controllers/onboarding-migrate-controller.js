@@ -60,7 +60,8 @@ module.exports = {
             const results = [];
 
             // Helper: uppercase a string value safely
-            const up = (v) => (typeof v === 'string' && v.trim() ? v.trim().toUpperCase() : (v || null));
+            const up   = (v) => (typeof v === 'string' && v.trim() ? v.trim().toUpperCase() : (v || null));
+            const code = (v) => up(v) ? up(v).replace(/\s+/g, '') : null;
 
             // ── Step 1: Create Location ──────────────────────────────────────────
             {
@@ -72,8 +73,8 @@ module.exports = {
                 } else {
                     try {
                         await insertRow(
-                            `INSERT INTO m_location (location_code, location_name, address, company_name, phone, gst_number, start_date, effective_end_date, created_by)
-                             VALUES (:loc, :name, :address, :company, :phone, :gst, CURDATE(), '9999-12-31', 'onboarding')`,
+                            `INSERT INTO m_location (location_code, location_name, address, company_name, phone, gst_number, start_date, effective_end_date, created_by, updated_by, creation_date)
+                             VALUES (:loc, :name, :address, :company, :phone, :gst, CURDATE(), '9999-12-31', 'onboarding', 'onboarding', NOW())`,
                             {
                                 loc,
                                 name:    up(ro.ro_name    || onboarding.location_name),
@@ -101,8 +102,8 @@ module.exports = {
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_supplier (supplier_name, supplier_short_name, location_code, effective_start_date, effective_end_date, created_by)
-                     VALUES (:name, :short, :loc, CURDATE(), '9999-12-31', 'onboarding')`,
+                    `INSERT INTO m_supplier (supplier_name, supplier_short_name, location_code, effective_start_date, effective_end_date, created_by, updated_by)
+                     VALUES (:name, :short, :loc, CURDATE(), '9999-12-31', 'onboarding', 'onboarding')`,
                     { name: up(s.supplier_name), short: up(s.short_name || s.supplier_name), loc }
                 );
             }));
@@ -117,8 +118,8 @@ module.exports = {
                 if (exists) return 'skipped';
                 const rgb = PRODUCT_RGB[(p.short_name || '').toUpperCase()] || '200,200,200';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by)
-                     VALUES (:name, :loc, 1, 'Litres', 1, :rgb, :hsn, :cgst, :sgst, 'onboarding')`,
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
+                     VALUES (:name, :loc, 1, 'Litres', 1, :rgb, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
                     { name: up(p.product_name), loc, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
                 );
             }));
@@ -132,8 +133,8 @@ module.exports = {
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code, cgst_percent, sgst_percent, created_by)
-                     VALUES (:name, :loc, 1, :unit, :price, 1, :hsn, :cgst, :sgst, 'onboarding')`,
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
+                     VALUES (:name, :loc, 1, :unit, :price, 1, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
                     { name: up(l.product_name), loc, unit: l.unit || 'Nos', price: l.selling_price || null, hsn: up(l.hsn_code) || null, cgst: l.cgst_percent ?? null, sgst: l.sgst_percent ?? null }
                 );
             }));
@@ -143,13 +144,13 @@ module.exports = {
                 if (!t.tank_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT tank_id FROM m_tank WHERE tank_code = :code AND location_code = :loc',
-                    { code: up(t.tank_name), loc }
+                    { code: code(t.tank_name), loc }
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_tank (tank_code, product_code, location_code, tank_orig_capacity, tank_opening_stock, effective_start_date, effective_end_date, created_by)
-                     VALUES (:code, :product, :loc, :capacity, 0, CURDATE(), '9999-12-31', 'onboarding')`,
-                    { code: up(t.tank_name), product: up(t.product_short_name) || '', loc, capacity: t.tank_capacity || 0 }
+                    `INSERT INTO m_tank (tank_code, product_code, location_code, tank_orig_capacity, tank_opening_stock, effective_start_date, effective_end_date, created_by, updated_by, creation_date)
+                     VALUES (:code, :product, :loc, :capacity, 0, CURDATE(), '9999-12-31', 'onboarding', 'onboarding', NOW())`,
+                    { code: code(t.tank_name), product: up(t.product_short_name) || '', loc, capacity: t.tank_capacity || 0 }
                 );
             }));
 
@@ -158,7 +159,7 @@ module.exports = {
                 if (!n.nozzle_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT pump_id FROM m_pump WHERE pump_code = :code AND location_code = :loc',
-                    { code: up(n.nozzle_name), loc }
+                    { code: code(n.nozzle_name), loc }
                 );
                 if (exists) return 'skipped';
                 const stampingDue = n.next_stamping_date
@@ -166,19 +167,19 @@ module.exports = {
                     : '0000-00-00 00:00:00';
                 const pump_id = await insertRow(
                     `INSERT INTO m_pump (pump_code, pump_make, product_code, opening_reading, location_code,
-                        effective_start_date, effective_end_date, current_stamping_date, Stamping_due, created_by)
-                     VALUES (:code, :make, :product, 0, :loc, CURDATE(), '9999-12-31', '0000-00-00 00:00:00', :stamping, 'onboarding')`,
-                    { code: up(n.nozzle_name), make: up(n.du_make) || 'UNKNOWN', product: up(n.nozzle_product) || '', loc, stamping: stampingDue }
+                        effective_start_date, effective_end_date, current_stamping_date, Stamping_due, created_by, updated_by)
+                     VALUES (:code, :make, :product, 0, :loc, CURDATE(), '9999-12-31', '0000-00-00 00:00:00', :stamping, 'onboarding', 'onboarding')`,
+                    { code: code(n.nozzle_name), make: up(n.du_make) || 'UNKNOWN', product: up(n.nozzle_product) || '', loc, stamping: stampingDue }
                 );
                 if (n.tank_connected) {
                     const tank = await selectOne(
                         'SELECT tank_id FROM m_tank WHERE tank_code = :code AND location_code = :loc',
-                        { code: up(n.tank_connected), loc }
+                        { code: code(n.tank_connected), loc }
                     );
                     if (tank) {
                         await insertRow(
-                            `INSERT INTO m_pump_tank (pump_id, tank_id, location_code, effective_start_date, effective_end_date, created_by)
-                             VALUES (:pump_id, :tank_id, :loc, CURDATE(), '9999-12-31', 'onboarding')`,
+                            `INSERT INTO m_pump_tank (pump_id, tank_id, location_code, effective_start_date, effective_end_date, created_by, updated_by)
+                             VALUES (:pump_id, :tank_id, :loc, CURDATE(), '9999-12-31', 'onboarding', 'onboarding')`,
                             { pump_id, tank_id: tank.tank_id, loc }
                         );
                     }
@@ -196,8 +197,8 @@ module.exports = {
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_bank (bank_name, bank_branch, account_number, ifsc_code, location_code, type, account_nickname, internal_flag, created_by)
-                     VALUES (:name, :branch, :accnum, :ifsc, :loc, :type, :nickname, 'Y', 'onboarding')`,
+                    `INSERT INTO m_bank (bank_name, bank_branch, account_number, ifsc_code, location_code, type, account_nickname, internal_flag, created_by, updated_by)
+                     VALUES (:name, :branch, :accnum, :ifsc, :loc, :type, :nickname, 'Y', 'onboarding', 'onboarding')`,
                     {
                         name:     up(b.bank_name),
                         branch:   up(b.branch) || '',
@@ -219,8 +220,8 @@ module.exports = {
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, type, creation_date, created_by)
-                     VALUES (:name, :loc, 'Y', 0, 'Digital', NOW(), 'onboarding')`,
+                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, type, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
+                     VALUES (:name, :loc, 'Y', 0, 'Credit', CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
                     { name: up(d.platform_name), loc }
                 );
             }));
@@ -242,8 +243,8 @@ module.exports = {
                     if (rb) remitBankId = rb.bank_id;
                 }
                 await insertRow(
-                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, remittance_bank_id, creation_date, created_by)
-                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :remitBankId, NOW(), 'onboarding')`,
+                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, remittance_bank_id, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
+                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :remitBankId, CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
                     { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null, remitBankId }
                 );
             }));

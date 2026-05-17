@@ -166,8 +166,8 @@ module.exports = {
                     { replacements: { loc, name }, type: QueryTypes.DELETE }
                 );
                 await db.sequelize.query(
-                    `INSERT INTO m_location_config (location_code, setting_name, setting_value, effective_start_date, effective_end_date, created_by)
-                     VALUES (:loc, :name, :value, CURDATE(), '9999-12-31', 'onboarding')`,
+                    `INSERT INTO m_location_config (location_code, setting_name, setting_value, effective_start_date, effective_end_date, created_by, updated_by, creation_date, updation_date)
+                     VALUES (:loc, :name, :value, CURDATE(), '9999-12-31', 'onboarding', 'onboarding', NOW(), NOW())`,
                     { replacements: { loc, name, value }, type: QueryTypes.INSERT }
                 );
             }

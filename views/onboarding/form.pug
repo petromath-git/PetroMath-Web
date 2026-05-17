@@ -214,7 +214,7 @@ html(lang="en")
                                 tbody#tbody-tanks
                                     each row in formData.tanks
                                         tr(data-section="tanks" data-row-id=row.id)
-                                            td(data-label="Tank Name"): input.form-control.form-control-sm(type="text" data-field="tank_name" value=(row.tank_name||'') placeholder="Tank Name")
+                                            td(data-label="Tank Name"): input.form-control.form-control-sm(type="text" data-field="tank_name" data-no-space="true" value=(row.tank_name||'') placeholder="No spaces e.g. TANK1")
                                             td(data-label="Capacity (L)"): input.form-control.form-control-sm(type="number" data-field="tank_capacity" value=(row.tank_capacity||'') placeholder="15000")
                                             td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="tank_short_name" value=(row.tank_short_name||'') placeholder="e.g. MS1")
                                             td(data-label="Product")
@@ -246,7 +246,7 @@ html(lang="en")
                                 tbody#tbody-nozzles
                                     each row in formData.nozzles
                                         tr(data-section="nozzles" data-row-id=row.id)
-                                            td(data-label="Nozzle Name"): input.form-control.form-control-sm(type="text" data-field="nozzle_name" value=(row.nozzle_name||'') placeholder="e.g. MS 1.1")
+                                            td(data-label="Nozzle Name"): input.form-control.form-control-sm(type="text" data-field="nozzle_name" data-no-space="true" value=(row.nozzle_name||'') placeholder="No spaces e.g. MS1.1")
                                             td(data-label="Product"): input.form-control.form-control-sm(type="text" data-field="nozzle_product" value=(row.nozzle_product||'') placeholder="Short Name")
                                             td(data-label="DU Make"): input.form-control.form-control-sm(type="text" data-field="du_make" value=(row.du_make||'') placeholder="Tokheim / Gilbarco")
                                             td(data-label="Tank")
