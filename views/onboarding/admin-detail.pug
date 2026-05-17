@@ -243,6 +243,44 @@ block content
                 else
                     p.text-muted.mb-0 No entries
 
+            +detailSection("colProductTax", `Product Tax — HSN & GST% (${formData.metered_products.length + formData.lubes.length} products)`)
+                p.small.text-muted.mb-2 Edit HSN codes and GST% before migration. HSN suggestions are drawn from existing products across all locations.
+                if formData.metered_products.length || formData.lubes.length
+                    .table-responsive
+                        table.table.table-sm.table-bordered.mb-0#taxEditTable
+                            thead.thead-light
+                                tr
+                                    th Type
+                                    th Product Name
+                                    th Short Name / Unit
+                                    th HSN Code
+                                    th CGST %
+                                    th SGST %
+                                    th(width="80")
+                            tbody
+                                each p in formData.metered_products
+                                    tr(data-tax-section="metered-products" data-tax-id=p.id)
+                                        td.small.text-muted Metered
+                                        td.small= p.product_name || '—'
+                                        td.small= p.short_name || '—'
+                                        td: input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(p.hsn_code||'') placeholder="e.g. 27101290")
+                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(p.cgst_percent!=null?p.cgst_percent:'') placeholder="e.g. 9")
+                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(p.sgst_percent!=null?p.sgst_percent:'') placeholder="e.g. 9")
+                                        td: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
+                                each l in formData.lubes
+                                    tr(data-tax-section="lubes" data-tax-id=l.id)
+                                        td.small.text-muted Lube
+                                        td.small= l.product_name || '—'
+                                        td.small= l.unit || '—'
+                                        td: input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(l.hsn_code||'') placeholder="e.g. 27101290")
+                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(l.cgst_percent!=null?l.cgst_percent:'') placeholder="e.g. 9")
+                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(l.sgst_percent!=null?l.sgst_percent:'') placeholder="e.g. 9")
+                                        td: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
+                    datalist#hsnDatalist
+                    p.text-muted.mt-1.mb-0(style="font-size:11px") HSN suggestions load from historical data when you click an HSN field.
+                else
+                    p.text-muted.mb-0 No products to edit
+
     //- ── Migrate to PetroMath Modal ────────────────────────────────────────────
     #migrateModal.modal.fade(tabindex="-1" role="dialog" aria-labelledby="migrateModalLabel" aria-hidden="true")
         .modal-dialog.modal-lg(role="document")
@@ -252,6 +290,12 @@ block content
                     button.close(type="button" data-dismiss="modal" aria-label="Close")
                         span(aria-hidden="true") ×
                 .modal-body
+                    //- Pre-flight validation
+                    #preflightCheck.mb-3
+                        p.small.font-weight-bold.text-secondary.mb-1 Pre-flight Validation
+                        #preflightBody
+                            p.text-muted.small.mb-0 Loading…
+                    hr.my-3
                     p.text-muted.small.mb-3
                         | Creates the location and inserts all masters into PetroMath. Safe to re-run — existing records are detected and skipped.
                     .form-row
@@ -263,6 +307,14 @@ block content
                             label.font-weight-bold(for="migrateTemplateLocCode") Template Location
                             input.form-control#migrateTemplateLocCode(type="text" placeholder="e.g. MUE or SFS" autocomplete="off")
                             small.form-text.text-muted Used for Account Heads & Ledger Rules. Auto-suggested from RO brand.
+                    if formData.suppliers.length
+                        .form-group.mb-2
+                            label.font-weight-bold.small Suppliers to Migrate
+                            p.text-muted(style="font-size:12px;margin-bottom:4px;") Uncheck suppliers that will be auto-created by the location trigger (e.g. oil company vendors).
+                            each s in formData.suppliers
+                                .form-check.form-check-inline
+                                    input.form-check-input(type="checkbox" id=`chkSupp${s.id}` value=s.id checked)
+                                    label.form-check-label.small(for=`chkSupp${s.id}`)= s.supplier_name || `Row ${s.id}`
                     .alert.alert-warning.py-2.small
                         strong Note:
                         |  Banks with missing Account Number or IFSC Code will be skipped — fill those fields in the onboarding form first.
@@ -281,12 +333,76 @@ block content
     script.
         var OB_ID = !{onboarding.id};
         var OB_STATUS = '!{onboarding.status}';
+        var OB_TOKEN = '!{onboarding.token}';
         var OB_RO_BRAND = '!{formData.ro ? (formData.ro.ro_brand || "") : ""}';
+        var OB_FORM_DATA = !{JSON.stringify(formData)};
+
+        function runPreflightCheck() {
+            var fd = OB_FORM_DATA;
+            var issues = [], warnings = [];
+
+            // Build lookup sets (case-insensitive)
+            var productSN = new Set();
+            (fd.metered_products || []).forEach(function(p) {
+                var sn = (p.short_name || '').trim().toUpperCase();
+                if (sn) productSN.add(sn);
+                if (!p.product_name || !p.product_name.trim()) issues.push('Metered product row with empty name');
+                else if (!sn) warnings.push('Product "' + p.product_name + '" has no Short Name — name will be used as product_code in tanks/nozzles');
+            });
+
+            var tankNames = new Set();
+            (fd.tanks || []).forEach(function(t) {
+                var tn = (t.tank_name || '').trim().toUpperCase();
+                if (tn) tankNames.add(tn);
+                if (!tn) { issues.push('Tank row with empty name'); return; }
+                var pn = (t.product_short_name || '').trim().toUpperCase();
+                if (!pn) warnings.push('Tank "' + t.tank_name + '" has no product assigned');
+                else if (!productSN.has(pn)) issues.push('Tank "' + t.tank_name + '" → product "' + t.product_short_name + '" not found in Metered Products');
+            });
+
+            (fd.nozzles || []).forEach(function(n) {
+                var nn = (n.nozzle_name || '').trim();
+                if (!nn) { issues.push('Nozzle row with empty name'); return; }
+                var tc = (n.tank_connected || '').trim().toUpperCase();
+                if (!tc) warnings.push('Nozzle "' + nn + '" not connected to any tank');
+                else if (!tankNames.has(tc)) issues.push('Nozzle "' + nn + '" → tank "' + n.tank_connected + '" not found in Tanks');
+                var np = (n.nozzle_product || '').trim().toUpperCase();
+                if (!np) warnings.push('Nozzle "' + nn + '" has no product set');
+                else if (!productSN.has(np)) warnings.push('Nozzle "' + nn + '" → product "' + n.nozzle_product + '" not in Metered Products (short name mismatch?)');
+            });
+
+            (fd.banks || []).forEach(function(b) {
+                if (!b.bank_name) return;
+                var missing = [];
+                if (!b.account_number) missing.push('Account Number');
+                if (!b.ifsc_code) missing.push('IFSC Code');
+                if (missing.length) warnings.push('Bank "' + b.bank_name + '" missing ' + missing.join(' & ') + ' — will be skipped during migration');
+            });
+
+            var el = document.getElementById('preflightBody');
+            var html = '';
+            if (!issues.length && !warnings.length) {
+                html = '<div class="alert alert-success py-2 mb-0 small"><strong>✓ All checks passed.</strong> Data looks good to migrate.</div>';
+            } else {
+                if (issues.length) {
+                    html += '<div class="alert alert-danger py-2 mb-2 small"><strong>Issues (' + issues.length + ') — fix before migrating:</strong><ul class="mb-0 pl-3 mt-1">';
+                    issues.forEach(function(i) { html += '<li>' + i + '</li>'; });
+                    html += '</ul></div>';
+                }
+                if (warnings.length) {
+                    html += '<div class="alert alert-warning py-2 mb-0 small"><strong>Warnings (' + warnings.length + '):</strong><ul class="mb-0 pl-3 mt-1">';
+                    warnings.forEach(function(w) { html += '<li>' + w + '</li>'; });
+                    html += '</ul></div>';
+                }
+            }
+            el.innerHTML = html;
+        }
 
         // Auto-suggest template location + load config hints when modal opens
         var TEMPLATE_SUGGESTIONS = { 'IOCL': 'MUE', 'BPCL': 'SFS' };
         var configHintsLoaded = false;
-        document.getElementById('migrateModal').addEventListener('show.bs.modal', function() {
+        $('#migrateModal').on('show.bs.modal', function() {
+            runPreflightCheck();
             var templateInput = document.getElementById('migrateTemplateLocCode');
             if (!templateInput.value && TEMPLATE_SUGGESTIONS[OB_RO_BRAND]) {
                 templateInput.value = TEMPLATE_SUGGESTIONS[OB_RO_BRAND];
@@ -294,10 +410,13 @@ block content
             if (!configHintsLoaded) {
                 configHintsLoaded = true;
                 fetch('/admin/onboarding/config-hints')
-                    .then(function(r) { return r.json(); })
+                    .then(function(r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.json();
+                    })
                     .then(function(hints) {
                         var el = document.getElementById('configHintTable');
-                        if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location configs found.</p>'; return; }
+                        if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location configs found for MUE / SFS / AACBE.</p>'; return; }
                         var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered table-striped mb-0" style="font-size:12px">';
                         h += '<thead class="thead-light"><tr><th>Setting</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th></tr></thead><tbody>';
                         hints.forEach(function(row) {
@@ -307,8 +426,8 @@ block content
                         h += '<p class="text-muted mt-1 mb-0" style="font-size:11px">These settings are not migrated automatically. Insert into m_location_config for the new location after reviewing the values above.</p>';
                         el.innerHTML = h;
                     })
-                    .catch(function() {
-                        document.getElementById('configHintTable').innerHTML = '<p class="text-danger small mb-0">Failed to load config hints.</p>';
+                    .catch(function(e) {
+                        document.getElementById('configHintTable').innerHTML = '<p class="text-danger small mb-0">Failed to load config hints: ' + (e.message || 'unknown error') + '</p>';
                     });
             }
         });
@@ -351,11 +470,56 @@ block content
             }
         });
 
+        // ── HSN suggestions ─────────────────────────────────────────────────────
+        var hsnLoaded = false;
+        document.getElementById('taxEditTable')?.addEventListener('focus', function(e) {
+            if (!hsnLoaded && e.target.classList.contains('tax-hsn')) {
+                hsnLoaded = true;
+                fetch('/admin/onboarding/hsn-suggestions')
+                    .then(function(r) { return r.json(); })
+                    .then(function(rows) {
+                        var dl = document.getElementById('hsnDatalist');
+                        if (dl) dl.innerHTML = rows.map(function(r) {
+                            return '<option value="' + r.hsn_code + '">' + r.sample_products + '</option>';
+                        }).join('');
+                    })
+                    .catch(function() {});
+            }
+        }, true);
+
+        async function saveTaxRow(btn) {
+            var tr = btn.closest('tr');
+            var section = tr.dataset.taxSection;
+            var rowId   = tr.dataset.taxId;
+            var hsn  = tr.querySelector('.tax-hsn').value.trim().toUpperCase() || null;
+            var cgst = tr.querySelector('.tax-cgst').value || null;
+            var sgst = tr.querySelector('.tax-sgst').value || null;
+            btn.textContent = 'Saving…';
+            btn.disabled = true;
+            try {
+                var r = await fetch('/onboard/' + OB_TOKEN + '/' + section + '/' + rowId, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hsn_code: hsn, cgst_percent: cgst, sgst_percent: sgst })
+                });
+                btn.textContent = r.ok ? 'Saved ✓' : 'Error';
+                setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
+            } catch(e) {
+                btn.textContent = 'Error';
+                btn.disabled = false;
+            }
+        }
+
         document.getElementById('btnRunMigrate').addEventListener('click', async function() {
             var locCode = document.getElementById('migrateLocCode').value.trim();
             var templateLoc = document.getElementById('migrateTemplateLocCode').value.trim();
             if (!locCode) { alert('Enter the PetroMath location code.'); return; }
             if (!templateLoc) { alert('Enter the template location code (used for Account Heads & Ledger Rules).'); return; }
+            // Collect unchecked supplier IDs to skip
+            var skipSupplierIds = [];
+            document.querySelectorAll('#migrateModal input[type=checkbox]').forEach(function(cb) {
+                if (!cb.checked) skipSupplierIds.push(parseInt(cb.value, 10));
+            });
             this.disabled = true;
             this.textContent = 'Running…';
             document.getElementById('migrateResults').style.display = 'none';
@@ -363,7 +527,7 @@ block content
                 var r = await fetch('/admin/onboarding/' + OB_ID + '/migrate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ location_code: locCode, template_location: templateLoc })
+                    body: JSON.stringify({ location_code: locCode, template_location: templateLoc, skip_supplier_ids: skipSupplierIds })
                 });
                 var data = await r.json();
                 var resultsEl = document.getElementById('migrateResults');

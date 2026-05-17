@@ -9,7 +9,8 @@ const isLoggedIn = login.ensureLoggedIn({});
 
 router.get('/',              isLoggedIn, ctrl.adminList);
 router.post('/',             isLoggedIn, ctrl.adminCreate);
-router.get('/config-hints',  isLoggedIn, ctrl.adminConfigHints);  // must be before /:id
+router.get('/config-hints',   isLoggedIn, ctrl.adminConfigHints);   // must be before /:id
+router.get('/hsn-suggestions', isLoggedIn, ctrl.hsnSuggestions);    // must be before /:id
 router.get('/:id',           isLoggedIn, ctrl.adminDetail);
 router.patch('/:id/status',  isLoggedIn, ctrl.adminUpdateStatus);
 router.post('/:id/migrate',  isLoggedIn, migrateCtrl.migrate);
