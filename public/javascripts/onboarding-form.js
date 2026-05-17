@@ -205,14 +205,14 @@ function buildNewRow(section, id) {
             <td class="text-center align-middle">${del}</td></tr>`,
 
         'tanks': `<tr ${a}>
-            <td data-label="Tank Name"><input class="form-control form-control-sm" type="text" data-field="tank_name" placeholder="Tank Name"></td>
+            <td data-label="Tank Name"><input class="form-control form-control-sm" type="text" data-field="tank_name" data-no-space="true" placeholder="No spaces e.g. TANK1"></td>
             <td data-label="Capacity (L)"><input class="form-control form-control-sm" type="number" data-field="tank_capacity" placeholder="15000"></td>
             <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="tank_short_name" placeholder="e.g. MS1"></td>
             <td data-label="Product"><select class="form-control form-control-sm" data-field="product_short_name">${productOpts()}</select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
         'nozzles': `<tr ${a}>
-            <td data-label="Nozzle Name"><input class="form-control form-control-sm" type="text" data-field="nozzle_name" placeholder="e.g. MS 1.1"></td>
+            <td data-label="Nozzle Name"><input class="form-control form-control-sm" type="text" data-field="nozzle_name" data-no-space="true" placeholder="No spaces e.g. MS1.1"></td>
             <td data-label="Product"><input class="form-control form-control-sm" type="text" data-field="nozzle_product" placeholder="Short Name"></td>
             <td data-label="DU Make"><input class="form-control form-control-sm" type="text" data-field="du_make" placeholder="Tokheim / Gilbarco"></td>
             <td data-label="Tank"><select class="form-control form-control-sm" data-field="tank_connected">${tankOpts()}</select></td>
@@ -273,11 +273,12 @@ function enforceUppercase(el) {
     if (!el || el.tagName !== 'INPUT') return;
     const t = (el.type || '').toLowerCase();
     if (t === 'url' || t === 'date' || t === 'number' || t === 'email' || t === 'tel') return;
-    const upper = el.value.toUpperCase();
-    if (el.value !== upper) {
+    let val = el.value.toUpperCase();
+    if (el.dataset.noSpace) val = val.replace(/\s+/g, '');
+    if (el.value !== val) {
         const start = el.selectionStart;
         const end   = el.selectionEnd;
-        el.value = upper;
+        el.value = val;
         try { el.setSelectionRange(start, end); } catch (_) {}
     }
 }
