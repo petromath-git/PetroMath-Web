@@ -81,6 +81,7 @@ async function saveRow(section, rowId) {
         setSaved();
         if (section === 'metered-products') refreshProductDropdowns();
         if (section === 'tanks') refreshTankDropdowns();
+        if (section === 'banks') refreshBankDatalist();
     } catch {
         setSaveError();
     }
@@ -100,6 +101,7 @@ async function addRow(section) {
         tbody.insertAdjacentHTML('beforeend', buildNewRow(section, id));
         if (section === 'tanks') refreshProductDropdowns();
         if (section === 'nozzles') refreshTankDropdowns();
+        if (section === 'banks') refreshBankDatalist();
     } catch {
         alert('Failed to add row. Please try again.');
     }
@@ -114,6 +116,7 @@ async function deleteRow(section, rowId, btn) {
         btn.closest('tr').remove();
         if (section === 'metered-products') refreshProductDropdowns();
         if (section === 'tanks') refreshTankDropdowns();
+        if (section === 'banks') refreshBankDatalist();
     } catch {
         alert('Failed to delete row. Please try again.');
     }
@@ -160,6 +163,19 @@ function refreshTankDropdowns() {
     });
 }
 
+function refreshBankDatalist() {
+    const dl = document.getElementById('bank-datalist');
+    if (!dl) return;
+    const banks = [];
+    document.querySelectorAll('#tbody-banks tr').forEach(tr => {
+        const sn = tr.querySelector('[data-field="short_name"]')?.value?.trim();
+        const bn = tr.querySelector('[data-field="bank_name"]')?.value?.trim();
+        const val = sn || bn;
+        if (val) banks.push(val);
+    });
+    dl.innerHTML = banks.map(b => `<option value="${escHtml(b)}">`).join('');
+}
+
 // ── Build HTML for a new empty row ────────────────────────────────────────────
 function buildNewRow(section, id) {
     const del = `<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteRow('${section}',${id},this)">×</button>`;
@@ -183,6 +199,9 @@ function buildNewRow(section, id) {
         'metered-products': `<tr ${a}>
             <td data-label="Product Name"><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="As per Invoice e.g. EBMS"></td>
             <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="e.g. MS / HSD"></td>
+            <td data-label="HSN Code"><input class="form-control form-control-sm" type="text" data-field="hsn_code" placeholder="e.g. 27101290" maxlength="20"></td>
+            <td data-label="CGST %"><input class="form-control form-control-sm" type="number" step="0.01" min="0" max="50" data-field="cgst_percent" placeholder="e.g. 9"></td>
+            <td data-label="SGST %"><input class="form-control form-control-sm" type="number" step="0.01" min="0" max="50" data-field="sgst_percent" placeholder="e.g. 9"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
         'tanks': `<tr ${a}>
@@ -207,6 +226,9 @@ function buildNewRow(section, id) {
                 <option>Litres</option><option>Nos</option><option>Kgs</option>
             </select></td>
             <td data-label="Price (₹)"><input class="form-control form-control-sm" type="number" step="0.01" data-field="selling_price" placeholder="0.00"></td>
+            <td data-label="HSN Code"><input class="form-control form-control-sm" type="text" data-field="hsn_code" placeholder="e.g. 27101290" maxlength="20"></td>
+            <td data-label="CGST %"><input class="form-control form-control-sm" type="number" step="0.01" min="0" max="50" data-field="cgst_percent" placeholder="e.g. 9"></td>
+            <td data-label="SGST %"><input class="form-control form-control-sm" type="number" step="0.01" min="0" max="50" data-field="sgst_percent" placeholder="e.g. 9"></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 
         'banks': `<tr ${a}>
@@ -215,6 +237,8 @@ function buildNewRow(section, id) {
             <td data-label="Branch"><input class="form-control form-control-sm" type="text" data-field="branch" placeholder="Branch"></td>
             <td data-label="Account Name"><input class="form-control form-control-sm" type="text" data-field="account_name" placeholder="Account Name"></td>
             <td data-label="Last 4 Digits"><input class="form-control form-control-sm" type="text" data-field="account_last4" placeholder="Last 4" maxlength="4"></td>
+            <td data-label="Account Number"><input class="form-control form-control-sm" type="text" data-field="account_number" placeholder="Full account number"></td>
+            <td data-label="IFSC Code"><input class="form-control form-control-sm" type="text" data-field="ifsc_code" placeholder="e.g. SBIN0001234" maxlength="15"></td>
             <td data-label="Account Type"><select class="form-control form-control-sm" data-field="account_type">
                 <option value="">-- Select --</option>
                 <option>Current</option><option>Savings</option><option>Cash Credit</option><option>EDFS</option>
@@ -229,10 +253,7 @@ function buildNewRow(section, id) {
             <td data-label="Customer Name"><input class="form-control form-control-sm" type="text" data-field="customer_name" placeholder="Trade Name"></td>
             <td data-label="Address"><input class="form-control form-control-sm" type="text" data-field="address" placeholder="Billing Address"></td>
             <td data-label="GSTIN"><input class="form-control form-control-sm" type="text" data-field="gstin" placeholder="GSTIN" maxlength="15"></td>
-            <td data-label="Owner Name"><input class="form-control form-control-sm" type="text" data-field="owner_name" placeholder="Owner Name"></td>
-            <td data-label="Owner Mobile"><input class="form-control form-control-sm" type="tel" data-field="owner_mobile" placeholder="10-digit" maxlength="10"></td>
-            <td data-label="Manager"><input class="form-control form-control-sm" type="text" data-field="manager_name" placeholder="Manager Name"></td>
-            <td data-label="Mgr Mobile"><input class="form-control form-control-sm" type="tel" data-field="manager_mobile" placeholder="10-digit" maxlength="10"></td>
+            <td data-label="Remittance Bank"><input class="form-control form-control-sm" type="text" list="bank-datalist" data-field="remittance_bank" placeholder="Bank short name"></td>
             <td data-label="Type"><select class="form-control form-control-sm" data-field="customer_type">
                 <option value="">-- Select --</option>
                 <option>Credit</option><option>Cash</option>
@@ -247,6 +268,20 @@ function buildNewRow(section, id) {
     return rows[section] || '';
 }
 
+// ── CAPS enforcement ──────────────────────────────────────────────────────────
+function enforceUppercase(el) {
+    if (!el || el.tagName !== 'INPUT') return;
+    const t = (el.type || '').toLowerCase();
+    if (t === 'url' || t === 'date' || t === 'number' || t === 'email' || t === 'tel') return;
+    const upper = el.value.toUpperCase();
+    if (el.value !== upper) {
+        const start = el.selectionStart;
+        const end   = el.selectionEnd;
+        el.value = upper;
+        try { el.setSelectionRange(start, end); } catch (_) {}
+    }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const el = _indicator();
@@ -254,6 +289,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     refreshProductDropdowns();
     refreshTankDropdowns();
+    refreshBankDatalist();
+
+    // CAPS: run before save listeners so saved value is already uppercased
+    ['tab-ro', 'onboarding-sections'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', e => enforceUppercase(e.target), true);
+    });
 
     document.getElementById('tab-ro')?.addEventListener('input', scheduleRoSave);
 

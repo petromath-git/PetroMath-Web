@@ -27,6 +27,8 @@ html(lang="en")
             .ob-table th { font-size: 12px; font-weight: 600; background: #f8f9fa; white-space: nowrap; }
             .ob-table td { vertical-align: middle; }
             .form-control-sm { font-size: 13px; }
+            input[type="text"].form-control,
+            input[type="text"].form-control-sm { text-transform: uppercase; }
             .setup-done-banner { background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; color: #155724; font-size: 14px; }
 
             /* ── Mobile responsive tables ───────────────────────────────────── */
@@ -119,13 +121,16 @@ html(lang="en")
                                 small.text-muted  (10-digit mobile)
                                 input.form-control(type="tel" data-field="owner_contact" value=(formData.ro.owner_contact||'') placeholder="9876543210")
                         .form-row
-                            .form-group.col-md-4
+                            .form-group.col-md-3
                                 label RO Brand
                                 select.form-control(data-field="ro_brand")
                                     option(value="" selected=!formData.ro.ro_brand) -- Select --
                                     each b in ['IOCL','BPCL','HPCL','NAYARA','SHELL']
                                         option(value=b selected=(formData.ro.ro_brand===b))= b
-                            .form-group.col-md-8
+                            .form-group.col-md-3
+                                label GST Number (GSTIN)
+                                input.form-control(type="text" data-field="gst_number" value=(formData.ro.gst_number||'') placeholder="22AAAAA0000A1Z5" maxlength="15")
+                            .form-group.col-md-6
                                 label RO Address
                                 input.form-control(type="text" data-field="ro_address" value=(formData.ro.ro_address||'') placeholder="Full address")
                         .form-group
@@ -166,7 +171,7 @@ html(lang="en")
                         .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Metered Products
-                                p.section-hint.mb-0 Products sold through Dispensing Units. Short Name is used across Tanks and Nozzles tabs.
+                                p.section-hint.mb-0 Products sold through Dispensing Units. Short Name is used across Tanks and Nozzles tabs. HSN &amp; GST% will be verified by PetroMath admin before import.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="metered-products") + Add Row
                         .table-responsive
                             table.table.table-sm.table-bordered.ob-table
@@ -174,12 +179,18 @@ html(lang="en")
                                     tr
                                         th Product Name (as per Invoice)
                                         th Short Name
+                                        th HSN Code
+                                        th CGST %
+                                        th SGST %
                                         th(width="50")
                                 tbody#tbody-metered-products
                                     each row in formData.metered_products
                                         tr(data-section="metered-products" data-row-id=row.id)
                                             td(data-label="Product Name"): input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. EBMS, HSD")
                                             td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. MS / HSD")
+                                            td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" data-field="hsn_code" value=(row.hsn_code||'') placeholder="e.g. 27101290" maxlength="20")
+                                            td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="cgst_percent" value=(row.cgst_percent!=null?row.cgst_percent:'') placeholder="e.g. 9")
+                                            td(data-label="SGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="sgst_percent" value=(row.sgst_percent!=null?row.sgst_percent:'') placeholder="e.g. 9")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('metered-products',${row.id},this)`) ×
 
@@ -253,7 +264,7 @@ html(lang="en")
                         .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Lubes & Other Products
-                                p.section-hint.mb-0 All products stocked in the RO except those sold through DU. Include SKU name with pack size.
+                                p.section-hint.mb-0 All products stocked in the RO except those sold through DU. Include SKU name with pack size. HSN &amp; GST% will be verified by admin.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="lubes") + Add Row
                         .table-responsive
                             table.table.table-sm.table-bordered.ob-table
@@ -262,6 +273,9 @@ html(lang="en")
                                         th Product Name (SKU + Pack Size)
                                         th Unit
                                         th Selling Price (₹)
+                                        th HSN Code
+                                        th CGST %
+                                        th SGST %
                                         th(width="50")
                                 tbody#tbody-lubes
                                     each row in formData.lubes
@@ -273,6 +287,9 @@ html(lang="en")
                                                     each u in ['Litres','Nos','Kgs']
                                                         option(value=u selected=(row.unit===u))= u
                                             td(data-label="Price (₹)"): input.form-control.form-control-sm(type="number" step="0.01" data-field="selling_price" value=(row.selling_price||'') placeholder="0.00")
+                                            td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" data-field="hsn_code" value=(row.hsn_code||'') placeholder="e.g. 27101290" maxlength="20")
+                                            td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="cgst_percent" value=(row.cgst_percent!=null?row.cgst_percent:'') placeholder="e.g. 9")
+                                            td(data-label="SGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="sgst_percent" value=(row.sgst_percent!=null?row.sgst_percent:'') placeholder="e.g. 9")
                                             td.text-center.align-middle
                                                 button.btn.btn-outline-danger.btn-sm(type="button" onclick=`deleteRow('lubes',${row.id},this)`) ×
 
@@ -293,6 +310,8 @@ html(lang="en")
                                         th Branch
                                         th Account Name
                                         th Last 4 Digits
+                                        th Account Number
+                                        th IFSC Code
                                         th Account Type
                                         th(width="50")
                                 tbody#tbody-banks
@@ -303,6 +322,8 @@ html(lang="en")
                                             td(data-label="Branch"): input.form-control.form-control-sm(type="text" data-field="branch" value=(row.branch||'') placeholder="Branch Name")
                                             td(data-label="Account Name"): input.form-control.form-control-sm(type="text" data-field="account_name" value=(row.account_name||'') placeholder="Name as per bank")
                                             td(data-label="Last 4 Digits"): input.form-control.form-control-sm(type="text" data-field="account_last4" value=(row.account_last4||'') placeholder="Last 4" maxlength="4")
+                                            td(data-label="Account Number"): input.form-control.form-control-sm(type="text" data-field="account_number" value=(row.account_number||'') placeholder="Full account number")
+                                            td(data-label="IFSC Code"): input.form-control.form-control-sm(type="text" data-field="ifsc_code" value=(row.ifsc_code||'') placeholder="e.g. SBIN0001234" maxlength="15")
                                             td(data-label="Account Type")
                                                 select.form-control.form-control-sm(data-field="account_type")
                                                     option(value="" selected=!row.account_type) -- Select --
@@ -338,8 +359,11 @@ html(lang="en")
                         .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Customers
-                                p.section-hint.mb-0 Customers for whom you maintain a ledger. Obtain RC copy for accurate GSTIN details.
+                                p.section-hint.mb-0 Customers for whom you maintain a ledger. Remittance Bank is which bank they pay through — select from the Banks tab.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="customers") + Add Row
+                        datalist#bank-datalist
+                            each b in formData.banks
+                                option(value=(b.short_name || b.bank_name || ''))
                         .table-responsive
                             table.table.table-sm.table-bordered.ob-table
                                 thead
@@ -347,10 +371,7 @@ html(lang="en")
                                         th Customer / Org Name
                                         th Address
                                         th GSTIN
-                                        th Owner Name
-                                        th Owner Mobile
-                                        th Manager Name
-                                        th Manager Mobile
+                                        th Remittance Bank
                                         th Type
                                         th(width="50")
                                 tbody#tbody-customers
@@ -359,10 +380,7 @@ html(lang="en")
                                             td(data-label="Customer Name"): input.form-control.form-control-sm(type="text" data-field="customer_name" value=(row.customer_name||'') placeholder="Trade Name")
                                             td(data-label="Address"): input.form-control.form-control-sm(type="text" data-field="address" value=(row.address||'') placeholder="Billing Address")
                                             td(data-label="GSTIN"): input.form-control.form-control-sm(type="text" data-field="gstin" value=(row.gstin||'') placeholder="GSTIN" maxlength="15")
-                                            td(data-label="Owner Name"): input.form-control.form-control-sm(type="text" data-field="owner_name" value=(row.owner_name||'') placeholder="Owner Name")
-                                            td(data-label="Owner Mobile"): input.form-control.form-control-sm(type="tel" data-field="owner_mobile" value=(row.owner_mobile||'') placeholder="10-digit" maxlength="10")
-                                            td(data-label="Manager"): input.form-control.form-control-sm(type="text" data-field="manager_name" value=(row.manager_name||'') placeholder="Manager Name")
-                                            td(data-label="Mgr Mobile"): input.form-control.form-control-sm(type="tel" data-field="manager_mobile" value=(row.manager_mobile||'') placeholder="10-digit" maxlength="10")
+                                            td(data-label="Remittance Bank"): input.form-control.form-control-sm(type="text" list="bank-datalist" data-field="remittance_bank" value=(row.remittance_bank||'') placeholder="Bank short name")
                                             td(data-label="Type")
                                                 select.form-control.form-control-sm(data-field="customer_type")
                                                     option(value="" selected=!row.customer_type) -- Select --
