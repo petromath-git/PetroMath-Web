@@ -151,6 +151,32 @@ module.exports = {
         }
     },
 
+    applyConfig: async (req, res, next) => {
+        try {
+            const { location_code, settings } = req.body;
+            if (!location_code?.trim()) return res.status(400).json({ error: 'location_code is required' });
+            if (!settings || typeof settings !== 'object') return res.status(400).json({ error: 'settings object is required' });
+            const loc = location_code.trim().toUpperCase();
+            const entries = Object.entries(settings).filter(([, v]) => v !== null && v !== '');
+            if (!entries.length) return res.json({ inserted: 0 });
+            for (const [name, value] of entries) {
+                // Remove any existing open-ended row for this location+setting, then insert fresh
+                await db.sequelize.query(
+                    `DELETE FROM m_location_config WHERE location_code = :loc AND setting_name = :name AND effective_end_date = '9999-12-31'`,
+                    { replacements: { loc, name }, type: QueryTypes.DELETE }
+                );
+                await db.sequelize.query(
+                    `INSERT INTO m_location_config (location_code, setting_name, setting_value, effective_start_date, effective_end_date, created_by)
+                     VALUES (:loc, :name, :value, CURDATE(), '9999-12-31', 'onboarding')`,
+                    { replacements: { loc, name, value }, type: QueryTypes.INSERT }
+                );
+            }
+            res.json({ inserted: entries.length });
+        } catch (e) {
+            next(e);
+        }
+    },
+
     hsnSuggestions: async (req, res, next) => {
         try {
             const q = (req.query.q || '').trim();

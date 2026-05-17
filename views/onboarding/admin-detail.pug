@@ -417,14 +417,59 @@ block content
                     .then(function(hints) {
                         var el = document.getElementById('configHintTable');
                         if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location configs found for MUE / SFS / AACBE.</p>'; return; }
-                        var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered table-striped mb-0" style="font-size:12px">';
-                        h += '<thead class="thead-light"><tr><th>Setting</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th></tr></thead><tbody>';
+                        // Pre-fill new-location column from brand template (IOCL→MUE, BPCL→SFS)
+                        var tmplCol = OB_RO_BRAND === 'IOCL' ? 'MUE' : (OB_RO_BRAND === 'BPCL' ? 'SFS' : null);
+                        var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered mb-0" style="font-size:12px" id="configHintsTable">';
+                        h += '<thead class="thead-light"><tr><th>Setting</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th><th style="min-width:110px">New Location</th></tr></thead><tbody>';
                         hints.forEach(function(row) {
-                            h += '<tr><td>' + row.name + '</td><td>' + (row.MUE || '<span class="text-muted">—</span>') + '</td><td>' + (row.SFS || '<span class="text-muted">—</span>') + '</td><td>' + (row.AACBE || '<span class="text-muted">—</span>') + '</td></tr>';
+                            var prefill = tmplCol ? (row[tmplCol] || '') : '';
+                            h += '<tr>';
+                            h += '<td>' + row.name + '</td>';
+                            h += '<td>' + (row.MUE || '<span class="text-muted">—</span>') + '</td>';
+                            h += '<td>' + (row.SFS || '<span class="text-muted">—</span>') + '</td>';
+                            h += '<td>' + (row.AACBE || '<span class="text-muted">—</span>') + '</td>';
+                            h += '<td><input type="text" class="form-control form-control-sm config-new-val" data-setting="' + row.name + '" value="' + prefill + '" style="min-width:90px"></td>';
+                            h += '</tr>';
                         });
                         h += '</tbody></table></div>';
-                        h += '<p class="text-muted mt-1 mb-0" style="font-size:11px">These settings are not migrated automatically. Insert into m_location_config for the new location after reviewing the values above.</p>';
+                        h += '<div class="d-flex align-items-center mt-2">';
+                        h += '<button type="button" class="btn btn-sm btn-outline-primary mr-2" id="btnApplyConfig">Apply Config to Location</button>';
+                        h += '<span id="applyConfigStatus" class="small text-muted"></span>';
+                        h += '</div>';
+                        h += '<p class="text-muted mt-1 mb-0" style="font-size:11px">Filled values will be inserted into m_location_config for the new location. Blank rows are skipped.</p>';
                         el.innerHTML = h;
+
+                        document.getElementById('btnApplyConfig').addEventListener('click', async function() {
+                            var locCode = document.getElementById('migrateLocCode').value.trim();
+                            if (!locCode) { alert('Enter the Location Code first (in the fields above).'); return; }
+                            var settings = {};
+                            document.querySelectorAll('#configHintsTable .config-new-val').forEach(function(inp) {
+                                var v = inp.value.trim();
+                                if (v) settings[inp.dataset.setting] = v;
+                            });
+                            if (!Object.keys(settings).length) { alert('No values to apply — fill in the New Location column first.'); return; }
+                            this.disabled = true;
+                            document.getElementById('applyConfigStatus').textContent = 'Saving…';
+                            try {
+                                var r = await fetch('/admin/onboarding/' + OB_ID + '/apply-config', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ location_code: locCode, settings: settings })
+                                });
+                                var data = await r.json();
+                                if (r.ok) {
+                                    document.getElementById('applyConfigStatus').textContent = '✓ ' + data.inserted + ' settings saved to m_location_config.';
+                                    document.getElementById('applyConfigStatus').className = 'small text-success';
+                                } else {
+                                    throw new Error(data.error || 'Failed');
+                                }
+                            } catch(e) {
+                                document.getElementById('applyConfigStatus').textContent = 'Error: ' + e.message;
+                                document.getElementById('applyConfigStatus').className = 'small text-danger';
+                            } finally {
+                                this.disabled = false;
+                            }
+                        });
                     })
                     .catch(function(e) {
                         document.getElementById('configHintTable').innerHTML = '<p class="text-danger small mb-0">Failed to load config hints: ' + (e.message || 'unknown error') + '</p>';
