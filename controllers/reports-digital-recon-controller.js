@@ -838,7 +838,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
 
 exports.getDifferences = async (req, res) => {
     console.log('getDifferences ENTRY POINT');
-    
+
     try {
         const { fromDate, toDate, vendorId } = req.body;
         const locationCode = req.user.location_code;
@@ -849,7 +849,7 @@ exports.getDifferences = async (req, res) => {
             locationCode,
             fromDate,
             toDate,
-            vendorId 
+            vendorId
         );
 
         console.log('Differences found:', differences ? differences.length : 0);
@@ -867,5 +867,98 @@ exports.getDifferences = async (req, res) => {
             message: 'Error fetching differences',
             error: error.message
         });
+    }
+};
+
+exports.exportDigitalReconExcel = async (req, res) => {
+    try {
+        const ExcelJS = require('exceljs');
+        const locationCode = req.user.location_code;
+        const fromDate = req.body.fromClosingDate;
+        const toDate = req.body.toClosingDate;
+        const cid = req.body.company_id;
+
+        if (!fromDate || !toDate || !cid) {
+            return res.status(400).send('Date range and vendor are required for export');
+        }
+
+        const rows = await ReportDao.getDigitalStmt(locationCode, fromDate, toDate, cid);
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Digital Recon');
+
+        // Header rows
+        const vendorName = rows.length > 0 ? rows[0].company_name : '';
+        ws.getRow(1).getCell(1).value = req.user.station_name || locationCode;
+        ws.getRow(1).getCell(1).font = { bold: true, size: 13 };
+        ws.getRow(2).getCell(1).value = vendorName;
+        ws.getRow(2).getCell(1).font = { bold: true };
+        ws.getRow(3).getCell(1).value =
+            `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
+
+        // Column headers (row 5)
+        const headers = ['Date', 'Narration', 'Debit', 'Credit'];
+        const headerRow = ws.getRow(5);
+        headers.forEach((h, i) => {
+            const cell = headerRow.getCell(i + 1);
+            cell.value = h;
+            cell.font = { bold: true };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+            cell.border = {
+                top: { style: 'thin' }, bottom: { style: 'thin' },
+                left: { style: 'thin' }, right: { style: 'thin' }
+            };
+            cell.alignment = { horizontal: 'center' };
+        });
+
+        // Data rows
+        rows.forEach((row, idx) => {
+            const r = ws.getRow(6 + idx);
+
+            // Parse date and use Date.UTC to avoid IST→UTC offset adding a fractional time component
+            const s = String(row.tran_date).substring(0, 10);
+            const parts = s.split('-');
+            let day, mon, yr;
+            if (parts[0].length === 4) {
+                [yr, mon, day] = parts.map(Number); // YYYY-MM-DD
+            } else {
+                [day, mon, yr] = parts.map(Number); // DD-MM-YYYY
+            }
+            const dateVal = new Date(Date.UTC(yr, mon - 1, day));
+            const dateCell = r.getCell(1);
+            dateCell.value = dateVal;
+            dateCell.numFmt = 'DD-MMM-YYYY';
+
+            r.getCell(2).value = [row.bill_no, row.notes].filter(Boolean).join(' - ');
+
+            const amount = parseFloat(row.amount);
+            const isDebit = row.entry_type === 'DEBIT';
+            r.getCell(3).value = isDebit ? amount : null;
+            r.getCell(4).value = !isDebit ? amount : null;
+
+            [3, 4].forEach(c => {
+                if (r.getCell(c).value !== null) {
+                    r.getCell(c).numFmt = '[>=10000000]##\\,##\\,##\\,##0.00;[>=100000]##\\,##\\,##0.00;##,##0.00';
+                    r.getCell(c).alignment = { horizontal: 'right' };
+                }
+            });
+        });
+
+        // Column widths
+        ws.getColumn(1).width = 16;
+        ws.getColumn(2).width = 40;
+        ws.getColumn(3).width = 14;
+        ws.getColumn(4).width = 14;
+
+        const vendorSlug = (req.body.vendorName || '').replace(/[^a-zA-Z0-9]/g, '');
+        const fileName = `DigitalRecon_${vendorSlug}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        await wb.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error in exportDigitalReconExcel:', error);
+        res.status(500).send('Failed to generate Excel export');
     }
 };

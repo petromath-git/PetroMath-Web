@@ -757,8 +757,13 @@ block content
                         input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
                     .col-lg-3.col-md-4.col-6
                         label.form-label &nbsp;
-                        .d-flex.gap-2.flex-wrap
+                        .d-flex.gap-2.flex-wrap.align-items-center
                             include report-print-download.pug
+                            if creditstmt && creditstmt.length > 0
+                                span.border-start.mx-2(style='height:28px; display:inline-block;')
+                                button.btn.btn-success(type='button' onclick='exportExcel()')
+                                    i.fas.fa-file-excel.me-1
+                                    | Export Excel
                     .col-lg-3.col-md-4.col-12
                         label.form-label &nbsp;
                         .form-check.pt-2
@@ -861,3 +866,27 @@ block content
                     button#saveDifferenceBtn.btn.btn-primary(type='button', onclick='saveDifferenceAndMatch()') Save & Match
 
     include overlay.pug
+
+    script.
+        function exportExcel() {
+            const vendorSelect = document.getElementById('company_id');
+            const vendorName = vendorSelect.options[vendorSelect.selectedIndex].text;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/digital-recon/excel';
+            [
+                ['fromClosingDate', document.getElementById('fromclosingDate').value],
+                ['toClosingDate',   document.getElementById('toclosingDate').value],
+                ['company_id',      vendorSelect.value],
+                ['vendorName',      vendorName]
+            ].forEach(function([name, value]) {
+                const inp = document.createElement('input');
+                inp.type  = 'hidden';
+                inp.name  = name;
+                inp.value = value;
+                form.appendChild(inp);
+            });
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        }
