@@ -129,7 +129,7 @@ module.exports = {
 // Updated getCreditStmt function in dao/report-dao.js with transaction_type
 getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId) => {
     return db.sequelize.query(
-        `SELECT 
+        `SELECT
             COALESCE(tc.credit_bill_date, DATE(tcl.closing_date)) AS tran_date,
             tcl.location_code,
             CONCAT('To Bill No: ', tc.bill_no) AS bill_no,
@@ -143,7 +143,9 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             mcl.creditlist_id,
             tc.odometer_reading,
             mcv.vehicle_number,
-            'SALE' AS transaction_type
+            'SALE' AS transaction_type,
+            mcl.address,
+            mcl.gst AS gstin
         FROM t_credits tc
         JOIN m_product mp ON tc.product_id = mp.product_id
         JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
@@ -156,7 +158,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
 
         UNION ALL
 
-        SELECT 
+        SELECT
             tr.receipt_date AS tran_date,
             tr.location_code,
             CONCAT('By Receipt No: ', tr.receipt_no) AS bill_no,
@@ -170,7 +172,9 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             mcl.creditlist_id,
             NULL AS odometer_reading,
             NULL AS vehicle_number,
-            'RECEIPT' AS transaction_type
+            'RECEIPT' AS transaction_type,
+            mcl.address,
+            mcl.gst AS gstin
         FROM t_receipts tr
         JOIN m_credit_list mcl ON tr.creditlist_id = mcl.creditlist_id
         WHERE mcl.creditlist_id = :creditId
@@ -180,7 +184,7 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
         UNION ALL
 
         -- NEW: Include adjustments with explicit transaction types
-        SELECT 
+        SELECT
             ta.adjustment_date AS tran_date,
             ta.location_code,
             CONCAT('Adjustment: ', COALESCE(ta.reference_no, ta.adjustment_id)) AS bill_no,
@@ -194,11 +198,13 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             mcl.creditlist_id,
             NULL AS odometer_reading,
             NULL AS vehicle_number,
-            CASE 
+            CASE
                 WHEN ta.debit_amount > 0 THEN 'ADJUSTMENT_DEBIT'
                 WHEN ta.credit_amount > 0 THEN 'ADJUSTMENT_CREDIT'
                 ELSE 'ADJUSTMENT'
-            END AS transaction_type
+            END AS transaction_type,
+            mcl.address,
+            mcl.gst AS gstin
         FROM t_adjustments ta
         JOIN m_credit_list mcl ON ta.external_id = mcl.creditlist_id
         WHERE ta.external_source IN ('CUSTOMER', 'DIGITAL_VENDOR')  -- Changed from 'CREDIT'
@@ -224,7 +230,9 @@ getCreditStmt: (locationCode, closingQueryFromDate, closingQueryToDate, creditId
             mcl.creditlist_id,
             NULL                                                      AS odometer_reading,
             mcv.vehicle_number                                        AS vehicle_number,
-            'BOWSER_SALE'                                             AS transaction_type
+            'BOWSER_SALE'                                             AS transaction_type,
+            mcl.address,
+            mcl.gst AS gstin
         FROM t_bowser_credits bc
         JOIN t_bowser_closing       bcl ON bcl.bowser_closing_id = bc.bowser_closing_id
         JOIN m_credit_list          mcl ON mcl.creditlist_id     = bc.creditlist_id
