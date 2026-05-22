@@ -71,7 +71,11 @@ block content
             if(cidparam == -1)
                 h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
             else
-                h5.font-weight-bold.text-center.text-uppercase= companyName                 
+                h5.font-weight-bold.text-center.text-uppercase= companyName
+                if customerAddress
+                    p.text-center.text-muted.mb-0= customerAddress
+                if customerGstin
+                    p.text-center.text-muted.mb-0= `GSTIN: ${customerGstin}`
                 h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
             h4.font-weight-bold.text-success.text-center
             if statementNumber

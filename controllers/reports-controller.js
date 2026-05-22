@@ -88,6 +88,9 @@ module.exports = {
 
               const data1 = await ReportDao.getCreditStmt(locationCode, fromDate,toDate,cid);
 
+              const customerAddress = data1.length > 0 ? (data1[0].address || null) : null;
+              const customerGstin   = data1.length > 0 ? (data1[0].gstin   || null) : null;
+
               if (reportType == 'Creditledger') {
                 let runningBalance = Number(OpeningBal); // Ensure it's a number                
               
@@ -200,6 +203,7 @@ module.exports = {
                         const showStatementNumber = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_STATEMENT_NUMBER', 'N');
                         const balanceCrDrFormat = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_BALANCE_CRDR_FORMAT', 'N');
                         const showBalanceCol = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_BALANCE', 'Y');
+                        const showCustomerInfo = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_CUSTOMER_INFO', 'N');
                         let statementNumber = null;
                         if (showStatementNumber === 'Y' && cid && cid != -1) {
                             try {
@@ -235,6 +239,8 @@ module.exports = {
                         balanceCrDr: balanceCrDrFormat === 'Y',
                         showBalance: showBalanceCol === 'Y',
                         enableCreditExcelDownload: (await locationConfig.getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')) === 'Y',
+                        customerAddress: showCustomerInfo === 'Y' ? customerAddress : null,
+                        customerGstin: showCustomerInfo === 'Y' ? customerGstin : null,
                       }
 
                     if(caller=='notpdf') {
