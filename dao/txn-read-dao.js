@@ -71,14 +71,16 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
         // Build dynamic product columns
         let fuelSalesColumns = [];
         let finalProductColumns = [];
-        
+
         if (pumpProducts.length > 0) {
             pumpProducts.forEach(product => {
                 fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE((r.closing_reading - r.opening_reading - r.testing), 0) ELSE 0 END) as \`${product.product_code}\``);
+                fuelSalesColumns.push(`SUM(CASE WHEN mp.product_code = '${product.product_code}' THEN COALESCE(r.testing, 0) ELSE 0 END) as \`test_${product.product_code}\``);
                 finalProductColumns.push(`COALESCE(fs.\`${product.product_code}\`, 0) as \`${product.product_code}\``);
+                finalProductColumns.push(`COALESCE(fs.\`test_${product.product_code}\`, 0) as \`test_${product.product_code}\``);
             });
         }
-        
+
         const dynamicFuelColumns = fuelSalesColumns.length > 0 ? ',\n        ' + fuelSalesColumns.join(',\n        ') : '';
         const dynamicFinalColumns = finalProductColumns.length > 0 ? ',\n    ' + finalProductColumns.join(',\n    ') : '';
 

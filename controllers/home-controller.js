@@ -497,6 +497,12 @@ const getHomeData = async (req, res, next) => {
             'N' // default value if not configured
         );
 
+        const showTestingSummary = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'SHOW_TESTING_SUMMARY',
+            'N'
+        );
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
@@ -522,6 +528,7 @@ const getHomeData = async (req, res, next) => {
                 canCreateShiftClosing: canCreateShiftClosing,
                 showDayCloseGrouping: showDayCloseGrouping,
                 allowShiftReopen: allowShiftReopen,
+                showTestingSummary: showTestingSummary,
                 devBackupInfo: devBackupInfo,
             });
         }).catch(error => {
