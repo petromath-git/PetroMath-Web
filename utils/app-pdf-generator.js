@@ -350,8 +350,8 @@ module.exports = {
                 <span style="font-size: 12px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
             </div>`,
             margin: {
-                top: '140px',    // Increased to accommodate dealer line + GSTIN/TIN in header
-                bottom: '90px',  // Increased from 60px to give more space for footer
+                top: '170px',    // Extra room for long addresses that wrap to 2 lines
+                bottom: '90px',
                 left: '20px',
                 right: '20px'
             }
