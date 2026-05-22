@@ -137,6 +137,8 @@ block content
                             if productColumns && productColumns.length > 0
                                 each column in productColumns
                                     th= column.label
+                                    if showTestingSummary === 'Y' && column.type === 'pump'
+                                        th= column.label + ' (T)'
                             else
                                 th MS
                                 th HSD
@@ -174,6 +176,9 @@ block content
                                     each column in productColumns
                                         td
                                             span= parseFloat(val[column.key] || 0).toFixed(2)
+                                        if showTestingSummary === 'Y' && column.type === 'pump'
+                                            td
+                                                span= parseFloat(val['test_' + column.key] || 0).toFixed(2)
                                 else
                                     td
                                         span= val.msData || '0.00'
@@ -230,6 +235,12 @@ block content
                                             each val in closingValues
                                                 - total += parseFloat(val[column.key] || 0)
                                             strong= total.toFixed(2)
+                                        if showTestingSummary === 'Y' && column.type === 'pump'
+                                            td
+                                                - var testTotal = 0
+                                                each val in closingValues
+                                                    - testTotal += parseFloat(val['test_' + column.key] || 0)
+                                                strong= testTotal.toFixed(2)
                                 else
                                     td
                                         - var msTotal = 0
@@ -282,6 +293,13 @@ block content
                                         .card-label= column.label
                                         .card-value
                                             span.product-value= productValue.toFixed(2)
+                                if showTestingSummary === 'Y' && column.type === 'pump'
+                                    - var testValue = parseFloat(val['test_' + column.key] || 0)
+                                    if testValue > 0
+                                        .card-row
+                                            .card-label= column.label + ' (T)'
+                                            .card-value
+                                                span.product-value= testValue.toFixed(2)
                         else
                             - var msVal = parseFloat(val.msData || 0)
                             if msVal > 0
