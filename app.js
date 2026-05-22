@@ -872,6 +872,10 @@ app.post('/digital-recon/get-differences', isLoginEnsured, function (req, res, n
     digitalReconreportsController.getDifferences(req, res, next);
 });
 
+app.post('/digital-recon/excel', isLoginEnsured, function (req, res, next) {
+    digitalReconreportsController.exportDigitalReconExcel(req, res, next);
+});
+
 
 
 
