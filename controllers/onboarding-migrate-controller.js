@@ -92,7 +92,47 @@ module.exports = {
                 }
             }
 
-            // ── Step 2: Suppliers ────────────────────────────────────────────────
+            // ── Step 2: GL Groups (copy structure from MUE) ──────────────────────
+            {
+                const [existCount] = await db.sequelize.query(
+                    'SELECT COUNT(*) AS cnt FROM gl_ledger_groups WHERE location_code = :loc',
+                    { replacements: { loc }, type: QueryTypes.SELECT }
+                );
+                if (existCount.cnt > 0) {
+                    results.push({ section: 'GL Groups', inserted: 0, skipped: existCount.cnt, errors: ['Already exist — skipped'] });
+                } else {
+                    try {
+                        // Top-level groups first (no parent_group_id)
+                        await db.sequelize.query(
+                            `INSERT INTO gl_ledger_groups (location_code, group_name, group_nature, active_flag, created_by)
+                             SELECT :loc, group_name, group_nature, active_flag, 'onboarding'
+                             FROM gl_ledger_groups
+                             WHERE location_code = 'MUE' AND parent_group_id IS NULL`,
+                            { replacements: { loc }, type: QueryTypes.INSERT }
+                        );
+                        // Child groups — resolve parent by matching group_name in the new location
+                        await db.sequelize.query(
+                            `INSERT INTO gl_ledger_groups (location_code, group_name, group_nature, parent_group_id, active_flag, created_by)
+                             SELECT :loc, child.group_name, child.group_nature, new_parent.group_id, child.active_flag, 'onboarding'
+                             FROM gl_ledger_groups child
+                             JOIN gl_ledger_groups mue_parent ON mue_parent.group_id      = child.parent_group_id
+                             JOIN gl_ledger_groups new_parent  ON new_parent.location_code = :loc
+                                                               AND new_parent.group_name   = mue_parent.group_name
+                             WHERE child.location_code = 'MUE' AND child.parent_group_id IS NOT NULL`,
+                            { replacements: { loc }, type: QueryTypes.INSERT }
+                        );
+                        const [newCount] = await db.sequelize.query(
+                            'SELECT COUNT(*) AS cnt FROM gl_ledger_groups WHERE location_code = :loc',
+                            { replacements: { loc }, type: QueryTypes.SELECT }
+                        );
+                        results.push({ section: 'GL Groups', inserted: newCount.cnt, skipped: 0, errors: [] });
+                    } catch (e) {
+                        results.push({ section: 'GL Groups', inserted: 0, skipped: 0, errors: [e.message] });
+                    }
+                }
+            }
+
+            // ── Step 3: Suppliers ────────────────────────────────────────────────
             results.push(await runSection('Suppliers', data.suppliers, async (s) => {
                 if (!s.supplier_name) return 'skipped';
                 if (skipSupplierIds.has(s.id)) return 'skipped';
@@ -260,17 +300,21 @@ module.exports = {
                 } else {
                     try {
                         // 5a: Copy all common heads (exclude any oil-company-specific heads)
+                        // JOIN to gl_ledger_groups so gl_group_id is resolved by name for the new location
                         await db.sequelize.query(
                             `INSERT INTO m_account_heads
                                 (location_code, account_head_name, account_head_type, allowed_entry_type,
                                  notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                                 created_by, updated_by, creation_date, updation_date)
-                             SELECT :loc, account_head_name, account_head_type, allowed_entry_type,
-                                notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                                'system', 'system', NOW(), NOW()
-                             FROM m_account_heads
-                             WHERE location_code = :tmpl
-                               AND account_head_name NOT IN (
+                                 gl_group_id, created_by, updated_by, creation_date, updation_date)
+                             SELECT :loc, ah.account_head_name, ah.account_head_type, ah.allowed_entry_type,
+                                ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
+                                new_grp.group_id, 'system', 'system', NOW(), NOW()
+                             FROM m_account_heads ah
+                             LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id       = ah.gl_group_id
+                             LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code  = :loc
+                                                                  AND new_grp.group_name     = tmpl_grp.group_name
+                             WHERE ah.location_code = :tmpl
+                               AND ah.account_head_name NOT IN (
                                    'IOCL LICENSE FEE RECOVERY', 'IOCL CHARGES',
                                    'BPCL LICENSE FEE RECOVERY', 'BPCL CHARGES'
                                )`,
@@ -284,13 +328,16 @@ module.exports = {
                                 `INSERT INTO m_account_heads
                                     (location_code, account_head_name, account_head_type, allowed_entry_type,
                                      notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                                     created_by, updated_by, creation_date, updation_date)
-                                 SELECT :loc, account_head_name, account_head_type, allowed_entry_type,
-                                    notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                                    'system', 'system', NOW(), NOW()
-                                 FROM m_account_heads
-                                 WHERE location_code = :tmpl
-                                   AND account_head_name IN (:head1, :head2)`,
+                                     gl_group_id, created_by, updated_by, creation_date, updation_date)
+                                 SELECT :loc, ah.account_head_name, ah.account_head_type, ah.allowed_entry_type,
+                                    ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
+                                    new_grp.group_id, 'system', 'system', NOW(), NOW()
+                                 FROM m_account_heads ah
+                                 LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id      = ah.gl_group_id
+                                 LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code = :loc
+                                                                      AND new_grp.group_name    = tmpl_grp.group_name
+                                 WHERE ah.location_code = :tmpl
+                                   AND ah.account_head_name IN (:head1, :head2)`,
                                 { replacements: { loc, tmpl, head1: ocHeads[0], head2: ocHeads[1] }, type: QueryTypes.INSERT }
                             );
                         }
