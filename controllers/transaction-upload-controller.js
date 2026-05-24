@@ -1,5 +1,6 @@
 // controllers/transaction-upload-controller.js
 const BankStatementDao = require('../dao/bank-statement-dao');
+const { debugLog } = require('../utils/debug-logger');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
 const fs = require('fs/promises');
 const path = require('path');
@@ -494,50 +495,42 @@ function parseHtmlXlsToData(buffer) {
  * ENHANCED: Also checks running balance when available
  */
 async function validateAccountByTransactionMatch(bankId, uploadedTransactions, lastUploadedDate) {
-    // Skip validation if first upload (no previous data)
     if (!lastUploadedDate) {
-        console.log('Account validation: First upload - skipping validation');
-        return { 
-            isValid: true, 
-            reason: 'first_upload' 
-        };
+        await debugLog(null, 'Account validation: First upload - skipping validation');
+        return { isValid: true, reason: 'first_upload' };
     }
-    
-    // Get transactions from the overlap date(s)
+
     const lastDate = new Date(lastUploadedDate);
     const dayBefore = new Date(lastDate);
     dayBefore.setDate(lastDate.getDate() - 1);
     const dayBeforeStr = dayBefore.toISOString().split('T')[0];
-    
-    const overlapTxns = uploadedTransactions.filter(txn => 
-        txn.txn_date === lastUploadedDate || 
+
+    const overlapTxns = uploadedTransactions.filter(txn =>
+        txn.txn_date === lastUploadedDate ||
         txn.txn_date === dayBeforeStr
     );
-    
+
     if (overlapTxns.length === 0) {
-        console.log('Account validation: No transactions in overlap period');
-        return { 
-            isValid: true, 
+        await debugLog(null, 'Account validation: No transactions in overlap period');
+        return {
+            isValid: true,
             reason: 'no_overlap_transactions',
             warning: 'Could not validate account - no overlap transactions'
         };
     }
-    
-    console.log(`Account validation: Checking ${overlapTxns.length} overlap transactions`);
-    
-    // Check each transaction individually (NOT totals)
+
+    await debugLog(null, `Account validation: Checking ${overlapTxns.length} overlap transactions`);
+
     let matchCount = 0;
     let balanceMatchCount = 0;
     let hasBalanceInUpload = false;
-    
+
     for (const uploadTxn of overlapTxns) {
-        // Check if upload has balance
         const uploadBalance = uploadTxn.balance_amount || null;
         if (uploadBalance !== null && uploadBalance !== 0) {
             hasBalanceInUpload = true;
         }
-        
-        // Check transaction with optional balance
+
         const checkResult = await bankReconDao.checkTransactionExists(
             bankId,
             uploadTxn.txn_date,
@@ -545,52 +538,47 @@ async function validateAccountByTransactionMatch(bankId, uploadedTransactions, l
             uploadTxn.debit_amount,
             uploadBalance
         );
-        
+
         if (checkResult.exists) {
             matchCount++;
-            
             if (checkResult.hasRunningBalance && uploadBalance !== null) {
                 balanceMatchCount++;
-                console.log(`✓ EXACT Match (with balance): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}, Balance: ${uploadBalance}`);
+                await debugLog(null, `✓ EXACT Match (with balance): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}, Balance: ${uploadBalance}`);
             } else {
-                console.log(`✓ Match (amount only): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}`);
+                await debugLog(null, `✓ Match (amount only): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}`);
             }
-            
-            // Found at least one match - this is enough!
             break;
         }
     }
-    
-    // Validation failed if no matches found
+
     if (matchCount === 0) {
-        console.log(`✗ Account validation FAILED: No matching transactions found`);
-        return { 
-            isValid: false, 
+        await debugLog(null, `✗ Account validation FAILED: No matching transactions found`);
+        return {
+            isValid: false,
             reason: 'no_matching_transactions',
             overlapDate: lastUploadedDate,
             overlapCount: overlapTxns.length,
             message: `No matching transactions found from ${formatDateForDisplay(lastUploadedDate)}. This file appears to be for a different bank account.`
         };
     }
-    
-    // Validation passed
+
     const validationResult = {
-        isValid: true, 
+        isValid: true,
         reason: 'matched',
         matchCount: matchCount,
         totalOverlap: overlapTxns.length,
         balanceValidated: balanceMatchCount > 0,
         hasBalanceInUpload: hasBalanceInUpload
     };
-    
+
     if (balanceMatchCount > 0) {
-        console.log(`✓ Account validation PASSED with BALANCE verification: ${matchCount} transaction(s) matched, ${balanceMatchCount} with balance`);
+        await debugLog(null, `✓ Account validation PASSED with BALANCE verification: ${matchCount} transaction(s) matched, ${balanceMatchCount} with balance`);
     } else if (hasBalanceInUpload) {
-        console.log(`✓ Account validation PASSED (no running balance in DB for comparison)`);
+        await debugLog(null, `✓ Account validation PASSED (no running balance in DB for comparison)`);
     } else {
-        console.log(`✓ Account validation PASSED (amount match only, no balance in upload)`);
+        await debugLog(null, `✓ Account validation PASSED (amount match only, no balance in upload)`);
     }
-    
+
     return validationResult;
 }
 
@@ -686,7 +674,7 @@ previewTransactions: async (req, res) => {
 
         let data;
         if (isHtmlFile(req.file.buffer)) {
-            console.log('HTML-XLS detected (SAP download), using HTML parser');
+            await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
             data = parseHtmlXlsToData(req.file.buffer);
         } else {
             const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
@@ -757,13 +745,11 @@ previewTransactions: async (req, res) => {
             const hasOverlap = uploadDate <= lastDate;
             const meetsOverlapRequirement = uploadDate <= expectedOverlapDate;
             
-            console.log('=== Overlap Validation (Transaction Upload) ===');
-            console.log('Last uploaded date:', lastUploadedDate);
-            console.log('Earliest upload date:', earliestUploadDate);
-            console.log('Required overlap days:', overlapDays);
-            console.log('Expected overlap date:', expectedOverlapDate.toISOString().split('T')[0]);
-            console.log('Has overlap:', hasOverlap);
-            console.log('Meets requirement:', meetsOverlapRequirement);
+            await debugLog(locationCode, '=== Overlap Validation (Transaction Upload) ===', {
+                lastUploadedDate, earliestUploadDate, overlapDays,
+                expectedOverlapDate: expectedOverlapDate.toISOString().split('T')[0],
+                hasOverlap, meetsOverlapRequirement
+            });
             
             if (!meetsOverlapRequirement) {
                 const gapDays = Math.ceil((uploadDate - lastDate) / (1000 * 60 * 60 * 24));
@@ -845,7 +831,7 @@ previewTransactions: async (req, res) => {
             // ===== SKIP TOTAL/SUMMARY ROWS =====
             // Rows with BOTH debit and credit are typically total/summary rows
             if (debitAmount > 0 && creditAmount > 0) {
-                console.log(`Skipping summary/total row at index ${i}: Debit=${debitAmount}, Credit=${creditAmount}`);
+                await debugLog(locationCode, `Skipping summary/total row at index ${i}: Debit=${debitAmount}, Credit=${creditAmount}`);
                 continue;
             }
 
@@ -1303,15 +1289,8 @@ async function checkTransactionDuplicates(bankId, transactions) {
             type: db.Sequelize.QueryTypes.SELECT
         });
         
-        console.log(`Found ${existingTransactions.length} existing transactions to check against`);
-        
-        // DEBUG: Log first few existing transactions
-        if (existingTransactions.length > 0) {
-            console.log('Sample existing transactions:');
-            existingTransactions.slice(0, 3).forEach(txn => {
-                console.log(`  Date: ${txn.trans_date}, Credit: ${txn.credit_amount}, Debit: ${txn.debit_amount}`);
-            });
-        }
+        await debugLog(null, `Found ${existingTransactions.length} existing transactions to check against`);
+        await debugLog(null, 'Sample existing:', existingTransactions.slice(0, 3).map(t => ({ date: t.trans_date, credit: t.credit_amount, debit: t.debit_amount })));
         
         // Convert to proper format
         existingTransactions.forEach(txn => {
@@ -1319,13 +1298,7 @@ async function checkTransactionDuplicates(bankId, transactions) {
             txn.debit_amount = parseFloat(txn.debit_amount) || 0;
         });
         
-        // DEBUG: Log first few uploaded transactions
-        if (transactions.length > 0) {
-            console.log('Sample uploaded transactions:');
-            transactions.slice(0, 3).forEach(txn => {
-                console.log(`  Date: ${txn.txn_date}, Credit: ${txn.credit_amount}, Debit: ${txn.debit_amount}`);
-            });
-        }
+        await debugLog(null, 'Sample uploaded:', transactions.slice(0, 3).map(t => ({ date: t.txn_date, credit: t.credit_amount, debit: t.debit_amount })));
         
         // Track which existing transactions have been matched
         const matchedExistingIds = new Set();
@@ -1335,52 +1308,24 @@ async function checkTransactionDuplicates(bankId, transactions) {
         transactions.forEach(uploadedTxn => {
             const uploadAmount = uploadedTxn.credit_amount > 0 ? uploadedTxn.credit_amount : uploadedTxn.debit_amount;
             const uploadType = uploadedTxn.credit_amount > 0 ? 'credit' : 'debit';
-            
-            // First try: EXACT date match
+            const uploadDescription = (uploadedTxn.description || uploadedTxn.remarks || '').trim();
+
+            // Match on exact date + amount + description (narration).
+            // If existing row has no remarks (manual entry or old import), fall back to date + amount only.
             let matchInfo = existingTransactions.find(existingTxn => {
-                // Skip if already matched
                 if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
-                
+
                 const existingAmount = uploadType === 'credit' ? existingTxn.credit_amount : existingTxn.debit_amount;
-                
-                // Both dates should be in YYYY-MM-DD format now
-                const uploadDate = uploadedTxn.txn_date; // YYYY-MM-DD
-                const existingDate = existingTxn.trans_date; // YYYY-MM-DD from DATE_FORMAT
-                
-                const dateMatch = uploadDate === existingDate;
+                const dateMatch = uploadedTxn.txn_date === existingTxn.trans_date;
                 const amountMatch = Math.abs(uploadAmount - existingAmount) < 0.01;
-                
-                // DEBUG first transaction
-                if (existingTransactions.indexOf(existingTxn) === 0 && transactions.indexOf(uploadedTxn) === 0) {
-                    console.log(`Exact match check: ${uploadDate} === ${existingDate}? ${dateMatch}, Amount match: ${amountMatch}`);
-                }
-                
-                return amountMatch && dateMatch;
+
+                if (!dateMatch || !amountMatch) return false;
+
+                const existingRemarks = (existingTxn.remarks || '').trim();
+                if (existingRemarks === '') return true; // no narration stored — date+amount is enough
+                return uploadDescription === existingRemarks;
             });
-            
-            // Second try: ±1 day tolerance
-            if (!matchInfo) {
-                matchInfo = existingTransactions.find(existingTxn => {
-                    // Skip if already matched
-                    if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
-                    
-                    const existingAmount = uploadType === 'credit' ? existingTxn.credit_amount : existingTxn.debit_amount;
-                    const amountMatch = Math.abs(uploadAmount - existingAmount) < 0.01;
-                    
-                    if (!amountMatch) return false;
-                    
-                    // Check if dates are within ±1 day
-                    const dateDiff = getDateDifference(uploadedTxn.txn_date, existingTxn.trans_date);
-                    
-                    // DEBUG
-                    if (dateDiff <= 1 && existingTransactions.indexOf(existingTxn) < 3) {
-                        console.log(`Near match: ${uploadedTxn.txn_date} vs ${existingTxn.trans_date}, diff: ${dateDiff} days`);
-                    }
-                    
-                    return dateDiff <= 1;
-                });
-            }
-            
+
             if (matchInfo) {
                 // Mark as matched
                 matchedExistingIds.add(matchInfo.t_bank_id);
@@ -1393,11 +1338,11 @@ async function checkTransactionDuplicates(bankId, transactions) {
                     ledger_name: matchInfo.ledger_name
                 });
                 
-                console.log(`DUPLICATE FOUND: ${uploadedTxn.txn_date} - ${uploadAmount} (${uploadType}) matches existing ${matchInfo.trans_date}`);
+                debugLog(null, `DUPLICATE FOUND: ${uploadedTxn.txn_date} - ${uploadAmount} (${uploadType}) matches existing ${matchInfo.trans_date}`);
             }
         });
         
-        console.log(`checkTransactionDuplicates: Found ${duplicates.length} duplicates out of ${transactions.length} transactions`);
+        await debugLog(null, `checkTransactionDuplicates: Found ${duplicates.length} duplicates out of ${transactions.length} transactions`);
         return duplicates;
         
     } catch (error) {
