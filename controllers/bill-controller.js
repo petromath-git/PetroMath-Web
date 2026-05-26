@@ -1,5 +1,6 @@
 // controllers/bill-controller.js
 const db = require("../db/db-connection");
+const { debugLog } = require('../utils/debug-logger');
 const ProductDao = require("../dao/product-dao");
 const CreditDao = require("../dao/credits-dao");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
@@ -805,19 +806,9 @@ getBills: async (req, res, next) => {
         const totalAmount = req.body.items.reduce((sum, item) => 
             sum + parseFloat(item.amount || 0), 0);
 
-        // Add detailed debugging
-        console.log('=== TOTAL AMOUNT CALCULATION DEBUG ===');
-        console.log('Items received:', req.body.items?.length || 0, 'items');
-        req.body.items?.forEach((item, index) => {
-            console.log(`Item ${index}:`, {
-                product_id: item.product_id,
-                amount: item.amount,
-                parsed_amount: parseFloat(item.amount || 0)
-            });
-        });
-        console.log('Calculated total amount:', totalAmount);
-        console.log('Is total NaN?', isNaN(totalAmount));
-        console.log('==========================================');
+        const locationCode = req.user.location_code;
+        await debugLog(locationCode, '=== Bill total recalc: items=%d, total=%s, isNaN=%s', req.body.items?.length || 0, totalAmount, isNaN(totalAmount));
+        await debugLog(locationCode, 'Bill items:', req.body.items);
 
         // Update bill total amount and closing_id
         await db.sequelize.query(`

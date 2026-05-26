@@ -1,5 +1,6 @@
 const db = require("../db/db-connection");
 const Sequelize = db.Sequelize;
+const { debugLog } = require('../utils/debug-logger');
 
 module.exports = {
     
@@ -432,7 +433,7 @@ getBankTemplate: async (bankId) => {
             allDuplicates = allDuplicates.concat(result);
         }
         
-        console.log(`checkDuplicates: Found ${allDuplicates.length} duplicates out of ${transactions.length} transactions`);
+        await debugLog(null, `checkDuplicates: Found ${allDuplicates.length} duplicates out of ${transactions.length} transactions`);
         return allDuplicates;
         
     } catch (error) {
@@ -501,7 +502,7 @@ insertUploadHistory: async (historyData) => {
                 type: db.Sequelize.QueryTypes.INSERT
             }
         );
-        console.log('Upload history inserted successfully:', result);
+        await debugLog(null, 'Upload history inserted successfully:', result);
         return result;
     } catch (error) {
         console.error('Error inserting upload history:', error);
@@ -687,7 +688,7 @@ getSuggestedLedger: async (bankId, description, entryType) => {
 
         if (structuralKey.length > 0) {
             patternKey = structuralKey.substring(0, 200);
-            console.log(`[STRUCTURAL KEY GENERATED] ${cleanDesc} → ${patternKey}`);
+            await debugLog(null, `[STRUCTURAL KEY GENERATED] ${cleanDesc} → ${patternKey}`);
         }
     }
 
@@ -713,7 +714,7 @@ getSuggestedLedger: async (bankId, description, entryType) => {
         });
 
         if (cacheResult && cacheResult[0]) {
-            console.log(`[CACHE HIT] Pattern: "${patternKey}" → ${cacheResult[0].ledger_name}`);
+            await debugLog(null, `[CACHE HIT] Pattern: "${patternKey}" → ${cacheResult[0].ledger_name}`);
             return cacheResult[0];
         }
     }
@@ -805,7 +806,7 @@ getSuggestedLedger: async (bankId, description, entryType) => {
     });
 
     if (historicalResult && historicalResult[0]) {
-        console.log(`[HISTORICAL MATCH] → ${historicalResult[0].ledger_name}`);
+        await debugLog(null, `[HISTORICAL MATCH] → ${historicalResult[0].ledger_name}`);
         return historicalResult[0];
     }
 
@@ -878,7 +879,7 @@ learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
 
         if (structuralKey.length > 0) {
             patternKey = structuralKey.substring(0, 200);
-            console.log(`[STRUCTURAL LEARNING] ${cleanDesc} → ${patternKey}`);
+            await debugLog(null, `[STRUCTURAL LEARNING] ${cleanDesc} → ${patternKey}`);
         }
     }
 
@@ -909,7 +910,7 @@ learnFromSuggestion: async (bankId, description, ledgerName, entryType) => {
             type: db.Sequelize.QueryTypes.INSERT
         });
 
-        console.log(`[LEARNED] Pattern: "${patternKey}" → ${ledgerName} (${entryType})`);
+        await debugLog(null, `[LEARNED] Pattern: "${patternKey}" → ${ledgerName} (${entryType})`);
 
     } catch (error) {
         console.error('Error learning pattern:', error);

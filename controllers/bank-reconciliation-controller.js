@@ -2,6 +2,7 @@ const bankReconDao = require("../dao/bank-reconciliation-dao");
 const moment = require('moment');
 const locationConfigDao = require('../dao/location-config-dao');
 const dateFormat = require('dateformat');
+const { debugLog } = require('../utils/debug-logger');
 
 module.exports = {
     /**
@@ -50,14 +51,13 @@ module.exports = {
      * POST - Get reconciliation report data
      */
     getBankReconReport: async (req, res) => {
-        console.log('=== Bank Recon POST Request ===');
-        console.log('User:', req.user);
-        console.log('Body:', req.body);
-        console.log('Session:', req.session);
-        
         try {
             const locationCode = req.user.location_code;
             const caller = req.body.caller;
+            await debugLog(locationCode, '=== Bank Recon POST Request ===');
+            await debugLog(locationCode, 'User:', req.user);
+            await debugLog(locationCode, 'Body:', req.body);
+            await debugLog(locationCode, 'Session:', req.session);
             
             // Date handling
             const fromClosingDate = new Date(req.body.fromClosingDate);
@@ -159,13 +159,12 @@ module.exports = {
                     sysTxn.isUnmatched = false;
                     sysTxn.matchedBankId = matchInfo.actual_stmt_id;
                     
-                    // Debug logging
                     if (sysTxn.isNearMatch) {
-                        console.log(`System NEAR MATCH (${sysTxn.dateOffBy} day off, Bank: ${sysTxn.bankDate}): ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
+                        debugLog(locationCode, `System NEAR MATCH (${sysTxn.dateOffBy} day off, Bank: ${sysTxn.bankDate}): ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
                     }
                 } else {
                     sysTxn.isUnmatched = true;
-                    console.log(`System UNMATCHED: ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
+                    debugLog(locationCode, `System UNMATCHED: ${sysTxn.trans_date} - ${sysTxn.remarks} - ${sysAmount}`);
                 }
             });
             
@@ -177,14 +176,14 @@ module.exports = {
                 } else {
                     bankTxn.isUnmatched = true;
                     const bankAmount = bankTxn.credit_amount > 0 ? bankTxn.credit_amount : bankTxn.debit_amount;
-                    console.log(`Bank UNMATCHED: ${bankTxn.txn_date} - ${bankTxn.description} - ${bankAmount}`);
+                    debugLog(locationCode, `Bank UNMATCHED: ${bankTxn.txn_date} - ${bankTxn.description} - ${bankAmount}`);
                 }
             });
             
             // Matching summary
-            console.log(`=== Matching Summary ===`);
-            console.log(`Total System: ${systemTransactions.length}, Matched: ${systemTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${systemTransactions.filter(t => t.isUnmatched).length}`);
-            console.log(`Total Bank: ${bankTransactions.length}, Matched: ${bankTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${bankTransactions.filter(t => t.isUnmatched).length}`);
+            await debugLog(locationCode, `=== Matching Summary ===`);
+            await debugLog(locationCode, `Total System: ${systemTransactions.length}, Matched: ${systemTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${systemTransactions.filter(t => t.isUnmatched).length}`);
+            await debugLog(locationCode, `Total Bank: ${bankTransactions.length}, Matched: ${bankTransactions.filter(t => !t.isUnmatched).length}, Unmatched: ${bankTransactions.filter(t => t.isUnmatched).length}`);
             
             // Get summary totals
             const summaryTotals = await bankReconDao.getSummaryTotals(
@@ -715,7 +714,7 @@ uploadBankStatement: async (req, res) => {
               // ===== SKIP TOTAL/SUMMARY ROWS =====
             // Rows with BOTH debit and credit are typically total/summary rows
             if (debitAmount > 0 && creditAmount > 0) {
-                console.log(`Skipping summary/total row at index ${i}: Debit=${debitAmount}, Credit=${creditAmount}`);
+                await debugLog(locationCode, `Skipping summary/total row at index ${i}: Debit=${debitAmount}, Credit=${creditAmount}`);
                 continue;
             }
 
@@ -1251,7 +1250,7 @@ function columnToIndex(column) {
 async function validateAccountByTransactionMatch(bankId, uploadedTransactions, lastUploadedDate) {
     // Skip validation if first upload (no previous data)
     if (!lastUploadedDate) {
-        console.log('Account validation: First upload - skipping validation');
+        await debugLog(null, 'Account validation: First upload - skipping validation');
         return { 
             isValid: true, 
             reason: 'first_upload' 
@@ -1270,15 +1269,15 @@ async function validateAccountByTransactionMatch(bankId, uploadedTransactions, l
     );
     
     if (overlapTxns.length === 0) {
-        console.log('Account validation: No transactions in overlap period');
-        return { 
-            isValid: true, 
+        await debugLog(null, 'Account validation: No transactions in overlap period');
+        return {
+            isValid: true,
             reason: 'no_overlap_transactions',
             warning: 'Could not validate account - no overlap transactions'
         };
     }
-    
-    console.log(`Account validation: Checking ${overlapTxns.length} overlap transactions`);
+
+    await debugLog(null, `Account validation: Checking ${overlapTxns.length} overlap transactions`);
     
     // Check each transaction individually (NOT totals)
     let matchCount = 0;
@@ -1306,44 +1305,44 @@ async function validateAccountByTransactionMatch(bankId, uploadedTransactions, l
             
             if (checkResult.hasRunningBalance && uploadBalance !== null) {
                 balanceMatchCount++;
-                console.log(`✓ EXACT Match (with balance): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}, Balance: ${uploadBalance}`);
+                await debugLog(null, `✓ EXACT Match (with balance): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}, Balance: ${uploadBalance}`);
             } else {
-                console.log(`✓ Match (amount only): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}`);
+                await debugLog(null, `✓ Match (amount only): ${uploadTxn.txn_date} - Credit: ${uploadTxn.credit_amount}, Debit: ${uploadTxn.debit_amount}`);
             }
-            
+
             // Found at least one match - this is enough!
             break;
         }
     }
-    
+
     // Validation failed if no matches found
     if (matchCount === 0) {
-        console.log(`✗ Account validation FAILED: No matching transactions found`);
-        return { 
-            isValid: false, 
+        await debugLog(null, `✗ Account validation FAILED: No matching transactions found`);
+        return {
+            isValid: false,
             reason: 'no_matching_transactions',
             overlapDate: lastUploadedDate,
             overlapCount: overlapTxns.length,
             message: `No matching transactions found from ${formatDateForDisplay(lastUploadedDate)}. This file appears to be for a different bank account.`
         };
     }
-    
+
     // Validation passed
     const validationResult = {
-        isValid: true, 
+        isValid: true,
         reason: 'matched',
         matchCount: matchCount,
         totalOverlap: overlapTxns.length,
         balanceValidated: balanceMatchCount > 0,
         hasBalanceInUpload: hasBalanceInUpload
     };
-    
+
     if (balanceMatchCount > 0) {
-        console.log(`✓ Account validation PASSED with BALANCE verification: ${matchCount} transaction(s) matched, ${balanceMatchCount} with balance`);
+        await debugLog(null, `✓ Account validation PASSED with BALANCE verification: ${matchCount} transaction(s) matched, ${balanceMatchCount} with balance`);
     } else if (hasBalanceInUpload) {
-        console.log(`✓ Account validation PASSED (no running balance in DB for comparison)`);
+        await debugLog(null, `✓ Account validation PASSED (no running balance in DB for comparison)`);
     } else {
-        console.log(`✓ Account validation PASSED (amount match only, no balance in upload)`);
+        await debugLog(null, `✓ Account validation PASSED (amount match only, no balance in upload)`);
     }
     
     return validationResult;
@@ -1353,38 +1352,38 @@ async function validateAccountByTransactionMatch(bankId, uploadedTransactions, l
 async function validateStatementAccountMatch(bankId, locationCode, uploadedTransactions, lastUploadedDate) {
     // Skip if first upload
     if (!lastUploadedDate) {
-        console.log('Statement account validation: First upload - skipping');
+        await debugLog(locationCode, 'Statement account validation: First upload - skipping');
         return { isValid: true, reason: 'first_upload' };
     }
-    
+
     // Get overlap transactions (last uploaded date and day before)
     const lastDate = new Date(lastUploadedDate);
     const dayBefore = new Date(lastDate);
     dayBefore.setDate(lastDate.getDate() - 1);
     const dayBeforeStr = dayBefore.toISOString().split('T')[0];
-    
+
     const overlapTxns = uploadedTransactions.filter(txn =>
         txn.txn_date === lastUploadedDate ||
         txn.txn_date === dayBeforeStr
     );
-    
+
     if (overlapTxns.length === 0) {
-        console.log('Statement account validation: No overlap transactions found');
+        await debugLog(locationCode, 'Statement account validation: No overlap transactions found');
         return {
             isValid: true,
             reason: 'no_overlap_transactions',
             warning: 'Could not validate account - no overlap transactions'
         };
     }
-    
-    console.log(`Statement account validation: Checking ${overlapTxns.length} overlap transactions`);
-    
+
+    await debugLog(locationCode, `Statement account validation: Checking ${overlapTxns.length} overlap transactions`);
+
     let matchCount = 0;
     let balanceMatchCount = 0;
-    
+
     for (const uploadTxn of overlapTxns) {
         const uploadBalance = uploadTxn.balance_amount || null;
-        
+
         const checkResult = await bankReconDao.checkStatementTransactionExists(
             bankId,
             locationCode,
@@ -1393,21 +1392,21 @@ async function validateStatementAccountMatch(bankId, locationCode, uploadedTrans
             uploadTxn.debit_amount,
             uploadBalance
         );
-        
+
         if (checkResult.exists) {
             matchCount++;
             if (checkResult.hasBalance && uploadBalance) {
                 balanceMatchCount++;
-                console.log(`Match (with balance): ${uploadTxn.txn_date} C:${uploadTxn.credit_amount} D:${uploadTxn.debit_amount} B:${uploadBalance}`);
+                await debugLog(locationCode, `Match (with balance): ${uploadTxn.txn_date} C:${uploadTxn.credit_amount} D:${uploadTxn.debit_amount} B:${uploadBalance}`);
             } else {
-                console.log(`Match (amount only): ${uploadTxn.txn_date} C:${uploadTxn.credit_amount} D:${uploadTxn.debit_amount}`);
+                await debugLog(locationCode, `Match (amount only): ${uploadTxn.txn_date} C:${uploadTxn.credit_amount} D:${uploadTxn.debit_amount}`);
             }
             break; // One match is enough
         }
     }
-    
+
     if (matchCount === 0) {
-        console.log('Statement account validation FAILED: No matching transactions');
+        await debugLog(locationCode, 'Statement account validation FAILED: No matching transactions');
         return {
             isValid: false,
             reason: 'no_matching_transactions',
@@ -1416,8 +1415,8 @@ async function validateStatementAccountMatch(bankId, locationCode, uploadedTrans
             message: `No matching transactions found from ${formatDateForDisplay(lastUploadedDate)}. This file appears to be for a different bank account.`
         };
     }
-    
-    console.log(`Statement account validation PASSED: ${matchCount} match(es), ${balanceMatchCount} with balance`);
+
+    await debugLog(locationCode, `Statement account validation PASSED: ${matchCount} match(es), ${balanceMatchCount} with balance`);
     return {
         isValid: true,
         reason: 'matched',
