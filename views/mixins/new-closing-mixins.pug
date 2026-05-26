@@ -272,7 +272,7 @@ mixin addCredits(creditRowNo, rowData)
     if(creditCompanyValues && creditCompanyValues[0])
         - creditName = creditCompanyValues[0].creditorName;
     if(!rowData)
-        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null, creditBillDate: (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)};
+        - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null, offMeterSale: 0, creditBillDate: (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)};
     if(rowData.tCreditId && parseInt(rowData.tCreditId) > 0)
         - trClass = ''
     tr(class=trClass id=trId)
@@ -328,6 +328,10 @@ mixin addCredits(creditRowNo, rowData)
             input.form-control(type='number' name=prefix + 'amt-' + creditRowNo id=prefix + 'amt-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.amount onchange='calculateCashOrCreditQuantity(\'' + prefix + '\', ' + creditRowNo + ')' step=0.001)
         td
             textarea.form-control(name=prefix + 'notes-' + creditRowNo id=prefix + 'notes-' + creditRowNo style="height:36px")= rowData.notes
+        if allowOffMeterSale
+            td.text-center
+                - var offMeterStyle = rowData.isLubeProduct ? '' : 'display:none'
+                input(type='checkbox' name=prefix + 'off-meter-' + creditRowNo id=prefix + 'off-meter-' + creditRowNo checked=(rowData.offMeterSale == 1) style=offMeterStyle)
         td
             button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\', "remove-credit-sale", calculateCreditTotal)')
                 span(aria-hidden="true") &times;

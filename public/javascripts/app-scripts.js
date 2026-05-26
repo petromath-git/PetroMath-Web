@@ -384,6 +384,17 @@ function creditOrSaleUpdateProductTypePrices(obj, rowNo, cashOrCreditRowPrefix) 
     const productId = obj.options[obj.selectedIndex].value;
     const productName = obj.options[obj.selectedIndex].text;
     showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName);
+
+    // Show/hide off-meter checkbox based on whether selected product is a metered lube (is_tank_product=1 AND is_lube_product=1)
+    if (window.productValuesData) {
+        const product = window.productValuesData.find(p => p.productId == productId);
+        const isLubeProduct = product && product.isLubeProduct;
+        const offMeterEl = document.getElementById(cashOrCreditRowPrefix + 'off-meter-' + rowNo);
+        if (offMeterEl) {
+            offMeterEl.style.display = isLubeProduct ? '' : 'none';
+            if (!isLubeProduct) offMeterEl.checked = false;
+        }
+    }
 }
 
 
@@ -1332,6 +1343,7 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'price_discount': document.getElementById(creditSaleTag + 'discount-' + creditObjRowNum).value,
         'qty': document.getElementById(creditSaleTag + 'qty-' + creditObjRowNum).value,
         'notes': document.getElementById(creditSaleTag + 'notes-' + creditObjRowNum).value,
+        'off_meter_sale': (function() { var el = document.getElementById(creditSaleTag + 'off-meter-' + creditObjRowNum); return el ? (el.checked ? 1 : 0) : 0; })(),
         'amount': currenciesAsFloat(document.getElementById(creditSaleTag + 'amt-' + creditObjRowNum).value),
         'created_by': user.User_Name,
         'updated_by': user.User_Name

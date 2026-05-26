@@ -147,7 +147,8 @@ const txnCreditsPromise = (closingId) => {
                         
                         data.forEach((credit) => {
                             const vehicleInfo = vehicleData.find(v => v.vehicle_id === credit.vehicle_id);
-                            
+                            const productInfo = productData.find(p => p.product_id === credit.product_id);
+
                             credits.push({
                                 tCreditId: credit.tcredit_id,
                                 billNo: credit.bill_no,
@@ -163,7 +164,9 @@ const txnCreditsPromise = (closingId) => {
                                 amount: credit.amount,
                                 creditBillDate: credit.credit_bill_date,
                                 notes: credit.notes,
-                                odometerReading: credit.odometer_reading  // ADD THIS LINE
+                                odometerReading: credit.odometer_reading,
+                                offMeterSale: credit.off_meter_sale,
+                                isLubeProduct: productInfo ? (productInfo.is_lube_product == 1 && productInfo.is_tank_product == 1) : false
                             });
                         });
                         resolve(credits);
