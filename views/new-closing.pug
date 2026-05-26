@@ -334,6 +334,7 @@ block content
                         #credit-table .col-qty       { width: 6%; }
                         #credit-table .col-sale      { width: 8%; }
                         #credit-table .col-notes     { width: 9%; }
+                        #credit-table .col-off-meter { width: 5%; text-align: center; }
                         #credit-table th:last-child  { width: 2%; text-align: center; } /* X delete column */
 
                         #credit-table .col-delete {
@@ -387,6 +388,8 @@ block content
                                                 th.col-qty(scope="col") Quantity
                                                 th.col-sale(scope="col") Sale
                                                 th.col-notes(scope="col") Notes
+                                                if allowOffMeterSale
+                                                    th.col-off-meter(scope="col") Off Meter
                                                 th.col-delete(scope="col")
                                                 th(scope="col")
                                             - var rowCnt = 0

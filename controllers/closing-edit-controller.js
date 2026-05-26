@@ -110,6 +110,12 @@ module.exports = {
                 'N' // default - disabled
             );
 
+            const allowOffMeterSale = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'ALLOW_OFF_METER_SALE',
+                'N'
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -144,6 +150,7 @@ module.exports = {
                         digitalSalesFutureDays: digitalSalesFutureDays,
                         show2TSalesTab: show2TSalesTab === 'Y',
                         allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
+                        allowOffMeterSale: allowOffMeterSale === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,

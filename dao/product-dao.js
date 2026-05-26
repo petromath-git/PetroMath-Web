@@ -96,8 +96,10 @@ module.exports = {
                 'product_id',
                 'product_name',
                 'sku_name',
-                'sku_number'
-            ], 
+                'sku_number',
+                'is_lube_product',
+                'is_tank_product'
+            ],
             where: {
                 product_id: {
                     [Op.in]: productIds
