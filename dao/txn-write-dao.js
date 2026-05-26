@@ -105,9 +105,9 @@ saveReadings: (data) => {
     saveCreditSales: (data) => {
     const salesTxn = TxnCreditSales.bulkCreate(data, {returning: true,
         updateOnDuplicate: ["bill_no", "creditlist_id","vehicle_id",
-            "product_id", "price", "price_discount", "qty", "amount", "notes", 
+            "product_id", "price", "price_discount", "qty", "amount", "notes",
             "vehicle_number", "indent_number", "settlement_date", "recon_id", "bill_id",
-            "credit_bill_date", "odometer_reading", "updated_by", "updation_date"]});
+            "credit_bill_date", "odometer_reading", "off_meter_sale", "updated_by", "updation_date"]});
     return salesTxn;
     },
     saveDigitalSales: (data) => {

@@ -10,6 +10,7 @@ const txnController = require("./txn-common-controller");
 const ExpenseDao = require("../dao/expense-dao");
 const config = require("../config/app-config");
 const locationConfig = require('../utils/location-config');
+const { debugLog } = require('../utils/debug-logger');
 const dateFormat = require('dateformat');
 const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
@@ -28,9 +29,9 @@ module.exports = {
     },
 
     getNewData: async (req, res, next) => {
-        console.log("User service_tier:", req.user.service_tier);
         await serviceTier.applyThrottle(req.user.service_tier);
         const locationCode = req.user.location_code;
+        await debugLog(locationCode, 'User service_tier:', req.user.service_tier);
 
 
         const maxBackDateDays = Number( await locationConfig.getLocationConfigValue(
@@ -75,6 +76,12 @@ module.exports = {
     'N' // default - disabled
     );
 
+    const allowOffMeterSale = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'ALLOW_OFF_METER_SALE',
+    'N'
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -112,7 +119,8 @@ module.exports = {
                             digitalSalesBackdateDays: digitalSalesBackdateDays,
                             digitalSalesFutureDays: digitalSalesFutureDays,
                             show2TSalesTab: show2TSalesTab === 'Y',
-                            allowQuickAddVehicle: allowQuickAddVehicle === 'Y'
+                            allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
+                            allowOffMeterSale: allowOffMeterSale === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -815,7 +823,8 @@ function formProductData(product, productAlias, textName) {
         productName: product.product_name,
         rgbColor: product.rgb_color,
         returnedQty: 0,
-        givenQty: 0
+        givenQty: 0,
+        isLubeProduct: product.is_lube_product == 1 && product.is_tank_product == 1
     };
 }
 

@@ -403,6 +403,8 @@ block content
                                                 th(scope="col") Quantity
                                                 th(scope="col") Sale
                                                 th(scope="col") Notes
+                                                if allowOffMeterSale
+                                                    th(scope="col") Off Meter
                                                 if(!freezedRecord)
                                                     th(scope="col")
                                             - var rowCnt = 0
