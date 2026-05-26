@@ -1,5 +1,7 @@
 //const { config } = require("chai");
 
+function debugLog(...args) { if (window.DEBUG_LOGGING) debugLog(...args); }
+
 var showClassName = 'd-md-block';
 var hideClassName = 'd-md-none';
 var toFixedValue = 2
@@ -201,9 +203,9 @@ function updatePriceOnReadingTabv1(isOnLoad) {
     const pumpSelectedOptionId = pumpSelectedOption.id;
     const elementId = pumpSelectedOptionId.replace("pump-", "rate_");; // Construct the full ID
     document.getElementById("reading-price").value = document.getElementById(elementId).value;
-    console.log(elementId);
-    console.log('elementId'+ document.getElementById(elementId).value);
-    console.log('rate_HSD' +document.getElementById('rate_HSD').value);
+    debugLog(elementId);
+    debugLog('elementId'+ document.getElementById(elementId).value);
+    debugLog('rate_HSD' +document.getElementById('rate_HSD').value);
     if (isOnLoad) {
         pumpName.selectedIndex = "0";
     }
@@ -401,10 +403,10 @@ function creditOrSaleUpdateProductTypePrices(obj, rowNo, cashOrCreditRowPrefix) 
 
 
 function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, creditTypes) {
-    console.log('toggleReceiptRelatedDropdowns called for row:', rowNo);
-    console.log('creditRowPrefix:', creditRowPrefix);
-    console.log('creditTypes:', creditTypes);
-    console.log('changedElement:', changedElement);
+    debugLog('toggleReceiptRelatedDropdowns called for row:', rowNo);
+    debugLog('creditRowPrefix:', creditRowPrefix);
+    debugLog('creditTypes:', creditTypes);
+    debugLog('changedElement:', changedElement);
 
     // Define CSS classes for show/hide states
     const showClassName = 'd-md-block';
@@ -435,27 +437,27 @@ function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, c
         creditType = creditTypeEl.value;
     }
 
-    console.log('receiptType:', receiptType);
-    console.log('creditType:', creditType);
+    debugLog('receiptType:', receiptType);
+    debugLog('creditType:', creditType);
 
     // Handle digital vendor dropdown - enable/disable based on receipt type ONLY
     if (digitalDropdown) {
-        console.log('Digital dropdown found, current disabled state:', digitalDropdown.disabled);
+        debugLog('Digital dropdown found, current disabled state:', digitalDropdown.disabled);
         
         // Only change digital vendor state when receipt type changes, not credit type
         if (changedElement.id === `${creditRowPrefix}receiptType_${rowNo}`) {
             if (receiptType === 'digital') {
-                console.log('Digital receipt type selected - enabling digital vendor dropdown');
+                debugLog('Digital receipt type selected - enabling digital vendor dropdown');
                 digitalDropdown.disabled = false;
             } else {
-                console.log('Non-digital receipt type - disabling digital vendor dropdown');
+                debugLog('Non-digital receipt type - disabling digital vendor dropdown');
                 digitalDropdown.disabled = true;
                 digitalDropdown.selectedIndex = 0; // Reset to first option
             }
         }
         // If credit type changed, don't touch the digital vendor dropdown state
         else {
-            console.log('Credit type changed - leaving digital vendor dropdown state unchanged');
+            debugLog('Credit type changed - leaving digital vendor dropdown state unchanged');
         }
     }
 
@@ -464,15 +466,15 @@ function toggleReceiptRelatedDropdowns(changedElement, rowNo, creditRowPrefix, c
         const creditTypeSelect = document.getElementById(`${creditRowPrefix}${type}-${rowNo}`);
         if (creditTypeSelect) {
             if (type === creditType) {
-                console.log(`Showing dropdown for credit type: ${type}`);
+                debugLog(`Showing dropdown for credit type: ${type}`);
                 creditTypeSelect.className = `form-control ${showClassName}`;
                 updateHiddenCreditId(creditTypeSelect, creditRowPrefix, rowNo);
             } else {
-                console.log(`Hiding dropdown for credit type: ${type}`);
+                debugLog(`Hiding dropdown for credit type: ${type}`);
                 creditTypeSelect.className = `form-control ${hideClassName}`;
             }
         } else {
-            console.log(`Dropdown not found for credit type: ${type}, expected ID: ${creditRowPrefix}${type}-${rowNo}`);
+            debugLog(`Dropdown not found for credit type: ${type}, expected ID: ${creditRowPrefix}${type}-${rowNo}`);
         }
     });
 }
@@ -530,14 +532,14 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
                 // If we found a rate element, use its value; otherwise keep the DB price
                 if (rateElement && rateElement.value !== undefined) {
                     productPrice = rateElement.value;
-                    console.log(`Found rate element ${rateElement.id} with price: ${productPrice}`);
+                    debugLog(`Found rate element ${rateElement.id} with price: ${productPrice}`);
                 } else {
-                    console.log(`No rate element found for pump product ${product.productName}, using DB price: ${productPrice}`);
+                    debugLog(`No rate element found for pump product ${product.productName}, using DB price: ${productPrice}`);
                 }
             } else {
                 // For non-pump products: directly use database price
                 productPrice = product.productPrice || 0;
-                console.log(`Non-pump product ${product.productName}, using DB price: ${productPrice}`);
+                debugLog(`Non-pump product ${product.productName}, using DB price: ${productPrice}`);
             }
             
             // Check for dynamic pump readings if this is a pump product
@@ -553,13 +555,13 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
                             let readingData = document.getElementById('f_' + currentOption + '_price');
                             if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
                                 productPrice = readingData.value;
-                                console.log(`Using pump reading price: ${productPrice}`);
+                                debugLog(`Using pump reading price: ${productPrice}`);
                                 break;
                             } else {
                                 readingData = document.getElementById('s_' + currentOption + '_price');
                                 if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
                                     productPrice = readingData.value;
-                                    console.log(`Using pump reading price: ${productPrice}`);
+                                    debugLog(`Using pump reading price: ${productPrice}`);
                                     break;
                                 }
                             }
@@ -654,9 +656,9 @@ function calculateTotal(tableNamePrefix) {
 
 //- Add new page: Dom elements to delete row dynamically on remove click
 function hideRow(trId, uri, funToRecalculateTotal) {
-    console.log(trId);
+    debugLog(trId);
     let deleteObj = document.getElementById(trId.replace('table-row-', '') + '_hiddenId');
-    console.log(deleteObj);
+    debugLog(deleteObj);
     if (deleteObj) {
         deleteAjax(uri, deleteObj.value, trId, hideClassName).then(data => {
             if (data) {
@@ -674,7 +676,7 @@ function reloadPage(trId) {
     let row = document.getElementById(trId);
     if (row) {
         row.style.display = 'none';
-        console.log('Row hidden successfully:', trId);
+        debugLog('Row hidden successfully:', trId);
         // Reload the page after hiding the row
         window.location.reload();
     } else {
@@ -910,7 +912,7 @@ function defaultInputValues(inputDiv) {
     for (let i = 0; i < elements.length; i++) {
         if (elements[i].value && isIncludedToDefaultValue(elements[i].id)) {
             elements[i].value = elements[i].defaultValue;
-            console.log(elements[i] + "value" + elements[i].defaultValue);
+            debugLog(elements[i] + "value" + elements[i].defaultValue);
         } else {
             elements[i].value = '';
         }
@@ -1000,8 +1002,8 @@ function saveClosing() {
                         newClosingData.push(formClosing(undefined, user));
                         newHiddenFieldsArr.push(hiddenTag);
                     }
-                    console.log('New closing data ' + JSON.stringify(newClosingData));
-                    console.log('Update closing data ' + JSON.stringify(updateClosingData));
+                    debugLog('New closing data ' + JSON.stringify(newClosingData));
+                    debugLog('Update closing data ' + JSON.stringify(updateClosingData));
                     postAjaxNew('new-closing', newClosingData, updateClosingData, tabToActivate, currentDiv, newHiddenFieldsArr, 'closing_id').then(data => {
                         resolve(data);
                     });
@@ -1136,7 +1138,7 @@ function updateClosingWithReadingTime(closeReadingTime, user) {
             if (xhr.readyState === 4) {
                 if (xhr.status === 200) {
                     const result = JSON.parse(xhr.responseText);
-                    console.log('Closing reading time update response:', result);
+                    debugLog('Closing reading time update response:', result);
                     resolve(true);
                 } else {
                     console.error('Failed to update closing reading time:', xhr.responseText);
@@ -1188,8 +1190,8 @@ function save2TProducts() {
                 }
             }
         });
-        console.log('New oilData ' + JSON.stringify(new2TProducts));
-        console.log('Update oilData ' + JSON.stringify(update2TProducts));
+        debugLog('New oilData ' + JSON.stringify(new2TProducts));
+        debugLog('Update oilData ' + JSON.stringify(update2TProducts));
         postAjaxNew('new-2t-sales', new2TProducts, update2TProducts, tabToActivate, currentDiv, newHiddenFieldsArr, 'oil_id')
             .then((data) => {
                 resolve(data);
@@ -1239,8 +1241,8 @@ function saveCashSales() {
                 }
             }
         });
-        console.log("NEW CASH SALES DATA " + JSON.stringify(newSales));
-        console.log("UPDATE CASH SALES DATA " + JSON.stringify(updateSales));
+        debugLog("NEW CASH SALES DATA " + JSON.stringify(newSales));
+        debugLog("UPDATE CASH SALES DATA " + JSON.stringify(updateSales));
         postAjaxNew('new-cash-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'cashsales_id')
             .then((data) => {
                 resolve(data);
@@ -1309,8 +1311,8 @@ function saveCreditSales() {
             return;
         }
 
-        console.log("New Credit sales data " + JSON.stringify(newSales));
-        console.log("Update Credit sales data " + JSON.stringify(updateSales));
+        debugLog("New Credit sales data " + JSON.stringify(newSales));
+        debugLog("Update Credit sales data " + JSON.stringify(updateSales));
         postAjaxNew('new-credit-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'tcredit_id')
             .then((data) => {
                 resolve(data);
@@ -1532,8 +1534,8 @@ function saveExpenses() {
                 }
             }
         });
-        console.log("NEW EXPENSES DATA " + JSON.stringify(newExpenses));
-        console.log("UPDATE EXPENSES DATA " + JSON.stringify(updateExpenses));
+        debugLog("NEW EXPENSES DATA " + JSON.stringify(newExpenses));
+        debugLog("UPDATE EXPENSES DATA " + JSON.stringify(updateExpenses));
         postAjaxNew('new-expenses', newExpenses, updateExpenses, tabToActivate, currentTabId, newHiddenFieldsArr, 'texpense_id')
             .then((data) => {
                 resolve(data);
@@ -1579,8 +1581,8 @@ function saveDenoms() {
                 }
             }
         });
-        console.log("NEW DENOMS DATA " + JSON.stringify(newDenoms));
-        console.log("UPDATE DENOMS DATA " + JSON.stringify(updateDenoms));
+        debugLog("NEW DENOMS DATA " + JSON.stringify(newDenoms));
+        debugLog("UPDATE DENOMS DATA " + JSON.stringify(updateDenoms));
         postAjaxNew('new-denoms', newDenoms, updateDenoms, tabToActivate, currentTabId, newHiddenFieldsArr, 'denom_id')
             .then((data) => {
                 resolve(data);
@@ -1613,12 +1615,12 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
         const ajaxUpdateReq = new XMLHttpRequest();
         let insertResult = 'No Action', updateResult = 'No Action'; // to store results of requests
 
-        console.log("INSERT DATA LEN : " + newData.length + ", UPDATE LEN : " + updateData.length);
+        debugLog("INSERT DATA LEN : " + newData.length + ", UPDATE LEN : " + updateData.length);
         if (newData && newData.length > 0) {
             ajaxLoading('d-md-block');
             ajaxInsertReq.onreadystatechange = function () {
                 if (ajaxInsertReq.readyState == 4) {
-                    console.log("Insert response [status : " + ajaxUpdateReq.status + "] - " + ajaxInsertReq.responseText);
+                    debugLog("Insert response [status : " + ajaxUpdateReq.status + "] - " + ajaxInsertReq.responseText);
                     if (ajaxInsertReq.status == 200 || ajaxInsertReq.status == 500) {
                         insertResult = JSON.parse(ajaxInsertReq.responseText);
                         attemptResult();
@@ -1633,7 +1635,7 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
             ajaxLoading('d-md-block');
             ajaxUpdateReq.onreadystatechange = function () {
                 if (ajaxUpdateReq.readyState == 4) {
-                    console.log("Update response [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
+                    debugLog("Update response [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
                     if (ajaxUpdateReq.status == 200 || ajaxUpdateReq.status == 500) {
                         updateResult = JSON.parse(ajaxUpdateReq.responseText);
                         attemptResult();
@@ -1670,7 +1672,7 @@ function postDeleteAction(elementId, classValue) {
 
 function deleteAjax(url, data, elementId, classValue) {
     return new Promise((resolve, reject) => {
-        console.log("Delete data " + data + ", rowId " + elementId);
+        debugLog("Delete data " + data + ", rowId " + elementId);
         undoShowStaticErrorMessage();
         if (data && parseInt(data) > 0) {
             ajaxLoading('d-md-block');
@@ -1705,7 +1707,7 @@ function updateIdsForUpsertSupport(data, hiddenFieldsArr, idModelAttr) {
         let rowCnt = 0;
         data.rowsData.forEach((row) => {
             document.getElementById(hiddenFieldsArr[rowCnt] + '_hiddenId').value = row[idModelAttr];
-            //console.log("Inside Id update"+row[idModelAttr]+idModelAttr);
+            //debugLog("Inside Id update"+row[idModelAttr]+idModelAttr);
             rowCnt++;
         });
     }
@@ -1765,7 +1767,7 @@ function disableUser(index, userId) {
 }
 
 function enableUser(index, userId) {
-    console.log("Enable user " + userId);
+    debugLog("Enable user " + userId);
     const r = confirm("Please confirm if you want to enable the user?");
     if (r == true) {
         putAjax('enable-user/' + userId, {}).then(success => {
@@ -1788,7 +1790,7 @@ function disableCredit(index, creditID) {
 }
 
 function enableCredit(index, creditID) {
-    console.log("Enable Credit" + creditID);
+    debugLog("Enable Credit" + creditID);
     const r = confirm("Please confirm if you want to enable the Credit?");
     if (r == true) {
         putAjax('enable-credit/' + creditID, {}).then(success => {
@@ -1811,7 +1813,7 @@ function disableVehicle(index, vehicleId) {
 }
 
 function enableVehicle(index, vehicleId) {
-    console.log("Enable Vehicle" + vehicleId);
+    debugLog("Enable Vehicle" + vehicleId);
     const r = confirm("Please confirm if you want to enable the Vehicle?");
     if (r == true) {
         putAjax('vehicles/enable-vehicle/' + vehicleId, {}).then(success => {
@@ -1899,7 +1901,7 @@ function delayedUpperCase(element) {
 function putAjax(uri, data) {
     return new Promise((resolve, reject) => {
         undoShowStaticErrorMessage();
-        console.log("Put data " + JSON.stringify(data) + ", uri " + uri);
+        debugLog("Put data " + JSON.stringify(data) + ", uri " + uri);
         if (data) {
             ajaxLoading('d-md-block');
             const xhttp = new XMLHttpRequest();
@@ -1935,7 +1937,7 @@ function finishClosing(hiddenPrefix, uri, redirect) {
             ajaxUpdateReq.onreadystatechange = function () {
                 if (ajaxUpdateReq.readyState == 4) {
                     ajaxLoading('d-md-none');
-                    console.log("Close record [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
+                    debugLog("Close record [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
                     if (ajaxUpdateReq.status == 200 || ajaxUpdateReq.status == 500) {
                         const updateResult = JSON.parse(ajaxUpdateReq.responseText);
                         showToastMessage(updateResult, 7000);
@@ -1962,7 +1964,7 @@ function deleteClosing(closingId) {
     const r = confirm("Please confirm if you want to delete the closing?");
     if (r == true) {
         if (deleteAjax('delete-closing', closingId, 'closing-record-' + closingId, 'd-md-none')) {
-            //console.log(location.href );
+            //debugLog(location.href );
             document.getElementById('home_tab').click();
         }
     }
@@ -1994,7 +1996,7 @@ function updateExcessStorage(elementId, result) {
 
 function getAjax(url, params, elementId, calBackMethod) {
     return new Promise((resolve, reject) => {
-        console.log("Get data " + params + ", rowId " + elementId);
+        debugLog("Get data " + params + ", rowId " + elementId);
         undoShowStaticErrorMessage();
         if (params) {
             ajaxLoading('d-md-block');
@@ -2147,9 +2149,9 @@ function saveDecantHeader() {
                         newDecantData.push(formDecant(undefined, user));
                         newHiddenFieldsArr.push(hiddenTag);
                     }
-                    console.log('New closing data ' + JSON.stringify(newDecantData));
-                    console.log('Update closing data ' + JSON.stringify(updateDecantData));
-                    console.log("tabToActivate" + tabToActivate, "currentDiv" + currentDiv, "newHiddenFieldsArr" + newHiddenFieldsArr);
+                    debugLog('New closing data ' + JSON.stringify(newDecantData));
+                    debugLog('Update closing data ' + JSON.stringify(updateDecantData));
+                    debugLog("tabToActivate" + tabToActivate, "currentDiv" + currentDiv, "newHiddenFieldsArr" + newHiddenFieldsArr);
                     postAjaxNew('new-decant', newDecantData, updateDecantData, tabToActivate, currentDiv, newHiddenFieldsArr, 'ttank_id').then(data => {
                         resolve(data);
                     });
@@ -2385,8 +2387,8 @@ function saveDecantLines() {
             if (!linesObj.className.includes('-none')) {
                 const linesObjRowNum = linesObj.id.replace(decantRow, '');
                 const hiddenIdObj = document.getElementById(decantLineTag + linesObjRowNum + '_hiddenId');
-                console.log(hiddenIdObj);
-                console.log(hiddenIdObj.value);
+                debugLog(hiddenIdObj);
+                debugLog(hiddenIdObj.value);
                 if (hiddenIdObj && parseInt(hiddenIdObj.value) > 0) {
                     updateLines.push(formDecantLines(hiddenIdObj.value, decantLineTag, linesObjRowNum, user));
                 } else {
@@ -2397,8 +2399,8 @@ function saveDecantLines() {
             }
 
         });
-        console.log("New Decant Lines data " + JSON.stringify(newLines));
-        console.log("Update Decant Lines data " + JSON.stringify(updateLines));
+        debugLog("New Decant Lines data " + JSON.stringify(newLines));
+        debugLog("Update Decant Lines data " + JSON.stringify(updateLines));
         postAjaxNew('new-decant-lines', newLines, updateLines, tabToActivate, currentTabId, newHiddenFieldsArr, 'tdtank_id')
             .then((data) => {
                 resolve(data);
@@ -2550,8 +2552,8 @@ function saveAttendance() {
             }
 
         });
-        console.log("New Attendance data " + JSON.stringify(newLines));
-        console.log("Updated Attendance data " + JSON.stringify(updateLines));
+        debugLog("New Attendance data " + JSON.stringify(newLines));
+        debugLog("Updated Attendance data " + JSON.stringify(updateLines));
         postAjaxNew('new-attendance', newLines, updateLines, tabToActivate, currentTabId, newHiddenFieldsArr, 'tattendance_id')
             .then((data) => {
                 resolve(data);
@@ -2576,7 +2578,7 @@ function formAttendanceLines(tAttendanceId, attendanceTag, rowNo, user) {
     if (out_datetime === '')
         out_datetime = dateTime
     outDateTimeArr = out_datetime.split("T");
-    //console.log("inDateTimeArr"+inDateTimeArr+"outDateTimeArr"+outDateTimeArr);
+    //debugLog("inDateTimeArr"+inDateTimeArr+"outDateTimeArr"+outDateTimeArr);
     return {
         'tattendance_id': tAttendanceId,
         'closing_id': document.getElementById('closing_hiddenId').value,
@@ -2683,7 +2685,7 @@ function initializeVehicleSelect2() {
 
 
 function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
-    console.log('updateCreditAndLoadVehicles called with:', {
+    debugLog('updateCreditAndLoadVehicles called with:', {
         creditListId: obj.value,
         creditRowPrefix: creditRowPrefix,
         rowNo: rowNo
