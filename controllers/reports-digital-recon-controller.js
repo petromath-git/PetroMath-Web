@@ -1,5 +1,6 @@
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
+const { debugLog } = require('../utils/debug-logger');
 var ReportDao = require("../dao/report-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
@@ -22,7 +23,7 @@ exports.getDigitalReconReport = async (req, res) => {
 
     if (vendorLookbackDays !== null) {
       lookbackDays = vendorLookbackDays;
-      console.log(`Using vendor-specific lookback: ${lookbackDays} days`);
+      await debugLog(locationCode, `Using vendor-specific lookback: ${lookbackDays} days`);
     } else {
       // Second: Check location config (location-specific or system default '*')
       const configLookbackDays = await locationConfig.getLocationConfigValue(
@@ -32,7 +33,7 @@ exports.getDigitalReconReport = async (req, res) => {
       );
       
       lookbackDays = parseInt(configLookbackDays);
-      console.log(`Using config lookback: ${lookbackDays} days`);
+      await debugLog(locationCode, `Using config lookback: ${lookbackDays} days`);
     }
 
 
@@ -443,7 +444,7 @@ function fifthPassShiftOffsetReconciliation(
       possibleMatch.reconciliation_pass = 5;
       matchedCreditIds.add(possibleMatch.unique_id);
 
-      console.log(
+      debugLog(locationCode,
         `Pass 5 (Shift Offset): Matched ₹${debitTx.DebitAmount} between ${debitTx.Date} and ${possibleMatch.Date}`
       );
     }
@@ -474,7 +475,7 @@ function fifthPassShiftOffsetReconciliation(
     // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors
     // CROSS-VENDOR MATCH DETECTION: Check for possible entry errors (OPTIONAL - Performance intensive)
   if (enableCrossVendorMatch === 'Y') {
-    console.log('Cross-vendor matching is ENABLED - checking other vendors...');
+    await debugLog(locationCode, 'Cross-vendor matching is ENABLED - checking other vendors...');
 
     const unReconciledTransactions = processedData.filter(tx => !tx.reconciled);
     
@@ -488,9 +489,9 @@ function fifthPassShiftOffsetReconciliation(
       
       // Early exit if no other vendors to check
       if (digitalVendors.length === 0) {
-        console.log('No other digital vendors to check for cross-vendor matches');
+        await debugLog(locationCode, 'No other digital vendors to check for cross-vendor matches');
       } else {
-        console.log(`Checking ${digitalVendors.length} other vendor(s) for possible matches`);
+        await debugLog(locationCode, `Checking ${digitalVendors.length} other vendor(s) for possible matches`);
         
         // Query each other vendor for possible matches
         for (const vendor of digitalVendors) {
@@ -552,7 +553,7 @@ function fifthPassShiftOffsetReconciliation(
   }
   else
     {
-      console.log('Cross-vendor matching is DISABLED (for better performance)');
+      await debugLog(locationCode, 'Cross-vendor matching is DISABLED (for better performance)');
     }
 
     // Filter to date range and map reconciliation status
@@ -608,7 +609,7 @@ function fifthPassShiftOffsetReconciliation(
               console.error('getDigitalReconReport: Error in res.render:', err);
               reject(err);
             } else {
-              console.log('getDigitalReconReport: Successfully rendered HTML');
+              debugLog(locationCode, 'getDigitalReconReport: Successfully rendered HTML');
               resolve(html);
             }
           });
@@ -638,7 +639,7 @@ exports.manualMatch = async (req, res) => {
         const userId = req.user.Person_id;
         const userRole = req.user.Role;
 
-        console.log('manualMatch called with rows:', rows);
+        await debugLog(locationCode, 'manualMatch called with rows:', rows);
 
         // Determine allowed difference based on role
         const allowedDifference = (userRole === 'Admin' || userRole === 'SuperUser') ? 1000 : 100;
@@ -665,7 +666,7 @@ exports.manualMatch = async (req, res) => {
 
         const difference = Math.abs(debitTotal - creditTotal);
 
-        console.log('Calculated totals:', { debitTotal, creditTotal, difference });
+        await debugLog(locationCode, 'Calculated totals:', { debitTotal, creditTotal, difference });
 
         // Check if difference is within allowed limit
         if (difference > allowedDifference) {
@@ -702,10 +703,10 @@ exports.manualMatch = async (req, res) => {
         // If no difference, proceed with normal matching
         const matchId = Date.now();
 
-        console.log('No difference, proceeding with matchId:', matchId);
+        await debugLog(locationCode, 'No difference, proceeding with matchId:', matchId);
 
         for (const row of rows) {
-            console.log('Updating row:', row.source_table, row.source_id);
+            await debugLog(locationCode, 'Updating row:', row.source_table, row.source_id);
             await ReportDao.updateReconMatch({
                 tableName: row.source_table,
                 recordId: row.source_id,
@@ -732,16 +733,14 @@ exports.manualMatch = async (req, res) => {
 
 // NEW FUNCTION: Save difference after user confirmation
 exports.saveDifferenceAndMatch = async (req, res) => {
-    console.log('saveDifferenceAndMatch ENTRY');
-    console.log('req.body:', req.body);
-    
     try {
         const { rows, notes, earliestDate, vendorId } = req.body;
         const locationCode = req.user.location_code;
         const userId = req.user.Person_id;
         const userRole = req.user.Role;
 
-        console.log('Extracted data:', { rows, notes, earliestDate, locationCode, userId, userRole });
+        await debugLog(locationCode, 'saveDifferenceAndMatch ENTRY');
+        await debugLog(locationCode, 'Extracted data:', { rows, notes, earliestDate, locationCode, userId, userRole });
 
         const allowedDifference = (userRole === 'Admin' || userRole === 'SuperUser') ? 1000 : 100;
 
@@ -775,12 +774,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
         // Credit > Debit (excess) → store as positive
         const differenceToStore = -calculatedDifference;
 
-        console.log('Calculated difference:', { 
-            debitTotal, 
-            creditTotal, 
-            calculatedDifference, 
-            differenceToStore 
-        });
+        await debugLog(locationCode, 'Calculated difference:', { debitTotal, creditTotal, calculatedDifference, differenceToStore });
 
         if (Math.abs(calculatedDifference) > allowedDifference) {
             return res.json({
@@ -791,7 +785,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
 
         const matchId = Date.now();
 
-        console.log('Inserting difference record with matchId:', matchId);
+        await debugLog(locationCode, 'Inserting difference record with matchId:', matchId);
 
         await ReportDao.insertDigitalReconDifference({
             location_code: locationCode,
@@ -803,10 +797,10 @@ exports.saveDifferenceAndMatch = async (req, res) => {
             notes: notes
         });
 
-        console.log('Difference record inserted, now updating recon matches');
+        await debugLog(locationCode, 'Difference record inserted, now updating recon matches');
 
         for (const row of rows) {
-            console.log('Updating row:', row.source_table, row.source_id);
+            await debugLog(locationCode, 'Updating row:', row.source_table, row.source_id);
             await ReportDao.updateReconMatch({
                 tableName: row.source_table,
                 recordId: row.source_id,
@@ -815,7 +809,7 @@ exports.saveDifferenceAndMatch = async (req, res) => {
             });
         }
 
-        console.log('All updates complete');
+        await debugLog(locationCode, 'All updates complete');
 
         res.json({
             success: true,
@@ -837,13 +831,11 @@ exports.saveDifferenceAndMatch = async (req, res) => {
 
 
 exports.getDifferences = async (req, res) => {
-    console.log('getDifferences ENTRY POINT');
-
     try {
         const { fromDate, toDate, vendorId } = req.body;
         const locationCode = req.user.location_code;
 
-        console.log('getDifferences called with:', { locationCode, fromDate, toDate, vendorId });
+        await debugLog(locationCode, 'getDifferences called with:', { locationCode, fromDate, toDate, vendorId });
 
         const differences = await ReportDao.getDigitalReconDifferences(
             locationCode,
@@ -852,7 +844,7 @@ exports.getDifferences = async (req, res) => {
             vendorId
         );
 
-        console.log('Differences found:', differences ? differences.length : 0);
+        await debugLog(locationCode, 'Differences found:', differences ? differences.length : 0);
 
         res.json({
             success: true,

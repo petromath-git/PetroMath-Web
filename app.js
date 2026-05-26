@@ -263,6 +263,7 @@ app.use(methodOverride('_method'));
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 app.locals.CACHE_BUST = Date.now();
+app.locals.DEBUG_LOGGING = process.env.DEBUG_LOGGING === 'true';
 
 app.use(flash());
 app.use(require('cookie-parser')('keyboard cat'));
