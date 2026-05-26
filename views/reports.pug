@@ -66,6 +66,8 @@ block content
             - var showVehicleColumn = creditstmt.some(val => val['Vehicle Number'] != null && val['Vehicle Number'] != '')
             - var showOdometerColumn = creditstmt.some(val => val['Odometer Reading'] != null && val['Odometer Reading'] != '')
             - function displayBalance(bal) { var fmt = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); if (balanceCrDr) { var a = Math.abs(bal); var f = fmt.format(a); if (bal > 0) return f + ' DR'; if (bal < 0) return f + ' CR'; return '0.00'; } return fmt.format(bal); }
+            - function trimNarration(n) { if (!n) return ''; var s = n.replace(/^Auto from Bank\s*[-–]\s*/i, ''); return s.length > 20 ? s.substring(0, 20) + '…' : s; }
+            - function trimParticulars(p) { if (!p) return ''; return p.replace(/^To Bill No:\s*/i, 'Bill #').replace(/^By Receipt No:\s*/i, 'Receipt #'); }
             div.row &nbsp;
             h6.font-weight-bold.text-center= "Credit Statement"
             if(cidparam == -1)
@@ -107,7 +109,7 @@ block content
                         table.table.table-bordered.border.table-sm
                             thead(class="thead-light")
                                 tr
-                                    th.text-center Date                        
+                                    th.text-center(style="white-space: nowrap") Date
                                     th.text-center Particulars                      
                                     th.text-center Product Name
                                     if showVehicleColumn
@@ -144,8 +146,8 @@ block content
                                             td &nbsp;
                                 each val in creditstmt
                                     tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                                        td.text-center(scope="row")= val.Date                            
-                                        td.text-left(scope="row")= val.Particulars
+                                        td.text-center(scope="row" style="white-space: nowrap")= val.Date
+                                        td.text-left(scope="row" title=val.Particulars)= trimParticulars(val.Particulars)
                                         td.text-left(scope="row")= val.Product
                                         if showVehicleColumn
                                             td.text-center(scope="row")= val['Vehicle Number']
@@ -159,7 +161,7 @@ block content
                                         td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
                                         if showBalance
                                             td.text-right(scope="row")= val.Balance !== null ? displayBalance(val.Balance) : ''
-                                        td(scope="row")= val.Narration                                
+                                        td(scope="row" title=val.Narration)= trimNarration(val.Narration)
                                 // Closing Balance Row
                                 if(cidparam != -1)
                                     tr
