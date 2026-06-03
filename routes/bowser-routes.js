@@ -53,6 +53,15 @@ router.get('/api/vehicles',
     [ensureLoggedIn],
     bowserController.getAllVehicles);
 
+// ── Bowser Report ─────────────────────────────────────────────
+router.get('/report',
+    [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],
+    bowserController.getReportPage);
+
+router.get('/report/excel',
+    [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],
+    bowserController.exportReportExcel);
+
 // ── Bowser Closing ────────────────────────────────────────────
 router.get('/closing',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],

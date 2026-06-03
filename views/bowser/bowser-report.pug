@@ -1,0 +1,165 @@
+extends ../layout
+
+block content
+    form#reportForm(method='get' action='/bowser/report')
+        input(type='hidden' name='selectedRange' id='selectedRangeInput' value=selectedRange || 'this_month')
+        table.center
+            tr
+                td Date Range:
+                td
+                    select#dateRange.form-control(onchange="onDateRangeChange()")
+                        option(value='this_month'          selected=(selectedRange==='this_month' || !selectedRange)) This Month
+                        option(value='last_month'          selected=(selectedRange==='last_month'))          Last Month
+                        option(value='this_financial_year' selected=(selectedRange==='this_financial_year')) This Financial Year
+                        option(value='last_financial_year' selected=(selectedRange==='last_financial_year')) Last Financial Year
+                        option(value='custom'              selected=(selectedRange==='custom'))              Custom Date
+                td &nbsp;
+                td#fromDateLabel(style=selectedRange==='custom' ? '' : 'display:none') From:
+                td(style=selectedRange==='custom' ? '' : 'display:none')
+                    input#fromDate.form-control(type='date' name='fromDate' value=fromDate max=currentDate)
+                td &nbsp;
+                td#toDateLabel(style=selectedRange==='custom' ? '' : 'display:none') To:
+                td(style=selectedRange==='custom' ? '' : 'display:none')
+                    input#toDate.form-control(type='date' name='toDate' value=toDate max=currentDate)
+                td &nbsp;
+                td Bowser:
+                td
+                    select#bowserId.form-control(name='bowserId')
+                        option(value='') All
+                        each b in bowsers
+                            option(value=b.bowser_id selected=(bowserId && String(bowserId) === String(b.bowser_id))) #{b.bowser_name}
+                include ../report-print-download.pug
+                td
+                    if transactions && transactions.length > 0
+                        button.btn.btn-success.ml-2(type='button' onclick='exportExcel()')
+                            i.fas.fa-file-excel
+                            |  Export Excel
+
+    div &nbsp;
+    div
+        div.row &nbsp;
+        h4.font-weight-bold.text-center Bowser Transactions Report
+        if formattedFromDate && formattedToDate
+            h5.text-center.text-muted= `${formattedFromDate} to ${formattedToDate}`
+
+        if transactions && transactions.length > 0
+            - var totalIn     = transactions.reduce(function(s,r){ return s + (r.in_qty  != null ? r.in_qty  : 0); }, 0)
+            - var totalOutQty = transactions.reduce(function(s,r){ return s + (r.out_qty != null ? r.out_qty : 0); }, 0)
+            - var totalAmt    = transactions.reduce(function(s,r){ return s + (r.amount  != null ? r.amount  : 0); }, 0)
+            - var fmtN = function(n, d) { return parseFloat(n || 0).toLocaleString('en-IN', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+
+            div.row &nbsp;
+            .table-responsive
+                table.table.table-bordered.table-hover.table-sm#txnTable
+                    thead.thead-light
+                        tr
+                            th.text-center Date
+                            th Bowser
+                            th.text-center IN / OUT
+                            th.text-center Type
+                            th Customer / Vendor
+                            th.text-center Vehicle
+                            th Product
+                            th.text-right IN Qty (L)
+                            th.text-right OUT Qty (L)
+                            th.text-right Amount (₹)
+                            th Ref / Bill No
+                    tbody
+                        each t in transactions
+                            tr
+                                td.text-center(style='white-space:nowrap')= new Date(t.closing_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td= t.bowser_name
+                                td.text-center
+                                    if t.direction === 'IN'
+                                        span.badge.badge-success IN
+                                    else
+                                        span.badge.badge-danger OUT
+                                td.text-center
+                                    if t.sub_type === 'Fill'
+                                        span.badge.badge-secondary Fill
+                                    else if t.sub_type === 'Credit'
+                                        span.badge.badge-primary Credit
+                                    else if t.sub_type === 'Digital'
+                                        span.badge.badge-info Digital
+                                    else
+                                        span.badge.badge-light Cash
+                                td= t.party || '—'
+                                td.text-center= t.vehicle_number || '—'
+                                td= t.product_name || '—'
+                                td.text-right
+                                    if t.in_qty != null
+                                        = fmtN(t.in_qty, 3)
+                                    else
+                                        | —
+                                td.text-right
+                                    if t.out_qty != null
+                                        = fmtN(t.out_qty, 3)
+                                    else
+                                        | —
+                                td.text-right
+                                    if t.amount != null
+                                        = fmtN(t.amount, 2)
+                                    else
+                                        | —
+                                td= t.ref || '—'
+                    tfoot.bg-light
+                        tr.font-weight-bold
+                            td(colspan='7') Total
+                            td.text-right= fmtN(totalIn, 3)
+                            td.text-right= fmtN(totalOutQty, 3)
+                            td.text-right= fmtN(totalAmt, 2)
+                            td
+        else
+            div.row &nbsp;
+            div.row.bg-light No transactions found for the selected period.
+
+    include ../overlay.pug
+
+    script.
+        function onDateRangeChange() {
+            var range = document.getElementById('dateRange').value;
+            document.getElementById('selectedRangeInput').value = range;
+            var fromInput = document.getElementById('fromDate');
+            var toInput   = document.getElementById('toDate');
+            var today = new Date();
+            var from, to;
+            if (range === 'this_month') {
+                from = new Date(today.getFullYear(), today.getMonth(), 1);
+                to   = today;
+            } else if (range === 'last_month') {
+                from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                to   = new Date(today.getFullYear(), today.getMonth(), 0);
+            } else if (range === 'this_financial_year') {
+                var m = today.getMonth();
+                from = m < 3 ? new Date(today.getFullYear()-1, 3, 1) : new Date(today.getFullYear(), 3, 1);
+                to   = today;
+            } else if (range === 'last_financial_year') {
+                var m = today.getMonth();
+                from = m < 3 ? new Date(today.getFullYear()-2, 3, 1) : new Date(today.getFullYear()-1, 3, 1);
+                to   = m < 3 ? new Date(today.getFullYear()-1, 2, 31) : new Date(today.getFullYear(), 2, 31);
+            } else {
+                ['fromDateLabel','toDateLabel'].forEach(function(id) {
+                    document.getElementById(id).style.display = 'table-cell';
+                    document.getElementById(id).nextElementSibling.style.display = 'table-cell';
+                });
+                return;
+            }
+            function fmt(d) { return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0]; }
+            fromInput.value = fmt(from);
+            toInput.value   = fmt(to);
+            ['fromDateLabel','toDateLabel'].forEach(function(id) {
+                document.getElementById(id).style.display = 'none';
+                document.getElementById(id).nextElementSibling.style.display = 'none';
+            });
+            document.getElementById('reportForm').submit();
+        }
+
+        function exportExcel() {
+            var params = new URLSearchParams({
+                fromDate: document.getElementById('fromDate').value,
+                toDate:   document.getElementById('toDate').value
+            });
+            var bid = document.getElementById('bowserId').value;
+            if (bid) params.set('bowserId', bid);
+            window.location.href = '/bowser/report/excel?' + params.toString();
+        }

@@ -449,5 +449,67 @@ module.exports = {
               AND (v.effective_end_date IS NULL OR v.effective_end_date > CURDATE())
             ORDER BY v.vehicle_number
         `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
+    // ── Report Queries ────────────────────────────────────────
+
+    getFillsReport: (locationCode, fromDate, toDate, bowserId) => {
+        const bowserFilter = bowserId ? 'AND ic.bowser_id = :bowserId' : '';
+        return db.sequelize.query(`
+            SELECT ic.closing_date, b.bowser_name, p.product_name, ic.quantity
+            FROM t_closing_intercompany ic
+            JOIN m_bowser  b ON b.bowser_id  = ic.bowser_id
+            JOIN m_product p ON p.product_id = ic.product_id
+            WHERE ic.location_code = :locationCode
+              AND ic.closing_date BETWEEN :fromDate AND :toDate
+              ${bowserFilter}
+            ORDER BY ic.closing_date, b.bowser_name
+        `, { replacements: { locationCode, fromDate, toDate, bowserId: bowserId || null }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
+    getDeliveriesReport: (locationCode, fromDate, toDate, bowserId) => {
+        const bowserFilter = bowserId ? 'AND bc.bowser_id = :bowserId' : '';
+        return db.sequelize.query(`
+            SELECT bc.closing_date, b.bowser_name, 'Credit' AS sale_type,
+                   cl.Company_Name AS party, cv.vehicle_number, p.product_name,
+                   cr.quantity, cr.rate, cr.amount, cr.bill_no
+            FROM t_bowser_credits cr
+            JOIN t_bowser_closing bc ON bc.bowser_closing_id = cr.bowser_closing_id
+            JOIN m_bowser  b ON b.bowser_id  = bc.bowser_id
+            JOIN m_product p ON p.product_id = cr.product_id
+            LEFT JOIN m_credit_list         cl ON cl.creditlist_id = cr.creditlist_id
+            LEFT JOIN m_creditlist_vehicles cv ON cv.vehicle_id    = cr.vehicle_id
+            WHERE bc.location_code = :locationCode
+              AND bc.closing_date BETWEEN :fromDate AND :toDate
+              ${bowserFilter}
+
+            UNION ALL
+
+            SELECT bc.closing_date, b.bowser_name, 'Digital' AS sale_type,
+                   cl.Company_Name AS party, NULL AS vehicle_number, NULL AS product_name,
+                   NULL AS quantity, NULL AS rate, ds.amount, ds.digital_ref AS bill_no
+            FROM t_bowser_digital_sales ds
+            JOIN t_bowser_closing bc ON bc.bowser_closing_id = ds.bowser_closing_id
+            JOIN m_bowser  b ON b.bowser_id  = bc.bowser_id
+            LEFT JOIN m_credit_list cl ON cl.creditlist_id = ds.digital_vendor_id
+            WHERE bc.location_code = :locationCode
+              AND bc.closing_date BETWEEN :fromDate AND :toDate
+              ${bowserFilter}
+
+            UNION ALL
+
+            SELECT bc.closing_date, b.bowser_name, 'Cash' AS sale_type,
+                   NULL AS party, NULL AS vehicle_number, p.product_name,
+                   NULL AS quantity, NULL AS rate, cs.amount, NULL AS bill_no
+            FROM t_bowser_cashsales cs
+            JOIN t_bowser_closing bc ON bc.bowser_closing_id = cs.bowser_closing_id
+            JOIN m_bowser  b ON b.bowser_id  = bc.bowser_id
+            JOIN m_product p ON p.product_id = cs.product_id
+            WHERE bc.location_code = :locationCode
+              AND bc.closing_date BETWEEN :fromDate AND :toDate
+              ${bowserFilter}
+
+            ORDER BY closing_date, bowser_name, sale_type
+        `, { replacements: { locationCode, fromDate, toDate, bowserId: bowserId || null }, type: db.Sequelize.QueryTypes.SELECT });
     }
 };
