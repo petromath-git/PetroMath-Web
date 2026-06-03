@@ -2,6 +2,45 @@
 const BowserDao      = require('../dao/bowser-dao');
 const utils          = require('../utils/app-utils');
 const locationConfig = require('../utils/location-config');
+const moment         = require('moment');
+
+function buildTransactions(fills, deliveries) {
+    const txns = [
+        ...fills.map(r => ({
+            closing_date:   r.closing_date,
+            bowser_name:    r.bowser_name,
+            direction:      'IN',
+            sub_type:       'Fill',
+            party:          null,
+            vehicle_number: null,
+            product_name:   r.product_name,
+            in_qty:         parseFloat(r.quantity || 0),
+            out_qty:        null,
+            rate:           null,
+            amount:         null,
+            ref:            null
+        })),
+        ...deliveries.map(r => ({
+            closing_date:   r.closing_date,
+            bowser_name:    r.bowser_name,
+            direction:      'OUT',
+            sub_type:       r.sale_type,
+            party:          r.party,
+            vehicle_number: r.vehicle_number,
+            product_name:   r.product_name,
+            in_qty:         null,
+            out_qty:        r.quantity != null ? parseFloat(r.quantity || 0) : null,
+            rate:           r.rate != null ? parseFloat(r.rate) : null,
+            amount:         parseFloat(r.amount || 0),
+            ref:            r.bill_no
+        }))
+    ];
+    txns.sort((a, b) => {
+        const d = new Date(a.closing_date) - new Date(b.closing_date);
+        return d !== 0 ? d : a.bowser_name.localeCompare(b.bowser_name);
+    });
+    return txns;
+}
 
 const parsePositiveRate = (value) => {
     const rate = Number.parseFloat(value);
@@ -362,6 +401,133 @@ module.exports = {
             const status = err.statusCode || 500;
             console.error('deleteClosing error:', err);
             res.status(status).json({ success: false, error: err.message });
+        }
+    },
+
+    // ── Bowser Transactions Report ────────────────────────────
+
+    getReportPage: async (req, res) => {
+        try {
+            const locationCode  = req.user.location_code;
+            const selectedRange = req.query.selectedRange || 'this_month';
+            const today         = moment();
+
+            let fromDate = req.query.fromDate;
+            let toDate   = req.query.toDate;
+            if (!fromDate || !toDate) {
+                fromDate = today.clone().startOf('month').format('YYYY-MM-DD');
+                toDate   = today.format('YYYY-MM-DD');
+            }
+
+            const bowserId = req.query.bowserId || null;
+
+            const [bowsers, fills, deliveries] = await Promise.all([
+                BowserDao.getActiveBowsersByLocation(locationCode),
+                BowserDao.getFillsReport(locationCode, fromDate, toDate, bowserId),
+                BowserDao.getDeliveriesReport(locationCode, fromDate, toDate, bowserId)
+            ]);
+
+            res.render('bowser/bowser-report', {
+                title: 'Bowser Transactions Report',
+                user: req.user,
+                bowsers,
+                transactions: buildTransactions(fills, deliveries),
+                fromDate,
+                toDate,
+                formattedFromDate: moment(fromDate).format('DD-MMM-YYYY'),
+                formattedToDate:   moment(toDate).format('DD-MMM-YYYY'),
+                currentDate:       today.format('YYYY-MM-DD'),
+                selectedRange,
+                bowserId
+            });
+        } catch (err) {
+            console.error('getReportPage error:', err);
+            res.status(500).send('Error loading bowser report');
+        }
+    },
+
+    exportReportExcel: async (req, res) => {
+        try {
+            const ExcelJS      = require('exceljs');
+            const locationCode = req.user.location_code;
+            const fromDate     = req.query.fromDate;
+            const toDate       = req.query.toDate;
+            const bowserId     = req.query.bowserId || null;
+
+            if (!fromDate || !toDate) {
+                return res.status(400).send('Date range required for export');
+            }
+
+            const [fills, deliveries] = await Promise.all([
+                BowserDao.getFillsReport(locationCode, fromDate, toDate, bowserId),
+                BowserDao.getDeliveriesReport(locationCode, fromDate, toDate, bowserId)
+            ]);
+            const transactions = buildTransactions(fills, deliveries);
+
+            const wb = new ExcelJS.Workbook();
+            const ws = wb.addWorksheet('Bowser Transactions');
+
+            ws.getRow(1).getCell(1).value = req.user.station_name || locationCode;
+            ws.getRow(1).getCell(1).font  = { bold: true, size: 13 };
+            ws.getRow(2).getCell(1).value = `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
+
+            const headers = ['Date', 'Bowser', 'IN/OUT', 'Type', 'Customer/Vendor', 'Vehicle', 'Product', 'IN Qty (L)', 'OUT Qty (L)', 'Amount (₹)', 'Ref/Bill No'];
+            const hRow = ws.getRow(4);
+            headers.forEach((h, i) => {
+                const c = hRow.getCell(i + 1);
+                c.value     = h;
+                c.font      = { bold: true };
+                c.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+                c.alignment = { horizontal: 'center' };
+                c.border    = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+            });
+
+            const fmt3 = v => v != null ? parseFloat(parseFloat(v).toFixed(3)) : null;
+            const fmt2 = v => v != null ? parseFloat(parseFloat(v).toFixed(2)) : null;
+            let totalIn = 0, totalOutQty = 0, totalAmt = 0;
+
+            transactions.forEach((t, idx) => {
+                const r = ws.getRow(5 + idx);
+                r.getCell(1).value  = moment(t.closing_date).format('DD-MMM-YYYY');
+                r.getCell(2).value  = t.bowser_name;
+                r.getCell(3).value  = t.direction;
+                r.getCell(4).value  = t.sub_type;
+                r.getCell(5).value  = t.party || '';
+                r.getCell(6).value  = t.vehicle_number || '';
+                r.getCell(7).value  = t.product_name || '';
+                r.getCell(8).value  = fmt3(t.in_qty);
+                r.getCell(9).value  = fmt3(t.out_qty);
+                r.getCell(10).value = fmt2(t.amount);
+                r.getCell(11).value = t.ref || '';
+                if (t.in_qty  != null) totalIn     += t.in_qty;
+                if (t.out_qty != null) totalOutQty += t.out_qty;
+                if (t.amount  != null) totalAmt    += t.amount;
+            });
+
+            const tRow = ws.getRow(5 + transactions.length);
+            tRow.getCell(1).value  = 'Total';
+            tRow.getCell(8).value  = parseFloat(totalIn.toFixed(3));
+            tRow.getCell(9).value  = parseFloat(totalOutQty.toFixed(3));
+            tRow.getCell(10).value = parseFloat(totalAmt.toFixed(2));
+            [1, 8, 9, 10].forEach(c => { tRow.getCell(c).font = { bold: true }; });
+
+            ws.getColumn(1).width  = 14;
+            ws.getColumn(2).width  = 22;
+            ws.getColumn(3).width  = 8;
+            ws.getColumn(4).width  = 10;
+            ws.getColumn(5).width  = 28;
+            ws.getColumn(6).width  = 14;
+            ws.getColumn(7).width  = 18;
+            [8, 9, 10, 11].forEach(c => { ws.getColumn(c).width = 14; });
+
+            const fileName = `BowserTransactions_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            await wb.xlsx.write(res);
+            res.end();
+        } catch (err) {
+            console.error('exportReportExcel error:', err);
+            res.status(500).send('Failed to generate Excel export');
         }
     }
 };
