@@ -264,6 +264,25 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 app.locals.CACHE_BUST = Date.now();
 
+// Per-location debug logging middleware — sets res.locals.debugLogging based on m_location_config
+const _debugLoggingCache = new Map();
+const addDebugLogging = async (req, res, next) => {
+    if (req.user && req.user.location_code) {
+        const locationCode = req.user.location_code;
+        if (!_debugLoggingCache.has(locationCode)) {
+            try {
+                const val = await getLocationConfigValue(locationCode, 'DEBUG_LOGGING', 'N');
+                _debugLoggingCache.set(locationCode, val === 'Y');
+            } catch { _debugLoggingCache.set(locationCode, false); }
+            setTimeout(() => _debugLoggingCache.delete(locationCode), 60_000);
+        }
+        res.locals.debugLogging = _debugLoggingCache.get(locationCode) || process.env.DEBUG_LOGGING === 'true';
+    } else {
+        res.locals.debugLogging = process.env.DEBUG_LOGGING === 'true';
+    }
+    next();
+};
+
 app.use(flash());
 app.use(require('cookie-parser')('keyboard cat'));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -357,6 +376,7 @@ const addUserLocationInfo = async (req, res, next) => {
 };
 
 app.use(addUserLocationInfo);
+app.use(addDebugLogging);
 
 
 

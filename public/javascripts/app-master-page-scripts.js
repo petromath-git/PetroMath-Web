@@ -1,4 +1,6 @@
 
+function debugLog(...args) { if (window.DEBUG_LOGGING) console.log(...args); }
+
 // Receipts - scripts - start
 
 
@@ -252,8 +254,8 @@ function saveCashFlowTxns(debitPrefix, creditPrefix) {
         const newTxns = [].concat(debitData.newTxns, creditData.newTxns);
         const updateTxns = [].concat(debitData.updateTxns, creditData.updateTxns);
         const newHiddenFieldsArr = [].concat(debitData.newHiddenFieldsArr, creditData.newHiddenFieldsArr);
-        console.log("Consolidated - New cash flow txn data " + JSON.stringify(newTxns));
-        console.log("Consolidated - Update cash flow txn data " + JSON.stringify(updateTxns));
+        debugLog("Consolidated - New cash flow txn data " + JSON.stringify(newTxns));
+        debugLog("Consolidated - Update cash flow txn data " + JSON.stringify(updateTxns));
         if (newTxns.length > 0 || updateTxns.length > 0) {
             postAjaxNew('save-cashflow-txns', newTxns, updateTxns, undefined, undefined, newHiddenFieldsArr, 'transaction_id')
                 .then((data) => {
@@ -288,8 +290,8 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
             }
         }
     });
-    console.log("New cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(newTxns));
-    console.log("Update cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(updateTxns));
+    debugLog("New cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(newTxns));
+    debugLog("Update cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(updateTxns));
     return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr };
 }
 
@@ -335,8 +337,8 @@ function saveCashFlowDenoms() {
                 }
             }
         });
-        console.log("New denoms data " + JSON.stringify(newDenoms));
-        console.log("Update denoms data " + JSON.stringify(updateDenoms));
+        debugLog("New denoms data " + JSON.stringify(newDenoms));
+        debugLog("Update denoms data " + JSON.stringify(updateDenoms));
         postAjaxNew('save-cashflow-denoms', newDenoms, updateDenoms, undefined, undefined, newHiddenFieldsArr, 'cashdenom_id')
             .then((data) => {
                 resolve(data);

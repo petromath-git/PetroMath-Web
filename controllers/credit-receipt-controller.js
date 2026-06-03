@@ -1,5 +1,6 @@
 const CreditReceiptsDao = require("../dao/credit-receipts-dao");
 const dbMapping = require("../db/ui-db-field-mapping")
+const { debugLog } = require('../utils/debug-logger');
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
@@ -36,8 +37,7 @@ module.exports = {
     saveReceipts: async (req, res) => {
         const txnReceiptDate = req.body.txn_receipt_date_0;
         let locationCode = req.user.location_code;
-
-        console.log('Saving receipt data:', req.body);
+        await debugLog(locationCode, 'Saving receipt data:', req.body);
 
         const configuredBackdateDays = Number(await locationConfig.getLocationConfigValue(
             locationCode,
@@ -84,7 +84,7 @@ module.exports = {
         
                     CreditReceiptsDao.create(dbMapping.newReceipt(req))
                         .then(data => {
-                            console.log('CreditReceiptsDao.create result:', data);
+                            debugLog(locationCode, 'CreditReceiptsDao.create result:', data);
                             if (data) {
                                 req.flash('success', 'Saved receipt data successfully.');
                                 res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
