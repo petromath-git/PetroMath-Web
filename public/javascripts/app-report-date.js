@@ -76,18 +76,26 @@ function updateDateRange() {
     fromDateInput.value = fromDate ? formatDateToISOString(fromDate) : '';
     toDateInput.value = toDate ? formatDateToISOString(toDate) : '';
 
+    function toggleDateField(el, show) {
+        if (!el) return;
+        const td = el.closest('td');
+        if (td) {
+            td.style.display = show ? 'table-cell' : 'none';
+        } else if (el.parentElement) {
+            el.parentElement.style.display = show ? '' : 'none';
+        }
+    }
+
     if (dateRange === 'custom') {
-        // Show the From Date and To Date inputs when 'Custom Date' is selected
-        fromDateInput.closest('td').style.display = 'table-cell';
-        toDateInput.closest('td').style.display = 'table-cell';
-        fromDateLabel.closest('td').style.display = 'table-cell';
-        toDateLabel.closest('td').style.display = 'table-cell';
+        toggleDateField(fromDateInput, true);
+        toggleDateField(toDateInput, true);
+        toggleDateField(fromDateLabel, true);
+        toggleDateField(toDateLabel, true);
     } else {
-        // Hide the From Date and To Date inputs when something other than 'Custom Date' is selected
-        fromDateInput.closest('td').style.display = 'none';
-        toDateInput.closest('td').style.display = 'none';
-        fromDateLabel.closest('td').style.display = 'none';
-        toDateLabel.closest('td').style.display = 'none';
+        toggleDateField(fromDateInput, false);
+        toggleDateField(toDateInput, false);
+        toggleDateField(fromDateLabel, false);
+        toggleDateField(toDateLabel, false);
     }
 
 
