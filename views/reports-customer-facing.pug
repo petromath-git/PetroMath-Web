@@ -2,37 +2,49 @@ extends layout-customer
 
 block content
     form(method='POST' action='/reports-indiv-customer')
-        table.center
-            tr
-                td Date Range:
-                td
-                    select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='this_month') This Month
-                        option(value='last_month') Last Month
-                        option(value='this_financial_year') This Financial Year
-                        option(value='last_financial_year') Last Financial Year
-                        option(value='custom', selected=true) Custom Date
-                td &nbsp;                   
-                td#fromDateLabel From Date:
-                td
-                    input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;                   
-                td#toDateLabel To Date:
-                td
-                    input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;                
-                include report-print-download.pug
-                td 
-                    input(type="hidden" id="company_id" name="company_id" value=company_id)    
-    div &nbsp;
-    div
+        input(type="hidden" id="company_id" name="company_id" value=company_id)
+        input(type="hidden" name="caller" value="notpdf")
+        .row.align-items-end.mb-3
+            .col-12.col-sm-auto.mb-2.mb-sm-0
+                label.d-block Date Range
+                select#dateRange.form-control(onchange="updateDateRange()")
+                    option(value='this_month') This Month
+                    option(value='last_month') Last Month
+                    option(value='this_financial_year') This Financial Year
+                    option(value='last_financial_year') Last Financial Year
+                    option(value='custom' selected=true) Custom Date
+            .col-6.col-sm-auto.mb-2.mb-sm-0
+                label#fromDateLabel.d-block From Date
+                input#fromclosingDate.form-control(type='date' name='fromClosingDate' value=fromClosingDate max=currentDate required)
+            .col-6.col-sm-auto.mb-2.mb-sm-0
+                label#toDateLabel.d-block To Date
+                input#toclosingDate.form-control(type='date' name='toClosingDate' value=toClosingDate max=currentDate required)
+            .col-12.col-sm-auto.mt-2.mt-sm-0.d-flex.align-items-end
+                button.btn.btn-primary.mr-2(type='submit' id='goButton') Go
+                button.btn.btn-success.mr-2(
+                    type='button'
+                    onClick='generatePDF(window.location.href,"N")'
+                    title='Download PDF'
+                    data-toggle='tooltip'
+                    data-placement='top'
+                )
+                    i.bi.bi-cloud-download
+                button.btn.btn-info(
+                    type='button'
+                    onClick='generatePDF(window.location.href,"Y")'
+                    title='Print'
+                    data-toggle='tooltip'
+                    data-placement='top'
+                )
+                    i.bi.bi-printer
+
+    div.mt-3
         if creditstmt && creditstmt.length > 0
             - var companyName = creditstmt[0].companyName
             - var cidparam = creditstmt[0].cidparam
             - var showPriceDiscountColumn = creditstmt.some(val => val['Price Discount'] != null && val['Price Discount'] != '' && val['Price Discount'] != 0)
             - var showVehicleColumn = creditstmt.some(val => val['Vehicle Number'] != null && val['Vehicle Number'] != '')
             - var showOdometerColumn = creditstmt.some(val => val['Odometer Reading'] != null && val['Odometer Reading'] != '')
-            div.row &nbsp;
             h6.font-weight-bold.text-center= "Credit Detail Report"
             if(cidparam == -1)
                 h5.font-weight-bold.text-center.text-uppercase= 'All Companies'
@@ -43,81 +55,80 @@ block content
                 if customerGstin
                     p.text-center.text-muted.mb-0= `GSTIN: ${customerGstin}`
                 h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
-            h4.font-weight-bold.text-success.text-center
-            table.table.table-bordered.border.table-sm
-                thead(class="thead-light")
-                    tr
-                        th.text-center Date                        
-                        th.text-center Particulars                      
-                        th.text-center Product Name
-                        if showVehicleColumn
-                            th.text-center Vehicle Number
-                        if showOdometerColumn
-                            th.text-center Odometer Reading
-                        th.text-center Price (Rs.)
-                        if showPriceDiscountColumn
-                            th.text-center PriceDiscount (Rs.)
-                        th.text-center Quantity
-                        th.text-center Debit (Rs.)
-                        th.text-center Credit (Rs.)
-                        th.text-center Balance (Rs.)
-                        th.text-center Narration
-                tbody
-                    if(cidparam != -1)
-                        tr                              
-                            td &nbsp;
-                            td.text-left Opening Balance                           
-                            td &nbsp;
+            div.table-responsive
+                table.table.table-bordered.border.table-sm
+                    thead(class="thead-light")
+                        tr
+                            th.text-center Date
+                            th.text-center Particulars
+                            th.text-center Product Name
                             if showVehicleColumn
-                                td &nbsp;
+                                th.text-center Vehicle Number
                             if showOdometerColumn
-                                td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
+                                th.text-center Odometer Reading
+                            th.text-center Price (Rs.)
                             if showPriceDiscountColumn
+                                th.text-center PriceDiscount (Rs.)
+                            th.text-center Quantity
+                            th.text-center Debit (Rs.)
+                            th.text-center Credit (Rs.)
+                            th.text-center Balance (Rs.)
+                            th.text-center Narration
+                    tbody
+                        if(cidparam != -1)
+                            tr
                                 td &nbsp;
-                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}                      
-                    each val in creditstmt
-                        tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                            td(scope="row")= val.Date                            
-                            td(scope="row")= val.Particulars                           
-                            td(scope="row")= val.Product
-                            if showVehicleColumn
-                                td.text-center(scope="row")= val['Vehicle Number']
-                            if showOdometerColumn
-                                td.text-center(scope="row")= val['Odometer Reading']
-                            td.text-right(scope="row")= val.Price
-                            if showPriceDiscountColumn
-                                td.text-right(scope="row")= val['Price Discount']
-                            td.text-right(scope="row")= val.Qty
-                            td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
-                            td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
-                            td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}                            
-                            td(scope="row")= val.Narration
-                    if(cidparam != -1)
-                        tr  
-                            td &nbsp;                           
-                            td.text-left Closing Balance                                                   
-                            td &nbsp;
-                            td &nbsp;
-                            if showVehicleColumn
+                                td.text-left Opening Balance
                                 td &nbsp;
-                            if showOdometerColumn
+                                if showVehicleColumn
+                                    td &nbsp;
+                                if showOdometerColumn
+                                    td &nbsp;
                                 td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            td &nbsp;
-                            if showPriceDiscountColumn
+                                if showPriceDiscountColumn
+                                    td &nbsp;
                                 td &nbsp;
-                            td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}                      
+                                td &nbsp;
+                                td &nbsp;
+                                td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(openingbalance)}
+                                td &nbsp;
+                        each val in creditstmt
+                            tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
+                                td(scope="row")= val.Date
+                                td(scope="row")= val.Particulars
+                                td(scope="row")= val.Product
+                                if showVehicleColumn
+                                    td.text-center(scope="row")= val['Vehicle Number']
+                                if showOdometerColumn
+                                    td.text-center(scope="row")= val['Odometer Reading']
+                                td.text-right(scope="row")= val.Price
+                                if showPriceDiscountColumn
+                                    td.text-right(scope="row")= val['Price Discount']
+                                td.text-right(scope="row")= val.Qty
+                                td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
+                                td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
+                                td.text-right(scope="row") #{val.Balance !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Balance) : ''}
+                                td(scope="row")= val.Narration
+                        if(cidparam != -1)
+                            tr
+                                td &nbsp;
+                                td.text-left Closing Balance
+                                td &nbsp;
+                                if showVehicleColumn
+                                    td &nbsp;
+                                if showOdometerColumn
+                                    td &nbsp;
+                                td &nbsp;
+                                if showPriceDiscountColumn
+                                    td &nbsp;
+                                td &nbsp;
+                                td &nbsp;
+                                td &nbsp;
+                                td.text-right.font-weight-bold #{new Intl.NumberFormat('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(closingbalance)}
+                                td &nbsp;
             div.col-12.text-right E &amp; OE
             div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.
         else
-            div.row &nbsp;
-            div.row.bg-light No Transactions.  
+            div.mt-3.bg-light.p-3 No Transactions.
 
-        // Include the overlay
         include overlay.pug
-
