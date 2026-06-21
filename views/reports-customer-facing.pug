@@ -13,10 +13,10 @@ block content
                     option(value='this_financial_year') This Financial Year
                     option(value='last_financial_year') Last Financial Year
                     option(value='custom' selected=true) Custom Date
-            .col-6.col-sm-auto.mb-2.mb-sm-0
+            .col-6.col-sm-auto.mb-2.mb-sm-0#fromDateGroup
                 label#fromDateLabel.d-block From Date
                 input#fromclosingDate.form-control(type='date' name='fromClosingDate' value=fromClosingDate max=currentDate required)
-            .col-6.col-sm-auto.mb-2.mb-sm-0
+            .col-6.col-sm-auto.mb-2.mb-sm-0#toDateGroup
                 label#toDateLabel.d-block To Date
                 input#toclosingDate.form-control(type='date' name='toClosingDate' value=toClosingDate max=currentDate required)
             .col-12.col-sm-auto.mt-2.mt-sm-0.d-flex.align-items-end
@@ -132,3 +132,45 @@ block content
             div.mt-3.bg-light.p-3 No Transactions.
 
         include overlay.pug
+
+    script.
+        // Override updateDateRange for Bootstrap grid layout (this page has no <td> wrappers)
+        function updateDateRange() {
+            var dateRange = document.getElementById('dateRange').value;
+            var fromDateInput = document.getElementById('fromclosingDate');
+            var toDateInput = document.getElementById('toclosingDate');
+            var fromGroup = document.getElementById('fromDateGroup');
+            var toGroup = document.getElementById('toDateGroup');
+            var currentDate = new Date();
+            var fromDate, toDate;
+
+            if (dateRange === 'this_month') {
+                fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                toDate = new Date();
+            } else if (dateRange === 'last_month') {
+                fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+                toDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+            } else if (dateRange === 'this_financial_year') {
+                var yr = currentDate.getFullYear(), mo = currentDate.getMonth();
+                fromDate = mo < 3 ? new Date(yr - 1, 3, 1) : new Date(yr, 3, 1);
+                toDate = new Date();
+            } else if (dateRange === 'last_financial_year') {
+                var yr = currentDate.getFullYear(), mo = currentDate.getMonth();
+                fromDate = mo < 3 ? new Date(yr - 2, 3, 1) : new Date(yr - 1, 3, 1);
+                toDate = mo < 3 ? new Date(yr - 1, 2, 31) : new Date(yr, 2, 31);
+            } else {
+                fromDate = null;
+                toDate = null;
+            }
+
+            function toISO(d) {
+                return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+            }
+
+            if (fromDate) fromDateInput.value = toISO(fromDate);
+            if (toDate) toDateInput.value = toISO(toDate);
+
+            var show = dateRange === 'custom';
+            fromGroup.style.display = show ? '' : 'none';
+            toGroup.style.display = show ? '' : 'none';
+        }
