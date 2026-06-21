@@ -57,6 +57,7 @@ block content
                         th Address
                         th GST
                         th Remittance Bank
+                        th Login
                         if canEdit || canDisable
                             th Actions
                 tbody#customersTableBody
@@ -72,6 +73,22 @@ block content
                                 td= val.address || '-'
                                 td= val.gst || '-'
                                 td= val.bank_name || '-'
+                                td
+                                    span.text-monospace.small= val.username || '-'
+                                    if val.username && val.username !== 'No Login Account' && val.username !== 'Error Loading'
+                                        if val.loginEnabled
+                                            span.badge.badge-success.ml-1(style="font-size:10px") Active
+                                        else
+                                            span.badge.badge-secondary.ml-1(style="font-size:10px") Disabled
+                                        button.btn.btn-sm.btn-link.p-0.ml-1.show-login-btn(
+                                            type="button"
+                                            data-customer-id=val.creditlist_id
+                                            data-customer-name=val.Company_Name
+                                            data-username=val.username
+                                            data-login-enabled=val.loginEnabled ? 'true' : 'false'
+                                            title="Show login details"
+                                        )
+                                            i.bi.bi-key
                                 if canEdit || canDisable
                                     td
                                         // Vehicle Management Link
@@ -98,6 +115,50 @@ block content
                     else
                         tr
                             td.text-center(colspan="9") No customers found
+
+    // Login Info Modal
+    .modal.fade#loginInfoModal(tabindex="-1", role="dialog")
+        .modal-dialog.modal-sm(role="document")
+            .modal-content
+                .modal-header.py-2
+                    h6.modal-title
+                        i.bi.bi-key.mr-1
+                        | Login Details
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    input(type="hidden" id="loginInfoCustomerId")
+                    input(type="hidden" id="loginInfoEnabled")
+                    p.mb-1.small.text-muted#loginInfoCustomerName
+                    .mb-3
+                        label.form-label.mb-1.small.font-weight-bold Username
+                        .input-group.input-group-sm
+                            input.form-control#loginInfoUsername(type="text", readonly)
+                            .input-group-append
+                                button.btn.btn-outline-secondary(type="button", onclick="copyLoginField('loginInfoUsername')", title="Copy")
+                                    i.bi.bi-clipboard
+                    .mb-2
+                        label.form-label.mb-1.small.font-weight-bold Password
+                        .input-group.input-group-sm
+                            input.form-control#loginInfoPassword(type="text", readonly, value="welcome123")
+                            .input-group-append
+                                button.btn.btn-outline-secondary(type="button", onclick="copyLoginField('loginInfoPassword')", title="Copy")
+                                    i.bi.bi-clipboard
+                    p.small.text-muted.mt-2.mb-0
+                        i.bi.bi-info-circle.mr-1
+                        | Password shown is this location's default. If the customer changed it, reset below.
+                    div#loginResetFeedback.mt-2
+                    hr.my-2
+                    .d-flex.align-items-center
+                        span.small.mr-2 Portal Access:
+                        span#loginStatusBadge.badge
+                    div#loginToggleFeedback.mt-2
+                .modal-footer.py-2
+                    button.btn.btn-sm#toggleLoginBtn(type="button")
+                    button.btn.btn-warning.btn-sm#resetPasswordBtn(type="button")
+                        i.bi.bi-arrow-counterclockwise.mr-1
+                        | Reset Password
+                    button.btn.btn-secondary.btn-sm(type="button", data-dismiss="modal") Close
 
     // Add Customer Modal
     .modal.fade#addCustomerModal(tabindex="-1", role="dialog")
@@ -302,6 +363,142 @@ block content
                 showMessage('Error updating customer', 'danger');
             });
         });
+
+        function updateLoginStatusUI(enabled) {
+            const badge = document.getElementById('loginStatusBadge');
+            const toggleBtn = document.getElementById('toggleLoginBtn');
+            document.getElementById('loginInfoEnabled').value = enabled ? 'true' : 'false';
+            if (enabled) {
+                badge.textContent = 'Active';
+                badge.className = 'badge badge-success';
+                toggleBtn.textContent = 'Disable Login';
+                toggleBtn.className = 'btn btn-outline-danger btn-sm';
+            } else {
+                badge.textContent = 'Disabled';
+                badge.className = 'badge badge-secondary';
+                toggleBtn.textContent = 'Enable Login';
+                toggleBtn.className = 'btn btn-outline-success btn-sm';
+            }
+        }
+
+        // Login info modal
+        document.querySelectorAll('.show-login-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const customerId = this.getAttribute('data-customer-id');
+                const loginEnabled = this.getAttribute('data-login-enabled') === 'true';
+                document.getElementById('loginInfoCustomerId').value = customerId;
+                document.getElementById('loginInfoCustomerName').textContent = this.getAttribute('data-customer-name');
+                document.getElementById('loginInfoUsername').value = this.getAttribute('data-username');
+                document.getElementById('loginInfoPassword').value = 'Checking...';
+                document.getElementById('loginInfoPassword').classList.add('text-muted');
+                document.getElementById('loginResetFeedback').innerHTML = '';
+                document.getElementById('loginToggleFeedback').innerHTML = '';
+                updateLoginStatusUI(loginEnabled);
+                $('#loginInfoModal').modal('show');
+
+                fetch(`/credit-master/api/${customerId}/login-info`)
+                    .then(r => r.json())
+                    .then(data => {
+                        const pwField = document.getElementById('loginInfoPassword');
+                        if (data.success) {
+                            if (data.passwordIsDefault) {
+                                pwField.value = data.defaultPassword;
+                                pwField.classList.remove('text-muted');
+                            } else {
+                                pwField.value = 'Password unknown — use Reset below';
+                                pwField.classList.add('text-muted');
+                            }
+                        } else {
+                            pwField.value = 'Could not check';
+                            pwField.classList.add('text-muted');
+                        }
+                    })
+                    .catch(() => {
+                        document.getElementById('loginInfoPassword').value = 'Could not check';
+                    });
+            });
+        });
+
+        document.getElementById('toggleLoginBtn').addEventListener('click', function() {
+            const customerId = document.getElementById('loginInfoCustomerId').value;
+            const currentlyEnabled = document.getElementById('loginInfoEnabled').value === 'true';
+            const enable = !currentlyEnabled;
+            const btn = this;
+            btn.disabled = true;
+
+            fetch(`/credit-master/api/${customerId}/toggle-login`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enable })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        updateLoginStatusUI(enable);
+                        document.getElementById('loginToggleFeedback').innerHTML =
+                            `<div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle mr-1"></i>Login ${enable ? 'enabled' : 'disabled'} successfully</div>`;
+                        // Update the badge in the table row
+                        const rowBtn = document.querySelector(`.show-login-btn[data-customer-id="${customerId}"]`);
+                        if (rowBtn) {
+                            rowBtn.setAttribute('data-login-enabled', enable ? 'true' : 'false');
+                            const badge = rowBtn.previousElementSibling;
+                            if (badge && badge.classList.contains('badge')) {
+                                badge.textContent = enable ? 'Active' : 'Disabled';
+                                badge.className = enable ? 'badge badge-success ml-1' : 'badge badge-secondary ml-1';
+                            }
+                        }
+                    } else {
+                        document.getElementById('loginToggleFeedback').innerHTML =
+                            `<div class="alert alert-danger py-1 px-2 mb-0 small">${data.error}</div>`;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('loginToggleFeedback').innerHTML =
+                        '<div class="alert alert-danger py-1 px-2 mb-0 small">Network error. Try again.</div>';
+                })
+                .finally(() => { btn.disabled = false; });
+        });
+
+        document.getElementById('resetPasswordBtn').addEventListener('click', function() {
+            const customerId = document.getElementById('loginInfoCustomerId').value;
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split mr-1"></i>Resetting...';
+
+            fetch(`/credit-master/api/${customerId}/reset-password`, { method: 'PUT' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const pwField = document.getElementById('loginInfoPassword');
+                        pwField.value = data.password;
+                        pwField.classList.remove('text-muted');
+                        document.getElementById('loginResetFeedback').innerHTML =
+                            `<div class="alert alert-success alert-sm py-1 px-2 mb-0 small"><i class="bi bi-check-circle mr-1"></i>Password reset to <strong>${data.password}</strong></div>`;
+                    } else {
+                        document.getElementById('loginResetFeedback').innerHTML =
+                            `<div class="alert alert-danger alert-sm py-1 px-2 mb-0 small">${data.error}</div>`;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('loginResetFeedback').innerHTML =
+                        '<div class="alert alert-danger alert-sm py-1 px-2 mb-0 small">Network error. Try again.</div>';
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-counterclockwise mr-1"></i>Reset to Default (welcome123)';
+                });
+        });
+
+        function copyLoginField(fieldId) {
+            const field = document.getElementById(fieldId);
+            navigator.clipboard.writeText(field.value).then(() => {
+                showMessage('Copied to clipboard', 'success');
+            }).catch(() => {
+                field.select();
+                document.execCommand('copy');
+                showMessage('Copied to clipboard', 'success');
+            });
+        }
 
         // Disable customer functionality
         document.querySelectorAll('.disable-customer-btn').forEach(btn => {

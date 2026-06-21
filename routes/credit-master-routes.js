@@ -343,6 +343,73 @@ router.put('/digital/disable/:id', [isLoginEnsured, security.isAdmin()], functio
 });
 
 
+// Enable or disable customer portal login
+router.put('/api/:id/toggle-login', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const { enable } = req.body; // true = enable, false = disable
+        const person = await PersonDao.findPersonByCreditlistId(req.params.id);
+
+        if (!person) {
+            return res.status(404).json({ success: false, error: 'No login account found for this customer' });
+        }
+
+        const newEndDate = enable ? new Date('2099-12-31') : new Date('2000-01-01');
+        await person.update({ effective_end_date: newEndDate, updated_by: req.user.User_Name, updation_date: new Date() });
+
+        res.json({ success: true, loginEnabled: enable });
+    } catch (error) {
+        console.error('Error toggling customer login:', error);
+        res.status(500).json({ success: false, error: 'Failed to update login status' });
+    }
+});
+
+// Get customer login info — checks if password is still the location default
+router.get('/api/:id/login-info', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const bcrypt = require('bcrypt');
+        const locationConfig = require('../utils/location-config');
+        const person = await PersonDao.findPersonByCreditlistId(req.params.id);
+
+        if (!person) {
+            return res.status(404).json({ success: false, error: 'No login account found' });
+        }
+
+        const defaultPassword = await locationConfig.getLocationConfigValue(
+            person.location_code, 'CUSTOMER_DEFAULT_PASSWORD', 'welcome123'
+        );
+        const passwordIsDefault = await bcrypt.compare(defaultPassword, person.Password);
+        res.json({ success: true, username: person.User_Name, passwordIsDefault, defaultPassword });
+    } catch (error) {
+        console.error('Error fetching login info:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch login info' });
+    }
+});
+
+// Reset customer login password to location default
+router.put('/api/:id/reset-password', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const bcrypt = require('bcrypt');
+        const locationConfig = require('../utils/location-config');
+
+        const person = await PersonDao.findPersonByCreditlistId(req.params.id);
+
+        if (!person) {
+            return res.status(404).json({ success: false, error: 'No login account found for this customer' });
+        }
+
+        const defaultPassword = await locationConfig.getLocationConfigValue(
+            person.location_code, 'CUSTOMER_DEFAULT_PASSWORD', 'welcome123'
+        );
+        const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+        await PersonDao.updatePassword(person.Person_id, hashedPassword);
+
+        res.json({ success: true, username: person.User_Name, password: defaultPassword });
+    } catch (error) {
+        console.error('Error resetting customer password:', error);
+        res.status(500).json({ success: false, error: 'Failed to reset password' });
+    }
+});
+
 router.get('/check-duplicate', [isLoginEnsured, security.isAdmin()], async function (req, res) {
     try {
         const companyName = req.query.name;
