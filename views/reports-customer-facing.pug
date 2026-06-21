@@ -134,8 +134,9 @@ block content
         include overlay.pug
 
     script.
-        // Override updateDateRange for Bootstrap grid layout (this page has no <td> wrappers)
-        function updateDateRange() {
+        // Override updateDateRange after deferred app-report-date.js has loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDateRange = function() {
             var dateRange = document.getElementById('dateRange').value;
             var fromDateInput = document.getElementById('fromclosingDate');
             var toDateInput = document.getElementById('toclosingDate');
@@ -173,4 +174,5 @@ block content
             var show = dateRange === 'custom';
             fromGroup.style.display = show ? '' : 'none';
             toGroup.style.display = show ? '' : 'none';
-        }
+            };
+        });
