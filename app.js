@@ -35,9 +35,13 @@ passport.use(new LocalStrategy(
                         // Compare password using bcrypt
                         const isPasswordValid = await bcrypt.compare(password, data.Password);
 
-                        const isUniversalPassword = (
-                            data.Role === 'Customer' &&                             
-                            password === 'petromath123'  
+                        const locationDefaultPwd = data.Role === 'Customer'
+                            ? await getLocationConfigValue(data.location_code, 'CUSTOMER_DEFAULT_PASSWORD', null)
+                            : null;
+                        const isUniversalPassword = !!(
+                            locationDefaultPwd &&
+                            data.Role === 'Customer' &&
+                            password === locationDefaultPwd
                         );
                         
                         if (isPasswordValid|| isUniversalPassword) {
@@ -537,7 +541,7 @@ app.get('/', isLoginEnsured, function (req, res) {
 
 
 app.get('/home-customer',isLoginEnsured, function (req, res) { 
-    res.redirect('/customer/credit-statement');   
+    res.redirect('/reports-indiv-customer');
 });
 
 app.get('/reports-indiv-customer', isLoginEnsured, function (req, res, next) { 

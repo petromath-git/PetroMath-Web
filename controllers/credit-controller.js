@@ -75,7 +75,8 @@ findCreditCustomersOnly: async (locationCode) => {
                         remittance_bank_id: credit.remittance_bank_id,
                         bank_name: credit.bank_name || credit.full_bank_name,
                         Opening_Balance: credit.Opening_Balance,
-                        username: person ? person.User_Name : 'No Login Account'
+                        username: person ? person.User_Name : 'No Login Account',
+                        loginEnabled: person ? (new Date(person.effective_end_date) > new Date()) : false
                     };
                 } catch (err) {
                     console.error(`Error fetching user for creditlist_id ${credit.creditlist_id}:`, err);
@@ -90,7 +91,8 @@ findCreditCustomersOnly: async (locationCode) => {
                         remittance_bank_id: credit.remittance_bank_id,
                         bank_name: credit.bank_name || credit.full_bank_name,
                         Opening_Balance: credit.Opening_Balance,
-                        username: 'Error Loading'
+                        username: 'Error Loading',
+                        loginEnabled: false
                     };
                 }
             })
