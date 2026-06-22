@@ -31,6 +31,11 @@ html
         //-         return formattedInteger + '.' + decimal;
         //-     }
         style.
+            /* Customer portal: undo global mobile CSS rules that were scoped to admin pages */
+            @media (max-width: 768px) {
+                .table-responsive { display: block !important; }
+                .table tbody tr { display: table-row !important; }
+            }
             @media print {
             table.table-bordered {
                 border-collapse: collapse !important;
