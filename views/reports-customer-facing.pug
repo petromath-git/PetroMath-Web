@@ -137,7 +137,8 @@ block content
                 if cidparam != -1
                     .d-flex.justify-content-between.align-items-center.py-2.px-1.mb-2.border-bottom
                         span.text-muted.small Opening Balance
-                        span.font-weight-bold= fmt(openingbalance)
+                        span.font-weight-bold(class=openingbalance >= 0 ? 'text-danger' : 'text-success')
+                            = fmt(Math.abs(openingbalance)) + (openingbalance >= 0 ? ' Dr' : ' Cr')
 
                 each val in creditstmt
                     - var isPayment = (val.price === null)
@@ -167,7 +168,8 @@ block content
                 if cidparam != -1
                     .d-flex.justify-content-between.align-items-center.py-2.px-1.mt-1.border-top
                         span.font-weight-bold Closing Balance
-                        span.font-weight-bold= fmt(closingbalance)
+                        span.font-weight-bold(class=closingbalance >= 0 ? 'text-danger' : 'text-success')
+                            = fmt(Math.abs(closingbalance)) + (closingbalance >= 0 ? ' Dr' : ' Cr')
 
             div.text-right.small.text-muted.mt-2 E &amp; OE
             div.text-center.small.text-muted Any discrepancies in this report should be reported to the management within 2 days.
