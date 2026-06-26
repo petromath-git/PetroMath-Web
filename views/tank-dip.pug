@@ -43,14 +43,23 @@ block content
                                 )
 
                         //- Dip Reading
-                        .col-md-3
+                        .col-md-2
                             .form-group
                                 label(for="dip_reading") Dip Reading (cm)
-                                select#dip_reading.form-control.form-control-sm(
+                                input#dip_reading.form-control(
+                                    type="text"
+                                    inputmode="decimal"
                                     name="dip_reading"
+                                    list="dip_chart_datalist"
+                                    placeholder="e.g. 45 or 45.3"
+                                    autocomplete="off"
                                     required
                                 )
-                                    option(value="") -- Select Dip Value --
+                                datalist#dip_chart_datalist
+                        .col-md-2
+                            .form-group
+                                label Volume
+                                div#dip_volume_display.pt-2.font-weight-bold.text-primary --
 
                     //- Tank Info Display
                     #tankInfo.row.mt-3(style="display: none;")
