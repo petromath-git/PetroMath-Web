@@ -83,30 +83,39 @@ function updateTankInfo(tankId) {
         $('#deadStock').text(`${tank.dead_stock} liters`);
         $('#tankInfo').show();
 
-        // Update dip reading dropdown
-        const dipSelect = $('#dip_reading');
-        dipSelect.empty();
-        dipSelect.append('<option value="">-- Select Dip Value --</option>');
+        // Build lookup map: dip_cm (integer key) -> volume_liters
+        const chartLines = (tank.m_tank_dipchart_header && tank.m_tank_dipchart_header.m_tank_dipchart_lines) || [];
+        const dipVolumeMap = {};
+        let maxDip = 0;
+        chartLines.forEach(line => {
+            const cm = Math.round(parseFloat(line.dip_cm));
+            dipVolumeMap[cm] = parseFloat(line.volume_liters);
+            if (cm > maxDip) maxDip = cm;
+        });
 
-        if (tank.m_tank_dipchart_header && tank.m_tank_dipchart_header.m_tank_dipchart_lines) {
-            tank.m_tank_dipchart_header.m_tank_dipchart_lines.forEach(line => {
-                dipSelect.append(`
-                    <option value="${line.dip_cm}" 
-                            data-volume="${line.volume_liters}">
-                        <strong>${line.dip_cm}</strong> cm (${line.volume_liters} liters)
-                    </option>
-                `);
-            });
+        // Populate datalist with integer chart values
+        const datalist = $('#dip_chart_datalist');
+        datalist.empty();
+        for (let cm = 1; cm <= maxDip; cm++) {
+            datalist.append(`<option value="${cm}">${cm} cm — ${dipVolumeMap[cm].toLocaleString('en-IN', {maximumFractionDigits: 2})} L</option>`);
         }
 
-        // Handle dip selection change
-        dipSelect.off('change').on('change', function() {
-            const selectedOption = $(this).find('option:selected');
-            const volume = selectedOption.data('volume');
-            if (volume) {
-                // You could display volume information if needed
-                console.log(`Selected dip corresponds to ${volume} liters`);
+        const dipInput = $('#dip_reading');
+        dipInput.val('');
+        $('#dip_volume_display').text('--');
+
+        dipInput.off('input change').on('input change', function() {
+            const raw = parseFloat($(this).val());
+            if (isNaN(raw) || raw <= 0 || raw > maxDip) {
+                $('#dip_volume_display').text('--');
+                return;
             }
+            const floor = Math.floor(raw);
+            const frac  = raw - floor;
+            const volFloor = dipVolumeMap[floor] || 0;
+            const volCeil  = dipVolumeMap[floor + 1] || volFloor;
+            const vol = frac > 0 ? volFloor + frac * (volCeil - volFloor) : volFloor;
+            $('#dip_volume_display').text(vol.toLocaleString('en-IN', {maximumFractionDigits: 2}) + ' L');
         });
 
         updatePumpReadings(tankId);
@@ -198,9 +207,9 @@ async function validateAndSubmit() {
         const tankId = $('#tank_id').val();
         const dipDate = $('#dip_date').val();
         const dipTime = $('#dip_time').val();
-        const dipReading = $('#dip_reading').val();
+        const dipReading = parseFloat($('#dip_reading').val());
 
-        if (!tankId || !dipDate || !dipTime || !dipReading) {
+        if (!tankId || !dipDate || !dipTime || isNaN(dipReading) || dipReading <= 0) {
             alert('Please fill all required fields');
             return;
         }
