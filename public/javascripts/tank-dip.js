@@ -71,6 +71,8 @@ $(document).ready(function() {
 function updateTankInfo(tankId) {
     if (!tankId) {
         $('#tankInfo, #connectedPumpsSection, #noPumpsMessage').hide();
+        $('#dip_reading').val('').prop('disabled', true);
+        $('#dip_volume_display').text('--');
         return;
     }
 
@@ -93,18 +95,18 @@ function updateTankInfo(tankId) {
             if (cm > maxDip) maxDip = cm;
         });
 
-        // Populate datalist with integer chart values
-        const datalist = $('#dip_chart_datalist');
-        datalist.empty();
-        for (let cm = 1; cm <= maxDip; cm++) {
-            datalist.append(`<option value="${cm}">${cm} cm — ${dipVolumeMap[cm].toLocaleString('en-IN', {maximumFractionDigits: 2})} L</option>`);
-        }
-
         const dipInput = $('#dip_reading');
-        dipInput.val('');
+        dipInput.val('').prop('disabled', false);
         $('#dip_volume_display').text('--');
 
-        dipInput.off('input change').on('input change', function() {
+        dipInput.off('input').on('input', function() {
+            // Restrict to max 2 decimal places
+            const val = $(this).val();
+            const dotPos = val.indexOf('.');
+            if (dotPos !== -1 && val.length - dotPos > 3) {
+                $(this).val(val.substring(0, dotPos + 3));
+            }
+
             const raw = parseFloat($(this).val());
             if (isNaN(raw) || raw <= 0 || raw > maxDip) {
                 $('#dip_volume_display').text('--');
