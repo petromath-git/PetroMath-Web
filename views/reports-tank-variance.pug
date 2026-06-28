@@ -79,6 +79,7 @@ block content
                             - var totalExpected = 0
                             - var totalActual = 0
                             - var totalVariance = 0
+                            - var hasGapWarning = false
                             each row in groupedByTank[tankCode]
                                 - totalOpening += row.opening_liters || 0
                                 - totalReceipts += row.receipts_liters || 0
@@ -88,8 +89,12 @@ block content
                                 - totalExpected += row.expected_liters || 0
                                 - totalActual += row.actual_liters || 0
                                 - totalVariance += row.variance_liters || 0
-                                tr(class=(Math.abs(row.variance_liters) >= 100 ? 'table-warning' : ''))
-                                    td= row.date_display
+                                - if (row.gap_warning) hasGapWarning = true
+                                tr(class=(row.gap_warning ? 'table-secondary' : (Math.abs(row.variance_liters) >= 100 ? 'table-warning' : '')))
+                                    td
+                                        = row.date_display
+                                        if row.gap_warning
+                                            span.ml-1(title=`Previous reading was ${row.gap_days} days ago`) ⚠
                                     td= row.time
                                     td= row.tank_code
                                     td= row.product_code
@@ -123,6 +128,14 @@ block content
                                         = ((totalVariance / totalSales) * 100).toFixed(2) + '%'
                                     else
                                         | -
+            - var anyGapWarning = varianceRows.some(r => r.gap_warning)
+            if anyGapWarning
+                .alert.alert-warning.mt-3.small
+                    strong ⚠ Note:&nbsp;
+                    | One or more rows are marked ⚠ because the previous dip reading was taken more than 7 days earlier.
+                    | For these rows, Gross Sales and Variance figures accumulate over the entire gap period and do not represent a single day's movement.
+                    | These rows should be disregarded for variance analysis.
+
         else
             div.row &nbsp;
             div.alert.alert-info.text-center No records to display for selected range.

@@ -672,6 +672,7 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
             const expected = opening + receiptLiters - netSales;
             const variance = actual - expected;
             const variancePct = netSales > 0 ? (variance / netSales) * 100 : null;
+            const gapDays = Math.round((curr.ts - prev.ts) / (1000 * 60 * 60 * 24));
 
             rows.push({
                 date: curr.dip_date,
@@ -686,7 +687,9 @@ function buildTankVarianceRows(raw, fromDate, toDate) {
                 expected_liters: expected,
                 actual_liters: actual,
                 variance_liters: variance,
-                variance_pct: variancePct
+                variance_pct: variancePct,
+                gap_days: gapDays,
+                gap_warning: gapDays > 7
             });
         }
     });
