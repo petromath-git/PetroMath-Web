@@ -68,17 +68,31 @@ $(document).ready(function() {
 });
 
 
+// Shared state for the currently selected tank's dip chart, used by both
+// the dip volume display and the live tank-variance check.
+const currentTankState = { dipVolumeMap: {}, maxDip: 0 };
+
+function volumeForDip(dipCm) {
+    if (isNaN(dipCm) || dipCm <= 0 || dipCm > currentTankState.maxDip) return null;
+    const floor = Math.floor(dipCm);
+    const frac  = dipCm - floor;
+    const volFloor = currentTankState.dipVolumeMap[floor] || 0;
+    const volCeil  = currentTankState.dipVolumeMap[floor + 1] || volFloor;
+    return frac > 0 ? volFloor + frac * (volCeil - volFloor) : volFloor;
+}
+
 function updateTankInfo(tankId) {
     if (!tankId) {
         $('#tankInfo, #connectedPumpsSection, #noPumpsMessage').hide();
         $('#dip_reading').val('').prop('disabled', true);
         $('#dip_volume_display').text('--');
+        $('#dip_variance_warning').hide();
         return;
     }
 
     const selectedOption = $(`#tank_id option[value="${tankId}"]`);
     const tank = tanks.find(t => t.tank_id === parseInt(tankId));
-    
+
     if (tank) {
         $('#productCode').text(tank.product_code);
         $('#tankCapacity').text(`${tank.tank_orig_capacity} liters`);
@@ -87,17 +101,18 @@ function updateTankInfo(tankId) {
 
         // Build lookup map: dip_cm (integer key) -> volume_liters
         const chartLines = (tank.m_tank_dipchart_header && tank.m_tank_dipchart_header.m_tank_dipchart_lines) || [];
-        const dipVolumeMap = {};
-        let maxDip = 0;
+        currentTankState.dipVolumeMap = {};
+        currentTankState.maxDip = 0;
         chartLines.forEach(line => {
             const cm = Math.round(parseFloat(line.dip_cm));
-            dipVolumeMap[cm] = parseFloat(line.volume_liters);
-            if (cm > maxDip) maxDip = cm;
+            currentTankState.dipVolumeMap[cm] = parseFloat(line.volume_liters);
+            if (cm > currentTankState.maxDip) currentTankState.maxDip = cm;
         });
 
         const dipInput = $('#dip_reading');
         dipInput.val('').prop('disabled', false);
         $('#dip_volume_display').text('--');
+        $('#dip_variance_warning').hide();
 
         dipInput.off('input').on('input', function() {
             // Restrict to max 2 decimal places
@@ -107,20 +122,46 @@ function updateTankInfo(tankId) {
                 $(this).val(val.substring(0, dotPos + 3));
             }
 
-            const raw = parseFloat($(this).val());
-            if (isNaN(raw) || raw <= 0 || raw > maxDip) {
-                $('#dip_volume_display').text('--');
-                return;
-            }
-            const floor = Math.floor(raw);
-            const frac  = raw - floor;
-            const volFloor = dipVolumeMap[floor] || 0;
-            const volCeil  = dipVolumeMap[floor + 1] || volFloor;
-            const vol = frac > 0 ? volFloor + frac * (volCeil - volFloor) : volFloor;
-            $('#dip_volume_display').text(vol.toLocaleString('en-IN', {maximumFractionDigits: 2}) + ' L');
+            const vol = volumeForDip(parseFloat($(this).val()));
+            $('#dip_volume_display').text(vol !== null ? vol.toLocaleString('en-IN', {maximumFractionDigits: 2}) + ' L' : '--');
+            recalcTankVariance();
         });
 
         updatePumpReadings(tankId);
+    }
+}
+
+function recalcTankVariance() {
+    const tankId = $('#tank_id').val();
+    const baseline = tankBaseline[tankId];
+    const warningEl = $('#dip_variance_warning');
+
+    if (!baseline) { warningEl.hide(); return; }
+
+    const dipVal = parseFloat($('#dip_reading').val());
+    const openingVolume = volumeForDip(baseline.lastDipReading);
+    const actualVolume = volumeForDip(dipVal);
+    if (openingVolume === null || actualVolume === null) { warningEl.hide(); return; }
+
+    let grossSales = 0;
+    $('.pump-reading-input').each(function() {
+        const last = parseFloat($(this).attr('data-last'));
+        const cur = parseFloat($(this).val());
+        if (!isNaN(last) && !isNaN(cur) && cur > last) {
+            grossSales += (cur - last);
+        }
+    });
+
+    const receipts = baseline.receiptsSinceLastDip || 0;
+    const expected = openingVolume + receipts - grossSales;
+    const variance = actualVolume - expected;
+
+    if (Math.abs(variance) >= 100) {
+        warningEl.attr('title',
+            `Expected ~${expected.toFixed(0)} L (opening ${openingVolume.toFixed(0)} + receipts ${receipts.toFixed(0)} - sales ${grossSales.toFixed(0)}) | You entered ~${actualVolume.toFixed(0)} L | Diff: ${variance.toFixed(0)} L`
+        ).show();
+    } else {
+        warningEl.hide();
     }
 }
 
@@ -141,15 +182,17 @@ function updatePumpReadings(tankId) {
 
     $('#pumpReadingsContainer').empty();
 
-    connectedPumps.forEach(pump => {  
+    connectedPumps.forEach(pump => {
         const lastReading = lastReadings[tankId]?.find(r => r.pump_id === pump.pump_id);
+        const baseline = (pumpHistory[tankId] || {})[pump.pump_id];
         const pumpHtml = `
             <div class="col-md-4 mb-3">
                 <div class="form-group">
                     <label>${pump.pump_code} (${pump.pump_make})
-                      ${lastReading ? 
-                            `<span class="text-muted ml-2">Last: ${lastReading.reading}</span>` : 
+                      ${lastReading ?
+                            `<span class="text-muted ml-2">Last: ${lastReading.reading}</span>` :
                             ''}
+                      <span class="pump-deviation-warning text-warning font-weight-bold ml-1" style="display:none" title=""> ⚠</span>
                     </label>
                     <input
                         type="number"
@@ -158,8 +201,9 @@ function updatePumpReadings(tankId) {
                         step="0.001"
                         min="0"
                         ${lastReading?.reading ? `data-last="${lastReading.reading}"` : ''}
+                        ${baseline?.avgPerDay != null ? `data-avg-per-day="${baseline.avgPerDay}" data-last-ts="${baseline.lastTs}"` : ''}
                         value="${pump.reading || ''}"  // Ensure the value is set correctly
-                        required                        
+                        required
                     >
                 </div>
             </div>
@@ -174,8 +218,43 @@ function updatePumpReadings(tankId) {
         validatePumpReading(this);
     });
 
+    $(document).off('input', '.pump-reading-input').on('input', '.pump-reading-input', function() {
+        checkPumpReadingDeviation(this);
+        recalcTankVariance();
+    });
+
     $('#connectedPumpsSection').show();
     $('#noPumpsMessage').hide();
+}
+
+function checkPumpReadingDeviation(input) {
+    const warningSpan = $(input).closest('.form-group').find('.pump-deviation-warning');
+    const avgPerDay = parseFloat($(input).attr('data-avg-per-day'));
+    const lastTs = parseFloat($(input).attr('data-last-ts'));
+    const lastReading = parseFloat($(input).attr('data-last')) || 0;
+    const currentReading = parseFloat($(input).val());
+
+    if (isNaN(avgPerDay) || isNaN(lastTs) || isNaN(currentReading)) {
+        warningSpan.hide();
+        return;
+    }
+
+    const dipDate = $('#dip_date').val();
+    const dipTime = $('#dip_time').val() || '00:00';
+    const currentTs = dipDate ? new Date(`${dipDate}T${dipTime}`).getTime() : Date.now();
+    const daysSince = Math.max((currentTs - lastTs) / 86400000, 1 / 24);
+
+    const expectedDelta = avgPerDay * daysSince;
+    const actualDelta = currentReading - lastReading;
+
+    const lowerBound = Math.min(expectedDelta * 0.2, expectedDelta - 50);
+    const upperBound = Math.max(expectedDelta * 5, expectedDelta + 50);
+
+    if (actualDelta < lowerBound || actualDelta > upperBound) {
+        warningSpan.attr('title', `Last: ${lastReading} | Usual change over ${daysSince.toFixed(1)} day(s): ~${expectedDelta.toFixed(0)} L | You entered: ${actualDelta.toFixed(0)} L`).show();
+    } else {
+        warningSpan.hide();
+    }
 }
 
 
