@@ -161,6 +161,73 @@ function TankDipDao() {
         }
     };
 
+    this.getPumpReadingHistory = async function(tank_id, maxEntries = 8) {
+        try {
+            const result = await db.sequelize.query(
+                `SELECT tr.pump_id, tr.reading, td.dip_date, td.dip_time
+                 FROM t_tank_reading tr
+                 JOIN t_tank_dip td ON tr.tdip_id = td.tdip_id
+                 WHERE td.tdip_id IN (
+                     SELECT tdip_id FROM t_tank_dip
+                     WHERE tank_id = :tank_id
+                     ORDER BY dip_date DESC, dip_time DESC
+                     LIMIT ${parseInt(maxEntries, 10)}
+                 )`,
+                {
+                    replacements: { tank_id: tank_id },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return result;
+        } catch (error) {
+            console.error("Error getting pump reading history:", error);
+            throw error;
+        }
+    };
+
+    this.getLatestDip = async function(tank_id) {
+        try {
+            const result = await db.sequelize.query(
+                `SELECT dip_reading,
+                        DATE_FORMAT(dip_date, '%Y-%m-%d') AS dip_date,
+                        TIME_FORMAT(dip_time, '%H:%i:%s') AS dip_time
+                 FROM t_tank_dip
+                 WHERE tank_id = :tank_id
+                 ORDER BY dip_date DESC, dip_time DESC
+                 LIMIT 1`,
+                {
+                    replacements: { tank_id: tank_id },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return result[0] || null;
+        } catch (error) {
+            console.error("Error getting latest dip:", error);
+            throw error;
+        }
+    };
+
+    this.getReceiptsSince = async function(tank_id, locationCode, sinceDate) {
+        try {
+            const result = await db.sequelize.query(
+                `SELECT dtl.quantity, rcpt.decant_date, rcpt.decant_time
+                 FROM t_tank_stk_rcpt_dtl dtl
+                 INNER JOIN t_tank_stk_rcpt rcpt ON rcpt.ttank_id = dtl.ttank_id
+                 WHERE dtl.tank_id = :tank_id
+                   AND rcpt.location_code = :locationCode
+                   AND rcpt.decant_date >= :sinceDate`,
+                {
+                    replacements: { tank_id: tank_id, locationCode: locationCode, sinceDate: sinceDate },
+                    type: db.Sequelize.QueryTypes.SELECT
+                }
+            );
+            return result;
+        } catch (error) {
+            console.error("Error getting receipts since date:", error);
+            throw error;
+        }
+    };
+
     this.delete = async function(tdip_id) {
         return await db.sequelize.transaction(async (t) => {
             // Delete tank readings first

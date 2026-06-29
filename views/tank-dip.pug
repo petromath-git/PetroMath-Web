@@ -58,7 +58,9 @@ block content
                         .col-md-2
                             .form-group
                                 label Volume
-                                div#dip_volume_display.pt-2.font-weight-bold.text-primary --
+                                div.pt-2
+                                    span#dip_volume_display.font-weight-bold.text-primary --
+                                    span#dip_variance_warning.text-warning.font-weight-bold.ml-1(style="display:none" title="") ⚠
 
                     //- Tank Info Display
                     #tankInfo.row.mt-3(style="display: none;")
@@ -140,6 +142,8 @@ block content
         const tanks = !{JSON.stringify(tanks)};
         const pumpTankMappings = !{JSON.stringify(pumpTankMappings)};
         const lastReadings = !{JSON.stringify(lastReadings)};
+        const pumpHistory = !{JSON.stringify(pumpHistory)};
+        const tankBaseline = !{JSON.stringify(tankBaseline)};
         window.allowPastDate = #{allowPastDate};
         // Now you can use the 'tanks' array in your JavaScript code.
         console.log(tanks);
