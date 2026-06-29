@@ -168,10 +168,12 @@ function TankDipDao() {
                  FROM t_tank_reading tr
                  JOIN t_tank_dip td ON tr.tdip_id = td.tdip_id
                  WHERE td.tdip_id IN (
-                     SELECT tdip_id FROM t_tank_dip
-                     WHERE tank_id = :tank_id
-                     ORDER BY dip_date DESC, dip_time DESC
-                     LIMIT ${parseInt(maxEntries, 10)}
+                     SELECT tdip_id FROM (
+                         SELECT tdip_id FROM t_tank_dip
+                         WHERE tank_id = :tank_id
+                         ORDER BY dip_date DESC, dip_time DESC
+                         LIMIT ${parseInt(maxEntries, 10)}
+                     ) AS recent_dips
                  )`,
                 {
                     replacements: { tank_id: tank_id },
