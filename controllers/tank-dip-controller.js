@@ -107,12 +107,33 @@ exports.getTankDipEntry = async function (req, res, next) {
 
         // Get the last readings for each tank's pumps
         const lastReadings = {};
+        const pumpHistory = {};
+        const tankBaseline = {};
         for (const tank of tanks) {
             const readings = await TankDipDao.getLatestPumpReadings(tank.tank_id);
             lastReadings[tank.tank_id] = readings;
-        }        
 
-        
+            const history = await TankDipDao.getPumpReadingHistory(tank.tank_id);
+            pumpHistory[tank.tank_id] = buildPumpRateBaseline(history);
+
+            const latestDip = await TankDipDao.getLatestDip(tank.tank_id);
+            if (latestDip) {
+                const lastDipTs = new Date(`${latestDip.dip_date}T${latestDip.dip_time}`).getTime();
+                const receiptRows = await TankDipDao.getReceiptsSince(tank.tank_id, locationCode, latestDip.dip_date);
+                const receiptsSinceLastDip = receiptRows.reduce((sum, r) => {
+                    const ts = toReceiptTs(r.decant_date, r.decant_time);
+                    return ts > lastDipTs ? sum + parseFloat(r.quantity || 0) * 1000 : sum;
+                }, 0);
+
+                tankBaseline[tank.tank_id] = {
+                    lastDipReading: parseFloat(latestDip.dip_reading),
+                    lastDipTs: lastDipTs,
+                    receiptsSinceLastDip: receiptsSinceLastDip
+                };
+            }
+        }
+
+
         res.render('tank-dip', {
             title: 'Tank Dip Entry',
             user: req.user,
@@ -121,10 +142,12 @@ exports.getTankDipEntry = async function (req, res, next) {
             pumpTankMappings: pumpTankMappings,
             existingDips: dipsWithReadings,
             lastReadings: lastReadings,
+            pumpHistory: pumpHistory,
+            tankBaseline: tankBaseline,
             searchDate: today,
             allowPastDate: allowPastDate,
             allowTankDipDelete: allowTankDipDelete,
-            currentDate: today  
+            currentDate: today
         });
     } catch (error) {
         console.error('Error fetching tank dip data:', error);
@@ -430,6 +453,54 @@ exports.getDipDetails = async (req, res) => {
 
 
 
+
+function toReceiptTs(decantDate, decantTime) {
+    const raw = (decantTime || '0').toString();
+    let hh, mm;
+    if (raw.includes(':')) {
+        hh = raw.slice(0, 2);
+        mm = raw.slice(3, 5);
+    } else {
+        const parts = raw.split('.');
+        hh = String(parseInt(parts[0] || '0', 10)).padStart(2, '0');
+        mm = parts[1] === '3' ? '30' : (parts[1] || '00').padEnd(2, '0').slice(0, 2);
+    }
+    const dateStr = dateFormat(new Date(decantDate), "yyyy-mm-dd");
+    return new Date(`${dateStr}T${hh}:${mm}:00`).getTime();
+}
+
+function buildPumpRateBaseline(history) {
+    const byPump = {};
+    (history || []).forEach(h => {
+        const pumpId = h.pump_id;
+        if (!byPump[pumpId]) byPump[pumpId] = [];
+        const dateStr = dateFormat(new Date(h.dip_date), "yyyy-mm-dd");
+        byPump[pumpId].push({
+            reading: parseFloat(h.reading),
+            ts: new Date(`${dateStr}T${h.dip_time}`).getTime()
+        });
+    });
+
+    const baseline = {};
+    Object.keys(byPump).forEach(pumpId => {
+        const entries = byPump[pumpId].sort((a, b) => a.ts - b.ts);
+        const newest = entries[entries.length - 1];
+        const oldest = entries[0];
+        let avgPerDay = null;
+        if (entries.length >= 2) {
+            const daysSpan = (newest.ts - oldest.ts) / 86400000;
+            if (daysSpan > 0) {
+                avgPerDay = Math.max((newest.reading - oldest.reading) / daysSpan, 0);
+            }
+        }
+        baseline[pumpId] = {
+            lastReading: newest.reading,
+            lastTs: newest.ts,
+            avgPerDay: avgPerDay
+        };
+    });
+    return baseline;
+}
 
 function calculateIntermediateDipCm(dipChartLines) {
     let result = [];
