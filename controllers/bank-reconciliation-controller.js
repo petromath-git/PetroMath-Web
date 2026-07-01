@@ -585,13 +585,16 @@ uploadBankStatement: async (req, res) => {
             });
         }
 
-        // Parse Excel file
-        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        
-        // Convert to JSON
-        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+        let data;
+        if (isHtmlFile(req.file.buffer)) {
+            await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
+            data = parseHtmlXlsToData(req.file.buffer);
+        } else {
+            const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+        }
 
         // ========== STEP 1: Parse all dates first to find earliest date ==========
         const tempDates = [];
@@ -601,10 +604,11 @@ uploadBankStatement: async (req, res) => {
             
             const txnDate = parseExcelDate(
                     row[columnToIndex(template.value_date_column || template.date_column)],
-                    template.date_format  // ← Pass the format from template
+                    template.date_format
                 );
-            if (txnDate) {
-                tempDates.push(txnDate);
+            const normalizedTxnDate = normalizeYmd(txnDate);
+            if (normalizedTxnDate) {
+                tempDates.push(normalizedTxnDate);
             }
         }
         
@@ -694,22 +698,31 @@ uploadBankStatement: async (req, res) => {
             
             if (!row || row.length === 0) continue;
 
-            const txnDate = parseExcelDate(
+            const parsedTxnDate = parseExcelDate(
                     row[columnToIndex(template.value_date_column || template.date_column)],
-                    template.date_format  // ← Pass the format from template
+                    template.date_format
                 );
-            
+            const txnDate = normalizeYmd(parsedTxnDate);
+
+            if (!txnDate) continue;
+
             if (excludeToday && txnDate >= todayStr) {
                 excludedTodayCount.push(txnDate);
                 continue;
             }
 
-            const debitRaw = row[columnToIndex(template.debit_column)] || '';
-            const creditRaw = row[columnToIndex(template.credit_column)] || '';
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
 
-            const debitAmount = parseFloat(String(debitRaw).replace(/,/g, '')) || 0;
-            const creditAmount = parseFloat(String(creditRaw).replace(/,/g, '')) || 0;
+            let debitAmount, creditAmount;
+            if (template.transaction_type_column) {
+                const txnType = String(row[columnToIndex(template.transaction_type_column)] || '').trim().toLowerCase();
+                const amount = parseAmount(row[columnToIndex(template.debit_column)]);
+                debitAmount = txnType === 'debit' ? amount : 0;
+                creditAmount = txnType === 'credit' ? amount : 0;
+            } else {
+                debitAmount = parseAmount(row[columnToIndex(template.debit_column)]);
+                creditAmount = parseAmount(row[columnToIndex(template.credit_column)]);
+            }
 
               // ===== SKIP TOTAL/SUMMARY ROWS =====
             // Rows with BOTH debit and credit are typically total/summary rows
@@ -726,13 +739,11 @@ uploadBankStatement: async (req, res) => {
                 description: row[columnToIndex(template.description_column)] || '',
                 debit_amount: debitAmount,
                 credit_amount: creditAmount,
-                balance_amount: parseFloat(String(balanceRaw).replace(/,/g, '')) || 0,
-                running_balance: parseFloat(String(balanceRaw).replace(/,/g, '')) || null, 
+                balance_amount: parseAmount(balanceRaw),
+                running_balance: parseAmount(balanceRaw) || null,
                 statement_ref: row[columnToIndex(template.reference_column)] || null,
                 source_file: req.file.originalname
             };
-
-            if (txn.debit_amount === 0 && txn.credit_amount === 0) continue;
 
             transactions.push(txn);
         }
@@ -1238,6 +1249,86 @@ function columnToIndex(column) {
         result = result * 26 + (col.charCodeAt(i) - 64);
     }
     return result - 1;
+}
+
+function isHtmlFile(buffer) {
+    const start = buffer.slice(0, 200).toString('utf8').trimStart().toLowerCase();
+    return start.startsWith('<html') || start.startsWith('<!doctype html');
+}
+
+function parseHtmlXlsToData(buffer) {
+    const html = buffer.toString('utf8');
+    const rows = [];
+    let currentRow = null;
+    let currentCell = '';
+    let inCell = false;
+
+    const decode = (s) => s
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n));
+
+    const tagRegex = /<(\/?)([a-zA-Z]+)[^>]*>|([^<]+)/g;
+    let match;
+
+    while ((match = tagRegex.exec(html)) !== null) {
+        const isClosing = match[1] === '/';
+        const tag = (match[2] || '').toLowerCase();
+        const text = match[3];
+
+        if (text !== undefined && inCell) {
+            currentCell += text;
+        } else if (tag === 'tr' && !isClosing) {
+            currentRow = [];
+        } else if (tag === 'tr' && isClosing) {
+            if (currentRow && currentRow.length > 0) rows.push(currentRow);
+            currentRow = null;
+        } else if ((tag === 'td' || tag === 'th') && !isClosing) {
+            inCell = true;
+            currentCell = '';
+        } else if ((tag === 'td' || tag === 'th') && isClosing) {
+            if (currentRow !== null) currentRow.push(decode(currentCell.trim()));
+            inCell = false;
+        }
+    }
+
+    return rows;
+}
+
+function normalizeYmd(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = parseInt(match[1], 10);
+    let month = parseInt(match[2], 10);
+    let day = parseInt(match[3], 10);
+
+    if (month > 12 && day <= 12) {
+        const temp = month;
+        month = day;
+        day = temp;
+    }
+
+    const d = new Date(year, month - 1, day);
+    if (
+        d.getFullYear() !== year ||
+        d.getMonth() !== month - 1 ||
+        d.getDate() !== day
+    ) {
+        return null;
+    }
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseAmount(raw) {
+    if (raw === null || raw === undefined || raw === '') return 0;
+    const cleaned = String(raw).replace(/[A-Z]{2,3}\s*/g, '').replace(/,/g, '').trim();
+    return parseFloat(cleaned) || 0;
 }
 
 
