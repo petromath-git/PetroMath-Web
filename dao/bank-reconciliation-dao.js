@@ -577,6 +577,19 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
     }
 },
 
+    deleteStatementsByDateRange: async (locationCode, bankId, fromDate, toDate) => {
+        await db.sequelize.query(
+            `DELETE FROM t_bank_statement_actual
+             WHERE location_code = :locationCode
+               AND bank_id = :bankId
+               AND txn_date BETWEEN :fromDate AND :toDate`,
+            {
+                replacements: { locationCode, bankId, fromDate, toDate },
+                type: db.Sequelize.QueryTypes.DELETE
+            }
+        );
+    },
+
     /**
      * Bulk insert bank statement transactions
      */
