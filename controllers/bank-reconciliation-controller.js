@@ -777,35 +777,13 @@ if (accountValidation.warning) {
     console.warn('ACCOUNT VALIDATION WARNING:', accountValidation.warning);
 }
 
-        // ========== STEP 6: Check for duplicates ==========
+        // ========== STEP 6: Return response ==========
 
-     
-        
-        const duplicates = await bankReconDao.checkDuplicates(locationCode, bankId, transactions);
-        
-     
-        const transactionsWithDupFlag = transactions.map(txn => {
-            const isDup = duplicates.some(dup => 
-                dup.txn_date === txn.txn_date && 
-                dup.description === txn.description &&
-                parseFloat(dup.credit_amount) === parseFloat(txn.credit_amount) &&
-                parseFloat(dup.debit_amount) === parseFloat(txn.debit_amount)
-            );
-            return {
-                ...txn,
-                is_duplicate: isDup
-            };
-        });
-
-        // ========== STEP 7: Return response ==========
-        
         res.json({
             success: true,
-            transactions: transactionsWithDupFlag,
-            duplicates: duplicates,
+            transactions: transactions,
             summary: {
                 total: transactions.length,
-                duplicates: duplicates.length,
                 excluded_today: excludedTodayCount.length,
                 last_uploaded_date: lastUploadedDate,
                 earliest_upload_date: earliestUploadDate,
@@ -848,25 +826,14 @@ saveBankStatement: async (req, res) => {
             });
         }
 
-        // Filter out duplicates (only save non-duplicates)
-        const nonDuplicates = transactions.filter(t => !t.is_duplicate);
-
-        if (nonDuplicates.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'All transactions are duplicates. Nothing to import.'
-            });
-        }
-
-        // Calculate date range
-        const dates = nonDuplicates.map(t => t.txn_date).sort();
+        // Calculate date range from uploaded transactions
+        const dates = transactions.map(t => t.txn_date).filter(Boolean).sort();
         const firstTxnDate = dates[0];
         const lastTxnDate = dates[dates.length - 1];
 
-        // Insert transactions
-        const result = await bankReconDao.bulkInsertStatements(
-            locationCode, bankId, nonDuplicates, userName
-        );
+        // Delete existing records for this date range, then insert fresh
+        await bankReconDao.deleteStatementsByDateRange(locationCode, bankId, firstTxnDate, lastTxnDate);
+        const result = await bankReconDao.bulkInsertStatements(locationCode, bankId, transactions, userName);
 
         // Record upload history
         await bankReconDao.insertUploadHistory({
@@ -875,17 +842,17 @@ saveBankStatement: async (req, res) => {
             source_file: sourceFile,
             uploaded_by: userName,
             total_transactions: transactions.length,
-            duplicates_found: transactions.length - nonDuplicates.length,
+            duplicates_found: 0,
             transactions_imported: result.inserted,
             first_txn_date: firstTxnDate,
             last_txn_date: lastTxnDate,
             status: 'COMPLETED',
-            remarks: `Imported ${result.inserted} transactions from ${firstTxnDate} to ${lastTxnDate}`
+            remarks: `Replaced ${firstTxnDate} to ${lastTxnDate} (${result.inserted} rows)`
         });
 
         res.json({
             success: true,
-            message: `${result.inserted} transactions imported successfully (${transactions.length - nonDuplicates.length} duplicates skipped)`
+            message: `${result.inserted} transactions imported successfully`
         });
 
     } catch (error) {
