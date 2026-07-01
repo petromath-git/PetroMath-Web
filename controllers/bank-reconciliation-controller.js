@@ -777,20 +777,29 @@ if (accountValidation.warning) {
     console.warn('ACCOUNT VALIDATION WARNING:', accountValidation.warning);
 }
 
-        // ========== STEP 6: Return response ==========
+        // ========== STEP 6: Save — delete date range then insert all ==========
+
+        await bankReconDao.deleteStatementsByDateRange(locationCode, bankId, earliestUploadDate, latestUploadDate);
+        const result = await bankReconDao.bulkInsertStatements(locationCode, bankId, transactions, userName);
+
+        await bankReconDao.insertUploadHistory({
+            location_code: locationCode,
+            bank_id: bankId,
+            source_file: req.file.originalname,
+            uploaded_by: userName,
+            total_transactions: transactions.length,
+            duplicates_found: 0,
+            transactions_imported: result.inserted,
+            first_txn_date: earliestUploadDate,
+            last_txn_date: latestUploadDate,
+            status: 'COMPLETED',
+            remarks: `Replaced ${earliestUploadDate} to ${latestUploadDate} (${result.inserted} rows)`
+        });
 
         res.json({
             success: true,
-            transactions: transactions,
-            summary: {
-                total: transactions.length,
-                excluded_today: excludedTodayCount.length,
-                last_uploaded_date: lastUploadedDate,
-                earliest_upload_date: earliestUploadDate,
-                latest_upload_date: latestUploadDate,
-                overlap_mode: overlapMode,
-                has_gap: lastUploadedDate && earliestUploadDate > lastUploadedDate
-            }
+            count: result.inserted,
+            message: `${result.inserted} transactions imported (${earliestUploadDate} to ${latestUploadDate})`
         });
 
     } catch (error) {
