@@ -351,200 +351,63 @@ block content
         }
         
         // UPLOAD TAB FUNCTIONS
-        let uploadedTransactions = [];
-        
-        async function uploadAndPreview() {
+
+        async function uploadAndSave() {
             const fileInput = document.getElementById('bankStatementFile');
             const bankId = document.getElementById('upload_bank_id').value;
-            
+            const btn = document.getElementById('btnUploadSave');
+            const statusDiv = document.getElementById('uploadStatus');
+
             if (!fileInput.files[0]) {
                 alert('Please select a file');
                 return;
             }
-            
             if (!bankId) {
                 alert('Please select a bank');
                 return;
             }
-            
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+            statusDiv.innerHTML = '';
+
             const formData = new FormData();
             formData.append('bankStatement', fileInput.files[0]);
             formData.append('bank_id', bankId);
-            
-            // Show loading state
-            document.getElementById('uploadStep1').style.display = 'none';
-            document.getElementById('uploadStep2').style.display = 'block';
-            document.getElementById('previewContent').innerHTML = `
-                <div class="text-center p-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2">Processing file...</p>
-                </div>
-            `;
-            
+
             try {
                 const response = await fetch('/reports-bank-recon/upload', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
-                    uploadedTransactions = data.transactions;
-                    displayPreview(data);
-                    document.getElementById('btnConfirmUpload').style.display = 'block';
+                    statusDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            ${data.message}. Page will reload.
+                        </div>`;
+                    setTimeout(() => location.reload(), 1500);
                 } else {
-                    document.getElementById('previewContent').innerHTML = `
-                        <div class="alert alert-danger m-3">
+                    statusDiv.innerHTML = `
+                        <div class="alert alert-danger">
                             <i class="bi bi-x-circle me-2"></i>
-                            Error: ${data.error}
-                        </div>
-                    `;
+                            ${data.error}
+                        </div>`;
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-upload me-2"></i>Upload & Save';
                 }
             } catch (error) {
                 console.error('Upload error:', error);
-                document.getElementById('previewContent').innerHTML = `
-                    <div class="alert alert-danger m-3">
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger">
                         <i class="bi bi-x-circle me-2"></i>
-                        Failed to process file.
-                    </div>
-                `;
-            }
-        }
-        
-        function displayPreview(data) {
-            const previewDiv = document.getElementById('previewContent');
-            
-            let summaryHtml = `
-                <div class="alert alert-info m-3 mb-0">
-                    <strong><i class="bi bi-file-earmark-spreadsheet me-2"></i>Preview: ${data.summary.total} transactions found</strong>
-                    ${data.summary.duplicates > 0 ? 
-                        `<br><i class="bi bi-exclamation-triangle me-2 text-warning"></i>${data.summary.duplicates} duplicate(s) detected (will be skipped)` 
-                        : ''}
-                    ${data.summary.excluded_today > 0 ?
-                        `<br><i class="bi bi-info-circle me-2 text-info"></i>${data.summary.excluded_today} transaction(s) from today excluded (only imports up to ${data.summary.yesterday_date})` 
-                        : ''}
-                </div>
-            `;
-            
-            let tableHtml = `
-                <div class="table-responsive" style="max-height: 60vh;">
-                    <table class="table table-sm table-hover table-bordered mb-0">
-                        <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 10;">
-                            <tr>
-                                <th style="width: 100px;">Date</th>
-                                <th style="min-width: 250px;">Description</th>
-                                <th style="width: 120px; text-align: right;">Credit</th>
-                                <th style="width: 120px; text-align: right;">Debit</th>
-                                <th style="width: 120px; text-align: right;">Balance</th>
-                                <th style="width: 80px; text-align: center;">Include</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-            
-            data.transactions.forEach((txn, index) => {
-                 const isDuplicate = txn.is_duplicate;
-                
-                const rowClass = isDuplicate ? 'table-warning' : '';
-                const checked = isDuplicate ? '' : 'checked';
-                const dupLabel = isDuplicate ? '<br><small class="text-warning">Dup?</small>' : '';
-                
-                tableHtml += `
-                    <tr class="${rowClass}">
-                        <td>${txn.txn_date}</td>
-                        <td><div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${txn.description}">${txn.description}</div></td>
-                        <td style="text-align: right;">${txn.credit_amount > 0 ? txn.credit_amount.toFixed(2) : '-'}</td>
-                        <td style="text-align: right;">${txn.debit_amount > 0 ? txn.debit_amount.toFixed(2) : '-'}</td>
-                        <td style="text-align: right;">${txn.balance_amount ? txn.balance_amount.toFixed(2) : '-'}</td>
-                        <td style="text-align: center;">
-                            ${isDuplicate ? 
-                                `<span class="text-muted">-</span>
-                                <br><span class="badge badge-warning">Already Uploaded</span>` : 
-                                `<input type="checkbox" 
-                                    class="form-check-input txn-checkbox" 
-                                    data-index="${index}" 
-                                    checked>`
-                            }                                  
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            tableHtml += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
-            previewDiv.innerHTML = summaryHtml + tableHtml;
-
-            const nonDuplicateCount = data.summary.total - data.summary.duplicates;
-            if (nonDuplicateCount > 0) {
-                document.getElementById('btnConfirmUploadRow').style.display = 'block';
-            } else {
-                document.getElementById('btnConfirmUploadRow').style.display = 'none';
-            }
-        }
-        
-        function resetUploadForm() {
-            document.getElementById('uploadStep1').style.display = 'block';
-            document.getElementById('uploadStep2').style.display = 'none';
-            document.getElementById('btnConfirmUpload').style.display = 'none';
-            document.getElementById('bankStatementFile').value = '';
-            uploadedTransactions = [];
-        }
-        
-        async function confirmSave() {
-            const checkboxes = document.querySelectorAll('.txn-checkbox:checked');
-            
-            if (checkboxes.length === 0) {
-                alert('Please select at least one transaction to save');
-                return;
-            }
-            
-            const selectedTransactions = [];
-            checkboxes.forEach(cb => {
-                const index = parseInt(cb.dataset.index);
-                if (uploadedTransactions[index]) {
-                    selectedTransactions.push(uploadedTransactions[index]);
-                }
-            });
-            
-            const proceed = confirm(`You are about to save ${selectedTransactions.length} transaction(s). Proceed?`);
-            if (!proceed) return;
-            
-            const bankId = document.getElementById('upload_bank_id').value;
-            document.getElementById('btnConfirmUpload').disabled = true;
-            document.getElementById('btnConfirmUpload').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-            
-            try {
-                const response = await fetch('/reports-bank-recon/save-statement', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        bank_id: bankId,
-                        transactions: selectedTransactions
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert(data.message + '. Page will reload.');
-                    location.reload();
-                } else {
-                    alert(`Error: ${data.error}`);
-                    document.getElementById('btnConfirmUpload').disabled = false;
-                    document.getElementById('btnConfirmUpload').innerHTML = '<i class="bi bi-save me-1"></i> Confirm & Save';
-                }
-            } catch (error) {
-                console.error('Save error:', error);
-                alert('Failed to save transactions');
-                document.getElementById('btnConfirmUpload').disabled = false;
-                document.getElementById('btnConfirmUpload').innerHTML = '<i class="bi bi-save me-1"></i> Confirm & Save';
+                        Failed to upload file.
+                    </div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-upload me-2"></i>Upload & Save';
             }
         }
         
@@ -909,25 +772,13 @@ block content
                                 .col-12
                                     .alert.alert-info.mb-0
                                         i.bi.bi-info-circle.me-2
-                                        | Upload your bank statement in Excel format (.xlsx or .xls). The system will automatically detect and preview transactions.
+                                        | Upload your bank statement in Excel format (.xlsx or .xls). Existing records for the uploaded date range will be replaced.
                             .row.mt-3
                                 .col-12
-                                    button.btn.btn-primary.btn-lg(type='button' onclick='uploadAndPreview()')
-                                        i.bi.bi-eye.me-2
-                                        | Upload & Preview
-                        
-                        #uploadStep2(style='display: none;')
-                            .d-flex.justify-content-between.align-items-center.mb-3
-                                h6.mb-0 Transaction Preview
-                                button.btn.btn-secondary.btn-sm(type='button' onclick='resetUploadForm()')
-                                    i.bi.bi-arrow-left.me-1
-                                    | Back to Upload
-                            #previewContent
-                            .row.mt-3(style='display: none;' id='btnConfirmUploadRow')
-                                .col-12.text-center
-                                    button#btnConfirmUpload.btn.btn-success.btn-lg(type='button' onclick='confirmSave()')
-                                        i.bi.bi-save.me-2
-                                        | Confirm & Save Selected Transactions
+                                    button#btnUploadSave.btn.btn-primary.btn-lg(type='button' onclick='uploadAndSave()')
+                                        i.bi.bi-upload.me-2
+                                        | Upload & Save
+                        #uploadStatus.mt-3
                 // Upload History Section
                 .card.shadow-sm.mt-4
                     .card-header.bg-info.text-white
