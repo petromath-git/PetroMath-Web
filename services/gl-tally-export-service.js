@@ -24,24 +24,6 @@ const VOUCHER_TYPE_MAP = {
     CONTRA:   'Contra'
 };
 
-// Sort groups so parents always appear before children in the XML.
-function topologicalSort(groupIds, allGroupMap) {
-    const result  = [];
-    const visited = new Set();
-
-    function visit(id) {
-        if (!id || visited.has(id)) return;
-        const g = allGroupMap.get(id);
-        if (!g) return;
-        if (g.parent_group_id) visit(g.parent_group_id);
-        visited.add(id);
-        result.push(g);
-    }
-
-    for (const id of groupIds) visit(id);
-    return result;
-}
-
 // Returns a count of what would be exported — no writes.
 async function preview(locationCode, fromDate, toDate, includeExported) {
     const exportedClause = includeExported ? '' : "AND h.is_exported = 'N'";
@@ -86,7 +68,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         ORDER BY h.voucher_date, h.voucher_id, l.line_no
     `, { replacements: { locationCode, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT });
 
-    if (!rows.length) return { xml: null, voucherCount: 0, ledgerCount: 0, groupCount: 0 };
+    if (!rows.length) return { xml: null, voucherCount: 0, ledgerCount: 0 };
 
     // 2. Unique ledger_ids used in these vouchers
     const ledgerIds = [...new Set(rows.map(r => r.ledger_id))];
@@ -104,27 +86,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         WHERE l.ledger_id IN (:ledgerIds)
     `, { replacements: { ledgerIds }, type: db.Sequelize.QueryTypes.SELECT });
 
-    // 4. Walk group tree upward — collect all ancestor groups too
-    const allGroupRows = await db.sequelize.query(`
-        SELECT group_id, group_name, tally_group_name, parent_group_id
-        FROM gl_ledger_groups
-        WHERE location_code = :locationCode
-    `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
-
-    const allGroupMap = new Map(allGroupRows.map(g => [g.group_id, g]));
-
-    const neededGroupIds = new Set();
-    function collectAncestors(id) {
-        if (!id || neededGroupIds.has(id)) return;
-        neededGroupIds.add(id);
-        const g = allGroupMap.get(id);
-        if (g && g.parent_group_id) collectAncestors(g.parent_group_id);
-    }
-    ledgerRows.forEach(l => collectAncestors(l.group_id));
-
-    const sortedGroups = topologicalSort([...neededGroupIds], allGroupMap);
-
-    // 5. Build voucher map
+    // 4. Build voucher map
     const voucherMap = new Map();
     for (const r of rows) {
         if (!voucherMap.has(r.voucher_id)) {
@@ -160,21 +122,9 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
     out.push(`      </REQUESTDESC>`);
     out.push(`      <REQUESTDATA>`);
 
-    // Groups — parents before children, ACTION=CREATE is idempotent in Tally
-    for (const g of sortedGroups) {
-        const name   = xmlEscape(g.tally_group_name || g.group_name);
-        const parent = g.parent_group_id
-            ? xmlEscape((allGroupMap.get(g.parent_group_id) || {}).tally_group_name || (allGroupMap.get(g.parent_group_id) || {}).group_name || '')
-            : '';
-        out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <GROUP ACTION="CREATE">`);
-        out.push(`            <NAME>${name}</NAME>`);
-        if (parent) out.push(`            <PARENT>${parent}</PARENT>`);
-        out.push(`          </GROUP>`);
-        out.push(`        </TALLYMESSAGE>`);
-    }
-
-    // Ledgers — ACTION=CREATE skipped silently if already exists in Tally
+    // Ledgers — standard Tally groups (Sundry Debtors, Bank Accounts, etc.) are pre-seeded
+    // in every Tally company; emitting GROUP blocks for them causes "already exists" errors.
+    // We only emit LEDGER blocks — the PARENT group name is sufficient for Tally to place them.
     const emittedLedgerIds = new Set();
     for (const l of ledgerRows) {
         if (emittedLedgerIds.has(l.ledger_id)) continue;
@@ -249,7 +199,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         type: db.Sequelize.QueryTypes.INSERT
     });
 
-    return { xml, fileName, voucherCount: vouchers.length, ledgerCount: emittedLedgerIds.size, groupCount: sortedGroups.length };
+    return { xml, fileName, voucherCount: vouchers.length, ledgerCount: emittedLedgerIds.size };
 }
 
 module.exports = { preview, generateAndExport };
