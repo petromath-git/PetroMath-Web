@@ -130,7 +130,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         if (emittedLedgerIds.has(l.ledger_id)) continue;
         emittedLedgerIds.add(l.ledger_id);
         out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <LEDGER ACTION="CREATE">`);
+        out.push(`          <LEDGER>`);
         out.push(`            <NAME>${xmlEscape(l.tally_ledger_name)}</NAME>`);
         out.push(`            <PARENT>${xmlEscape(l.tally_group_name)}</PARENT>`);
         out.push(`          </LEDGER>`);
@@ -145,7 +145,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         if (isRev) narr = '[REVERSAL] ' + narr;
 
         out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <VOUCHER VCHTYPE="${tallyType}" ACTION="CREATE">`);
+        out.push(`          <VOUCHER VCHTYPE="${tallyType}">`);
         out.push(`            <DATE>${tallyDate(v.voucher_date)}</DATE>`);
         out.push(`            <VOUCHERTYPENAME>${tallyType}</VOUCHERTYPENAME>`);
         out.push(`            <VOUCHERNUMBER>${xmlEscape(v.voucher_no || '')}</VOUCHERNUMBER>`);
