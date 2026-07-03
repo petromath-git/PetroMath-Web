@@ -15,6 +15,8 @@ block content
                 a.nav-link(id="tab-accounting" data-toggle="tab" href="#pane-accounting" role="tab") Create Accounting
             li.nav-item
                 a.nav-link(id="tab-generate" data-toggle="tab" href="#pane-generate" role="tab") Generate Events
+            li.nav-item
+                a.nav-link(id="tab-export" data-toggle="tab" href="#pane-export" role="tab") Tally Export
 
         .tab-content
 
@@ -180,6 +182,48 @@ block content
                 #geBatchRuns
                     .text-muted.small Loading…
 
+
+            //- ── Tally Export ────────────────────────────────────────────────
+            #pane-export.tab-pane.fade(role="tabpanel")
+
+                p.text-muted.small.mb-3
+                    | Generates a Tally-compatible XML file for the selected date range.
+                    | Groups and ledgers are bundled before each voucher — new parties and accounts created in PetroMath are automatically included, so import never fails on missing ledger.
+
+                .row.align-items-end.mb-3
+                    .col-auto
+                        label.small.mb-1 Period
+                        select.form-control.form-control-sm#exPeriod(onchange="glSetPeriod(this)" data-from="exFrom" data-to="exTo")
+                            option(value="this_month") This Month
+                            option(value="last_month") Last Month
+                            option(value="this_fy") This Financial Year
+                            option(value="last_fy") Last Financial Year
+                            option(value="custom" selected) Custom
+                    .col-auto
+                        label.small.mb-1 From Date
+                        input.form-control.form-control-sm(type="date" id="exFrom" value=fromDate)
+                    .col-auto
+                        label.small.mb-1 To Date
+                        input.form-control.form-control-sm(type="date" id="exTo" value=toDate)
+                    .col-auto.align-self-end
+                        button.btn.btn-outline-secondary.btn-sm#btnExPreview Preview
+                    .col-auto.align-self-end
+                        .custom-control.custom-switch
+                            input.custom-control-input(type="checkbox" id="chkReexport")
+                            label.custom-control-label.small(for="chkReexport") Include already exported
+
+                #exPreviewResult.mb-3(style="display:none")
+                    .alert.py-2.small.mb-0#exPreviewBody
+
+                button.btn.btn-success.mb-3#btnExExport(disabled)
+                    i.bi.bi-download.mr-1
+                    | Download XML
+
+                hr
+                h6.mb-2 Export History
+                    button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadExportHistory()") Refresh
+                #exHistory
+                    .text-muted.small Loading…
 
     //- ── Source Detail Modal ─────────────────────────────────────────────────
     .modal.fade#sourceDetailModal(tabindex="-1" role="dialog")
@@ -484,6 +528,123 @@ block content
 
         document.getElementById('tab-accounting').addEventListener('shown.bs.tab', function() { loadBatchRuns('ca'); });
         document.getElementById('tab-generate').addEventListener('shown.bs.tab',  function() { loadBatchRuns('ge'); });
+        document.getElementById('tab-export').addEventListener('shown.bs.tab',    loadExportHistory);
+
+        // ── Tally Export ──────────────────────────────────────────────────────
+
+        let exPreviewData = null;
+
+        async function loadExportHistory() {
+            const el = document.getElementById('exHistory');
+            el.innerHTML = '<p class="text-muted small">Loading…</p>';
+            try {
+                const rows = await fetch('/gl/api/tally-export/history').then(r => r.json());
+                if (!rows.length) { el.innerHTML = '<p class="text-muted small mb-0">No exports yet.</p>'; return; }
+                const rowsHtml = rows.map(function(r) {
+                    return `<tr>
+                        <td class="small">${r.batch_id}</td>
+                        <td class="small">${(r.from_date||'').toString().substring(0,10)}</td>
+                        <td class="small">${(r.to_date||'').toString().substring(0,10)}</td>
+                        <td class="small">${r.voucher_count}</td>
+                        <td class="small">${r.exported_by||''}</td>
+                        <td class="small">${r.exported_at ? new Date(r.exported_at).toLocaleString('en-IN') : ''}</td>
+                        <td class="small text-muted" style="font-size:0.75rem">${r.file_name||''}</td>
+                    </tr>`;
+                }).join('');
+                el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-bordered table-hover">
+                    <thead class="thead-dark"><tr>
+                        <th style="width:50px">ID</th>
+                        <th style="width:90px">From</th><th style="width:90px">To</th>
+                        <th style="width:80px">Vouchers</th>
+                        <th>By</th>
+                        <th style="width:150px">Exported At</th>
+                        <th>File</th>
+                    </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+            } catch (e) {
+                el.innerHTML = '<p class="text-danger small">' + e.message + '</p>';
+            }
+        }
+
+        document.getElementById('btnExPreview').addEventListener('click', async function() {
+            const from = document.getElementById('exFrom').value;
+            const to   = document.getElementById('exTo').value;
+            if (!from || !to) { alert('Please select a date range.'); return; }
+            const includeExported = document.getElementById('chkReexport').checked;
+            this.disabled = true;
+            this.textContent = 'Checking…';
+            try {
+                const qs   = new URLSearchParams({ from_date: from, to_date: to, include_exported: includeExported ? '1' : '0' });
+                const data = await fetch('/gl/api/tally-export/preview?' + qs).then(r => r.json());
+                const wrap = document.getElementById('exPreviewResult');
+                const body = document.getElementById('exPreviewBody');
+                if (data.error) {
+                    body.className = 'alert alert-danger py-2 small mb-0';
+                    body.textContent = data.error;
+                    document.getElementById('btnExExport').disabled = true;
+                    exPreviewData = null;
+                } else if (!data.voucher_count) {
+                    body.className = 'alert alert-warning py-2 small mb-0';
+                    body.textContent = 'No vouchers found for this date range.';
+                    document.getElementById('btnExExport').disabled = true;
+                    exPreviewData = null;
+                } else {
+                    body.className = 'alert alert-info py-2 small mb-0';
+                    body.innerHTML = '<strong>' + data.voucher_count + '</strong> voucher(s) across <strong>' + data.ledger_count + '</strong> unique ledger(s) — ready to export.';
+                    document.getElementById('btnExExport').disabled = false;
+                    exPreviewData = { from, to, includeExported };
+                }
+                wrap.style.display = '';
+            } catch (e) {
+                alert('Error: ' + e.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = 'Preview';
+            }
+        });
+
+        document.getElementById('btnExExport').addEventListener('click', async function() {
+            if (!exPreviewData) return;
+            const { from, to, includeExported } = exPreviewData;
+            this.disabled = true;
+            const orig = this.innerHTML;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span>Generating…';
+            try {
+                const resp = await fetch('/gl/api/tally-export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from_date: from, to_date: to, include_exported: includeExported })
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(function() { return {}; });
+                    alert('Export failed: ' + (err.error || resp.statusText));
+                    return;
+                }
+                // Extract filename from Content-Disposition header
+                const cd       = resp.headers.get('Content-Disposition') || '';
+                const fnMatch  = cd.match(/filename="?([^";\n]+)"?/);
+                const fileName = fnMatch ? fnMatch[1] : 'tally_export.xml';
+
+                const xml  = await resp.text();
+                const blob = new Blob([xml], { type: 'text/xml' });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
+                a.download = fileName;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                // Reset state + refresh history
+                document.getElementById('exPreviewResult').style.display = 'none';
+                document.getElementById('btnExExport').disabled = true;
+                exPreviewData = null;
+                loadExportHistory();
+            } catch (e) {
+                alert('Export error: ' + e.message);
+            } finally {
+                this.disabled = false;
+                this.innerHTML = orig;
+            }
+        });
 
         // Auto-load summary on page open
         loadSummary();

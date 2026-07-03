@@ -1574,6 +1574,65 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.isAdmin()], 
     }
 });
 
+// ── Tally Export ──────────────────────────────────────────────────────────────
+
+const tallyExportService = require('../services/gl-tally-export-service');
+
+// GET /gl/api/tally-export/preview?from_date=&to_date=&include_exported=0
+router.get('/api/tally-export/preview', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode    = req.user.location_code;
+    const { from_date, to_date, include_exported } = req.query;
+    if (!from_date || !to_date) return res.status(400).json({ error: 'from_date and to_date are required' });
+    try {
+        const result = await tallyExportService.preview(locationCode, from_date, to_date, include_exported === '1');
+        res.json(result);
+    } catch (err) {
+        console.error('Tally export preview error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /gl/api/tally-export
+// Body: { from_date, to_date, include_exported }
+// Returns XML file as download; marks vouchers as is_exported='Y'.
+router.post('/api/tally-export', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode   = req.user.location_code;
+    const exportedBy     = req.user.username || String(req.user.Person_id);
+    const { from_date, to_date, include_exported } = req.body;
+    if (!from_date || !to_date) return res.status(400).json({ error: 'from_date and to_date are required' });
+    try {
+        const result = await tallyExportService.generateAndExport(
+            locationCode, from_date, to_date, !!include_exported, exportedBy
+        );
+        if (!result.xml) return res.status(400).json({ error: 'No vouchers found for this date range.' });
+
+        res.setHeader('Content-Type', 'text/xml; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+        res.send(result.xml);
+    } catch (err) {
+        console.error('Tally export error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /gl/api/tally-export/history — recent export batches for this location
+router.get('/api/tally-export/history', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const rows = await db.sequelize.query(`
+            SELECT batch_id, from_date, to_date, voucher_count, exported_at, exported_by, file_name
+            FROM gl_export_batches
+            WHERE location_code = :locationCode
+            ORDER BY batch_id DESC
+            LIMIT 20
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        res.json(rows);
+    } catch (err) {
+        console.error('Tally export history error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
 
 // Exported helper — used by products route to populate ledger dropdowns server-side
