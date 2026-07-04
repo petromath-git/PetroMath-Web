@@ -109,6 +109,9 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
     const vouchers = [...voucherMap.values()];
 
     // 6. Generate XML
+    // Two-block structure verified working with Tally Prime:
+    //   Block 1 (All Masters): ledger upserts — "Altered" for existing, "Created" for new, no errors
+    //   Block 2 (Vouchers): vouchers with ACTION="Create"
     const out = [];
     out.push(`<?xml version="1.0" encoding="UTF-8"?>`);
     out.push(`<ENVELOPE>`);
@@ -116,28 +119,36 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
     out.push(`    <TALLYREQUEST>Import Data</TALLYREQUEST>`);
     out.push(`  </HEADER>`);
     out.push(`  <BODY>`);
+
+    // Block 1: Masters — idempotent upsert in All Masters mode
     out.push(`    <IMPORTDATA>`);
     out.push(`      <REQUESTDESC>`);
-    out.push(`        <REPORTNAME>Vouchers</REPORTNAME>`);
+    out.push(`        <REPORTNAME>All Masters</REPORTNAME>`);
     out.push(`      </REQUESTDESC>`);
     out.push(`      <REQUESTDATA>`);
 
-    // Ledgers — standard Tally groups (Sundry Debtors, Bank Accounts, etc.) are pre-seeded
-    // in every Tally company; emitting GROUP blocks for them causes "already exists" errors.
-    // We only emit LEDGER blocks — the PARENT group name is sufficient for Tally to place them.
     const emittedLedgerIds = new Set();
     for (const l of ledgerRows) {
         if (emittedLedgerIds.has(l.ledger_id)) continue;
         emittedLedgerIds.add(l.ledger_id);
         out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <LEDGER>`);
+        out.push(`          <LEDGER NAME="${xmlEscape(l.tally_ledger_name)}" RESERVEDNAME="">`);
         out.push(`            <NAME>${xmlEscape(l.tally_ledger_name)}</NAME>`);
         out.push(`            <PARENT>${xmlEscape(l.tally_group_name)}</PARENT>`);
         out.push(`          </LEDGER>`);
         out.push(`        </TALLYMESSAGE>`);
     }
 
-    // Vouchers
+    out.push(`      </REQUESTDATA>`);
+    out.push(`    </IMPORTDATA>`);
+
+    // Block 2: Vouchers
+    out.push(`    <IMPORTDATA>`);
+    out.push(`      <REQUESTDESC>`);
+    out.push(`        <REPORTNAME>Vouchers</REPORTNAME>`);
+    out.push(`      </REQUESTDESC>`);
+    out.push(`      <REQUESTDATA>`);
+
     for (const v of vouchers) {
         const tallyType = VOUCHER_TYPE_MAP[v.voucher_type] || 'Journal';
         const isRev     = v.is_reversal === 'Y';
@@ -145,7 +156,7 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
         if (isRev) narr = '[REVERSAL] ' + narr;
 
         out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <VOUCHER VCHTYPE="${tallyType}">`);
+        out.push(`          <VOUCHER VCHTYPE="${tallyType}" ACTION="Create">`);
         out.push(`            <DATE>${tallyDate(v.voucher_date)}</DATE>`);
         out.push(`            <VOUCHERTYPENAME>${tallyType}</VOUCHERTYPENAME>`);
         out.push(`            <VOUCHERNUMBER>${xmlEscape(v.voucher_no || '')}</VOUCHERNUMBER>`);
@@ -153,8 +164,6 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
 
         for (const line of v.lines) {
             const isDebit = line.dr_amount > 0;
-            // Tally convention: DR → ISDEEMEDPOSITIVE=Yes, AMOUNT=negative
-            //                   CR → ISDEEMEDPOSITIVE=No,  AMOUNT=positive
             const amount  = isDebit ? -(line.dr_amount) : line.cr_amount;
             out.push(`            <ALLLEDGERENTRIES.LIST>`);
             out.push(`              <LEDGERNAME>${xmlEscape(line.ledger_name)}</LEDGERNAME>`);
