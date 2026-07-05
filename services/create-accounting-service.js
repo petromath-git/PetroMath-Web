@@ -365,9 +365,10 @@ async function processCreditSaleEvent(event, processedBy) {
     if (!customerLedgerId) throw new Error(`GL ledger not found for customer ${row.customer_name} (creditlist_id:${row.creditlist_id})`);
 
     const totalAmount = parseFloat(row.amount);
-    const baseAmount  = parseFloat(row.base_amount  || totalAmount);
     const cgstAmount  = parseFloat(row.cgst_amount  || 0);
     const sgstAmount  = parseFloat(row.sgst_amount  || 0);
+    // Derive base from total so DR always equals CR (stored base_amount may be independently rounded)
+    const baseAmount  = totalAmount - cgstAmount - sgstAmount;
     const qty         = parseFloat(row.qty).toFixed(3);
     const narration   = `${qty} ${row.product_name} | ₹${totalAmount.toFixed(2)} | ${row.customer_name} | Bill: ${row.bill_no}`;
 
@@ -443,9 +444,10 @@ async function processCashSaleEvent(event, processedBy) {
     if (!cashLedgerId) throw new Error(`Cash-in-Hand ledger not found for location ${location_code}`);
 
     const totalAmount = parseFloat(row.amount);
-    const baseAmount  = parseFloat(row.base_amount  || totalAmount);
     const cgstAmount  = parseFloat(row.cgst_amount  || 0);
     const sgstAmount  = parseFloat(row.sgst_amount  || 0);
+    // Derive base from total so DR always equals CR (stored base_amount may be independently rounded)
+    const baseAmount  = totalAmount - cgstAmount - sgstAmount;
     const qty         = parseFloat(row.qty).toFixed(3);
     const narration   = `${qty} ${row.product_name} | ₹${totalAmount.toFixed(2)} | Bill: ${row.bill_no}`;
 
