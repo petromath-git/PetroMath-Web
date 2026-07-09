@@ -1170,6 +1170,7 @@ previewTransactions: async (req, res) => {
                 await bankReconDao.insertUploadHistory({
                     location_code: locationCode,
                     bank_id: bankId,
+                    source_screen: 'TRANSACTION_UPLOAD',
                     source_file: sourceFile,
                     uploaded_by: userName,
                     total_transactions: totalTransactions,
@@ -1198,6 +1199,7 @@ previewTransactions: async (req, res) => {
             await bankReconDao.insertUploadHistory({
                 location_code: locationCode,
                 bank_id: bankId,
+                source_screen: 'TRANSACTION_UPLOAD',
                 source_file: sourceFile,
                 uploaded_by: userName,
                 total_transactions: totalTransactions,
@@ -1223,6 +1225,7 @@ previewTransactions: async (req, res) => {
                 await bankReconDao.insertUploadHistory({
                     location_code: req.user.location_code,
                     bank_id: parseInt(req.body.bank_id, 10),
+                    source_screen: 'TRANSACTION_UPLOAD',
                     source_file: req.body.source_file || req.body.transactions?.[0]?.source_file || 'Unknown',
                     uploaded_by: req.user.User_Name || req.user.username || req.user.user_id,
                     total_transactions: parseInt(req.body.total_transactions, 10) || req.body.transactions?.length || 0,

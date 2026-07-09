@@ -481,14 +481,15 @@ insertUploadHistory: async (historyData) => {
     try {
         const result = await db.sequelize.query(
             `INSERT INTO t_bank_statement_upload_history
-             (location_code, bank_id, source_file, uploaded_by, 
+             (location_code, bank_id, source_screen, source_file, uploaded_by,
               total_transactions, duplicates_found, transactions_imported,
               first_txn_date, last_txn_date, status, remarks)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             {
                 replacements: [
                     historyData.location_code,
                     historyData.bank_id,
+                    historyData.source_screen || 'BANK_RECON',
                     historyData.source_file,
                     historyData.uploaded_by,
                     historyData.total_transactions || 0,
@@ -519,8 +520,9 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
         
         if (bankId) {
             query = `
-                SELECT 
+                SELECT
                     h.upload_id,
+                    h.source_screen,
                     h.source_file,
                     DATE_FORMAT(h.upload_date, '%d-%m-%Y %H:%i') as upload_date,
                     h.uploaded_by,
@@ -542,8 +544,9 @@ getUploadHistory: async (locationCode, bankId = null, limit = 10) => {
             replacements = [locationCode, bankId, limit];
         } else {
             query = `
-                SELECT 
+                SELECT
                     h.upload_id,
+                    h.source_screen,
                     h.source_file,
                     DATE_FORMAT(h.upload_date, '%d-%m-%Y %H:%i') as upload_date,
                     h.uploaded_by,

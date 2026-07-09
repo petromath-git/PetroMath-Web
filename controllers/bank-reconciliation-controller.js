@@ -785,6 +785,7 @@ if (accountValidation.warning) {
         await bankReconDao.insertUploadHistory({
             location_code: locationCode,
             bank_id: bankId,
+            source_screen: 'BANK_RECON',
             source_file: req.file.originalname,
             uploaded_by: userName,
             total_transactions: transactions.length,
@@ -848,6 +849,7 @@ saveBankStatement: async (req, res) => {
         await bankReconDao.insertUploadHistory({
             location_code: locationCode,
             bank_id: bankId,
+            source_screen: 'BANK_RECON',
             source_file: sourceFile,
             uploaded_by: userName,
             total_transactions: transactions.length,
@@ -872,6 +874,7 @@ saveBankStatement: async (req, res) => {
             await bankReconDao.insertUploadHistory({
                 location_code: req.user.location_code,
                 bank_id: parseInt(req.body.bank_id),
+                source_screen: 'BANK_RECON',
                 source_file: req.body.transactions[0]?.source_file || 'Unknown',
                 uploaded_by: req.user.User_Name || req.user.username,
                 total_transactions: req.body.transactions?.length || 0,
