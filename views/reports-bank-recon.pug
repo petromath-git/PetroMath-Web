@@ -592,6 +592,7 @@ block content
                         <thead style="position: sticky; top: 0; background-color: #f8f9fa; z-index: 5;">
                             <tr>
                                 <th>Upload Date</th>
+                                <th>Source</th>
                                 <th>File Name</th>
                                 <th>First Date</th>
                                 <th>Last Date</th>
@@ -604,14 +605,17 @@ block content
                         </thead>
                         <tbody>
             `;
-            
+
             history.forEach(h => {
-                const statusBadge = h.status === 'COMPLETED' ? 'badge-success' : 
+                const statusBadge = h.status === 'COMPLETED' ? 'badge-success' :
                                 h.status === 'FAILED' ? 'badge-danger' : 'badge-warning';
-                                
+                const sourceBadge = h.source_screen === 'TRANSACTION_UPLOAD' ? 'badge-info' : 'badge-secondary';
+                const sourceLabel = h.source_screen === 'TRANSACTION_UPLOAD' ? 'Transaction Upload' : 'Bank Recon';
+
                 html += `
                     <tr>
                         <td style="white-space: nowrap;">${h.upload_date}</td>
+                        <td><span class="badge ${sourceBadge}">${sourceLabel}</span></td>
                         <td><small>${h.source_file}</small></td>
                         <td style="white-space: nowrap;">${h.first_txn_date || '-'}</td>
                         <td style="white-space: nowrap;">${h.last_txn_date || '-'}</td>
