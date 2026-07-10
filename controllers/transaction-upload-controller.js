@@ -233,12 +233,21 @@ function parseExcelDate(value, dateFormat = 'AUTO') {
              case 'YYYY-MM-DD':
                 // 2026-02-01 → already correct (BPCL SAP)
                 if (v.match(/^\d{4}-\d{2}-\d{2}$/)) return v;
-                break;              
+                break;
         }
+
+        // A specific date_format was configured for this bank's template but
+        // the actual text didn't match its pattern. Do NOT fall through to
+        // auto-detection below — a mismatch here means either a bad upload
+        // (wrong bank/template picked) or the source file's shape changed,
+        // and guessing a different format previously caused silent day/month
+        // swaps (e.g. SBI dates being stored a month off). Surface it instead.
+        console.error(`parseExcelDate: value "${v}" does not match configured date_format "${dateFormat}" — refusing to guess`);
+        return null;
     }
-    
-    // Fallback to auto-detection
-    
+
+    // Fallback to auto-detection (only reached when no explicit date_format was configured)
+
     // DD.MM.YY (IOCL)
     if (v.match(/^\d{1,2}\.\d{1,2}\.\d{2}$/)) {
         const [day, month, year] = v.split('.');
@@ -445,6 +454,29 @@ function formatDateForDisplay(dateStr) {
 function isHtmlFile(buffer) {
     const start = buffer.slice(0, 200).toString('utf8').trimStart().toLowerCase();
     return start.startsWith('<html') || start.startsWith('<!doctype html');
+}
+
+// ========== Plain-text (tab-delimited) file detection & parser ==========
+// Some bank exports carry a .xls/.xlsx extension but are actually plain
+// tab-delimited text (e.g. SBI, CSB Bank). XLSX.read() will still "read" such
+// files via its generic CSV-like text parser, but that parser auto-detects
+// date-looking cell text and silently reformats it (e.g. "05-Jul-26" becomes
+// "7/5/26", or "16/05/26" gets misread as month=16-invalid and left alone
+// while "06/05/26" gets misread as June 5 and reformatted to "6/5/26") —
+// destroying the original text before parseExcelDate ever sees it.
+// Detecting real binary shapes up front and routing anything else through a
+// literal tab/newline split avoids that reformatting entirely.
+function isRealBinaryWorkbook(buffer) {
+    if (buffer.length < 4) return false;
+    const b0 = buffer[0], b1 = buffer[1], b2 = buffer[2], b3 = buffer[3];
+    const isZip = b0 === 0x50 && b1 === 0x4b; // "PK" — .xlsx (OOXML)
+    const isOle = b0 === 0xd0 && b1 === 0xcf && b2 === 0x11 && b3 === 0xe0; // legacy binary .xls
+    return isZip || isOle;
+}
+
+function parsePlainTextToData(buffer) {
+    const text = buffer.toString('utf8');
+    return text.split(/\r\n|\r|\n/).map(line => line.split('\t'));
 }
 
 function parseHtmlXlsToData(buffer) {
@@ -676,6 +708,9 @@ previewTransactions: async (req, res) => {
         if (isHtmlFile(req.file.buffer)) {
             await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
             data = parseHtmlXlsToData(req.file.buffer);
+        } else if (!isRealBinaryWorkbook(req.file.buffer)) {
+            await debugLog(locationCode, 'Plain-text file detected (not a real binary workbook), using literal tab/newline parser to preserve original date text');
+            data = parsePlainTextToData(req.file.buffer);
         } else {
             const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
@@ -688,7 +723,7 @@ previewTransactions: async (req, res) => {
         for (let i = template.data_start_row - 1; i < data.length; i++) {
             const row = data[i];
             if (!row || row.length === 0) continue;
-            
+
             const txnDate = parseExcelDate(
                 row[columnToIndex(template.value_date_column || template.date_column)],
                 template.date_format  // ← Pass the format from template
@@ -698,7 +733,7 @@ previewTransactions: async (req, res) => {
                 tempDates.push(normalizedTxnDate);
             }
         }
-        
+
         if (tempDates.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -796,23 +831,15 @@ previewTransactions: async (req, res) => {
 
         const transactions = [];
         const excludedTodayCount = [];
-        
+        const dateFormatMismatches = [];
+
         for (let i = template.data_start_row - 1; i < data.length; i++) {
             const row = data[i];
             if (!row || row.length === 0) continue;
 
-            const parsedTxnDate = parseExcelDate(
-                row[columnToIndex(template.value_date_column || template.date_column)],
-                template.date_format  // Pass the format from template
-            );
+            const rawDateValue = row[columnToIndex(template.value_date_column || template.date_column)];
+            const parsedTxnDate = parseExcelDate(rawDateValue, template.date_format);
             const txnDate = normalizeYmd(parsedTxnDate);
-
-            if (!txnDate) continue;  // skip opening/closing balance and summary rows
-            
-            if (excludeToday && txnDate > yesterdayStr) {
-                excludedTodayCount.push(txnDate);
-                continue;
-            }
 
             const balanceRaw = row[columnToIndex(template.balance_column)] || '';
 
@@ -826,6 +853,25 @@ previewTransactions: async (req, res) => {
             } else {
                 debitAmount = parseAmount(row[columnToIndex(template.debit_column)]);
                 creditAmount = parseAmount(row[columnToIndex(template.credit_column)]);
+            }
+
+            if (!txnDate) {
+                // A row with exactly one of debit/credit set but a date that
+                // didn't match the configured format is a genuine transaction
+                // we're about to silently drop — flag it instead of losing
+                // it. Rows with no amount (headers, opening/closing balance,
+                // blank separators) or with both debit AND credit set
+                // (total/summary rows) are expected to fail date parsing and
+                // are skipped exactly as before.
+                if ((debitAmount > 0) !== (creditAmount > 0) && rawDateValue) {
+                    dateFormatMismatches.push({ row: i + 1, value: rawDateValue, debitAmount, creditAmount });
+                }
+                continue;  // skip opening/closing balance and summary rows
+            }
+
+            if (excludeToday && txnDate > yesterdayStr) {
+                excludedTodayCount.push(txnDate);
+                continue;
             }
 
             // ===== SKIP TOTAL/SUMMARY ROWS =====
@@ -857,6 +903,18 @@ previewTransactions: async (req, res) => {
             
 
             transactions.push(txn);
+        }
+
+        if (dateFormatMismatches.length > 0) {
+            const sample = dateFormatMismatches.slice(0, 5)
+                .map(m => `row ${m.row}: "${m.value}" (${m.debitAmount > 0 ? 'debit' : 'credit'} ${m.debitAmount || m.creditAmount})`)
+                .join(', ');
+            await debugLog(locationCode, `Date format mismatch: ${dateFormatMismatches.length} row(s) with an amount did not match configured format "${template.date_format}"`, dateFormatMismatches);
+            return res.status(400).json({
+                success: false,
+                error: `${dateFormatMismatches.length} transaction(s) have a date that doesn't match the configured format "${template.date_format}" for this bank (e.g. ${sample}). Please check the bank template configuration — no transactions were imported to avoid saving them with a wrong date.`,
+                errorType: 'DATE_FORMAT_MISMATCH'
+            });
         }
 
         if (transactions.length === 0) {
@@ -1112,6 +1170,7 @@ previewTransactions: async (req, res) => {
                 await bankReconDao.insertUploadHistory({
                     location_code: locationCode,
                     bank_id: bankId,
+                    source_screen: 'TRANSACTION_UPLOAD',
                     source_file: sourceFile,
                     uploaded_by: userName,
                     total_transactions: totalTransactions,
@@ -1140,6 +1199,7 @@ previewTransactions: async (req, res) => {
             await bankReconDao.insertUploadHistory({
                 location_code: locationCode,
                 bank_id: bankId,
+                source_screen: 'TRANSACTION_UPLOAD',
                 source_file: sourceFile,
                 uploaded_by: userName,
                 total_transactions: totalTransactions,
@@ -1165,6 +1225,7 @@ previewTransactions: async (req, res) => {
                 await bankReconDao.insertUploadHistory({
                     location_code: req.user.location_code,
                     bank_id: parseInt(req.body.bank_id, 10),
+                    source_screen: 'TRANSACTION_UPLOAD',
                     source_file: req.body.source_file || req.body.transactions?.[0]?.source_file || 'Unknown',
                     uploaded_by: req.user.User_Name || req.user.username || req.user.user_id,
                     total_transactions: parseInt(req.body.total_transactions, 10) || req.body.transactions?.length || 0,
@@ -1310,8 +1371,7 @@ async function checkTransactionDuplicates(bankId, transactions) {
             const uploadType = uploadedTxn.credit_amount > 0 ? 'credit' : 'debit';
             const uploadDescription = (uploadedTxn.description || uploadedTxn.remarks || '').trim();
 
-            // Match on exact date + amount + description (narration).
-            // If existing row has no remarks (manual entry or old import), fall back to date + amount only.
+            // Pass 1: exact date + amount + narration (or date+amount if no narration stored).
             let matchInfo = existingTransactions.find(existingTxn => {
                 if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
 
@@ -1326,6 +1386,21 @@ async function checkTransactionDuplicates(bankId, transactions) {
                 return uploadDescription === existingRemarks;
             });
 
+            // Pass 2: if date parsing may have differed, catch re-uploads of the same line via
+            // exact amount + exact narration match (narration must be non-empty on both sides).
+            if (!matchInfo && uploadDescription !== '') {
+                matchInfo = existingTransactions.find(existingTxn => {
+                    if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
+
+                    const existingAmount = uploadType === 'credit' ? existingTxn.credit_amount : existingTxn.debit_amount;
+                    const amountMatch = Math.abs(uploadAmount - existingAmount) < 0.01;
+                    if (!amountMatch) return false;
+
+                    const existingRemarks = (existingTxn.remarks || '').trim();
+                    return existingRemarks !== '' && uploadDescription === existingRemarks;
+                });
+            }
+
             if (matchInfo) {
                 // Mark as matched
                 matchedExistingIds.add(matchInfo.t_bank_id);
@@ -1337,7 +1412,7 @@ async function checkTransactionDuplicates(bankId, transactions) {
                     matched_id: matchInfo.t_bank_id,
                     ledger_name: matchInfo.ledger_name
                 });
-                
+
                 debugLog(null, `DUPLICATE FOUND: ${uploadedTxn.txn_date} - ${uploadAmount} (${uploadType}) matches existing ${matchInfo.trans_date}`);
             }
         });

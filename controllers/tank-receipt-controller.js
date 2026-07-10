@@ -289,7 +289,7 @@ module.exports = {
 }
 const getTankProductsForLocation = (locationCode) => {
     return db.sequelize.query(
-        `SELECT product_id, product_name FROM m_product WHERE location_code = :locationCode AND is_tank_product = 1 ORDER BY product_name`,
+        `SELECT product_id, product_name FROM m_product WHERE location_code = :locationCode AND is_tank_product = 1 AND is_lube_product = 0 ORDER BY product_name`,
         { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
     ).catch(() => []);
 };
