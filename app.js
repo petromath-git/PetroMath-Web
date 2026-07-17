@@ -529,9 +529,12 @@ app.get('/login', function (req, res) {
 });
 
 // Routes - start
-app.get('/', isLoginEnsured, function (req, res) {
+app.get('/', function (req, res) {
+    if (!req.isAuthenticated()) {
+        return res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+    }
     if(req.user.Role === 'Customer') {
-        res.redirect('/home-customer');    
+        res.redirect('/home-customer');
     }
     if (req.user.Role === 'Cashier') {
         return res.redirect('/dsm-entry');
