@@ -623,59 +623,14 @@ uploadBankStatement: async (req, res) => {
         const latestUploadDate = tempDates[tempDates.length - 1];
 
         // ========== STEP 2: Overlap Validation ==========
-        
-        const overlapMode = await locationConfigDao.getSetting(
-            locationCode, 
-            'bank_statement_overlap_mode'
-        ) || 'off';
-        
-        const overlapDays = parseInt(
-            await locationConfigDao.getSetting(
-                locationCode, 
-                'bank_statement_overlap_days'
-            ) || '1'
-        );
-        
+        // Gap/overlap enforcement is intentionally disabled for bank reconciliation
+        // uploads — these are reference statement rows, not the source-of-truth
+        // ledger, so a gap between uploads just means fewer matches until the
+        // missing period is uploaded later (nothing is silently lost or corrupted).
+        // The account-match check below still uses lastUploadedDate to confirm the
+        // correct bank account was uploaded.
+
         const lastUploadedDate = await bankReconDao.getLastStatementDate(locationCode, bankId);
-        
-        if (lastUploadedDate && overlapMode !== 'off') {
-            const lastDate = new Date(lastUploadedDate);
-            const uploadDate = new Date(earliestUploadDate);
-            
-            const expectedOverlapDate = new Date(lastDate);
-            expectedOverlapDate.setDate(lastDate.getDate() - (overlapDays - 1));
-            
-            const hasOverlap = uploadDate <= lastDate;
-            const meetsOverlapRequirement = uploadDate <= expectedOverlapDate;
-            
-         
-            
-            if (!meetsOverlapRequirement) {
-                const gapDays = Math.ceil((uploadDate - lastDate) / (1000 * 60 * 60 * 24));
-                
-                const message = `Gap detected! Your last upload ended on ${formatDateForDisplay(lastUploadedDate)}. ` +
-                    `This upload starts on ${formatDateForDisplay(earliestUploadDate)} (${gapDays} day gap). ` +
-                    `To prevent missing transactions, uploads must overlap by at least ${overlapDays} day(s). ` +
-                    `Please upload a statement that includes ${formatDateForDisplay(expectedOverlapDate.toISOString().split('T')[0])} or earlier.`;
-                
-                if (overlapMode === 'strict') {
-                    return res.status(400).json({
-                        success: false,
-                        error: message,
-                        errorType: 'OVERLAP_REQUIRED',
-                        details: {
-                            lastUploadedDate: formatDateForDisplay(lastUploadedDate),
-                            earliestUploadDate: formatDateForDisplay(earliestUploadDate),
-                            gapDays: gapDays,
-                            requiredOverlapDays: overlapDays,
-                            suggestedStartDate: formatDateForDisplay(expectedOverlapDate.toISOString().split('T')[0])
-                        }
-                    });
-                } else if (overlapMode === 'warning') {
-                    console.warn('OVERLAP WARNING:', message);
-                }
-            }
-        }
 
         // ========== STEP 3: Exclude today's transactions (if configured) ==========
         
