@@ -162,6 +162,48 @@
     border-radius: var(--radius); box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
     border: 1px solid rgba(255,255,255,0.08);
   }
+
+  /* ---------- Carousel ---------- */
+  .carousel {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.08);
+    aspect-ratio: 4 / 3;
+    background: #0a1220;
+  }
+  .carousel-track { position: relative; width: 100%; height: 100%; }
+  .carousel-slide {
+    position: absolute; inset: 0;
+    opacity: 0; transition: opacity .7s ease;
+  }
+  .carousel-slide.active { opacity: 1; }
+  .carousel-slide img {
+    width: 100%; height: 100%; object-fit: cover;
+    border-radius: 0; border: none; box-shadow: none;
+  }
+  .slide-label {
+    position: absolute; left: 18px; bottom: 18px;
+    background: rgba(10,18,32,0.72); backdrop-filter: blur(4px);
+    color: #fff; font-size: 0.82rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .carousel-dots {
+    position: absolute; right: 18px; bottom: 18px;
+    display: flex; gap: 8px;
+  }
+  .carousel-dots .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: rgba(255,255,255,0.35); border: none; padding: 0; cursor: pointer;
+    transition: background .2s ease, transform .2s ease;
+  }
+  .carousel-dots .dot.active { background: var(--amber); transform: scale(1.2); }
+  .photo-credit {
+    margin: 12px 2px 0; font-size: 0.72rem; color: #6b7686; line-height: 1.6;
+  }
+  .photo-credit a { color: #6b7686; text-decoration: underline; }
   .showcase-copy .kicker { color: var(--amber); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
   .showcase-copy h2 { font-size: clamp(1.5rem, 2.6vw, 2.1rem); margin: 0 0 18px; line-height: 1.25; }
   .showcase-copy p { color: #b9c2cf; line-height: 1.7; margin: 0 0 26px; }
@@ -328,12 +370,38 @@
 <section class="showcase" id="showcase">
   <div class="wrap showcase-grid">
     <div class="img-col">
-      <img src="/images/landingpage.jpg" alt="A real Indian Oil fuel station running on PetroMath">
+      <div class="carousel" id="brandCarousel">
+        <div class="carousel-track">
+          <div class="carousel-slide active">
+            <img src="/images/landingpage.jpg" alt="Indian Oil fuel station running on PetroMath">
+            <span class="slide-label">Indian Oil</span>
+          </div>
+          <div class="carousel-slide">
+            <img src="/images/bpcl-station.jpg" alt="Bharat Petroleum fuel station running on PetroMath">
+            <span class="slide-label">Bharat Petroleum</span>
+          </div>
+          <div class="carousel-slide">
+            <img src="/images/hpcl-station.jpg" alt="Hindustan Petroleum fuel station running on PetroMath">
+            <span class="slide-label">Hindustan Petroleum</span>
+          </div>
+          <div class="carousel-slide">
+            <img src="/images/nayara-station.jpg" alt="Nayara Energy fuel station running on PetroMath">
+            <span class="slide-label">Nayara Energy</span>
+          </div>
+        </div>
+        <div class="carousel-dots">
+          <button class="dot active" data-index="0" aria-label="Show Indian Oil slide"></button>
+          <button class="dot" data-index="1" aria-label="Show Bharat Petroleum slide"></button>
+          <button class="dot" data-index="2" aria-label="Show Hindustan Petroleum slide"></button>
+          <button class="dot" data-index="3" aria-label="Show Nayara Energy slide"></button>
+        </div>
+      </div>
+      <p class="photo-credit">Station photos: Bharat Petroleum &amp; Nayara Energy by Manukrishnan80, Hindustan Petroleum by I.Mahesh — <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener">Wikimedia Commons</a>, CC BY-SA.</p>
     </div>
     <div class="showcase-copy">
       <div class="kicker">Made for the forecourt, not just the office</div>
       <h2>Built alongside real dealers, tested at real pumps</h2>
-      <p>PetroMath grew out of the day-to-day realities of running an outlet — shift handovers, oil-company compliance, and closing the books at the end of a long day. Every feature exists because a working station needed it.</p>
+      <p>PetroMath grew out of the day-to-day realities of running an outlet — shift handovers, oil-company compliance, and closing the books at the end of a long day. Every feature exists because a working station needed it, across every major oil company.</p>
       <ul class="checklist">
         <li><span class="tick">✓</span> Closes match tank readings and cash counted, every shift</li>
         <li><span class="tick">✓</span> Day-end billing follows oil-company GST rules out of the box</li>
@@ -426,6 +494,43 @@
     </div>
   </div>
 </footer>
+
+<script>
+(function () {
+  var carousel = document.getElementById('brandCarousel');
+  if (!carousel) return;
+  var slides = carousel.querySelectorAll('.carousel-slide');
+  var dots = carousel.querySelectorAll('.dot');
+  var current = 0;
+  var timer;
+
+  function show(index) {
+    slides[current].classList.remove('active');
+    dots[current].classList.remove('active');
+    current = (index + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    dots[current].classList.add('active');
+  }
+
+  function next() { show(current + 1); }
+
+  function start() { timer = setInterval(next, 4500); }
+  function stop() { clearInterval(timer); }
+
+  dots.forEach(function (dot) {
+    dot.addEventListener('click', function () {
+      show(parseInt(dot.dataset.index, 10));
+      stop();
+      start();
+    });
+  });
+
+  carousel.addEventListener('mouseenter', stop);
+  carousel.addEventListener('mouseleave', start);
+
+  start();
+})();
+</script>
 
 </body>
 </html>
