@@ -231,6 +231,28 @@
   .step h4 { margin: 0 0 8px; font-size: 1rem; }
   .step p { margin: 0; color: #5c6675; font-size: 0.9rem; line-height: 1.6; }
 
+  /* ---------- Testimonials ---------- */
+  .testimonials { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .testimonial-card {
+    background: #fff; border: 1px solid #eae6da; border-radius: var(--radius);
+    padding: 32px 30px; display: flex; flex-direction: column;
+  }
+  .testimonial-quote {
+    font-size: 1.02rem; line-height: 1.7; color: #333c48; margin: 0 0 26px;
+  }
+  .testimonial-quote::before { content: "\201C"; }
+  .testimonial-quote::after { content: "\201D"; }
+  .testimonial-attribution { display: flex; align-items: center; gap: 14px; margin-top: auto; }
+  .testimonial-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.95rem; color: #fff;
+    background: linear-gradient(135deg, var(--navy), var(--navy-2));
+    object-fit: cover;
+  }
+  .testimonial-name { font-weight: 700; font-size: 0.92rem; color: var(--ink); }
+  .testimonial-role { font-size: 0.82rem; color: #6b7686; }
+
   /* ---------- CTA ---------- */
   .cta {
     background: linear-gradient(135deg, var(--amber) 0%, #f7d354 100%);
@@ -269,6 +291,7 @@
   @media (max-width: 560px) {
     .features { grid-template-columns: 1fr; }
     .workflow { grid-template-columns: 1fr; }
+    .testimonials { grid-template-columns: 1fr; }
     .footer-grid { grid-template-columns: 1fr; }
     .cta { padding: 44px 26px; margin: 0 16px; }
   }
@@ -438,6 +461,37 @@
         <div class="num">4</div>
         <h4>Books close themselves</h4>
         <p>GL journal entries post automatically, and stock, GST, and variance reports are ready to review.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="testimonials">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">From dealers running PetroMath</div>
+      <h2>What real outlets say</h2>
+    </div>
+    <div class="testimonials">
+      <div class="testimonial-card">
+        <p class="testimonial-quote">DSM closing used to take half a day just to track down the suspense amount — with PetroMath it's a fraction of that. Being cloud-based, we can pull and send statements from anywhere, even on mobile. Uploading bank statements and oil company SOAs is seamless, and reconciling digital sales against bank deposits is far simpler now.</p>
+        <div class="testimonial-attribution">
+          <img class="testimonial-avatar" src="/images/srinivasa-fuel-owner.jpg" alt="Owner, Srinivasa Fuel Station">
+          <div>
+            <div class="testimonial-name">Srinivasa Fuel Station</div>
+            <div class="testimonial-role">BPCL Dealer &middot; Sriperumbudur, TN</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <p class="testimonial-quote">PetroMath is user-friendly enough that even a layman can manage day-to-day operations — financial and non-financial. Shift closing, day close, digital reconciliation, bank deposit reconciliation, and credit party management make accounting for the firm's finances far easier. The GST reports make filing returns straightforward.</p>
+        <div class="testimonial-attribution">
+          <div class="testimonial-avatar">SP</div>
+          <div>
+            <div class="testimonial-name">S P Fuel Point</div>
+            <div class="testimonial-role">IOCL Dealer &middot; Telangana</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
