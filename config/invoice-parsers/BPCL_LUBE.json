@@ -1,0 +1,65 @@
+{
+  "supplier": "BPCL_LUBE",
+  "dateFormats": ["DD.MM.YYYY", "DD-MM-YYYY", "DD/MM/YYYY"],
+  "header": {
+    "invoice_number": {
+      "keyword": "INVOICE No",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d{9,11}"
+    },
+    "invoice_date": {
+      "keyword": "DATE/TIME",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d{1,2}\\.\\d{1,2}\\.\\d{4}"
+    },
+    "delivery_doc_no": {
+      "keyword": "DELIVERY No",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d+"
+    },
+    "seal_lock_no": {
+      "keyword": "Seal/Lock No",
+      "strategy": "value_after_keyword",
+      "pattern": "[\\d,/]+"
+    },
+    "e_way_bill_no": {
+      "keyword": "E-Way Bill No",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d{9,}"
+    },
+    "total_invoice_amount": {
+      "keyword": "TOTAL AMOUNT",
+      "strategy": "nth_number_on_line",
+      "position": 1
+    }
+  },
+  "lines": {
+    "mode": "ordered_zip",
+    "count_from": "hsn_line",
+    "numeric_fields": ["invoice_qty", "rate", "taxable_value", "cgst_pct", "cgst_amount", "qty_litres", "discount_amount", "sgst_pct", "sgst_amount"],
+    "ocr_fixes": [
+      { "pattern": "\\bERL\\b", "flags": "g", "replacement": "BRL" },
+      { "pattern": "\\b(\\d+\\.?\\d*)\\s+129\\b", "flags": "g", "replacement": "$1 L29" },
+      { "pattern": "/129\\b", "flags": "g", "replacement": "/L29" },
+      { "pattern": "\\bSS\\b", "flags": "g", "replacement": "55" },
+      { "pattern": "\\b(5[0-9])\\s+\\.([\\d]{2}/L29)\\b", "flags": "g", "replacement": "$1.$2" }
+    ],
+    "fields": {
+      "product_line": {
+        "pattern": "^(.*?)\\s+(\\d+)\\s*(CS|cs|BRL|PKT|TIN|CAN|BTL|KG|LTR|s)\\s+([\\d,]+\\.\\d{2})/L29\\s+([\\d,]+\\.\\d{2})\\s+[A-Z]{3,6}\\s+(\\d+)%\\s+([\\d,]+\\.\\d{2})",
+        "flags": "gim",
+        "groups": ["product_name", "invoice_qty", "invoice_uom", "rate", "taxable_value", "cgst_pct", "cgst_amount"]
+      },
+      "hsn_line": {
+        "pattern": "HSN\\s*:?\\s*(\\d{6,8})\\s*\\([A-Z0-9]{5,10}\\)\\s*BATCH\\s*No\\s+([\\d,]+\\.?\\d*)\\s*L29\\s+DISCOUNT\\s+(-?[\\d,]+\\.\\d{2})\\s+[A-Z]{3,6}\\s+(\\d+)%\\s+([\\d,]+\\.\\d{2})",
+        "flags": "gi",
+        "groups": ["hsn_code", "qty_litres", "discount_amount", "sgst_pct", "sgst_amount"]
+      },
+      "batch_no": {
+        "pattern": "^:([A-Z0-9]{4,7})$",
+        "flags": "gm",
+        "groups": ["batch_no"]
+      }
+    }
+  }
+}
