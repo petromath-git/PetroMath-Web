@@ -415,125 +415,77 @@ async function parseInvoice(pdfBuffer, companyName) {
 }
 
 // ---------------------------------------------------------------------------
-// BPCL Lube Invoice Parser (scanned PDF via OCR)
+// Config-driven "ordered zip" line parser (for scanned/OCR invoices where the
+// table layout is shattered and there's no reliable per-block delimiter).
 //
-// Scanned PDFs are read column-by-column, so the multi-column table is
-// completely shattered. Product names are garbled.
-//
-// Strategy: extract L29 quantities, packing UOMs, rates, HSN codes as
-// ordered lists, then zip them into product records.
-// Taxable value is computed as qty_litres × rate (reliable).
+// Each field in config.fields is matched globally across the whole text
+// (after config.ocr_fixes is applied), producing an ordered list of records.
+// Records at the same index across all fields are assumed to belong to the
+// same product line and are merged. The field named in config.count_from
+// determines how many product lines exist.
 // ---------------------------------------------------------------------------
 
+function applyOcrFixes(text, fixes) {
+    if (!fixes) return text;
+    return fixes.reduce((out, fix) => out.replace(new RegExp(fix.pattern, fix.flags || 'g'), fix.replacement), text);
+}
+
+function parseProductLinesOrderedZip(rawText, linesConfig) {
+    const { ocr_fixes, fields, count_from, numeric_fields = [], abs_fields = [] } = linesConfig;
+    const fixed = applyOcrFixes(rawText, ocr_fixes);
+    const normalised = fixed.split('\n').map(l => l.trim()).join('\n');
+
+    const fieldMatches = {};
+    for (const [fieldKey, fieldConfig] of Object.entries(fields)) {
+        const regex = new RegExp(fieldConfig.pattern, fieldConfig.flags || 'g');
+        const groupNames = fieldConfig.groups || [fieldKey];
+        fieldMatches[fieldKey] = [...normalised.matchAll(regex)].map(m => {
+            const rec = {};
+            groupNames.forEach((name, i) => { rec[name] = m[i + 1] != null ? m[i + 1].trim() : null; });
+            return rec;
+        });
+    }
+
+    const n = (fieldMatches[count_from] || []).length;
+    const results = [];
+    for (let i = 0; i < n; i++) {
+        const rec = {};
+        for (const fieldKey of Object.keys(fields)) {
+            const match = fieldMatches[fieldKey][i];
+            if (match) Object.assign(rec, match);
+        }
+
+        for (const key of numeric_fields) {
+            if (rec[key] == null) continue;
+            let val = cleanNumber(rec[key]);
+            if (abs_fields.includes(key) && val != null) val = Math.abs(val);
+            rec[key] = val;
+        }
+
+        if (rec.product_name) {
+            // Strip leading item number ("01.") or stray OCR noise ("|") before the name
+            rec.product_name = rec.product_name.replace(/^\d{1,2}\.\s*/, '').replace(/^\|\s*/, '').trim() || null;
+        }
+
+        if (rec.invoice_uom) {
+            rec.invoice_uom = rec.invoice_uom.toUpperCase();
+            if (rec.invoice_uom === 'S') rec.invoice_uom = 'CS'; // OCR commonly drops the leading "C" in "CS"
+        }
+
+        results.push(rec);
+    }
+    return results;
+}
+
+// BPCL lube invoices are scanned/OCR'd; parsed via config/invoice-parsers/BPCL_LUBE.json
 function parseBpclLubeInvoice(rawText) {
-    // --- OCR fixes for common BPCL lube misreads ---
-    const fixed = rawText
-        .replace(/\bERL\b/g, 'BRL')                              // E/B confusion: "ERL" → "BRL"
-        .replace(/\b(\d+\.?\d*)\s+129\b/g, '$1 L29')             // "210 129" → "210 L29" (missing L)
-        .replace(/\/129\b/g, '/L29')                              // "55.00/129" → "55.00/L29"
-        .replace(/\bSS\b/g, '55')                                 // "SS" → "55" (digit 5 read as S)
-        .replace(/\b(5[0-9])\s+\.([\d]{2}\/L29)/g, '$1.$2');     // "55 .00/L29" → "55.00/L29"
-
-    const lines = fixed.split('\n').map(l => l.trim());
-
-    // === HEADER ===
-    const header = {};
-
-    // Invoice number: standalone 9-11 digit number anywhere in first 25 lines
-    // (In scanned OCR the number appears in its own text run before the "INVOICE No." label)
-    for (let i = 0; i < Math.min(25, lines.length); i++) {
-        const m = lines[i].match(/^(\d{9,11})$/);
-        if (m) { header.invoice_number = m[1]; break; }
-    }
-
-    // Invoice date: from the digital signature block at the bottom
-    // OCR gives e.g. "Thu.\nsep\n25,\n2025 IST" — \s+ spans the newlines
-    const dateM = fixed.match(
-        /(?:mon|tue|wed|thu|fri|sat|sun)\.?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.?\s+(\d{1,2})[,.]?\s+(20\d{2})/i
-    );
-    if (dateM) {
-        const d = moment(`${dateM[1]} ${dateM[2]} ${dateM[3]}`, 'MMM D YYYY');
-        header.invoice_date = d.isValid() ? d.format('YYYY-MM-DD') : null;
-    }
-
-    // E-way bill: long digit sequence after "Bill No"
-    const ewayM = fixed.match(/Bill\s+No\s*[\s:]+(\d{10,})/i);
-    header.e_way_bill_no = ewayM ? ewayM[1] : null;
-
-    // Total invoice amount: number on line after TOTAL / OCR variants / "VAUJE RS"
-    const totalM = fixed.match(/(?:VAUJE|VALUE)\s*[\s:]+RS?\s*([\d,\s]+\.?\d*)/i) ||
-                   fixed.match(/(?:'IVrAL|1VrAL|TOTAL)\s*\n\s*([\d,\s]+\.?\d*)/i);
-    if (totalM) {
-        const cleaned = totalM[1].replace(/,\s+/g, ',').replace(/\s/g, '');
-        header.total_invoice_amount = cleanNumber(cleaned);
-    }
-
-    // Delivery doc no: digits after "DOC No" or "roc No" (OCR variant of "DOC")
-    const delivM = fixed.match(/(?:roc|DOC)\s*No\s*[\s:]+(\d+)/i);
-    header.delivery_doc_no = delivM ? delivM[1] : null;
-
-    // === PRODUCT LINES — sequential (column-by-column) extraction ===
-    // Scanned PDFs are read column-by-column. Each field type appears as a
-    // group; we extract all instances in order and zip them per product.
-
-    // 1. L29 quantities — most reliable; count defines number of products
-    const l29List = [...fixed.matchAll(/([\d,]+\.?\d*)\s+L29\b/gi)]
-        .map(m => cleanNumber(m[1]));
-
-    if (l29List.length === 0) return { header, lines: [] };
-    const n = l29List.length;
-
-    // 2. Packing quantities + UOM  e.g. "15 BRL", "3 CS"
-    const packingList = [...fixed.matchAll(/\b(\d+)\s+(BRL|CS|PKT|TIN|CAN|BTL|KG|LTR)\b/gi)]
-        .map(m => ({ qty: parseFloat(m[1]), uom: m[2].toUpperCase() }));
-
-    // 3. Rates  e.g. "55.00/L29"  — after OCR fixes "SS .00/L29" → "55.00/L29"
-    const rateList = [...fixed.matchAll(/([\d,]+\.?\d*)\/L29\b/gi)]
-        .map(m => cleanNumber(m[1]));
-
-    // 4. HSN codes: 6-8 digit numbers after ":"
-    //    Filter: must be >= 270000 to skip non-HSN codes (supply plant codes etc.)
-    //    Petroleum/lube HSNs: 2710xx, 2712xx, 3102xx, 3403xx etc.
-    const hsnList = [...rawText.matchAll(/:\s*(\d{6,8})\b/g)]
-        .map(m => m[1])
-        .filter(h => parseInt(h) >= 270000);
-
-    // 5. Batch numbers: 7-digit numbers in parentheses
-    const batchList = [...rawText.matchAll(/\((\d{7})\)/g)].map(m => m[1]);
-
-    // 6. Taxable values: comma-formatted amounts (NNN,NNN.NN) that are > 5000
-    //    These are reliably OCR'd even in scans; used to fill gaps when rate is null
-    const taxableFromText = [...fixed.matchAll(/\b(\d{1,3},\d{3}\.\d{2})\b/g)]
-        .map(m => cleanNumber(m[1]))
-        .filter(v => v > 5000)
-        .sort((a, b) => b - a)           // largest first — taxable values dominate
-        .slice(0, n * 2);                // take at most 2× product count
-
-    // Build product records — pair each field list in order
-    return {
-        header,
-        lines: l29List.map((qty_litres, i) => {
-            const rate = rateList[i] != null ? rateList[i] : null;
-            // Taxable: prefer computed (qty × rate); fall back to largest unassigned amount from text
-            let taxable = (qty_litres && rate) ? Math.round(qty_litres * rate * 100) / 100 : null;
-            if (taxable == null && taxableFromText[i] != null) taxable = taxableFromText[i];
-            // If we have taxable but not rate, back-compute rate
-            const effectiveRate = rate != null ? rate : (taxable && qty_litres ? Math.round(taxable / qty_litres * 100) / 100 : null);
-            return {
-                product_name:  null,   // unreadable from scanned OCR
-                invoice_qty:   packingList[i] ? packingList[i].qty : null,
-                invoice_uom:   packingList[i] ? packingList[i].uom : null,
-                qty_litres,
-                rate:          effectiveRate,
-                hsn_code:      hsnList[i] || null,
-                batch_no:      batchList[i] || null,
-                taxable_value: taxable,
-                discount_amount: null,
-                cgst_pct: null, cgst_amount: null,
-                sgst_pct: null, sgst_amount: null
-            };
-        })
-    };
+    const config = loadConfig('BPCL_LUBE');
+    const lines = getLines(rawText);
+    const header = parseHeaderFields(lines, config.header || {}, config.dateFormats || []);
+    const productLines = (config.lines && config.lines.mode === 'ordered_zip')
+        ? parseProductLinesOrderedZip(rawText, config.lines)
+        : [];
+    return { header, lines: productLines };
 }
 
 module.exports = { parseInvoice, resolveSupplier, parseBpclLubeInvoice, extractText };
