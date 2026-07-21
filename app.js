@@ -528,6 +528,85 @@ app.get('/login', function (req, res) {
     res.render('login', { title: 'Login' });
 });
 
+app.post('/login', function(req, res, next) {
+    passport.authenticate('local', async function(err, user, info) {
+        if (err) {
+            return next(err);
+        }
+
+        // Capture request info
+        const loginInfo = {
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'],
+            attempted_username: req.body.username  // Capture the attempted username
+        };
+
+        if (!user) {
+            // Log failed login attempt
+            try {
+                await LoginLogDao.create({
+                    Person_id: info.Person_id || null,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'failed',
+                    failure_reason: info.message,
+                    location_code: info.location_code || null,
+                    created_by: 'SYSTEM'
+                });
+            } catch (error) {
+                console.error("Error logging failed login:", error);
+            }
+
+            req.flash('error', info.message);
+            return res.redirect('/login');
+        }
+
+        req.logIn(user, async function(err) {
+            if (err) {
+                return next(err);
+            }
+
+            // Log successful login after successful authentication
+            try {
+                await LoginLogDao.create({
+                    Person_id: user.Person_id,
+                    ip_address: loginInfo.ip_address,
+                    user_agent: loginInfo.user_agent,
+                    attempted_username: loginInfo.attempted_username,
+                    login_status: 'success',
+                    location_code: user.location_code,
+                    created_by: user.Person_id.toString()
+                });
+            } catch (error) {
+                console.error("Error logging login:", error);
+            }
+
+                 const shouldRedirect = await handleVersionRouting(user, req, res);
+		        if (shouldRedirect) {
+		                 return; // Redirect happened, stop processing
+		            }
+
+            // Cashier goes directly to credit entry page
+            if (user.Role === 'Cashier') {
+                return res.redirect('/dsm-entry');
+            }
+
+             // Check if the user is a superuser
+             if (user.Role === 'SuperUser') {
+                // Redirect to location selection page if superuser
+                return res.redirect('/select-location');
+            }
+
+            if(user.Role === 'Customer') {
+                return res.redirect('/home-customer');
+                        }
+                else{
+                    return res.redirect('/home');}
+        });
+    })(req, res, next);
+});
+
 // Routes - start
 app.get('/', function (req, res) {
     if (!req.isAuthenticated()) {
@@ -1179,95 +1258,6 @@ app.get('/test-reset-role', isLoginEnsured, function(req, res, next) {
     }
     res.redirect('back');
 });
-
-
-// app.post('/login', function (req, res, next) {
-//     passport.authenticate('local', {
-//         successRedirect: '/home',
-//         failureRedirect: '/login',
-//         failureFlash: true
-//     })(req, res, req.body.username, req.body.password, next);
-// });
-
-app.post('/login', function(req, res, next) {
-    passport.authenticate('local', async function(err, user, info) {
-        if (err) { 
-            return next(err); 
-        }
-        
-        // Capture request info
-        const loginInfo = {
-            ip_address: req.ip,
-            user_agent: req.headers['user-agent'],
-            attempted_username: req.body.username  // Capture the attempted username
-        };
-
-        if (!user) {
-            // Log failed login attempt
-            try {
-                await LoginLogDao.create({
-                    Person_id: info.Person_id || null,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'failed',
-                    failure_reason: info.message,
-                    location_code: info.location_code || null,
-                    created_by: 'SYSTEM'
-                });
-            } catch (error) {
-                console.error("Error logging failed login:", error);
-            }
-            
-            req.flash('error', info.message);
-            return res.redirect('/login');
-        }
-
-        req.logIn(user, async function(err) {
-            if (err) { 
-                return next(err); 
-            }
-
-            // Log successful login after successful authentication
-            try {
-                await LoginLogDao.create({
-                    Person_id: user.Person_id,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'success',
-                    location_code: user.location_code,
-                    created_by: user.Person_id.toString()
-                });
-            } catch (error) {
-                console.error("Error logging login:", error);
-            }
-
-                 const shouldRedirect = await handleVersionRouting(user, req, res);
-		        if (shouldRedirect) {
-		                 return; // Redirect happened, stop processing
-		            }	
-
-            // Cashier goes directly to credit entry page
-            if (user.Role === 'Cashier') {
-                return res.redirect('/dsm-entry');
-            }            
-
-             // Check if the user is a superuser
-             if (user.Role === 'SuperUser') {
-                // Redirect to location selection page if superuser
-                return res.redirect('/select-location');
-            }
-
-            if(user.Role === 'Customer') {              
-                return res.redirect('/home-customer');
-                        }
-                else{
-                    return res.redirect('/home');}            
-        });
-    })(req, res, next);
-});
-
 
 
 app.get('/cashflow', isLoginEnsured, function (req, res, next) {
