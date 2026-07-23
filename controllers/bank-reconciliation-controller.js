@@ -293,6 +293,7 @@ bulkAddEntries: async (req, res) => {
                     credit_amount: credit > 0 ? credit : null,
                     debit_amount: debit > 0 ? debit : null,
                     remarks: entry.remarks || '',
+                    user_remark: entry.user_remark || null,
                     external_id: null,
                     external_source: entry.external_source || 'bulk_add',
                     running_balance: entry.running_balance ? parseFloat(entry.running_balance) : null,
@@ -423,6 +424,7 @@ bulkAddEntries: async (req, res) => {
                 credit_amount,
                 debit_amount,
                 remarks,
+                user_remark,
                 external_id,
                 external_source,
                 running_balance
@@ -463,6 +465,7 @@ bulkAddEntries: async (req, res) => {
                 credit_amount: credit > 0 ? credit : null,
                 debit_amount: debit > 0 ? debit : null,
                 remarks: remarks || '',
+                user_remark: user_remark || null,
                 external_id: external_id || null,
                 external_source: external_source || null,
                 running_balance: running_balance ? parseFloat(running_balance) : null,
