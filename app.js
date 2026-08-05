@@ -382,6 +382,26 @@ const addUserLocationInfo = async (req, res, next) => {
 app.use(addUserLocationInfo);
 app.use(addDebugLogging);
 
+app.use((req, res, next) => {
+    res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
+    res.locals.SERVER_PORT = process.env.SERVER_PORT;
+    next();
+});
+
+// Load DESKTOP_ZOOM from m_location_config (setting_name='DESKTOP_ZOOM', location_code='*' or per-location)
+// Remove this middleware once zoom is finalized and baked into style.css
+const { getLocationConfigValue } = require('./utils/location-config');
+app.use(async (req, res, next) => {
+    try {
+        const locationCode = (req.user && req.user.location_code) ? req.user.location_code : '*';
+        const zoom = await getLocationConfigValue(locationCode, 'DESKTOP_ZOOM', null);
+        res.locals.desktopZoom = zoom; // e.g. '0.85' or null to disable
+    } catch (e) {
+        res.locals.desktopZoom = null;
+    }
+    next();
+});
+
 
 
 // Route logging middleware - tracks user navigation patterns for analytics
@@ -455,27 +475,6 @@ app.use('/admin/onboarding', onboardingAdminRoutes);
 
 
 //app.use('/auditing-utilities', auditingUtilitiesRoutes);
-app.use((req, res, next) => {
-    res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
-    res.locals.SERVER_PORT = process.env.SERVER_PORT;
-    next();
-});
-
-// Load DESKTOP_ZOOM from m_location_config (setting_name='DESKTOP_ZOOM', location_code='*' or per-location)
-// Remove this middleware once zoom is finalized and baked into style.css
-const { getLocationConfigValue } = require('./utils/location-config');
-app.use(async (req, res, next) => {
-    try {
-        const locationCode = (req.user && req.user.location_code) ? req.user.location_code : '*';
-        const zoom = await getLocationConfigValue(locationCode, 'DESKTOP_ZOOM', null);
-        res.locals.desktopZoom = zoom; // e.g. '0.85' or null to disable
-    } catch (e) {
-        res.locals.desktopZoom = null;
-    }
-    next();
-});
-
-
 
 
 
