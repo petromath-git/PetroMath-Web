@@ -385,6 +385,8 @@ block content
                         #credit-table .col-qty       { width: 6%; }
                         #credit-table .col-sale      { width: 10%; } /* extra space for sale */
                         #credit-table .col-notes     { width: 10%; }
+                        #credit-table .col-off-meter { width: 5%; text-align: center; }
+                        #credit-table .col-delete    { width: 3%; text-align: center; }
                     div
                         div.col-16
                             div.table-responsive
@@ -392,21 +394,21 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
-                                                th(scope="col") Bill Date
-                                                th(scope="col") Product
-                                                th(scope="col") Bill #                                                
-                                                th(scope="col") Company
-                                                th(scope="col") Vehicle Number
-                                                th(scope="col") Odometer
-                                                th(scope="col") Price
-                                                th(scope="col") Price Discount
-                                                th(scope="col") Quantity
-                                                th(scope="col") Sale
-                                                th(scope="col") Notes
+                                                th.col-date(scope="col") Bill Date
+                                                th.col-product(scope="col") Product
+                                                th.col-bill(scope="col") Bill #
+                                                th.col-company(scope="col") Company
+                                                th.col-vehicle(scope="col") Vehicle Number
+                                                th.col-odo(scope="col") Odometer
+                                                th.col-price(scope="col") Price
+                                                th.col-discount(scope="col") Price Discount
+                                                th.col-qty(scope="col") Quantity
+                                                th.col-sale(scope="col") Sale
+                                                th.col-notes(scope="col") Notes
                                                 if allowOffMeterSale
-                                                    th(scope="col") Off Meter
+                                                    th.col-off-meter(scope="col") Off Meter
                                                 if(!freezedRecord)
-                                                    th(scope="col")
+                                                    th.col-delete(scope="col")
                                             - var rowCnt = 0
                                             while rowCnt < maxCreditsRowCnt
                                                 +addCredits(rowCnt, t_credits[rowCnt++])
