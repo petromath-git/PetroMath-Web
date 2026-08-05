@@ -1293,9 +1293,9 @@ body {
   width: 260px;
   background: linear-gradient(180deg, #343a40 0%, #212529 100%);
   position: fixed;
-  height: 100vh;
-  left: 0;
   top: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1000;
   overflow-y: auto;
   transition: all 0.3s ease;
