@@ -147,6 +147,10 @@ block content
                     h4.mb-0.text-primary.text-center.text-md-left Location Configuration
                 .col-auto.order-1.order-md-2.ml-auto
                     .btn-group
+                        button.btn.btn-outline-primary.btn-sm#openCatalogBtn(type="button", data-toggle="modal", data-target="#settingCatalogModal")
+                            i.bi.bi-journal-text.me-1
+                            span.d-none.d-sm-inline Setting Catalog
+                            span.d-inline.d-sm-none Catalog
                         button.btn.btn-success.btn-sm#addConfigBtn(type="button", data-toggle="modal", data-target="#addConfigModal")
                             i.bi.bi-plus-circle.me-1
                             span.d-none.d-sm-inline Add Config
@@ -177,50 +181,6 @@ block content
                         option(value="*") Global Only
                         each location in locations
                             option(value=location.location_code, selected=location.location_code === currentFilter)= location.location_name
-
-        // Setting Catalog Section — the feature directory: every setting_name ever used,
-        // with a short + detailed description, searchable independent of any active/history row.
-        .catalog-section.mb-4
-            h5.mb-2
-                i.bi.bi-journal-text.me-2
-                | Setting Catalog
-                small.text-muted.ms-2 (search by what a setting does, not just its name)
-            .input-group.mb-3(style="max-width: 500px;")
-                .input-group-prepend
-                    span.input-group-text
-                        i.bi.bi-search
-                input.form-control#catalogSearchInput(
-                    type="text",
-                    placeholder="Search setting name or description...",
-                    autocomplete="off"
-                )
-            .table-responsive
-                table.table.table-hover.table-sm#catalog-table
-                    thead.thead-light
-                        tr
-                            th(scope="col" style="width: 20%;") Setting Name
-                            th(scope="col" style="width: 25%;") Short Description
-                            th(scope="col") Detailed Description
-                            th(scope="col" style="width: 60px;") Actions
-                    tbody
-                        if settingCatalog && settingCatalog.length > 0
-                            each entry in settingCatalog
-                                tr
-                                    td
-                                        strong= entry.setting_name
-                                    td.small= entry.short_description || '—'
-                                    td.small.text-muted= entry.detailed_description || '—'
-                                    td
-                                        button.btn.btn-sm.btn-outline-secondary.edit-description-btn(
-                                            type="button",
-                                            data-setting-name=entry.setting_name,
-                                            data-toggle="modal",
-                                            data-target="#editDescriptionModal"
-                                        )
-                                            i.bi.bi-pencil
-                        else
-                            tr
-                                td(colspan="4").text-center.text-muted No settings found
 
         // Active Configs Section
         h5.mb-3
@@ -499,6 +459,55 @@ block content
                                 span.spinner-border.spinner-border-sm.me-2(style='display:none')
                                 | Update Config
 
+    // Setting Catalog Modal — the feature directory: every setting_name ever used,
+    // with a short + detailed description, searchable independent of any active/history row.
+    #settingCatalogModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-xl.modal-dialog-scrollable
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        i.bi.bi-journal-text.me-2
+                        | Setting Catalog
+                        small.text-muted.ms-2 (search by what a setting does, not just its name)
+                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                .modal-body
+                    .input-group.mb-3
+                        .input-group-prepend
+                            span.input-group-text
+                                i.bi.bi-search
+                        input.form-control#catalogSearchInput(
+                            type="text",
+                            placeholder="Search setting name or description...",
+                            autocomplete="off"
+                        )
+                    .table-responsive
+                        table.table.table-hover.table-sm#catalog-table
+                            thead.thead-light.sticky-top
+                                tr
+                                    th(scope="col" style="width: 20%;") Setting Name
+                                    th(scope="col" style="width: 25%;") Short Description
+                                    th(scope="col") Detailed Description
+                                    th(scope="col" style="width: 60px;") Actions
+                            tbody
+                                if settingCatalog && settingCatalog.length > 0
+                                    each entry in settingCatalog
+                                        tr
+                                            td
+                                                strong= entry.setting_name
+                                            td.small= entry.short_description || '—'
+                                            td.small.text-muted= entry.detailed_description || '—'
+                                            td
+                                                button.btn.btn-sm.btn-outline-secondary.edit-description-btn(
+                                                    type="button",
+                                                    data-setting-name=entry.setting_name
+                                                )
+                                                    i.bi.bi-pencil
+                                else
+                                    tr
+                                        td(colspan="4").text-center.text-muted No settings found
+                .modal-footer
+                    button.btn.btn-outline-secondary(type='button' data-dismiss='modal') Close
+
     // Edit Description Modal (edits the catalog entry for a setting_name — not tied to any one row)
     #editDescriptionModal.modal.fade(tabindex='-1')
         .modal-dialog.modal-dialog-centered
@@ -549,6 +558,7 @@ block content
         const locationsData = !{locationsData};
         const settingCatalogData = !{settingCatalogData};
         const isSuperUser = !{isSuperUser};
+        let descriptionSaveSucceeded = false;
 
         // Page initialization
         $(document).ready(function() {
@@ -572,6 +582,15 @@ block content
 
             // Save description button
             $('#saveDescriptionBtn').on('click', handleSaveDescription);
+
+            // Reopen the catalog modal when the edit-description modal closes,
+            // unless it closed because the save succeeded (page is about to reload).
+            $('#editDescriptionModal').on('hidden.bs.modal', function() {
+                if (!descriptionSaveSucceeded) {
+                    $('#settingCatalogModal').modal('show');
+                }
+                descriptionSaveSucceeded = false;
+            });
 
             // Refresh button
             $('#refreshDataBtn').on('click', function() {
@@ -608,6 +627,13 @@ block content
             $('#descSettingDisplay').text(settingName);
             $('#descShortText').val(entry ? entry.short_description : '');
             $('#descDetailedText').val(entry ? entry.detailed_description : '');
+
+            // Bootstrap 4 doesn't stack modals cleanly — swap the catalog modal out
+            // for the edit modal, and swap back in when the edit modal closes.
+            $('#settingCatalogModal').modal('hide');
+            $('#settingCatalogModal').one('hidden.bs.modal', function() {
+                $('#editDescriptionModal').modal('show');
+            });
         }
 
         async function handleSaveDescription() {
@@ -636,6 +662,7 @@ block content
 
                 if (result.success) {
                     showAlert(result.message, 'success');
+                    descriptionSaveSucceeded = true;
                     $('#editDescriptionModal').modal('hide');
                     setTimeout(() => {
                         window.location.reload();
