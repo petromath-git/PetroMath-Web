@@ -4,6 +4,7 @@ const db = require("../db/db-connection");
 const CreditListVehicle = db.creditlistvehicle;
 const { Op } = require("sequelize");
 const dateFormat = require('dateformat');
+const { normalize, isLikelySameVehicle } = require('../utils/vehicle-number-matcher');
 
 module.exports = {
     // Find all vehicles for a credit party (UPDATE THIS METHOD)
@@ -60,6 +61,19 @@ module.exports = {
     }
 },
 
+
+    // Find active vehicles for this customer that look like they might be
+    // the same vehicle as vehicleNumber, entered with different formatting
+    // (missing RTO code/series letter, extra spacing, single-digit typo).
+    // Excludes exact normalized matches - callers should check those separately.
+    findSimilarForCustomer: async (vehicleNumber, creditlistId) => {
+        const target = normalize(vehicleNumber);
+        const active = await module.exports.findAll(creditlistId);
+        return active.filter(v =>
+            normalize(v.vehicle_number) !== target &&
+            isLikelySameVehicle(v.vehicle_number, vehicleNumber)
+        );
+    },
 
     // Create a new vehicle (UPDATE THIS METHOD to include product_id)
   create: (vehicleData) => {
@@ -130,6 +144,19 @@ module.exports = {
                 ]
             }
         });
+    },
+
+    // Find active vehicles anywhere else at this location (any other customer)
+    // that look like they might be the same vehicle as vehicleNumber - either
+    // an exact match or a formatting/typo variant. Used to warn when a plate
+    // is being quick-added under what might be the wrong customer.
+    findSimilarAcrossLocation: async (vehicleNumber, locationCode, excludeCreditlistId) => {
+        const target = normalize(vehicleNumber);
+        const all = await module.exports.findAllVehiclesForLocation(locationCode);
+        return all.filter(v =>
+            String(v.creditlist_id) !== String(excludeCreditlistId) &&
+            (normalize(v.vehicle_number) === target || isLikelySameVehicle(v.vehicle_number, vehicleNumber))
+        );
     },
 
     findAllVehiclesForLocation: (locationCode) => {

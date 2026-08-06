@@ -343,6 +343,33 @@ router.put('/digital/disable/:id', [isLoginEnsured, security.isAdmin()], functio
 });
 
 
+// Create login account for a customer that has none yet (e.g. bulk-onboarded customers)
+router.post('/api/:id/create-login', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const credit = await CreditDao.findById(req.params.id);
+        if (!credit) {
+            return res.status(404).json({ success: false, error: 'Customer not found' });
+        }
+
+        const existingPerson = await PersonDao.findPersonByCreditlistId(credit.creditlist_id);
+        if (existingPerson) {
+            return res.status(400).json({ success: false, error: 'Customer already has a login account' });
+        }
+
+        const person = await PersonDao.createUserForCredit(credit, req.user);
+
+        const locationConfig = require('../utils/location-config');
+        const defaultPassword = await locationConfig.getLocationConfigValue(
+            credit.location_code, 'CUSTOMER_DEFAULT_PASSWORD', 'welcome123'
+        );
+
+        res.json({ success: true, username: person.User_Name, password: defaultPassword });
+    } catch (error) {
+        console.error('Error creating login for customer:', error);
+        res.status(500).json({ success: false, error: 'Failed to create login account' });
+    }
+});
+
 // Enable or disable customer portal login
 router.put('/api/:id/toggle-login', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
     try {
