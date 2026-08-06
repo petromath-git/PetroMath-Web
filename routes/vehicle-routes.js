@@ -191,7 +191,7 @@ router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('
 // Quick-add vehicle from closing page (returns JSON)
 router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD_VEHICLE')], async function(req, res) {
     try {
-        const { creditlist_id, vehicle_number, vehicle_type } = req.body;
+        const { creditlist_id, vehicle_number, vehicle_type, force } = req.body;
         const cleanNumber = (vehicle_number || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (!cleanNumber) {
             return res.status(400).json({ success: false, error: 'Vehicle number is required' });
@@ -199,6 +199,17 @@ router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD
         const existing = await CreditVehiclesDao.findByNumberAndCustomer(cleanNumber, creditlist_id);
         if (existing) {
             return res.status(400).json({ success: false, error: `Vehicle ${cleanNumber} already exists for this customer` });
+        }
+        if (!force) {
+            const similar = await CreditVehiclesDao.findSimilarForCustomer(cleanNumber, creditlist_id);
+            if (similar.length > 0) {
+                return res.json({
+                    success: false,
+                    warning: true,
+                    similar: similar.map(v => ({ vehicleId: v.vehicle_id, vehicleNumber: v.vehicle_number })),
+                    error: `This looks similar to an existing vehicle for this customer: ${similar.map(v => v.vehicle_number).join(', ')}`
+                });
+            }
         }
         const created = await CreditVehiclesDao.create({
             creditlist_id,
