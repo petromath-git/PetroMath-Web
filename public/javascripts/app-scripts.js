@@ -2735,10 +2735,8 @@ function updateCreditAndLoadVehicles(obj, creditRowPrefix, rowNo) {
     if (creditListId && vehicleDataByCredit[creditListId]) {
         // Populate with vehicles for this credit party
         vehicleDataByCredit[creditListId].forEach(vehicle => {
-            const option = new Option(
-                `${vehicle.vehicleNumber} (${vehicle.vehicleType})`, 
-                vehicle.vehicleId
-            );
+            const label = vehicle.vehicleType ? `${vehicle.vehicleNumber} (${vehicle.vehicleType})` : vehicle.vehicleNumber;
+            const option = new Option(label, vehicle.vehicleId);
             $(vehicleSelect).append(option);
         });
     }
@@ -2929,10 +2927,8 @@ function loadVehiclesDynamically(creditListId, vehicleSelectId) {
             
             if (response.success && response.vehicles) {
                 response.vehicles.forEach(vehicle => {
-                    vehicleSelect.append(new Option(
-                        `${vehicle.vehicleNumber} (${vehicle.vehicleType})`,
-                        vehicle.vehicleId
-                    ));
+                    const label = vehicle.vehicleType ? `${vehicle.vehicleNumber} (${vehicle.vehicleType})` : vehicle.vehicleNumber;
+                    vehicleSelect.append(new Option(label, vehicle.vehicleId));
                 });
             }
             
