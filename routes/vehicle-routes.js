@@ -202,12 +202,22 @@ router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD
         }
         if (!force) {
             const similar = await CreditVehiclesDao.findSimilarForCustomer(cleanNumber, creditlist_id);
-            if (similar.length > 0) {
+            const similarElsewhere = await CreditVehiclesDao.findSimilarAcrossLocation(cleanNumber, req.user.location_code, creditlist_id);
+
+            if (similar.length > 0 || similarElsewhere.length > 0) {
+                const messages = [];
+                if (similar.length > 0) {
+                    messages.push(`This looks similar to an existing vehicle for this customer: ${similar.map(v => v.vehicle_number).join(', ')}`);
+                }
+                if (similarElsewhere.length > 0) {
+                    const elsewhereList = similarElsewhere.map(v => `${v.vehicle_number} (${v.company_name})`).join(', ');
+                    messages.push(`This vehicle is already registered under another customer: ${elsewhereList}`);
+                }
                 return res.json({
                     success: false,
                     warning: true,
-                    similar: similar.map(v => ({ vehicleId: v.vehicle_id, vehicleNumber: v.vehicle_number })),
-                    error: `This looks similar to an existing vehicle for this customer: ${similar.map(v => v.vehicle_number).join(', ')}`
+                    similar: [...similar, ...similarElsewhere].map(v => ({ vehicleId: v.vehicle_id, vehicleNumber: v.vehicle_number })),
+                    error: messages.join('\n')
                 });
             }
         }

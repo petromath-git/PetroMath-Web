@@ -146,6 +146,19 @@ module.exports = {
         });
     },
 
+    // Find active vehicles anywhere else at this location (any other customer)
+    // that look like they might be the same vehicle as vehicleNumber - either
+    // an exact match or a formatting/typo variant. Used to warn when a plate
+    // is being quick-added under what might be the wrong customer.
+    findSimilarAcrossLocation: async (vehicleNumber, locationCode, excludeCreditlistId) => {
+        const target = normalize(vehicleNumber);
+        const all = await module.exports.findAllVehiclesForLocation(locationCode);
+        return all.filter(v =>
+            String(v.creditlist_id) !== String(excludeCreditlistId) &&
+            (normalize(v.vehicle_number) === target || isLikelySameVehicle(v.vehicle_number, vehicleNumber))
+        );
+    },
+
     findAllVehiclesForLocation: (locationCode) => {
     return db.sequelize.query(
         `SELECT 
