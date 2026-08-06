@@ -74,8 +74,8 @@ block content
                                 td= val.gst || '-'
                                 td= val.bank_name || '-'
                                 td
-                                    span.text-monospace.small= val.username || '-'
                                     if val.username && val.username !== 'No Login Account' && val.username !== 'Error Loading'
+                                        span.text-monospace.small= val.username
                                         if val.loginEnabled
                                             span.badge.badge-success.ml-1(style="font-size:10px") Active
                                         else
@@ -89,6 +89,17 @@ block content
                                             title="Show login details"
                                         )
                                             i.bi.bi-key
+                                    else if val.username === 'No Login Account' && canEdit
+                                        button.btn.btn-sm.btn-outline-primary.create-login-btn(
+                                            type="button"
+                                            data-customer-id=val.creditlist_id
+                                            data-customer-name=val.Company_Name
+                                            title="Create a portal login for this customer"
+                                        )
+                                            i.bi.bi-person-plus.mr-1
+                                            | Create Login
+                                    else
+                                        span.text-monospace.small= val.username || '-'
                                 if canEdit || canDisable
                                     td
                                         // Vehicle Management Link
@@ -415,6 +426,41 @@ block content
                     })
                     .catch(() => {
                         document.getElementById('loginInfoPassword').value = 'Could not check';
+                    });
+            });
+        });
+
+        // Create login for a customer that has none
+        document.querySelectorAll('.create-login-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const customerId = this.getAttribute('data-customer-id');
+                const customerName = this.getAttribute('data-customer-name');
+                const triggerBtn = this;
+                triggerBtn.disabled = true;
+
+                fetch(`/credit-master/api/${customerId}/create-login`, { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById('loginInfoCustomerId').value = customerId;
+                            document.getElementById('loginInfoCustomerName').textContent = customerName;
+                            document.getElementById('loginInfoUsername').value = data.username;
+                            document.getElementById('loginInfoPassword').value = data.password;
+                            document.getElementById('loginInfoPassword').classList.remove('text-muted');
+                            document.getElementById('loginResetFeedback').innerHTML = '';
+                            document.getElementById('loginToggleFeedback').innerHTML =
+                                '<div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle mr-1"></i>Login account created</div>';
+                            updateLoginStatusUI(true);
+                            $('#loginInfoModal').modal('show');
+                            $('#loginInfoModal').one('hidden.bs.modal', () => location.reload());
+                        } else {
+                            showMessage(data.error || 'Error creating login', 'danger');
+                            triggerBtn.disabled = false;
+                        }
+                    })
+                    .catch(() => {
+                        showMessage('Network error. Try again.', 'danger');
+                        triggerBtn.disabled = false;
                     });
             });
         });

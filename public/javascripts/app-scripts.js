@@ -2226,7 +2226,7 @@ function renderInvoicePreview(inv) {
         <tbody>
             <tr><td class="text-muted" style="width:160px">Supplier</td><td><strong>${inv.supplier || '—'}</strong></td>
                 <td class="text-muted" style="width:160px">Invoice No.</td><td>${inv.invoice_number || '—'}</td></tr>
-            <tr><td class="text-muted">Invoice Date</td><td>${fmtD(inv.invoice_date)}</td>
+            <tr><td class="text-muted">Invoice Date</td><td>${fmtD(inv.invoice_date)}${inv.invoice_time ? ' ' + inv.invoice_time : ''}</td>
                 <td class="text-muted">Truck No.</td><td>${inv.truck_number || '—'}</td></tr>
             <tr><td class="text-muted">Delivery Doc No.</td><td>${inv.delivery_doc_no || '—'}</td>
                 <td class="text-muted">Seal / Lock No.</td><td>${inv.seal_lock_no || '—'}</td></tr>
@@ -2341,6 +2341,7 @@ function prefillFromInvoice(data, supplier) {
         setVal('invoiceno', h.invoice_number);
         setVal('invoiceDate', h.invoice_date);
         setVal('ttnumber', h.truck_number);
+        suggestDecantTime(h.invoice_time);
     }
 
     // Show invoice reference info (read-only display) — always shown
@@ -2348,11 +2349,33 @@ function prefillFromInvoice(data, supplier) {
     if (refEl) {
         const parts = [];
         if (h.invoice_number) parts.push('Invoice: ' + h.invoice_number);
+        if (h.invoice_time) parts.push('Invoice Time: ' + h.invoice_time);
         if (h.delivery_doc_no) parts.push('Delivery: ' + h.delivery_doc_no);
         if (h.seal_lock_no) parts.push('Seal: ' + h.seal_lock_no);
         if (h.total_invoice_amount) parts.push('Total: ₹' + Number(h.total_invoice_amount).toLocaleString('en-IN'));
         refEl.textContent = parts.join('  |  ');
     }
+}
+
+// Suggest a decant time from the invoice time (+2.5 hrs, rounded to the nearest
+// 30-min slot in the decant-time dropdown). Only applied if the dropdown is still
+// on its untouched default ("0.00") so it never overwrites a time already entered.
+// Stays editable — month-end pushes can delay actual decanting by 10-16+ hrs, so
+// this is a starting suggestion, not a fact.
+function suggestDecantTime(invoiceTime) {
+    if (!invoiceTime) return;
+    const el = document.getElementById('decanttime');
+    if (!el || el.value !== '0.00') return;
+
+    const m = invoiceTime.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return;
+    const totalMinutes = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + 150) % (24 * 60); // +2.5 hrs, wraps past midnight
+    let hh = Math.floor(totalMinutes / 60);
+    let mm = Math.round((totalMinutes % 60) / 30) * 30;
+    if (mm === 60) { mm = 0; hh = (hh + 1) % 24; }
+    const suggested = hh + '.' + (mm === 0 ? '00' : '30');
+
+    if (Array.from(el.options).some(o => o.value === suggested)) el.value = suggested;
 }
 
 // Add new page - add credit sales to DB via ajax
@@ -2751,7 +2774,7 @@ function openAddVehicleModal(prefix, rowNo) {
     $('#quickAddVehicleModal').modal('show');
 }
 
-function quickSaveVehicle() {
+function quickSaveVehicle(force) {
     if (!_quickAddVehicleContext) return;
 
     const vehicleNumber = document.getElementById('quickVehicleNumber').value.trim().toUpperCase();
@@ -2773,7 +2796,8 @@ function quickSaveVehicle() {
         body: JSON.stringify({
             creditlist_id: _quickAddVehicleContext.creditListId,
             vehicle_number: vehicleNumber,
-            vehicle_type: vehicleType
+            vehicle_type: vehicleType,
+            force: !!force
         })
     })
     .then(r => r.json())
@@ -2795,6 +2819,16 @@ function quickSaveVehicle() {
             $(vehicleSelect).append(option).trigger('change');
 
             $('#quickAddVehicleModal').modal('hide');
+        } else if (d.warning) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Add Vehicle';
+            const proceed = confirm(
+                (d.error || 'A similar vehicle already exists for this customer.') +
+                `\n\nAre you sure "${vehicleNumber}" is a different vehicle? Click OK to add it anyway.`
+            );
+            if (proceed) {
+                quickSaveVehicle(true);
+            }
         } else {
             if (d.error && d.error.includes('already exists')) {
                 document.getElementById('quickVehicleDupMsg').classList.remove('d-none');
