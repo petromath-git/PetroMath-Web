@@ -335,16 +335,18 @@ getUserAccessibleLocationsWithNames: async (personId) => {
 createUserForCredit: async (credit, currentUser) => {
     try {
         const bcrypt = require('bcrypt');
-        
+        const locationConfig = require('../utils/location-config');
+
         // Check if user already exists for this creditlist_id
         const existingUser = await Person.findOne({
             where: { creditlist_id: credit.creditlist_id }
         });
-        
+
         if (!existingUser) {
-            // Use standard welcome password for all new credit customers
-            const defaultPassword = 'welcome123';
-            
+            const defaultPassword = await locationConfig.getLocationConfigValue(
+                credit.location_code, 'CUSTOMER_DEFAULT_PASSWORD', 'welcome123'
+            );
+
             // Hash the password with 12 salt rounds (consistent with app)
             const hashedPassword = await bcrypt.hash(defaultPassword, 12);
             

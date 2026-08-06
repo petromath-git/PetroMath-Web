@@ -173,6 +173,11 @@ findCustomerByPhone: async (phone) => {
         where: { creditlist_id: creditlistId }
     });
     },    
+    findById: (creditlistId) => {
+        return Credit.findOne({
+            where: { creditlist_id: creditlistId }
+        });
+    },
     findByNameAndLocation: async (companyName, locationCode) => {
         try {
             const customer = await Credit.findOne({
