@@ -35,6 +35,12 @@ router.put('/update/:configId',
     locationConfigController.updateConfig
 );
 
+// PUT /location-config/catalog/:settingName - Create/update a setting's description
+router.put('/catalog/:settingName',
+    [isLoginEnsured, security.hasPermission('MANAGE_LOCATION_CONFIG')],
+    locationConfigController.updateCatalogDescription
+);
+
 // ============================================================================
 // API ROUTES (AJAX/JSON)
 // ============================================================================

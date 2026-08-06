@@ -2,6 +2,7 @@ const db = require("../db/db-connection");
 const Sequelize = require("sequelize");
 const { Op } = require("sequelize");
 const LocationConfig = db.location_config;
+const LocationConfigCatalog = db.location_config_catalog;
 
 module.exports = {
     
@@ -140,8 +141,8 @@ module.exports = {
                 ],
                 raw: true
             });
-            
-            return configs;
+
+            return await module.exports.attachCatalogDescriptions(configs);
         } catch (error) {
             console.error('Error in getAllConfigs:', error);
             throw error;
@@ -175,10 +176,84 @@ module.exports = {
                 ],
                 raw: true
             });
-            
-            return configs;
+
+            return await module.exports.attachCatalogDescriptions(configs);
         } catch (error) {
             console.error('Error in getHistoryConfigs:', error);
+            throw error;
+        }
+    },
+
+    // Merge in short/detailed descriptions from the catalog (keyed by setting_name)
+    attachCatalogDescriptions: async (configs) => {
+        if (!configs || configs.length === 0) return configs;
+
+        const catalogMap = await module.exports.getCatalogMap();
+        return configs.map(config => ({
+            ...config,
+            short_description: catalogMap[config.setting_name]?.short_description || null,
+            detailed_description: catalogMap[config.setting_name]?.detailed_description || null
+        }));
+    },
+
+    // Get all catalog entries as a map keyed by setting_name
+    getCatalogMap: async () => {
+        try {
+            const entries = await LocationConfigCatalog.findAll({ raw: true });
+            const map = {};
+            entries.forEach(entry => {
+                map[entry.setting_name] = entry;
+            });
+            return map;
+        } catch (error) {
+            console.error('Error in getCatalogMap:', error);
+            throw error;
+        }
+    },
+
+    // Get all catalog entries as a list (for the manage-descriptions UI)
+    getCatalogList: async () => {
+        try {
+            return await LocationConfigCatalog.findAll({
+                order: [['setting_name', 'ASC']],
+                raw: true
+            });
+        } catch (error) {
+            console.error('Error in getCatalogList:', error);
+            throw error;
+        }
+    },
+
+    // Create or update the description for a setting_name (independent of any config value/row)
+    upsertCatalogEntry: async (settingName, shortDescription, detailedDescription, updatedBy = 'system') => {
+        try {
+            const existing = await LocationConfigCatalog.findByPk(settingName);
+
+            if (existing) {
+                await LocationConfigCatalog.update(
+                    {
+                        short_description: shortDescription,
+                        detailed_description: detailedDescription,
+                        updated_by: updatedBy,
+                        updation_date: new Date()
+                    },
+                    { where: { setting_name: settingName } }
+                );
+            } else {
+                await LocationConfigCatalog.create({
+                    setting_name: settingName,
+                    short_description: shortDescription,
+                    detailed_description: detailedDescription,
+                    created_by: updatedBy,
+                    updated_by: updatedBy,
+                    creation_date: new Date(),
+                    updation_date: new Date()
+                });
+            }
+
+            return await LocationConfigCatalog.findByPk(settingName, { raw: true });
+        } catch (error) {
+            console.error('Error in upsertCatalogEntry:', error);
             throw error;
         }
     },
