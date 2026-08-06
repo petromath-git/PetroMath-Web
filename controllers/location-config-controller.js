@@ -4,6 +4,12 @@ const LocationConfigDao = require('../dao/location-config-dao');
 const LocationDao = require('../dao/location-dao');
 const dateFormat = require('dateformat');
 
+function safeDate(d, fmt) {
+    if (!d) return 'N/A';
+    const parsed = new Date(d);
+    return isNaN(parsed.getTime()) ? 'N/A' : dateFormat(parsed, fmt);
+}
+
 /**
  * Location Config Controller
  * Manages location-specific and global configuration settings
@@ -51,23 +57,29 @@ module.exports = {
             
             // Get all unique setting names for autocomplete
             const settingNames = await LocationConfigDao.getAllSettingNames();
-            
+
+            // Get description catalog (one row per setting_name) for the manage-descriptions UI
+            const catalogMap = await LocationConfigDao.getCatalogMap();
+            const settingCatalog = settingNames.map(name => ({
+                setting_name: name,
+                short_description: catalogMap[name]?.short_description || '',
+                detailed_description: catalogMap[name]?.detailed_description || ''
+            }));
+
             // Format dates for display
             const formattedActiveConfigs = activeConfigs.map(config => ({
                 ...config,
-                effective_start_date_formatted: dateFormat(config.effective_start_date, 'dd-mmm-yyyy'),
-                effective_end_date_formatted: dateFormat(config.effective_end_date, 'dd-mmm-yyyy'),
-                creation_date_formatted: config.creation_date ? 
-                    dateFormat(config.creation_date, 'dd-mmm-yyyy HH:MM') : 'N/A',
+                effective_start_date_formatted: safeDate(config.effective_start_date, 'dd-mmm-yyyy'),
+                effective_end_date_formatted: safeDate(config.effective_end_date, 'dd-mmm-yyyy'),
+                creation_date_formatted: safeDate(config.creation_date, 'dd-mmm-yyyy HH:MM'),
                 is_global: config.location_code === '*'
             }));
-            
+
             const formattedHistoryConfigs = historyConfigs.map(config => ({
                 ...config,
-                effective_start_date_formatted: dateFormat(config.effective_start_date, 'dd-mmm-yyyy'),
-                effective_end_date_formatted: dateFormat(config.effective_end_date, 'dd-mmm-yyyy'),
-                creation_date_formatted: config.creation_date ? 
-                    dateFormat(config.creation_date, 'dd-mmm-yyyy HH:MM') : 'N/A',
+                effective_start_date_formatted: safeDate(config.effective_start_date, 'dd-mmm-yyyy'),
+                effective_end_date_formatted: safeDate(config.effective_end_date, 'dd-mmm-yyyy'),
+                creation_date_formatted: safeDate(config.creation_date, 'dd-mmm-yyyy HH:MM'),
                 is_global: config.location_code === '*'
             }));
 
@@ -79,10 +91,12 @@ module.exports = {
                 historyConfigsData: JSON.stringify(formattedHistoryConfigs),
                 locationsData: JSON.stringify(locations),
                 settingNamesData: JSON.stringify(settingNames),
+                settingCatalogData: JSON.stringify(settingCatalog),
                 activeConfigs: formattedActiveConfigs,
                 historyConfigs: formattedHistoryConfigs,
                 locations: locations,
                 settingNames: settingNames,
+                settingCatalog: settingCatalog,
                 currentFilter: locationFilter,
                 currentDate: new Date().toISOString().split('T')[0],
                 isSuperUser: userRole === 'SuperUser',
@@ -328,6 +342,45 @@ module.exports = {
             res.status(500).json({
                 success: false,
                 error: 'Failed to fetch configuration: ' + error.message
+            });
+        }
+    },
+
+    /**
+     * PUT /location-config/catalog/:settingName
+     * Create/update the description for a setting_name (independent of any location's value).
+     * Any authenticated user with MANAGE_LOCATION_CONFIG can edit descriptions.
+     */
+    updateCatalogDescription: async (req, res, next) => {
+        try {
+            const settingName = req.params.settingName.trim().toUpperCase();
+            const { short_description, detailed_description } = req.body;
+            const username = req.user.username;
+
+            if (!settingName) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Setting name is required'
+                });
+            }
+
+            const updated = await LocationConfigDao.upsertCatalogEntry(
+                settingName,
+                (short_description || '').trim(),
+                (detailed_description || '').trim(),
+                username
+            );
+
+            res.json({
+                success: true,
+                message: 'Description saved successfully',
+                data: updated
+            });
+        } catch (error) {
+            console.error('Error updating catalog description:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to save description: ' + error.message
             });
         }
     },

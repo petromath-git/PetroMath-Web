@@ -178,11 +178,55 @@ block content
                         each location in locations
                             option(value=location.location_code, selected=location.location_code === currentFilter)= location.location_name
 
+        // Setting Catalog Section — the feature directory: every setting_name ever used,
+        // with a short + detailed description, searchable independent of any active/history row.
+        .catalog-section.mb-4
+            h5.mb-2
+                i.bi.bi-journal-text.me-2
+                | Setting Catalog
+                small.text-muted.ms-2 (search by what a setting does, not just its name)
+            .input-group.mb-3(style="max-width: 500px;")
+                .input-group-prepend
+                    span.input-group-text
+                        i.bi.bi-search
+                input.form-control#catalogSearchInput(
+                    type="text",
+                    placeholder="Search setting name or description...",
+                    autocomplete="off"
+                )
+            .table-responsive
+                table.table.table-hover.table-sm#catalog-table
+                    thead.thead-light
+                        tr
+                            th(scope="col" style="width: 20%;") Setting Name
+                            th(scope="col" style="width: 25%;") Short Description
+                            th(scope="col") Detailed Description
+                            th(scope="col" style="width: 60px;") Actions
+                    tbody
+                        if settingCatalog && settingCatalog.length > 0
+                            each entry in settingCatalog
+                                tr
+                                    td
+                                        strong= entry.setting_name
+                                    td.small= entry.short_description || '—'
+                                    td.small.text-muted= entry.detailed_description || '—'
+                                    td
+                                        button.btn.btn-sm.btn-outline-secondary.edit-description-btn(
+                                            type="button",
+                                            data-setting-name=entry.setting_name,
+                                            data-toggle="modal",
+                                            data-target="#editDescriptionModal"
+                                        )
+                                            i.bi.bi-pencil
+                        else
+                            tr
+                                td(colspan="4").text-center.text-muted No settings found
+
         // Active Configs Section
         h5.mb-3
             i.bi.bi-gear-fill.me-2
             | Active Configurations
-        
+
         // Desktop table view
         .desktop-table-view.d-none.d-lg-block
             .table-responsive
@@ -191,6 +235,7 @@ block content
                         tr
                             th(scope="col") Location
                             th(scope="col") Setting Name
+                            th(scope="col") Description
                             th(scope="col") Setting Value
                             th(scope="col") Effective From
                             th(scope="col") Effective Until
@@ -207,6 +252,8 @@ block content
                                             span.badge.badge-location= config.location_code
                                     td
                                         strong= config.setting_name
+                                    td.text-muted.small(title=config.detailed_description || '')
+                                        = config.short_description || '—'
                                     td= config.setting_value
                                     td= config.effective_start_date_formatted
                                     td= config.effective_end_date_formatted
@@ -221,7 +268,7 @@ block content
                                             i.bi.bi-pencil
                         else
                             tr
-                                td(colspan="7").text-center.text-muted No active configurations found
+                                td(colspan="8").text-center.text-muted No active configurations found
         
         // Mobile cards view
         .mobile-cards-view.d-lg-none
@@ -246,6 +293,11 @@ block content
                                         i.bi.bi-pencil
                             .card-body.p-3
                                 .row.g-2
+                                    if config.short_description
+                                        .col-12
+                                            .config-detail
+                                                small Description
+                                                div.text-muted= config.short_description
                                     .col-12
                                         .config-detail
                                             small Setting Value
@@ -447,45 +499,157 @@ block content
                                 span.spinner-border.spinner-border-sm.me-2(style='display:none')
                                 | Update Config
 
+    // Edit Description Modal (edits the catalog entry for a setting_name — not tied to any one row)
+    #editDescriptionModal.modal.fade(tabindex='-1')
+        .modal-dialog.modal-dialog-centered
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        i.bi.bi-journal-text.me-2
+                        | Edit Description
+                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                .modal-body
+                    .card.mb-3.bg-light
+                        .card-body.py-2
+                            small.text-muted Setting:
+                            .fw-semibold#descSettingDisplay -
+
+                    form#editDescriptionForm
+                        input#descSettingName(type='hidden')
+                        .row.g-3
+                            .col-12
+                                label.form-label(for='descShortText') Short Description
+                                input.form-control#descShortText(
+                                    type='text',
+                                    maxlength='255',
+                                    placeholder='One-line summary shown in the config table'
+                                )
+                            .col-12
+                                label.form-label(for='descDetailedText') Detailed Description
+                                textarea.form-control#descDetailedText(
+                                    rows='4',
+                                    placeholder='What it does, valid values, where it is used, defaults, etc.'
+                                )
+                            .col-12
+                                .small.text-muted This description applies to the setting wherever it appears — across all locations and history — since it describes the setting itself, not one row.
+                .modal-footer
+                    .row.g-2.w-100
+                        .col-6
+                            button.btn.btn-outline-secondary.w-100(type='button' data-dismiss='modal') Cancel
+                        .col-6
+                            button#saveDescriptionBtn.btn.btn-primary.w-100(type='button')
+                                span.spinner-border.spinner-border-sm.me-2(style='display:none')
+                                | Save Description
+
     // JavaScript
     script.
         // Data from server
         const activeConfigsData = !{activeConfigsData};
         const historyConfigsData = !{historyConfigsData};
         const locationsData = !{locationsData};
+        const settingCatalogData = !{settingCatalogData};
         const isSuperUser = !{isSuperUser};
 
         // Page initialization
         $(document).ready(function() {
             initializeEventListeners();
             initializeSearch();
+            initializeCatalogSearch();
         });
 
         function initializeEventListeners() {
             // Add config button
             $('#saveConfigBtn').on('click', handleSaveConfig);
-            
+
             // Update config button
             $('#updateConfigBtn').on('click', handleUpdateConfig);
-            
+
             // Edit config button
             $('.edit-config-btn').on('click', handleEditClick);
-            
+
+            // Edit description button
+            $('.edit-description-btn').on('click', handleEditDescriptionClick);
+
+            // Save description button
+            $('#saveDescriptionBtn').on('click', handleSaveDescription);
+
             // Refresh button
             $('#refreshDataBtn').on('click', function() {
                 window.location.reload();
             });
-            
+
             // Location filter (SuperUser only)
             $('#locationFilter').on('change', function() {
                 const selectedLocation = $(this).val();
                 window.location.href = `/location-config?location=${selectedLocation}`;
             });
-            
+
             // Setting name input - auto uppercase
             $('#addSettingName').on('input', function() {
                 this.value = this.value.toUpperCase();
             });
+        }
+
+        function initializeCatalogSearch() {
+            $('#catalogSearchInput').on('keyup', function() {
+                const searchTerm = $(this).val().toLowerCase();
+                $('#catalog-table tbody tr').each(function() {
+                    const text = $(this).text().toLowerCase();
+                    $(this).toggle(text.indexOf(searchTerm) > -1);
+                });
+            });
+        }
+
+        function handleEditDescriptionClick(e) {
+            const settingName = $(this).data('setting-name');
+            const entry = settingCatalogData.find(c => c.setting_name === settingName);
+
+            $('#descSettingName').val(settingName);
+            $('#descSettingDisplay').text(settingName);
+            $('#descShortText').val(entry ? entry.short_description : '');
+            $('#descDetailedText').val(entry ? entry.detailed_description : '');
+        }
+
+        async function handleSaveDescription() {
+            const settingName = $('#descSettingName').val();
+            const shortText = $('#descShortText').val().trim();
+            const detailedText = $('#descDetailedText').val().trim();
+
+            const btn = $('#saveDescriptionBtn');
+            const spinner = btn.find('.spinner-border');
+            btn.prop('disabled', true);
+            spinner.show();
+
+            try {
+                const response = await fetch(`/location-config/catalog/${encodeURIComponent(settingName)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        short_description: shortText,
+                        detailed_description: detailedText
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    $('#editDescriptionModal').modal('hide');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showAlert(result.error, 'danger');
+                }
+            } catch (error) {
+                console.error('Error saving description:', error);
+                showAlert('Failed to save description', 'danger');
+            } finally {
+                btn.prop('disabled', false);
+                spinner.hide();
+            }
         }
 
         function initializeSearch() {
