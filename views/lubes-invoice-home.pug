@@ -174,8 +174,22 @@ block content
                         select#supplier_id.form-control.form-control-sm(name='supplier_id')
                             option(value='') All Suppliers
                             each supplier in suppliers
-                                option(value=supplier.supplier_id, 
+                                option(value=supplier.supplier_id,
                                     selected=selectedSupplierId == supplier.supplier_id)= supplier.supplier_name
+                    td &nbsp;
+                    td Type:
+                    td
+                        select#invoice_type.form-control.form-control-sm(name='invoice_type')
+                            option(value='' selected=selectedType == '') All Types
+                            option(value='FUEL' selected=selectedType == 'FUEL') Fuel
+                            option(value='LUBE' selected=selectedType == 'LUBE') Lube
+                    td &nbsp;
+                    td Fuel Category:
+                    td
+                        select#fuel_category.form-control.form-control-sm(name='fuel_category')
+                            option(value='' selected=selectedFuelCategory == '') All Fuel
+                            option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
+                            option(value='MS_HSD' selected=selectedFuelCategory == 'MS_HSD') MS / HSD
                     td &nbsp;
                     td
                         button.btn.btn-sm.btn-primary(type='submit') Go
@@ -221,7 +235,7 @@ block content
                             td= val.date
                             td
                                 if val.type === 'FUEL'
-                                    span.badge.badge-warning Fuel
+                                    span.badge.badge-warning= val.fuel_category === 'CNG' ? 'CNG' : 'Fuel (MS/HSD)'
                                 else
                                     span.badge.badge-info Lube
                             td.text-right= val.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

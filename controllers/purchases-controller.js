@@ -225,6 +225,8 @@ module.exports = {
             if (!lines.length) return res.status(400).json({ success: false, error: 'At least one product line is required.' });
             if (lines.some(l => !l.product_id)) return res.status(400).json({ success: false, error: 'All lines must have a product selected.' });
 
+            header.fuel_category = lines.some(l => l.qty_unit === 'KG') ? 'CNG' : 'MS_HSD';
+
             const invoice = await TankInvoiceDao.saveInvoice(
                 header, lines, pdfBuffer, locationCode, header.supplier_id, originalFileName
             );

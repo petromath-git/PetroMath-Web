@@ -32,6 +32,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.DATEONLY,
             allowNull: true
         },
+        invoice_time: {
+            field: 'invoice_time',
+            type: DataTypes.TIME,
+            allowNull: true
+        },
         truck_number: {
             field: 'truck_number',
             type: DataTypes.STRING(20),
@@ -50,6 +55,11 @@ module.exports = function(sequelize, DataTypes) {
         bay_number: {
             field: 'bay_number',
             type: DataTypes.STRING(20),
+            allowNull: true
+        },
+        fuel_category: {
+            field: 'fuel_category',
+            type: DataTypes.STRING(10),
             allowNull: true
         },
         total_invoice_amount: {

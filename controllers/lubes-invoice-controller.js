@@ -19,12 +19,14 @@ const tempLubeInvoiceStore = new Map();
 module.exports = {
     getLubesInvoiceHome: (req, res, next) => {
         gatherLubesInvoices(
-            req.query.invoice_fromDate, 
+            req.query.invoice_fromDate,
             req.query.invoice_toDate,
-            req.query.supplier_id, 
-            req.user, 
-            res, 
-            next, 
+            req.query.supplier_id,
+            req.query.invoice_type,
+            req.query.fuel_category,
+            req.user,
+            res,
+            next,
             {}
         );
     },
@@ -525,25 +527,33 @@ function getLubesInvoiceDetailsPromise(invoiceDetails, req, res, next) {
     });
 }
 
-function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, messagesOptional) {
+function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCategory, user, res, next, messagesOptional) {
     // If no dates provided, use financial year dates
     if(fromDate === undefined || toDate === undefined) {
         const financialYearDates = getFinancialYearDates();
         fromDate = financialYearDates.fromDate;
         toDate = financialYearDates.toDate;
     }
-    
+
     const { Op } = require('sequelize');
     const TankInvoice = db.tank_invoice;
     const TankInvoiceDtl = db.tank_invoice_dtl;
 
+    // A fuel category filter only applies to fuel invoices
     const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
-    const lubesPromise = lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
-    const fuelPromise = TankInvoice.findAll({
-        where: { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } },
-        include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity', 'qty_unit'] }],
-        order: [['invoice_date', 'DESC'], ['id', 'DESC']]
-    });
+    const lubesPromise = (invoiceType === 'FUEL' || fuelCategory)
+        ? Promise.resolve([])
+        : lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
+
+    const fuelWhere = { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } };
+    if (fuelCategory) fuelWhere.fuel_category = fuelCategory;
+    const fuelPromise = invoiceType === 'LUBE'
+        ? Promise.resolve([])
+        : TankInvoice.findAll({
+            where: fuelWhere,
+            include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity', 'qty_unit'] }],
+            order: [['invoice_date', 'DESC'], ['id', 'DESC']]
+        });
 
     Promise.all([suppliersPromise, lubesPromise, fuelPromise])
         .then(([suppliers, lubesInvoices, fuelInvoices]) => {
@@ -582,7 +592,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
                         amount: parseFloat(f.total_invoice_amount) || 0,
                         total_lines: (f.lines || []).length,
                         qty_kl: qty > 0 ? qty.toFixed(3) : '',
-                        qty_unit: qty_unit
+                        qty_unit: qty_unit,
+                        fuel_category: f.fuel_category || (qty_unit === 'KG' ? 'CNG' : 'MS_HSD')
                     });
                 });
             }
@@ -595,6 +606,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
                 fromDate: fromDate,
                 toDate: toDate,
                 selectedSupplierId: supplierId,
+                selectedType: invoiceType || '',
+                selectedFuelCategory: fuelCategory || '',
                 suppliers: suppliers,
                 invoiceValues: invoiceValues,
                 currentDate: utils.currentDate(),
