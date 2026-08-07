@@ -53,6 +53,14 @@ block content
             }
         }
 
+        function toggleFuelCategoryFilter() {
+            const show = document.getElementById('invoice_type').value === 'FUEL';
+            const display = show ? 'table-cell' : 'none';
+            document.getElementById('fuelCategorySpacer').style.display = display;
+            document.getElementById('fuelCategoryLabel').style.display = display;
+            document.getElementById('fuelCategoryField').style.display = display;
+        }
+
         function toggleInvoiceLines(invoiceId, button) {
             const lineContainer = document.getElementById(`invoice-lines-${invoiceId}`);
             const isExpanded = button.getAttribute('aria-expanded') === 'true';
@@ -146,29 +154,31 @@ block content
                             option(value='this_financial_year') This Financial Year
                             option(value='last_financial_year') Last Financial Year
                             option(value='custom', selected=true) Custom Date
-                    td &nbsp;                   
+                    td &nbsp;
                     td#fromDateLabel From Date:
                     td
                         input#invoice_fromDate.form-control.form-control-sm(
-                            type='date', 
-                            name='invoice_fromDate', 
-                            value=fromDate,                            
-                            format="dd/mm/yyyy",
-                            required,
-                            onChange="copyToHidden(this);"
-                        )
-                    td &nbsp;                   
-                    td#toDateLabel To Date:
-                    td
-                        input#invoice_toDate.form-control.form-control-sm(
-                            type='date', 
-                            name='invoice_toDate', 
-                            value=toDate,                             
+                            type='date',
+                            name='invoice_fromDate',
+                            value=fromDate,
                             format="dd/mm/yyyy",
                             required,
                             onChange="copyToHidden(this);"
                         )
                     td &nbsp;
+                    td#toDateLabel To Date:
+                    td
+                        input#invoice_toDate.form-control.form-control-sm(
+                            type='date',
+                            name='invoice_toDate',
+                            value=toDate,
+                            format="dd/mm/yyyy",
+                            required,
+                            onChange="copyToHidden(this);"
+                        )
+                tr
+                    td &nbsp;
+                tr
                     td Supplier:
                     td
                         select#supplier_id.form-control.form-control-sm(name='supplier_id')
@@ -179,13 +189,13 @@ block content
                     td &nbsp;
                     td Type:
                     td
-                        select#invoice_type.form-control.form-control-sm(name='invoice_type')
+                        select#invoice_type.form-control.form-control-sm(name='invoice_type' onchange='toggleFuelCategoryFilter()')
                             option(value='' selected=selectedType == '') All Types
                             option(value='FUEL' selected=selectedType == 'FUEL') Fuel
                             option(value='LUBE' selected=selectedType == 'LUBE') Lube
-                    td &nbsp;
-                    td Fuel Category:
-                    td
+                    td#fuelCategorySpacer(style=selectedType == 'FUEL' ? '' : 'display:none') &nbsp;
+                    td#fuelCategoryLabel(style=selectedType == 'FUEL' ? '' : 'display:none') Fuel Category:
+                    td#fuelCategoryField(style=selectedType == 'FUEL' ? '' : 'display:none')
                         select#fuel_category.form-control.form-control-sm(name='fuel_category')
                             option(value='' selected=selectedFuelCategory == '') All Fuel
                             option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
