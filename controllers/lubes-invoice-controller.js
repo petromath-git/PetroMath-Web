@@ -538,11 +538,22 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
     const { Op } = require('sequelize');
     const TankInvoice = db.tank_invoice;
     const TankInvoiceDtl = db.tank_invoice_dtl;
+    const Product = db.product;
 
     // A fuel category filter only applies when Type=Fuel is explicitly selected;
     // ignore a stray fuel_category param otherwise (e.g. a stale value left over
     // from a hidden form field) so it can never silently suppress Lube results.
     fuelCategory = invoiceType === 'FUEL' ? fuelCategory : '';
+
+    // Only offer the CNG/MS-HSD filter for locations that actually carry a CNG product
+    const hasCngPromise = Product.findOne({
+        where: {
+            location_code: user.location_code,
+            is_tank_product: 1,
+            product_name: db.Sequelize.where(db.Sequelize.fn('UPPER', db.Sequelize.col('product_name')), 'CNG')
+        },
+        attributes: ['product_id']
+    });
 
     const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
     const lubesPromise = invoiceType === 'FUEL'
@@ -559,8 +570,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
             order: [['invoice_date', 'DESC'], ['id', 'DESC']]
         });
 
-    Promise.all([suppliersPromise, lubesPromise, fuelPromise])
-        .then(([suppliers, lubesInvoices, fuelInvoices]) => {
+    Promise.all([suppliersPromise, lubesPromise, fuelPromise, hasCngPromise])
+        .then(([suppliers, lubesInvoices, fuelInvoices, cngProduct]) => {
             let invoiceValues = [];
 
             if (lubesInvoices && lubesInvoices.length > 0) {
@@ -612,6 +623,7 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
                 selectedSupplierId: supplierId,
                 selectedType: invoiceType || '',
                 selectedFuelCategory: fuelCategory || '',
+                hasCngProduct: !!cngProduct,
                 suppliers: suppliers,
                 invoiceValues: invoiceValues,
                 currentDate: utils.currentDate(),
