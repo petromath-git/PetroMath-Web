@@ -54,12 +54,14 @@ block content
         }
 
         function toggleFuelCategoryFilter() {
+            const fuelCategorySelect = document.getElementById('fuel_category');
+            if (!fuelCategorySelect) return; // location has no CNG product; filter isn't rendered
             const show = document.getElementById('invoice_type').value === 'FUEL';
             const display = show ? 'table-cell' : 'none';
             document.getElementById('fuelCategorySpacer').style.display = display;
             document.getElementById('fuelCategoryLabel').style.display = display;
             document.getElementById('fuelCategoryField').style.display = display;
-            if (!show) document.getElementById('fuel_category').value = '';
+            if (!show) fuelCategorySelect.value = '';
         }
 
         function toggleInvoiceLines(invoiceId, button) {
@@ -194,13 +196,14 @@ block content
                             option(value='' selected=selectedType == '') All Types
                             option(value='FUEL' selected=selectedType == 'FUEL') Fuel
                             option(value='LUBE' selected=selectedType == 'LUBE') Lube
-                    td#fuelCategorySpacer(style=selectedType == 'FUEL' ? '' : 'display:none') &nbsp;
-                    td#fuelCategoryLabel(style=selectedType == 'FUEL' ? '' : 'display:none') Fuel Category:
-                    td#fuelCategoryField(style=selectedType == 'FUEL' ? '' : 'display:none')
-                        select#fuel_category.form-control.form-control-sm(name='fuel_category')
-                            option(value='' selected=selectedFuelCategory == '') All Fuel
-                            option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
-                            option(value='MS_HSD' selected=selectedFuelCategory == 'MS_HSD') MS / HSD
+                    if hasCngProduct
+                        td#fuelCategorySpacer(style=selectedType == 'FUEL' ? '' : 'display:none') &nbsp;
+                        td#fuelCategoryLabel(style=selectedType == 'FUEL' ? '' : 'display:none') Fuel Category:
+                        td#fuelCategoryField(style=selectedType == 'FUEL' ? '' : 'display:none')
+                            select#fuel_category.form-control.form-control-sm(name='fuel_category')
+                                option(value='' selected=selectedFuelCategory == '') All Fuel
+                                option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
+                                option(value='MS_HSD' selected=selectedFuelCategory == 'MS_HSD') MS / HSD
                     td &nbsp;
                     td
                         button.btn.btn-sm.btn-primary(type='submit') Go
