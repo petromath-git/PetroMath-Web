@@ -562,6 +562,7 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
 
     const fuelWhere = { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } };
     if (fuelCategory) fuelWhere.fuel_category = fuelCategory;
+    if (supplierId) fuelWhere.supplier_id = supplierId;
     const fuelPromise = invoiceType === 'LUBE'
         ? Promise.resolve([])
         : TankInvoice.findAll({
