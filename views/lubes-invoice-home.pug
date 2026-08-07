@@ -59,6 +59,7 @@ block content
             document.getElementById('fuelCategorySpacer').style.display = display;
             document.getElementById('fuelCategoryLabel').style.display = display;
             document.getElementById('fuelCategoryField').style.display = display;
+            if (!show) document.getElementById('fuel_category').value = '';
         }
 
         function toggleInvoiceLines(invoiceId, button) {

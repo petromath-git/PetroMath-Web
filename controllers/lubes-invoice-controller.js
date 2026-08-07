@@ -539,9 +539,13 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
     const TankInvoice = db.tank_invoice;
     const TankInvoiceDtl = db.tank_invoice_dtl;
 
-    // A fuel category filter only applies to fuel invoices
+    // A fuel category filter only applies when Type=Fuel is explicitly selected;
+    // ignore a stray fuel_category param otherwise (e.g. a stale value left over
+    // from a hidden form field) so it can never silently suppress Lube results.
+    fuelCategory = invoiceType === 'FUEL' ? fuelCategory : '';
+
     const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
-    const lubesPromise = (invoiceType === 'FUEL' || fuelCategory)
+    const lubesPromise = invoiceType === 'FUEL'
         ? Promise.resolve([])
         : lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
 
