@@ -37,6 +37,7 @@ module.exports = function(sequelize, DataTypes) {
             field: 'notes',
             type: DataTypes.STRING(300)
         },
+        discount_amount:      { field: 'discount_amount',      type: DataTypes.DECIMAL(12,2), allowNull: true },
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,

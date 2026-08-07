@@ -79,15 +79,15 @@ module.exports = {
             });
     },
     saveLubesInvoice: (req, res, next) => {
-        const { 
+        const {
             invoice_date, invoice_number, supplier_id, location_id, location_code,
-            invoice_amount, notes, items, lubes_hdr_id
+            invoice_amount, cash_discount, notes, items, lubes_hdr_id
         } = req.body;
-        
+
         const saveInvoice = async () => {
             try {
                 let headerData;
-                
+
                 if (lubes_hdr_id) {
                     // Update existing invoice
                     await LubesInvoiceHeader.update({
@@ -95,6 +95,7 @@ module.exports = {
                         invoice_number,
                         supplier_id,
                         invoice_amount,
+                        cash_discount: cash_discount || 0,
                         notes,
                         updated_by: req.user.Person_id,
                         updation_date: new Date()
@@ -102,9 +103,9 @@ module.exports = {
                         where: { lubes_hdr_id: lubes_hdr_id }
                     });
                     headerData = { lubes_hdr_id };
-                    
+
                     // Delete existing lines to replace with new ones
-                    await LubesInvoiceLine.destroy({ 
+                    await LubesInvoiceLine.destroy({
                         where: { lubes_hdr_id: lubes_hdr_id }
                     });
                 } else {
@@ -114,6 +115,7 @@ module.exports = {
                         invoice_number,
                         supplier_id,
                         invoice_amount,
+                        cash_discount: cash_discount || 0,
                         notes,
                         location_id,
                         location_code,
@@ -122,7 +124,7 @@ module.exports = {
                         creation_date: new Date()
                     });
                 }
-                
+
                 // Prepare and save line items
                 if (items && items.length > 0) {
                     const lineItems = items.map(item => ({
@@ -131,6 +133,7 @@ module.exports = {
                         qty: item.qty,
                         mrp: item.mrp || 0,
                         net_rate: item.net_rate || 0,
+                        discount_amount: item.discount_amount || 0,
                         amount: item.amount,
                         notes: item.notes,
                         created_by: req.user.Person_id,
