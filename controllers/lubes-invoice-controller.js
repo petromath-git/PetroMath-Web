@@ -19,12 +19,14 @@ const tempLubeInvoiceStore = new Map();
 module.exports = {
     getLubesInvoiceHome: (req, res, next) => {
         gatherLubesInvoices(
-            req.query.invoice_fromDate, 
+            req.query.invoice_fromDate,
             req.query.invoice_toDate,
-            req.query.supplier_id, 
-            req.user, 
-            res, 
-            next, 
+            req.query.supplier_id,
+            req.query.invoice_type,
+            req.query.fuel_category,
+            req.user,
+            res,
+            next,
             {}
         );
     },
@@ -525,28 +527,52 @@ function getLubesInvoiceDetailsPromise(invoiceDetails, req, res, next) {
     });
 }
 
-function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, messagesOptional) {
+function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCategory, user, res, next, messagesOptional) {
     // If no dates provided, use financial year dates
     if(fromDate === undefined || toDate === undefined) {
         const financialYearDates = getFinancialYearDates();
         fromDate = financialYearDates.fromDate;
         toDate = financialYearDates.toDate;
     }
-    
+
     const { Op } = require('sequelize');
     const TankInvoice = db.tank_invoice;
     const TankInvoiceDtl = db.tank_invoice_dtl;
+    const Product = db.product;
 
-    const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
-    const lubesPromise = lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
-    const fuelPromise = TankInvoice.findAll({
-        where: { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } },
-        include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity', 'qty_unit'] }],
-        order: [['invoice_date', 'DESC'], ['id', 'DESC']]
+    // A fuel category filter only applies when Type=Fuel is explicitly selected;
+    // ignore a stray fuel_category param otherwise (e.g. a stale value left over
+    // from a hidden form field) so it can never silently suppress Lube results.
+    fuelCategory = invoiceType === 'FUEL' ? fuelCategory : '';
+
+    // Only offer the CNG/MS-HSD filter for locations that actually carry a CNG product
+    const hasCngPromise = Product.findOne({
+        where: {
+            location_code: user.location_code,
+            is_tank_product: 1,
+            product_name: db.Sequelize.where(db.Sequelize.fn('UPPER', db.Sequelize.col('product_name')), 'CNG')
+        },
+        attributes: ['product_id']
     });
 
-    Promise.all([suppliersPromise, lubesPromise, fuelPromise])
-        .then(([suppliers, lubesInvoices, fuelInvoices]) => {
+    const suppliersPromise = lubesInvoiceDao.getSuppliers(user.location_code);
+    const lubesPromise = invoiceType === 'FUEL'
+        ? Promise.resolve([])
+        : lubesInvoiceDao.findLubesInvoices(user.location_code, fromDate, toDate, supplierId);
+
+    const fuelWhere = { location_id: user.location_code, invoice_date: { [Op.between]: [fromDate, toDate] } };
+    if (fuelCategory) fuelWhere.fuel_category = fuelCategory;
+    if (supplierId) fuelWhere.supplier_id = supplierId;
+    const fuelPromise = invoiceType === 'LUBE'
+        ? Promise.resolve([])
+        : TankInvoice.findAll({
+            where: fuelWhere,
+            include: [{ model: TankInvoiceDtl, as: 'lines', attributes: ['quantity', 'qty_unit'] }],
+            order: [['invoice_date', 'DESC'], ['id', 'DESC']]
+        });
+
+    Promise.all([suppliersPromise, lubesPromise, fuelPromise, hasCngPromise])
+        .then(([suppliers, lubesInvoices, fuelInvoices, cngProduct]) => {
             let invoiceValues = [];
 
             if (lubesInvoices && lubesInvoices.length > 0) {
@@ -582,7 +608,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
                         amount: parseFloat(f.total_invoice_amount) || 0,
                         total_lines: (f.lines || []).length,
                         qty_kl: qty > 0 ? qty.toFixed(3) : '',
-                        qty_unit: qty_unit
+                        qty_unit: qty_unit,
+                        fuel_category: f.fuel_category || (qty_unit === 'KG' ? 'CNG' : 'MS_HSD')
                     });
                 });
             }
@@ -595,6 +622,9 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, user, res, next, mess
                 fromDate: fromDate,
                 toDate: toDate,
                 selectedSupplierId: supplierId,
+                selectedType: invoiceType || '',
+                selectedFuelCategory: fuelCategory || '',
+                hasCngProduct: !!cngProduct,
                 suppliers: suppliers,
                 invoiceValues: invoiceValues,
                 currentDate: utils.currentDate(),

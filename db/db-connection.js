@@ -63,6 +63,7 @@ db.t_lubes_inv_lines = require("./txn-lubes-lines")(sequelize, Sequelize);
 db.m_supplier = require("./suppliers")(sequelize, Sequelize);
 db.creditlistvehicle = require("./creditlistvehicle")(sequelize, Sequelize);  // Import the creditlistvehicle model
 db.location_config = require('./location-config')(sequelize, Sequelize);
+db.location_config_catalog = require('./location-config-catalog')(sequelize, Sequelize);
 db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 db.adjustments = require("./adjustments")(sequelize, Sequelize);
 db.dev_tracker = require("./dev-tracker")(sequelize, Sequelize);
@@ -81,6 +82,7 @@ db.gst_filing_log = require("./gst-filing-log")(sequelize, Sequelize);
 db.day_bill = require("./day-bill")(sequelize, Sequelize);
 db.day_bill_header = require("./day-bill-header")(sequelize, Sequelize);
 db.day_bill_items = require("./day-bill-items")(sequelize, Sequelize);
+
 db.document_store = require("./document-store")(sequelize, Sequelize);
 db.employee = require("./employee")(sequelize, Sequelize);
 db.employee_salary = require("./employee-salary")(sequelize, Sequelize);

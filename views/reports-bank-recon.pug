@@ -996,14 +996,14 @@ block content
                     h5#impactModalLabel.modal-title
                         i.bi.bi-exclamation-triangle.me-2
                         | Delete Transaction - Impact Analysis
-                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
+                    button.btn-close.btn-close-white(type='button' data-dismiss='modal' aria-label='Close')
                 .modal-body
                     #impactContent
                         .text-center.p-4
                             .spinner-border.text-primary(role='status')
                             p.mt-2 Loading impact analysis...
                 .modal-footer
-                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Cancel
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button#btnConfirmDelete.btn.btn-danger(type='button' disabled)
                         i.bi.bi-trash.me-1
                         | Confirm Delete
@@ -1015,7 +1015,7 @@ block content
                     h5#addEntryModalLabel.modal-title
                         i.bi.bi-plus-circle.me-2
                         | Add Entry to PetroMath
-                    button.btn-close.btn-close-white(type='button' data-bs-dismiss='modal' aria-label='Close')
+                    button.btn-close.btn-close-white(type='button' data-dismiss='modal' aria-label='Close')
                 .modal-body
                     form#addEntryForm
                         .row.g-3
@@ -1045,7 +1045,7 @@ block content
                                 label.form-label Remarks
                                 input#modal_remarks.form-control(type='text' maxlength='1000' placeholder='Optional remarks...')
                 .modal-footer
-                    button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Cancel
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button#btnSaveEntry.btn.btn-success(type='button' onclick='saveNewEntry()')
                         i.bi.bi-save.me-1
                         | Save Entry

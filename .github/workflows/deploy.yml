@@ -16,12 +16,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $(echo ${{ secrets.DEV_SERVER }} | cut -d@ -f2) >> ~/.ssh/known_hosts
 
-      - name: Deploy to Dev + Beta Prod
+      - name: Deploy to Beta Prod
         run: |
           ssh ${{ secrets.DEV_SERVER }} "
-            cd /home/ubuntu/petromath_dev_new &&
-            git pull origin PetroMath_dev_new
-
             cd /home/ubuntu/petromath_prod_beta &&
             git pull origin PetroMath_dev_new
 
