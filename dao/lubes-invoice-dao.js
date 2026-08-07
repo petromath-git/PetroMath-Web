@@ -99,6 +99,11 @@ module.exports = {
                 'mrp',
                 'net_rate',
                 'discount_amount',
+                'taxable_value',
+                'cgst_pct',
+                'cgst_amount',
+                'sgst_pct',
+                'sgst_amount',
                 'notes'
             ]
         });
@@ -113,6 +118,11 @@ module.exports = {
                 "mrp",
                 "net_rate",
                 "discount_amount",
+                "taxable_value",
+                "cgst_pct",
+                "cgst_amount",
+                "sgst_pct",
+                "sgst_amount",
                 "amount",
                 "notes",
                 "updated_by",

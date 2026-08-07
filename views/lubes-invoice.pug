@@ -65,10 +65,13 @@ block content
                             th Product
                             th Unit
                             th MRP
-                            th Net Rate
+                            th Rate
                             th Quantity
                             th Discount
-                            th Amount
+                            th Taxable Value
+                            th GST %
+                            th GST Amt
+                            th Net Amount
                             th Notes
                             th Action
                     tbody
@@ -84,9 +87,11 @@ block content
                                         )
                                             option(value='') Select Product
                                             each product in products
+                                                - var productGst = (parseFloat(product.cgst_percent) || 0) + (parseFloat(product.sgst_percent) || 0)
                                                 option(
                                                     value=product.product_id,
                                                     'data-unit': product.unit,
+                                                    'data-gst': productGst,
                                                     selected=line.product_id == product.product_id
                                                 )= product.product_name
                                     td.product-unit= line.Product ? line.Product.unit : ''
@@ -126,6 +131,28 @@ block content
                                             value=(line && line.discount_amount !== undefined) ? parseFloat(line.discount_amount).toFixed(2) : '0.00'
                                         )
                                     td
+                                        input.form-control.taxable-value(
+                                            type='number'
+                                            name=`items[${index}][taxable_value]`
+                                            value=(line && line.taxable_value !== undefined && line.taxable_value !== null) ? parseFloat(line.taxable_value).toFixed(2) : '0.00'
+                                            readonly
+                                        )
+                                    td
+                                        input.form-control.gst-pct(
+                                            type='number'
+                                            name=`items[${index}][gst_pct]`
+                                            step='0.01'
+                                            min='0'
+                                            value=(line && line.cgst_pct !== undefined && line.cgst_pct !== null) ? (parseFloat(line.cgst_pct) + parseFloat(line.sgst_pct || 0)).toFixed(2) : '0.00'
+                                        )
+                                    td
+                                        input.form-control.gst-amount(
+                                            type='number'
+                                            name=`items[${index}][gst_amount]`
+                                            value=(line && line.cgst_amount !== undefined && line.cgst_amount !== null) ? (parseFloat(line.cgst_amount) + parseFloat(line.sgst_amount || 0)).toFixed(2) : '0.00'
+                                            readonly
+                                        )
+                                    td
                                         input.form-control.amount(
                                             type='number'
                                             name=`items[${index}][amount]`
@@ -134,8 +161,8 @@ block content
                                         )
                                     td
                                         input.form-control.notes(
-                                            type='text' 
-                                            name=`items[${index}][notes]` 
+                                            type='text'
+                                            name=`items[${index}][notes]`
                                             value=line.notes || ''
                                         )
                                     td
@@ -147,9 +174,11 @@ block content
                                     select.form-control.product-select(name='items[0][product_id]' required)
                                         option(value='') Select Product
                                         each product in products
+                                            - var productGst = (parseFloat(product.cgst_percent) || 0) + (parseFloat(product.sgst_percent) || 0)
                                             option(
                                                 value=product.product_id,
-                                                'data-unit': product.unit
+                                                'data-unit': product.unit,
+                                                'data-gst': productGst
                                             )= product.product_name
                                 td.product-unit
                                 td
@@ -183,6 +212,28 @@ block content
                                         step='0.01'
                                         min='0'
                                         value='0.00'
+                                    )
+                                td
+                                    input.form-control.taxable-value(
+                                        type='number'
+                                        name='items[0][taxable_value]'
+                                        value='0.00'
+                                        readonly
+                                    )
+                                td
+                                    input.form-control.gst-pct(
+                                        type='number'
+                                        name='items[0][gst_pct]'
+                                        step='0.01'
+                                        min='0'
+                                        value='0.00'
+                                    )
+                                td
+                                    input.form-control.gst-amount(
+                                        type='number'
+                                        name='items[0][gst_amount]'
+                                        value='0.00'
+                                        readonly
                                     )
                                 td
                                     input.form-control.amount(

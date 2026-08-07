@@ -37,7 +37,12 @@ module.exports = function(sequelize, DataTypes) {
             field: 'notes',
             type: DataTypes.STRING(300)
         },
+        taxable_value:        { field: 'taxable_value',        type: DataTypes.DECIMAL(12,2), allowNull: true },
         discount_amount:      { field: 'discount_amount',      type: DataTypes.DECIMAL(12,2), allowNull: true },
+        cgst_pct:             { field: 'cgst_pct',             type: DataTypes.DECIMAL(5,2),  allowNull: true },
+        cgst_amount:          { field: 'cgst_amount',          type: DataTypes.DECIMAL(12,2), allowNull: true },
+        sgst_pct:             { field: 'sgst_pct',             type: DataTypes.DECIMAL(5,2),  allowNull: true },
+        sgst_amount:          { field: 'sgst_amount',          type: DataTypes.DECIMAL(12,2), allowNull: true },
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,
