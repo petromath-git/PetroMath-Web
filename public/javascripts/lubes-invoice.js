@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const invoiceNumberInput = document.getElementById('invoice_number');
     const supplierSelect = document.getElementById('supplier_id');
     const invoiceDateInput = document.getElementById('invoice_date');
+    const cashDiscountInput = document.getElementById('cash_discount');
 
     // Store all suppliers with their effective dates
     let allSuppliers = [];
@@ -139,6 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const mrpInput = row.querySelector('.mrp');
         const netRateInput = row.querySelector('.net-rate');
         const quantityInput = row.querySelector('.quantity');
+        const discountInput = row.querySelector('.discount');
         const amountInput = row.querySelector('.amount');
         const removeBtn = row.querySelector('.remove-row');
         
@@ -158,14 +160,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Calculate amount based on net rate and quantity
+        // Calculate amount based on net rate, quantity and discount
         function calculateAmount() {
             const netRate = parseFloat(netRateInput.value) || 0;
             const quantity = parseFloat(quantityInput.value) || 0;
-            
-            const calculatedAmount = netRate * quantity;
+            const discount = parseFloat(discountInput.value) || 0;
+
+            const calculatedAmount = (netRate * quantity) - discount;
             amountInput.value = calculatedAmount.toFixed(2);
-            
+
             calculateTotal();
         }
         
@@ -188,7 +191,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (quantityInput) {
             quantityInput.addEventListener('input', calculateAmount);
         }
-        
+
+        // Discount input event
+        if (discountInput) {
+            discountInput.addEventListener('input', calculateAmount);
+        }
+
         // Remove row button
         if (removeBtn) {
             removeBtn.addEventListener('click', function() {
@@ -226,6 +234,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input class="form-control quantity" type="number" name="items[${rowCount}][qty]" step="0.01" min="0.01" required>
                 </td>
                 <td>
+                    <input class="form-control discount" type="number" name="items[${rowCount}][discount_amount]" step="0.01" min="0" value="0.00">
+                </td>
+                <td>
                     <input class="form-control amount" type="number" name="items[${rowCount}][amount]" readonly>
                 </td>
                 <td>
@@ -259,15 +270,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Calculate total invoice amount
     function calculateTotal() {
-        const total = [...itemsTable.querySelectorAll('.amount')]
+        const linesTotal = [...itemsTable.querySelectorAll('.amount')]
             .reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
-        
+        const cashDiscount = cashDiscountInput ? (parseFloat(cashDiscountInput.value) || 0) : 0;
+        const total = linesTotal - cashDiscount;
+
         document.getElementById('invoice_amount').value = total.toFixed(2);
-        
+
         // Enable/disable close button based on total
         if (closeBtn) {
             closeBtn.disabled = total <= 0;
         }
+    }
+
+    // Cash discount input event
+    if (cashDiscountInput) {
+        cashDiscountInput.addEventListener('input', calculateTotal);
     }
 
     // Validate form before submission
@@ -351,15 +369,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const mrpInput = row.querySelector('.mrp');
                 const netRateInput = row.querySelector('.net-rate');
                 const quantityInput = row.querySelector('.quantity');
+                const discountInput = row.querySelector('.discount');
                 const amountInput = row.querySelector('.amount');
                 const notesInput = row.querySelector('.notes');
-                
+
                 if (productSelect && productSelect.value) {
                     items.push({
                         product_id: productSelect.value,
                         mrp: mrpInput.value,
                         net_rate: netRateInput.value,
                         qty: quantityInput.value,
+                        discount_amount: discountInput ? discountInput.value : 0,
                         amount: amountInput.value,
                         notes: notesInput ? notesInput.value : ''
                     });

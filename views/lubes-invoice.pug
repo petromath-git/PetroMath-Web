@@ -67,6 +67,7 @@ block content
                             th MRP
                             th Net Rate
                             th Quantity
+                            th Discount
                             th Amount
                             th Notes
                             th Action
@@ -109,18 +110,26 @@ block content
                                         )
                                     td
                                         input.form-control.quantity(
-                                            type='number' 
-                                            name=`items[${index}][qty]` 
-                                            step='0.01' 
-                                            min='0.01' 
-                                            value=line.qty 
+                                            type='number'
+                                            name=`items[${index}][qty]`
+                                            step='0.01'
+                                            min='0.01'
+                                            value=line.qty
                                             required
                                         )
                                     td
+                                        input.form-control.discount(
+                                            type='number'
+                                            name=`items[${index}][discount_amount]`
+                                            step='0.01'
+                                            min='0'
+                                            value=(line && line.discount_amount !== undefined) ? parseFloat(line.discount_amount).toFixed(2) : '0.00'
+                                        )
+                                    td
                                         input.form-control.amount(
-                                            type='number' 
-                                            name=`items[${index}][amount]` 
-                                            value=(line && line.amount !== undefined) ? parseFloat(line.amount).toFixed(2) : '0.00' 
+                                            type='number'
+                                            name=`items[${index}][amount]`
+                                            value=(line && line.amount !== undefined) ? parseFloat(line.amount).toFixed(2) : '0.00'
                                             readonly
                                         )
                                     td
@@ -161,16 +170,24 @@ block content
                                     )
                                 td
                                     input.form-control.quantity(
-                                        type='number' 
-                                        name='items[0][qty]' 
-                                        step='0.01' 
-                                        min='0.01' 
+                                        type='number'
+                                        name='items[0][qty]'
+                                        step='0.01'
+                                        min='0.01'
                                         required
                                     )
                                 td
+                                    input.form-control.discount(
+                                        type='number'
+                                        name='items[0][discount_amount]'
+                                        step='0.01'
+                                        min='0'
+                                        value='0.00'
+                                    )
+                                td
                                     input.form-control.amount(
-                                        type='number' 
-                                        name='items[0][amount]' 
+                                        type='number'
+                                        name='items[0][amount]'
                                         readonly
                                     )
                                 td
@@ -182,19 +199,29 @@ block content
                                     button.btn.btn-danger.remove-row(type='button') Remove
                 
                 div.row.mt-3
-                    div.col-md-4
+                    div.col-md-3
                         if(invoiceStatus != 'CLOSED')
                             button#add-row-btn.btn.btn-secondary(type='button') Add Row
-                    div.col-md-4
+                    div.col-md-3
                         div.form-group
                             label(for='notes') Notes
                             textarea#notes.form-control(name='notes' rows='2')=invoice ? invoice.notes : ''
-                    div.col-md-4
+                    div.col-md-3
+                        div.form-group
+                            label(for='cash_discount') Cash Discount
+                            input#cash_discount.form-control(
+                                type='number'
+                                name='cash_discount'
+                                step='0.01'
+                                min='0'
+                                value=(invoice && invoice.cash_discount !== undefined && invoice.cash_discount !== null) ? parseFloat(invoice.cash_discount).toFixed(2) : '0.00'
+                            )
+                    div.col-md-3
                         div.form-group
                             label.fw-bold Total Amount:
                             input#invoice_amount.form-control.fw-bold(
-                                type='number' 
-                                name='invoice_amount' 
+                                type='number'
+                                name='invoice_amount'
                                 readonly
                                 value=(invoice && invoice.invoice_amount !== undefined) ? parseFloat(invoice.invoice_amount).toFixed(2) : '0.00'
                             )

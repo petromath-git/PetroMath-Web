@@ -25,6 +25,10 @@ module.exports = function(sequelize, DataTypes) {
             field: 'invoice_amount',
             type: DataTypes.DECIMAL(15, 2)
         },
+        cash_discount: {
+            field: 'cash_discount',
+            type: DataTypes.DECIMAL(15, 2)
+        },
         notes: {
             field: 'notes',
             type: DataTypes.STRING(300)

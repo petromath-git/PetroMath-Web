@@ -92,28 +92,30 @@ module.exports = {
                 }
             ],
             attributes: [
-                'lubes_line_id', 
-                'product_id', 
-                'qty', 
-                'amount', 
-                'mrp', 
-                'net_rate', 
+                'lubes_line_id',
+                'product_id',
+                'qty',
+                'amount',
+                'mrp',
+                'net_rate',
+                'discount_amount',
                 'notes'
             ]
         });
     },
-    
+
     saveLubesInvoiceLines: (data) => {
         const lines = LubesInvoiceLine.bulkCreate(data, {
             returning: true,
             updateOnDuplicate: [
-                "product_id", 
-                "qty", 
-                "mrp", 
-                "net_rate", 
-                "amount", 
-                "notes", 
-                "updated_by", 
+                "product_id",
+                "qty",
+                "mrp",
+                "net_rate",
+                "discount_amount",
+                "amount",
+                "notes",
+                "updated_by",
                 "updation_date"
             ]
         });
