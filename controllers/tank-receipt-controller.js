@@ -251,6 +251,8 @@ module.exports = {
                 };
             });
 
+            headerData.fuel_category = lineData.some(l => l.qty_unit === 'KG') ? 'CNG' : 'MS_HSD';
+
             const invoice = await TankInvoiceDao.saveInvoice(headerData, lineData, pdfBuffer, locationCode, Number(supplierId), originalFileName);
             return res.json({ success: true, invoiceId: invoice.id, invoiceNumber: invoice.invoice_number });
         } catch (err) {
