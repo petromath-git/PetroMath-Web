@@ -530,7 +530,33 @@ app.get('/login', function (req, res) {
     res.render('login', { title: 'Login' });
 });
 
-app.post('/login', function(req, res, next) {
+// Rate limit the web login form the same way /api/login is limited, so a single
+// IP can't hammer this endpoint with unlimited attempts.
+const rateLimit = require('express-rate-limit');
+const webLoginLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 5,
+    handler: (req, res) => {
+        // login_status is a DB/Sequelize enum restricted to 'success'/'failed' - use
+        // 'failed' with a distinguishing failure_reason rather than a value the
+        // enum will reject.
+        LoginLogDao.create({
+            Person_id: null,
+            ip_address: req.ip,
+            user_agent: req.headers['user-agent'],
+            attempted_username: req.body.username,
+            login_status: 'failed',
+            failure_reason: 'Rate limit exceeded - too many attempts',
+            location_code: null,
+            created_by: 'SYSTEM'
+        }).catch(err => console.error('Error logging rate limit:', err));
+
+        req.flash('error', 'Too many login attempts. Please wait 5 minutes and try again.');
+        return res.redirect('/login');
+    }
+});
+
+app.post('/login', webLoginLimiter, function(req, res, next) {
     passport.authenticate('local', async function(err, user, info) {
         if (err) {
             return next(err);
