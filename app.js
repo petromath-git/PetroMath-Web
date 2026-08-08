@@ -196,6 +196,9 @@ const { log } = require('console');
 const deploymentConfig = "./config/app-deployment-" + process.env.ENVIRONMENT;
 const serverConfig = require(deploymentConfig);
 const app = express();
+// Trust exactly one hop (the nginx reverse proxy) so req.ip reflects the real
+// client IP from X-Forwarded-For instead of nginx's own loopback address.
+app.set('trust proxy', 1);
 security.secureApp(app);
 
 
