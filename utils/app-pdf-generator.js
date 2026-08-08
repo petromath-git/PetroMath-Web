@@ -166,8 +166,20 @@ module.exports = {
                                         tbody {
                                             display: table-row-group;
                                         }
-                                       
-                                       
+
+                                        /* PDFs always render the desktop layout, regardless of the
+                                           requesting device. page.pdf() lays out content using the
+                                           printed page's content-box width (A4 minus margins, ~754px),
+                                           which falls under Bootstrap's 768px 'md' breakpoint, so
+                                           d-md-* responsive toggles would otherwise resolve to mobile. */
+                                        .d-md-none {
+                                            display: none !important;
+                                        }
+                                        .d-none.d-md-block,
+                                        .d-md-block {
+                                            display: block !important;
+                                        }
+
                                     </style>
                                   `;
                                   
@@ -191,7 +203,7 @@ module.exports = {
         console.log(`Browser New page  generation took: ${pageend - browserend}ms`);
       //  await page.setContent(htmlContent);
      //   await page.waitForSelector('body'); // Wait for the body tag to ensure the page is loaded
-        
+
              // Set content with optimized options
              await page.setContent(htmlContent, {
                 waitUntil: 'domcontentloaded',

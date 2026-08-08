@@ -7,17 +7,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const invoiceNumberInput = document.getElementById('invoice_number');
     const supplierSelect = document.getElementById('supplier_id');
     const invoiceDateInput = document.getElementById('invoice_date');
+    const cashDiscountInput = document.getElementById('cash_discount');
 
     // Store all suppliers with their effective dates
     let allSuppliers = [];
     
     // Get product options HTML (used when adding new rows)
     function getProductOptions() {
-        return products.map(product => 
-            `<option value="${product.product_id}" data-unit="${product.unit}">
+        return products.map(product => {
+            const gst = (parseFloat(product.cgst_percent) || 0) + (parseFloat(product.sgst_percent) || 0);
+            return `<option value="${product.product_id}" data-unit="${product.unit}" data-gst="${gst}">
                 ${product.product_name}
-            </option>`
-        ).join('');
+            </option>`;
+        }).join('');
     }
 
     // Fetch all suppliers with their effective dates
@@ -139,56 +141,88 @@ document.addEventListener('DOMContentLoaded', function() {
         const mrpInput = row.querySelector('.mrp');
         const netRateInput = row.querySelector('.net-rate');
         const quantityInput = row.querySelector('.quantity');
+        const discountInput = row.querySelector('.discount');
+        const taxableValueInput = row.querySelector('.taxable-value');
+        const gstPctInput = row.querySelector('.gst-pct');
+        const gstAmountInput = row.querySelector('.gst-amount');
         const amountInput = row.querySelector('.amount');
         const removeBtn = row.querySelector('.remove-row');
-        
+
         // Update product details when product is selected
         function updateProductDetails() {
             const selectedOption = productSelect.options[productSelect.selectedIndex];
-            
+
             if (selectedOption.value) {
                 const unit = selectedOption.getAttribute('data-unit') || '';
                 unitCell.textContent = unit;
-                
+
                 // Fetch historical rate when product is selected
                 fetchHistoricalRate(selectedOption.value, netRateInput);
+
+                // Prefill GST% from the product master, but only when this line doesn't
+                // already have one set (avoid clobbering a value loaded for an existing
+                // line, which should reflect the rate actually charged on that invoice)
+                if (gstPctInput && (!gstPctInput.value || parseFloat(gstPctInput.value) === 0)) {
+                    const gst = selectedOption.getAttribute('data-gst');
+                    if (gst !== null && gst !== '') {
+                        gstPctInput.value = parseFloat(gst).toFixed(2);
+                        calculateAmount();
+                    }
+                }
             } else {
                 unitCell.textContent = '';
                 netRateInput.placeholder = "";
             }
         }
-        
-        // Calculate amount based on net rate and quantity
+
+        // Calculate taxable value, GST amount and net amount from rate, qty, discount and GST%
         function calculateAmount() {
-            const netRate = parseFloat(netRateInput.value) || 0;
+            const rate = parseFloat(netRateInput.value) || 0;
             const quantity = parseFloat(quantityInput.value) || 0;
-            
-            const calculatedAmount = netRate * quantity;
-            amountInput.value = calculatedAmount.toFixed(2);
-            
+            const discount = parseFloat(discountInput.value) || 0;
+            const gstPct = parseFloat(gstPctInput.value) || 0;
+
+            const taxableValue = (rate * quantity) - discount;
+            const gstAmount = taxableValue * gstPct / 100;
+            const netAmount = taxableValue + gstAmount;
+
+            taxableValueInput.value = taxableValue.toFixed(2);
+            gstAmountInput.value = gstAmount.toFixed(2);
+            amountInput.value = netAmount.toFixed(2);
+
             calculateTotal();
         }
-        
+
         // Product select change event
         if (productSelect) {
             productSelect.addEventListener('change', updateProductDetails);
-            
+
             // Trigger update if a product is pre-selected
             if (productSelect.value) {
                 updateProductDetails();
             }
         }
-        
+
         // Net Rate input event
         if (netRateInput) {
             netRateInput.addEventListener('input', calculateAmount);
         }
-        
+
         // Quantity input event
         if (quantityInput) {
             quantityInput.addEventListener('input', calculateAmount);
         }
-        
+
+        // Discount input event
+        if (discountInput) {
+            discountInput.addEventListener('input', calculateAmount);
+        }
+
+        // GST% input event
+        if (gstPctInput) {
+            gstPctInput.addEventListener('input', calculateAmount);
+        }
+
         // Remove row button
         if (removeBtn) {
             removeBtn.addEventListener('click', function() {
@@ -226,6 +260,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input class="form-control quantity" type="number" name="items[${rowCount}][qty]" step="0.01" min="0.01" required>
                 </td>
                 <td>
+                    <input class="form-control discount" type="number" name="items[${rowCount}][discount_amount]" step="0.01" min="0" value="0.00">
+                </td>
+                <td>
+                    <input class="form-control taxable-value" type="number" name="items[${rowCount}][taxable_value]" value="0.00" readonly>
+                </td>
+                <td>
+                    <input class="form-control gst-pct" type="number" name="items[${rowCount}][gst_pct]" step="0.01" min="0" value="0.00">
+                </td>
+                <td>
+                    <input class="form-control gst-amount" type="number" name="items[${rowCount}][gst_amount]" value="0.00" readonly>
+                </td>
+                <td>
                     <input class="form-control amount" type="number" name="items[${rowCount}][amount]" readonly>
                 </td>
                 <td>
@@ -259,15 +305,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Calculate total invoice amount
     function calculateTotal() {
-        const total = [...itemsTable.querySelectorAll('.amount')]
+        const linesTotal = [...itemsTable.querySelectorAll('.amount')]
             .reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
-        
+        const cashDiscount = cashDiscountInput ? (parseFloat(cashDiscountInput.value) || 0) : 0;
+        const total = linesTotal - cashDiscount;
+
         document.getElementById('invoice_amount').value = total.toFixed(2);
-        
+
         // Enable/disable close button based on total
         if (closeBtn) {
             closeBtn.disabled = total <= 0;
         }
+    }
+
+    // Cash discount input event
+    if (cashDiscountInput) {
+        cashDiscountInput.addEventListener('input', calculateTotal);
     }
 
     // Validate form before submission
@@ -351,15 +404,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 const mrpInput = row.querySelector('.mrp');
                 const netRateInput = row.querySelector('.net-rate');
                 const quantityInput = row.querySelector('.quantity');
+                const discountInput = row.querySelector('.discount');
+                const taxableValueInput = row.querySelector('.taxable-value');
+                const gstPctInput = row.querySelector('.gst-pct');
+                const gstAmountInput = row.querySelector('.gst-amount');
                 const amountInput = row.querySelector('.amount');
                 const notesInput = row.querySelector('.notes');
-                
+
                 if (productSelect && productSelect.value) {
+                    // Split combined GST% (and amount) evenly into CGST/SGST for storage,
+                    // matching the accounting engine's expectation of an intra-state split
+                    const gstPct = gstPctInput ? (parseFloat(gstPctInput.value) || 0) : 0;
+                    const gstAmount = gstAmountInput ? (parseFloat(gstAmountInput.value) || 0) : 0;
+
                     items.push({
                         product_id: productSelect.value,
                         mrp: mrpInput.value,
                         net_rate: netRateInput.value,
                         qty: quantityInput.value,
+                        discount_amount: discountInput ? discountInput.value : 0,
+                        taxable_value: taxableValueInput ? taxableValueInput.value : 0,
+                        cgst_pct: (gstPct / 2).toFixed(2),
+                        cgst_amount: (gstAmount / 2).toFixed(2),
+                        sgst_pct: (gstPct / 2).toFixed(2),
+                        sgst_amount: (gstAmount / 2).toFixed(2),
                         amount: amountInput.value,
                         notes: notesInput ? notesInput.value : ''
                     });

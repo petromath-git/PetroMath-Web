@@ -929,14 +929,18 @@ async function processLubesInvoiceEvent(event, processedBy) {
         return { voucherCount: 0 };
     }
 
+    // Prefer the GST breakdown captured on the invoice line itself (the rate actually
+    // charged at the time). Falls back to reverse-calculating from the product master's
+    // CURRENT rate only for older lines saved before GST capture existed (taxable_value
+    // IS NULL) -- unchanged from the previous behavior for that historical data.
     const lines_rows = await db.sequelize.query(`
         SELECT
             l.lubes_line_id,
             l.product_id,
             p.product_name,
-            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100), 2) AS taxable_value,
-            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.cgst_percent,0) / 100, 2) AS cgst_amount,
-            ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.sgst_percent,0) / 100, 2) AS sgst_amount
+            COALESCE(l.taxable_value, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100), 2)) AS taxable_value,
+            COALESCE(l.cgst_amount, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.cgst_percent,0) / 100, 2)) AS cgst_amount,
+            COALESCE(l.sgst_amount, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.sgst_percent,0) / 100, 2)) AS sgst_amount
         FROM t_lubes_inv_lines l
         JOIN m_product p ON p.product_id = l.product_id
         WHERE l.lubes_hdr_id = :lubesHdrId

@@ -420,24 +420,26 @@ get2TOilSalesSummary: async (locationCode, fromDate, toDate) => {
  * Now with supplier GSTIN
  */
 getPurchaseData: async (locationCode, fromDate, toDate) => {
+    // Prefer the GST breakdown captured on the invoice line itself (the rate actually
+    // charged at the time). Falls back to the product master's CURRENT rate, using the
+    // exact same formula this query always has, only for older lines saved before GST
+    // capture existed (taxable_value IS NULL) -- unchanged behavior for that historical data.
     const query = `
-        SELECT 
+        SELECT
             lih.invoice_number,
             lih.invoice_date,
             ms.gstin as supplier_gstin,
             ms.supplier_name,
             mp.hsn_code,
             SUM(lil.qty) as quantity,
-            SUM(lil.amount) as taxable_value,
-            
-            -- Use product master for GST rates (t_lubes_inv_lines doesn't have GST fields)
-            COALESCE(mp.cgst_percent, 0) as cgst_percent,
-            COALESCE(mp.sgst_percent, 0) as sgst_percent,
-            
-            -- Calculate GST amounts from product master
-            SUM(lil.amount * COALESCE(mp.cgst_percent, 0) / 100) as cgst_amount,
-            SUM(lil.amount * COALESCE(mp.sgst_percent, 0) / 100) as sgst_amount,
-            
+            SUM(COALESCE(lil.taxable_value, lil.amount)) as taxable_value,
+
+            COALESCE(lil.cgst_pct, mp.cgst_percent, 0) as cgst_percent,
+            COALESCE(lil.sgst_pct, mp.sgst_percent, 0) as sgst_percent,
+
+            SUM(COALESCE(lil.cgst_amount, lil.amount * COALESCE(mp.cgst_percent, 0) / 100)) as cgst_amount,
+            SUM(COALESCE(lil.sgst_amount, lil.amount * COALESCE(mp.sgst_percent, 0) / 100)) as sgst_amount,
+
             0 as igst_amount
         FROM t_lubes_inv_hdr lih
         JOIN t_lubes_inv_lines lil ON lih.lubes_hdr_id = lil.lubes_hdr_id
@@ -447,7 +449,7 @@ getPurchaseData: async (locationCode, fromDate, toDate) => {
             AND lih.closing_status = 'CLOSED'
             AND DATE(lih.invoice_date) BETWEEN :fromDate AND :toDate
         GROUP BY lih.invoice_number, lih.invoice_date, ms.gstin, ms.supplier_name,
-                 mp.hsn_code, mp.cgst_percent, mp.sgst_percent
+                 mp.hsn_code, COALESCE(lil.cgst_pct, mp.cgst_percent, 0), COALESCE(lil.sgst_pct, mp.sgst_percent, 0)
         ORDER BY lih.invoice_date
     `;
 
