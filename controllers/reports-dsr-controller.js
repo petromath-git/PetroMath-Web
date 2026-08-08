@@ -75,10 +75,10 @@ module.exports = {
       // Process Person Location Data
      personLocationPromise.forEach((locations) => {
        personLocations.push({
-           'LocationCodes': locations.location_code,           
+           'LocationCodes': locations.location_code,
        });
      });
-      
+
      const closingPromise = await DsrReportDao.getclosingid(locationCode, fromDate);
 
       let dayClosePromise = [];
@@ -100,17 +100,14 @@ module.exports = {
                   dayClosePromise = [{ closing_id: 1 }];
               }
           }
-      }      
-            
-
-              
+      }
 
 
       if(dayClosePromise && dayClosePromise.length>0 && closingPromise && closingPromise.length > 0)
       {
 
       // Fetch readings and sales summary concurrently
-      
+
       const readingsPromise = DsrReportDao.getreadings(locationCode, fromDate);
       const salesSummaryPromise = DsrReportDao.getsalessummary(locationCode, fromDate);
       const collectionPromise = DsrReportDao.getcollection(locationCode, fromDate);
@@ -126,7 +123,12 @@ module.exports = {
       const cashFlowTransPromise =  CashFlowReportDao.getCashflowTrans(locationCode, fromDate);
       const bankTransPromise =  CashFlowReportDao.getBankTransaction(locationCode, fromDate);
       const cashFlowDenomPromise =  CashFlowReportDao.getCashfowDenomination(locationCode, fromDate);
-      const fuelTankStockPromise =  DsrReportDao.getfuelstock(locationCode, fromDate);
+      // Fuel Tank Stock section is not rendered in the DSR view (renderTable call for it is
+      // commented out in views/reports-dsr.pug) -- getfuelstock() calls the expensive
+      // GET_TANK_OPENING_STOCK/GET_TANK_CLOSING_STOCK functions per tank for no visible benefit.
+      // Restore this line (and remove the Promise.resolve([]) below) if the section is ever shown again.
+      // const fuelTankStockPromise =  DsrReportDao.getfuelstock(locationCode, fromDate);
+      const fuelTankStockPromise = Promise.resolve([]);
       const productPricePromise   =  DsrReportDao.getPumpPrice(locationCode, fromDate);
       const monthlyOfftakePromise = DsrReportDao.getMonthlyOfftake(locationCode, fromDate);
       const deadlinePromise = DsrReportDao.getDeadline(locationCode, fromDate);
@@ -137,7 +139,7 @@ module.exports = {
       // Wait for all promises to resolve
       const [readingsData, salesSummaryData,collectionData,digitalData,oilCollectionData,creditSalesData,
              cardSalesSummaryData,cashSalesData,expensesData,stockReceiptData,creditReceiptData,shiftSummaryData,
-             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData,skippedReadingsData] = await Promise.all([readingsPromise, 
+             cashflowData,denomData,bankTranData,fuelTankStockData,productPriceData,monthlyOfftakeData,deadlineData,skippedReadingsData] = await Promise.all([readingsPromise,
                                                                                                 salesSummaryPromise,
                                                                                                 collectionPromise,
                                                                                                 digitalcollectionPromise,
@@ -156,7 +158,7 @@ module.exports = {
                                                                                                 productPricePromise,
                                                                                                 monthlyOfftakePromise,
                                                                                                 deadlinePromise,
-                                                                                                skippedReadingsPromise                                                                                                
+                                                                                                skippedReadingsPromise
                                                                                               ]);
 
       // Process readings data
@@ -630,8 +632,9 @@ module.exports = {
           return acc;
         }, {});
 
-
-        fuelTankStockData.forEach((tankStock) => {        
+        // Fuel Tank Stock table is not rendered (see comment near fuelTankStockPromise above).
+        // fuelTankStockData is always [] now, so this loop is a no-op; kept for easy restore.
+        fuelTankStockData.forEach((tankStock) => {
           FuelTankStocklist.push({
              Tank: tankStock.tank,
              'Opening Stock': tankStock.opening,
@@ -643,10 +646,6 @@ module.exports = {
           });
         });
 
-     
-      
- 
-      
         const formattedFromClosingDate = moment(fromDate).format('DD/MM/YYYY (dddd)');
 
       // Prepare the render data
