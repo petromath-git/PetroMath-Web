@@ -173,6 +173,13 @@ DAY_BILL_TABLE: "t_day_bill",
 DAY_BILL_HEADER_TABLE: "t_day_bill_header",
 DAY_BILL_ITEMS_TABLE: "t_day_bill_items",
 
+// Platform Billing tables (PetroMath's own subscription invoicing)
+LOCATION_BILLING_PLAN_TABLE: "m_location_billing_plan",
+PLATFORM_INVOICE_TABLE: "t_platform_invoice",
+PLATFORM_INVOICE_ITEMS_TABLE: "t_platform_invoice_items",
+PLATFORM_PAYMENT_TABLE: "t_platform_payment",
+PLATFORM_PAYMENT_ALLOCATION_TABLE: "t_platform_payment_allocation",
+
 // GST Configuration
 GST_CONFIG_TABLE: "m_gst_config",
 GST_RETURN_DATA_TABLE: "t_gst_return_data",
