@@ -96,14 +96,14 @@ html
             if m.group_name && m.group_code
               if children.length === 0
                 // Standalone menu group
-                - allGroups[m.group_code] = allGroups[m.group_code] || { group_name: m.group_name, group_sequence: m.group_sequence, type: 'standalone', menus: [] }
+                - allGroups[m.group_code] = allGroups[m.group_code] || { group_code: m.group_code, group_name: m.group_name, group_sequence: m.group_sequence, type: 'standalone', menus: [] }
                 - allGroups[m.group_code].menus.push(m)
               else
                 // Dropdown menu group
-                - allGroups[m.group_code] = allGroups[m.group_code] || { group_name: m.group_name, group_sequence: m.group_sequence, type: 'dropdown', parent: m, children: children }
+                - allGroups[m.group_code] = allGroups[m.group_code] || { group_code: m.group_code, group_name: m.group_name, group_sequence: m.group_sequence, type: 'dropdown', parent: m, children: children }
             else
               // Fallback to Administration if no group
-              - allGroups['ADMIN'] = allGroups['ADMIN'] || { group_name: 'Administration', group_sequence: 999, type: 'standalone', menus: [] }
+              - allGroups['ADMIN'] = allGroups['ADMIN'] || { group_code: 'ADMIN', group_name: 'Administration', group_sequence: 999, type: 'standalone', menus: [] }
               - allGroups['ADMIN'].menus.push(m)
 
         // Convert to sorted array by group_sequence
@@ -115,14 +115,17 @@ html
         // Render all groups in database sequence order
         each group in sortedGroups
           if group.type === 'standalone' && group.menus && group.menus.length > 0
-            // Standalone menu group
+            // Standalone menu group — collapsible, same as dropdown groups below
             .menu-section
-              .menu-section-title= group.group_name
-              each menu in group.menus
-                a.menu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
-                  span.menu-item-icon
-                    i.bi(class=menu.icon || 'bi-circle')
-                  | #{menu.menu_name}
+              .menu-section-title.collapsible-header(onclick=`toggleMenuSection('${group.group_code}')`, style="cursor: pointer;")
+                i.bi.bi-chevron-right.collapse-icon(id=`icon-${group.group_code}`, style="margin-right: 8px; transition: transform 0.3s ease;")
+                | #{group.group_name}
+              .menu-submenu(id=`submenu-${group.group_code}`, style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;")
+                each menu in group.menus
+                  a.menu-item.submenu-item(href=menu.url_path, class=(title === menu.menu_name ? 'active' : ''))
+                    span.menu-item-icon
+                      i.bi(class=menu.icon || 'bi-circle', style="font-size: 12px; margin-left: 4px;")
+                    | #{menu.menu_name}
           else if group.type === 'dropdown' && group.children && group.children.length > 0
             // Dropdown menu group
             .menu-section
