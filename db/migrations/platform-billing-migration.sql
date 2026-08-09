@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS t_platform_payment (
     location_code     VARCHAR(50)   NOT NULL,
     payment_date        DATE         NOT NULL,
     amount                DECIMAL(12,2) NOT NULL,
-    payment_mode           ENUM('MANUAL_CASH','MANUAL_BANK','MANUAL_CHEQUE','RAZORPAY','OTHER') NOT NULL DEFAULT 'MANUAL_CASH',
+    payment_mode           ENUM('MANUAL_CASH','MANUAL_BANK','MANUAL_UPI','MANUAL_CHEQUE','RAZORPAY','OTHER') NOT NULL DEFAULT 'MANUAL_CASH',
     reference_number         VARCHAR(100) NULL,
     gateway_txn_id             VARCHAR(150) NULL,
     gateway_payload               JSON      NULL,

@@ -19,8 +19,9 @@ const PlatformBillingDao = {
     },
 
     // All active billing plans as of a date, joined to active locations —
-    // drives the monthly generation loop
-    getActiveBillingPlansForGeneration: (asOfDate) => {
+    // drives the monthly generation loop. Pass locationCode to restrict to
+    // a single location (e.g. for a first test run or a manual backfill).
+    getActiveBillingPlansForGeneration: (asOfDate, locationCode) => {
         return db.sequelize.query(
             `SELECT
                 bp.billing_plan_id, bp.location_code, bp.plan_duration_months,
@@ -31,9 +32,10 @@ const PlatformBillingDao = {
             WHERE :asOfDate BETWEEN bp.effective_start_date AND bp.effective_end_date
               AND l.start_date <= :asOfDate
               AND l.effective_end_date > :asOfDate
+              AND (:locationCode IS NULL OR bp.location_code = :locationCode)
             ORDER BY bp.location_code`,
             {
-                replacements: { asOfDate },
+                replacements: { asOfDate, locationCode: locationCode || null },
                 type: QueryTypes.SELECT
             }
         );

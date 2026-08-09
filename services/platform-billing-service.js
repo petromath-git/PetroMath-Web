@@ -5,6 +5,9 @@
 //
 const dateFormat = require('dateformat');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
+const DistributorService = require('./distributor-service');
+
+const DUE_DAYS_AFTER_GENERATION = 5; // payment is usually received within 5 days of the invoice being generated
 
 /**
  * Generate platform invoices for every active, non-trial location whose
@@ -13,10 +16,20 @@ const PlatformBillingDao = require('../dao/platform-billing-dao');
  *
  * @param {string} periodStartDate  YYYY-MM-DD, first of the billing month
  * @param {string} userId
+ * @param {object} [options]
+ * @param {string} [options.locationCode]   restrict generation to one location
+ * @param {string} [options.generatedDate]  YYYY-MM-DD, defaults to today; due date is
+ *                                          computed as generatedDate + 5 days, not
+ *                                          relative to the period — invoices are
+ *                                          typically raised a few days into the
+ *                                          following month, not on day 1 of the period
  * @returns {{ generated: string[], skipped: {location_code:string, reason:string}[] }}
  */
-async function generateInvoicesForPeriod(periodStartDate, userId) {
-    const plans = await PlatformBillingDao.getActiveBillingPlansForGeneration(periodStartDate);
+async function generateInvoicesForPeriod(periodStartDate, userId, options = {}) {
+    const generatedDate = options.generatedDate || dateFormat(new Date(), 'yyyy-mm-dd');
+    const dueDate = addDays(generatedDate, DUE_DAYS_AFTER_GENERATION);
+
+    const plans = await PlatformBillingDao.getActiveBillingPlansForGeneration(periodStartDate, options.locationCode);
     const generated = [];
     const skipped = [];
 
@@ -34,7 +47,6 @@ async function generateInvoicesForPeriod(periodStartDate, userId) {
             }
 
             const periodEndDate = addMonthsMinusOneDay(periodStartDate, plan.plan_duration_months);
-            const dueDate = addDays(periodStartDate, 7);
 
             const gross = Number(plan.plan_rate) || 0;
             const discount = computeDiscount(gross, plan.discount_type, plan.discount_value);
@@ -60,7 +72,7 @@ async function generateInvoicesForPeriod(periodStartDate, userId) {
                 net_amount: net,
                 due_date: dueDate,
                 status: net <= 0 ? 'PAID' : 'UNPAID',
-                generated_date: dateFormat(new Date(), 'yyyy-mm-dd'),
+                generated_date: generatedDate,
                 created_by: userId,
                 creation_date: new Date(),
                 updated_by: userId,
@@ -105,6 +117,16 @@ async function recordPayment(payment, allocations) {
     for (const a of allocations) {
         await recalculateInvoiceStatus(a.invoice_id, payment.created_by);
     }
+
+    // If this location has an active distributor assignment, this creates
+    // the commission entry owed to that distributor. No-op otherwise.
+    await DistributorService.maybeCreateCommission({
+        payment_id: created.payment_id,
+        location_code: payment.location_code,
+        payment_date: payment.payment_date,
+        amount: payment.amount,
+        created_by: payment.created_by
+    });
 
     return created;
 }
