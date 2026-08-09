@@ -1,0 +1,245 @@
+extends ../layout
+
+block content
+    style.
+        .badge-status-PENDING { background-color: #fd7e14; }
+        .badge-status-PAID { background-color: #198754; }
+
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-people.me-2
+                    | Distributor Payables
+                div
+                    button.btn.btn-outline-primary.btn-sm.me-2#btnOpenDistributor(type='button') Add Distributor
+                    button.btn.btn-outline-primary.btn-sm.me-2#btnOpenAssignment(type='button') Assign to Location
+                    button.btn.btn-primary.btn-sm#btnOpenPayout(type='button') Record Payout
+
+    div.container-fluid
+        h6.mt-2 Location Assignments
+        if assignments && assignments.length
+            .table-responsive.mb-4
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th Distributor
+                            th Location
+                            th.text-right Commission %
+                            th Since
+                    tbody
+                        each a in assignments
+                            tr
+                                td= a.distributor_name
+                                td= a.location_name + ' (' + a.location_code + ')'
+                                td.text-right= Number(a.commission_percent).toFixed(2) + '%'
+                                td= new Date(a.effective_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+        else
+            .alert.alert-info.mb-4 No distributor assignments yet.
+
+        h6 Commission Ledger
+        if commissions && commissions.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th Distributor
+                            th Location
+                            th.text-right Payment
+                            th.text-right Commission
+                            th.text-right Paid Out
+                            th.text-right Balance
+                            th.text-center Status
+                    tbody
+                        each c in commissions
+                            tr
+                                td= c.distributor_name
+                                td= c.location_name + ' (' + c.location_code + ')'
+                                td.text-right ₹#{Number(c.payment_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td.text-right ₹#{Number(c.commission_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td.text-right ₹#{Number(c.paid_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td.text-right ₹#{(Number(c.commission_amount) - Number(c.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td.text-center
+                                    span.badge(class=`badge-status-${c.status}`)= c.status
+        else
+            .alert.alert-info No commissions recorded yet.
+
+    //- ── Add Distributor Modal ────────────────────────────────────────────
+    #distributorModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Add Distributor
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Name:
+                        input#distName.form-control(type='text')
+                    .mb-3
+                        label.form-label Phone (optional):
+                        input#distPhone.form-control(type='text')
+                    .mb-3
+                        label.form-label Since:
+                        input#distStartDate.form-control(type='date' value=today)
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSaveDistributor(type='button') Save
+
+    //- ── Assign to Location Modal ─────────────────────────────────────────
+    #assignmentModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Assign Distributor to Location
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Distributor:
+                        select#assignDistributor.form-control
+                            option(value='') -- Select --
+                            each d in distributors
+                                option(value=d.distributor_id)= d.distributor_name
+                    .mb-3
+                        label.form-label Location:
+                        select#assignLocation.form-control
+                            option(value='') -- Select --
+                            each loc in locations
+                                option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
+                    .mb-3
+                        label.form-label Commission %:
+                        input#assignPercent.form-control(type='number' step='0.01' min='0' max='100')
+                    .mb-3
+                        label.form-label Since:
+                        input#assignStartDate.form-control(type='date' value=today)
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSaveAssignment(type='button') Save
+
+    //- ── Record Payout Modal ──────────────────────────────────────────────
+    #payoutModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Record Payout
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Distributor:
+                        select#payoutDistributor.form-control
+                            option(value='') -- Select --
+                            each d in distributors
+                                option(value=d.distributor_id)= d.distributor_name
+                    .mb-3
+                        label.form-label Payout Date:
+                        input#payoutDate.form-control(type='date' value=today)
+                    .mb-3
+                        label.form-label Amount:
+                        input#payoutAmount.form-control(type='number' step='0.01' min='0')
+                    .mb-3
+                        label.form-label Mode:
+                        select#payoutMode.form-control
+                            option(value='MANUAL_CASH') Cash
+                            option(value='MANUAL_UPI') UPI / GPay
+                            option(value='MANUAL_BANK') Bank Transfer
+                            option(value='MANUAL_CHEQUE') Cheque
+                            option(value='OTHER') Other
+                    .mb-3
+                        label.form-label Reference No. (optional):
+                        input#payoutReference.form-control(type='text')
+                    .mb-3#pendingBlock(style='display:none;')
+                        label.form-label Pending commissions (optional — leave unchecked to auto-apply oldest-first):
+                        div#pendingList.border.rounded.p-2(style='max-height:200px; overflow-y:auto;')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSavePayout(type='button') Save Payout
+
+    script.
+        $('#btnOpenDistributor').on('click', function() { $('#distributorModal').modal('show'); });
+        $('#btnOpenAssignment').on('click', function() { $('#assignmentModal').modal('show'); });
+        $('#btnOpenPayout').on('click', function() {
+            $('#pendingBlock').hide();
+            $('#pendingList').empty();
+            $('#payoutModal').modal('show');
+        });
+
+        $('#btnSaveDistributor').on('click', function() {
+            const name = $('#distName').val();
+            if (!name) { alert('Name is required.'); return; }
+            $.ajax({
+                url: '/distributors', method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({
+                    distributor_name: name,
+                    phone: $('#distPhone').val(),
+                    effective_start_date: $('#distStartDate').val()
+                }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });
+
+        $('#btnSaveAssignment').on('click', function() {
+            const distributor_id = $('#assignDistributor').val();
+            const location_code = $('#assignLocation').val();
+            const commission_percent = parseFloat($('#assignPercent').val());
+            if (!distributor_id || !location_code || !commission_percent) { alert('All fields are required.'); return; }
+            $.ajax({
+                url: '/distributors/assignments', method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({
+                    distributor_id: distributor_id,
+                    location_code: location_code,
+                    commission_percent: commission_percent,
+                    effective_start_date: $('#assignStartDate').val()
+                }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });
+
+        $('#payoutDistributor').on('change', function() {
+            const id = $(this).val();
+            if (!id) { $('#pendingBlock').hide(); return; }
+            $.get('/distributors/' + id + '/pending-commissions', function(res) {
+                const list = $('#pendingList').empty();
+                if (!res.commissions.length) {
+                    list.append('<div class="text-muted">No pending commissions.</div>');
+                } else {
+                    res.commissions.forEach(function(c) {
+                        list.append(
+                            '<div class="form-check">' +
+                            '<input class="form-check-input pending-check" type="checkbox" value="' + c.commission_id + '" data-amt="' + c.commission_amount + '">' +
+                            '<label class="form-check-label">' + c.location_code + ' — ₹' + Number(c.commission_amount).toLocaleString('en-IN') + '</label>' +
+                            '</div>'
+                        );
+                    });
+                }
+                $('#pendingBlock').show();
+            });
+        });
+
+        $('#btnSavePayout').on('click', function() {
+            const distributor_id = $('#payoutDistributor').val();
+            const amount = parseFloat($('#payoutAmount').val());
+            if (!distributor_id || !amount) { alert('Distributor and amount are required.'); return; }
+
+            const allocations = [];
+            $('.pending-check:checked').each(function() {
+                allocations.push({ commission_id: parseInt($(this).val(), 10), allocated_amount: parseFloat($(this).data('amt')) });
+            });
+
+            $.ajax({
+                url: '/distributors/payouts', method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({
+                    distributor_id: distributor_id,
+                    payout_date: $('#payoutDate').val(),
+                    amount: amount,
+                    payment_mode: $('#payoutMode').val(),
+                    reference_number: $('#payoutReference').val(),
+                    allocations: allocations
+                }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });

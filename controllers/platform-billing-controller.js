@@ -44,7 +44,10 @@ const PlatformBillingController = {
                 return res.status(400).json({ error: 'periodStartDate is required' });
             }
             const userId = req.user.User_Name || req.user.Person_Name;
-            const result = await PlatformBillingSvc.generateInvoicesForPeriod(periodStartDate, userId);
+            const result = await PlatformBillingSvc.generateInvoicesForPeriod(periodStartDate, userId, {
+                locationCode: req.body.locationCode || null,
+                generatedDate: req.body.generatedDate || null
+            });
             res.json({ success: true, ...result });
         } catch (err) {
             console.error('PlatformBillingController.generateInvoices:', err);

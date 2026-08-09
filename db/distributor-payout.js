@@ -2,17 +2,17 @@
 const config = require("../config/app-config");
 
 module.exports = function(sequelize, DataTypes) {
-    var PlatformPayment = sequelize.define(config.PLATFORM_PAYMENT_TABLE, {
-        payment_id: {
+    var DistributorPayout = sequelize.define(config.DISTRIBUTOR_PAYOUT_TABLE, {
+        payout_id: {
             type: DataTypes.INTEGER,
             primaryKey: true,
             autoIncrement: true
         },
-        location_code: {
-            type: DataTypes.STRING(50),
+        distributor_id: {
+            type: DataTypes.INTEGER,
             allowNull: false
         },
-        payment_date: {
+        payout_date: {
             type: DataTypes.DATEONLY,
             allowNull: false
         },
@@ -21,25 +21,12 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: false
         },
         payment_mode: {
-            type: DataTypes.ENUM('MANUAL_CASH', 'MANUAL_BANK', 'MANUAL_UPI', 'MANUAL_CHEQUE', 'RAZORPAY', 'OTHER'),
+            type: DataTypes.ENUM('MANUAL_CASH', 'MANUAL_BANK', 'MANUAL_UPI', 'MANUAL_CHEQUE', 'OTHER'),
             defaultValue: 'MANUAL_CASH'
         },
         reference_number: {
             type: DataTypes.STRING(100),
             allowNull: true
-        },
-        gateway_txn_id: {
-            // Unused until a payment gateway is integrated
-            type: DataTypes.STRING(150),
-            allowNull: true
-        },
-        gateway_payload: {
-            type: DataTypes.JSON,
-            allowNull: true
-        },
-        status: {
-            type: DataTypes.ENUM('RECORDED', 'CONFIRMED', 'FAILED', 'REFUNDED'),
-            defaultValue: 'RECORDED'
         },
         remarks: {
             type: DataTypes.STRING(255),
@@ -66,5 +53,5 @@ module.exports = function(sequelize, DataTypes) {
         freezeTableName: true
     });
 
-    return PlatformPayment;
+    return DistributorPayout;
 };

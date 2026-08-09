@@ -24,6 +24,9 @@ block content
                     i.bi.bi-receipt.me-2
                     | Platform Billing — All Locations
                 div
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/distributors')
+                        i.bi.bi-people.me-1
+                        | Distributors
                     button.btn.btn-outline-success.btn-sm.me-2#btnOpenGenerate(type='button')
                         i.bi.bi-lightning-charge.me-1
                         | Generate Invoices
@@ -115,6 +118,7 @@ block content
                         label.form-label Mode:
                         select#payMode.form-control
                             option(value='MANUAL_CASH') Cash
+                            option(value='MANUAL_UPI') UPI / GPay
                             option(value='MANUAL_BANK') Bank Transfer
                             option(value='MANUAL_CHEQUE') Cheque
                             option(value='OTHER') Other
