@@ -7,12 +7,16 @@ const security = require('../utils/app-security');
 const controller = require('../controllers/platform-billing-controller');
 
 // ── Location-scoped: any logged-in user sees only their own location's invoices ──
+// Temporarily locked down to MANAGE_PLATFORM_BILLING (SuperUser) — not yet
+// rolled out to locations. Data is already location-filtered in the
+// controller; this extra gate is so the page isn't reachable by direct URL
+// while it's disabled in the menu.
 
 // GET /platform-billing/my-invoices
-router.get('/my-invoices', isLoginEnsured, controller.getMyInvoices);
+router.get('/my-invoices', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getMyInvoices);
 
 // GET /platform-billing/my-invoices/:invoiceId
-router.get('/my-invoices/:invoiceId', isLoginEnsured, controller.getMyInvoiceDetail);
+router.get('/my-invoices/:invoiceId', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getMyInvoiceDetail);
 
 // ── Master (cross-location): requires MANAGE_PLATFORM_BILLING permission ──
 
