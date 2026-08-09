@@ -24,6 +24,15 @@ block content
                     i.bi.bi-receipt.me-2
                     | Platform Billing — All Locations
                 div
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/plans')
+                        i.bi.bi-sliders.me-1
+                        | Billing Plans
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/payments')
+                        i.bi.bi-cash-stack.me-1
+                        | Payments
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/ledger')
+                        i.bi.bi-journal-text.me-1
+                        | Ledger
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/distributors')
                         i.bi.bi-people.me-1
                         | Distributors
@@ -41,6 +50,12 @@ block content
                 .col-md-3.col-6
                     label.form-label To Period:
                     input#toPeriod.form-control(type='date' value=toPeriod max=today)
+                .col-md-3.col-6
+                    label.form-label Location:
+                    select#filterLocation.form-control
+                        option(value='') All Locations
+                        each loc in locations
+                            option(value=loc.location_code selected=(locationCode === loc.location_code))= loc.location_name + ' (' + loc.location_code + ')'
                 .col-md-2.d-flex.align-items-end
                     button.btn.btn-primary.w-100(type='button' onclick='applyFilter()')
                         i.bi.bi-search.me-2
@@ -61,6 +76,7 @@ block content
                             th.text-right Paid
                             th.text-right Balance
                             th.text-center Status
+                            th.text-center Adjust
                     tbody
                         each inv in invoices
                             tr
@@ -74,6 +90,9 @@ block content
                                 td.text-right= (Number(inv.net_amount) - Number(inv.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})
                                 td.text-center
                                     span.badge(class=`badge-status-${inv.status}`)= inv.status
+                                td.text-center
+                                    button.btn.btn-outline-secondary.btn-sm.btn-adjust(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
+                                        i.bi.bi-pencil-square
         else
             .alert.alert-info No invoices found for the selected period.
 
@@ -132,12 +151,55 @@ block content
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-primary#btnSavePayment(type='button') Save Payment
 
+    //- ── Adjustment Modal ─────────────────────────────────────────────────
+    #adjustModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#adjustModalTitle Add Adjustment
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Reason:
+                        input#adjustDescription.form-control(type='text' placeholder='e.g. Goodwill credit')
+                    .mb-3
+                        label.form-label Amount (negative = discount, positive = extra charge):
+                        input#adjustAmount.form-control(type='number' step='0.01')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSaveAdjustment(type='button') Save
+
     script.
         function applyFilter() {
             const from = document.getElementById('fromPeriod').value;
             const to   = document.getElementById('toPeriod').value;
-            window.location.href = '/platform-billing?fromPeriod=' + from + '&toPeriod=' + to;
+            const loc  = document.getElementById('filterLocation').value;
+            window.location.href = '/platform-billing?fromPeriod=' + from + '&toPeriod=' + to + '&locationCode=' + loc;
         }
+
+        let adjustInvoiceId = null;
+        $('.btn-adjust').on('click', function() {
+            adjustInvoiceId = $(this).data('invoice-id');
+            $('#adjustModalTitle').text('Add Adjustment — ' + $(this).data('invoice-number'));
+            $('#adjustDescription').val('');
+            $('#adjustAmount').val('');
+            $('#adjustModal').modal('show');
+        });
+
+        $('#btnSaveAdjustment').on('click', function() {
+            const description = $('#adjustDescription').val();
+            const amount = parseFloat($('#adjustAmount').val());
+            if (!description || isNaN(amount)) { alert('Reason and amount are required.'); return; }
+            $.ajax({
+                url: '/platform-billing/' + adjustInvoiceId + '/adjustment',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ description, amount }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });
 
         $('#btnOpenGenerate').on('click', function() {
             $('#genPeriodStart').val('');

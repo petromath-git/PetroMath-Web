@@ -45,6 +45,28 @@ const PlatformBillingDao = {
         return db.location_billing_plan.create(planData);
     },
 
+    // Current billing plan (any effective_end_date >= today) for every location that has one
+    findAllCurrentBillingPlans: () => {
+        return db.sequelize.query(
+            `SELECT bp.billing_plan_id, bp.location_code, l.location_name, bp.plan_duration_months,
+                    bp.plan_rate, bp.discount_type, bp.discount_value, bp.trial_end_date,
+                    bp.effective_start_date, bp.remarks
+             FROM m_location_billing_plan bp
+             JOIN m_location l ON l.location_code = bp.location_code
+             WHERE bp.effective_end_date = '9999-12-31'
+             ORDER BY l.location_name`,
+            { type: QueryTypes.SELECT }
+        );
+    },
+
+    // Close out the current open-ended plan for a location (effective_end_date -> day before newStartDate)
+    closeBillingPlan: (locationCode, dayBeforeNewStart) => {
+        return db.location_billing_plan.update(
+            { effective_end_date: dayBeforeNewStart },
+            { where: { location_code: locationCode, effective_end_date: '9999-12-31' } }
+        );
+    },
+
     // ─── Invoices ──────────────────────────────────────────────────────────
 
     // Any non-cancelled invoice whose period already covers this date
@@ -93,8 +115,9 @@ const PlatformBillingDao = {
         });
     },
 
-    // All invoices across all locations (master view), with location name
-    findAllInvoices: (fromPeriod, toPeriod) => {
+    // All invoices across all locations (master view), with location name.
+    // Pass locationCode to restrict to one location.
+    findAllInvoices: (fromPeriod, toPeriod, locationCode) => {
         return db.sequelize.query(
             `SELECT
                 pi.invoice_id, pi.location_code, l.location_name, pi.invoice_number,
@@ -109,12 +132,50 @@ const PlatformBillingDao = {
             FROM t_platform_invoice pi
             JOIN m_location l ON l.location_code = pi.location_code
             WHERE pi.period_start_date BETWEEN :fromPeriod AND :toPeriod
+              AND (:locationCode IS NULL OR pi.location_code = :locationCode)
             ORDER BY pi.period_start_date DESC, l.location_name`,
             {
-                replacements: { fromPeriod, toPeriod },
+                replacements: { fromPeriod, toPeriod, locationCode: locationCode || null },
                 type: QueryTypes.SELECT
             }
         );
+    },
+
+    // Chronological ledger for one location: invoices (owed) + payments (paid), running balance computed by caller
+    getLedgerForLocation: (locationCode) => {
+        return db.sequelize.query(
+            `SELECT 'INVOICE' AS entry_type, invoice_id AS entry_id, period_start_date AS entry_date,
+                    invoice_number AS reference, net_amount AS amount, status
+             FROM t_platform_invoice WHERE location_code = :locationCode
+             UNION ALL
+             SELECT 'PAYMENT' AS entry_type, payment_id AS entry_id, payment_date AS entry_date,
+                    CONCAT(payment_mode, COALESCE(CONCAT(' - ', reference_number), '')) AS reference,
+                    amount, status
+             FROM t_platform_payment WHERE location_code = :locationCode
+             ORDER BY entry_date, entry_type DESC`,
+            { replacements: { locationCode }, type: QueryTypes.SELECT }
+        );
+    },
+
+    addInvoiceAdjustment: (invoiceId, description, amount, userId) => {
+        return db.sequelize.transaction(async (t) => {
+            const invoice = await db.platform_invoice.findOne({ where: { invoice_id: invoiceId }, transaction: t });
+            if (!invoice) throw new Error('Invoice not found');
+
+            const nextSort = await db.platform_invoice_items.count({ where: { invoice_id: invoiceId }, transaction: t }) + 1;
+            await db.platform_invoice_items.create({
+                invoice_id: invoiceId, description: `Adjustment: ${description}`, amount, sort_order: nextSort
+            }, { transaction: t });
+
+            const newNet = Math.max(0, Number(invoice.net_amount) + Number(amount));
+            await db.platform_invoice.update({
+                net_amount: newNet,
+                discount_amount: amount < 0 ? Number(invoice.discount_amount) + Math.abs(amount) : invoice.discount_amount,
+                updated_by: userId, updation_date: new Date()
+            }, { where: { invoice_id: invoiceId }, transaction: t });
+
+            return newNet;
+        });
     },
 
     // Outstanding (unpaid/partial) invoices for a location — for bulk payment allocation
@@ -150,6 +211,27 @@ const PlatformBillingDao = {
             await db.platform_payment_allocation.bulkCreate(rows, { transaction: t });
             return payment;
         });
+    },
+
+    // All payments across all locations (master view). Pass locationCode to restrict to one.
+    findAllPayments: (fromDate, toDate, locationCode) => {
+        return db.sequelize.query(
+            `SELECT pp.payment_id, pp.location_code, l.location_name, pp.payment_date, pp.amount,
+                    pp.payment_mode, pp.reference_number, pp.status, pp.remarks,
+                    GROUP_CONCAT(pi.invoice_number SEPARATOR ', ') AS invoice_numbers
+             FROM t_platform_payment pp
+             JOIN m_location l ON l.location_code = pp.location_code
+             LEFT JOIN t_platform_payment_allocation ppa ON ppa.payment_id = pp.payment_id
+             LEFT JOIN t_platform_invoice pi ON pi.invoice_id = ppa.invoice_id
+             WHERE pp.payment_date BETWEEN :fromDate AND :toDate
+               AND (:locationCode IS NULL OR pp.location_code = :locationCode)
+             GROUP BY pp.payment_id
+             ORDER BY pp.payment_date DESC`,
+            {
+                replacements: { fromDate, toDate, locationCode: locationCode || null },
+                type: QueryTypes.SELECT
+            }
+        );
     },
 
     findPaymentsForLocation: (locationCode) => {

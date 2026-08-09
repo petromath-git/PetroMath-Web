@@ -79,8 +79,19 @@ async function recalculateCommissionStatus(commissionId) {
     await DistributorDao.updateCommissionStatus(commissionId, status);
 }
 
+/** Chronological ledger for a distributor with a running balance owed. */
+async function getDistributorLedger(distributorId) {
+    const rows = await DistributorDao.getLedgerForDistributor(distributorId);
+    let balance = 0;
+    return rows.map(r => {
+        balance += r.entry_type === 'COMMISSION' ? Number(r.amount) : -Number(r.amount);
+        return { ...r, balance };
+    });
+}
+
 module.exports = {
     maybeCreateCommission,
     recordPayout,
-    recalculateCommissionStatus
+    recalculateCommissionStatus,
+    getDistributorLedger
 };

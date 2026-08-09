@@ -15,9 +15,10 @@ const PlatformBillingController = {
                 new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1), 'yyyy-mm-dd'
             );
             const toPeriod = req.query.toPeriod || today;
+            const locationCode = req.query.locationCode || null;
 
             const [invoices, locations] = await Promise.all([
-                PlatformBillingDao.findAllInvoices(fromPeriod, toPeriod),
+                PlatformBillingDao.findAllInvoices(fromPeriod, toPeriod, locationCode),
                 LocationDao.findActiveLocations()
             ]);
 
@@ -27,6 +28,7 @@ const PlatformBillingController = {
                 locations,
                 fromPeriod,
                 toPeriod,
+                locationCode,
                 today,
                 user: req.user
             });
@@ -92,6 +94,107 @@ const PlatformBillingController = {
         } catch (err) {
             console.error('PlatformBillingController.getOutstandingForLocation:', err);
             res.status(500).json({ error: 'Failed to fetch outstanding invoices' });
+        }
+    },
+
+    // ─── GET /platform-billing/payments (master) ────────────────────────────
+    getPayments: async (req, res, next) => {
+        try {
+            const today = dateFormat(new Date(), 'yyyy-mm-dd');
+            const fromDate = req.query.fromDate || dateFormat(
+                new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1), 'yyyy-mm-dd'
+            );
+            const toDate = req.query.toDate || today;
+            const locationCode = req.query.locationCode || null;
+
+            const [payments, locations] = await Promise.all([
+                PlatformBillingDao.findAllPayments(fromDate, toDate, locationCode),
+                LocationDao.findActiveLocations()
+            ]);
+
+            res.render('platform-billing/payments', {
+                title: 'Payments',
+                payments,
+                locations,
+                fromDate,
+                toDate,
+                locationCode,
+                today,
+                user: req.user
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    // ─── GET /platform-billing/plans (master) ───────────────────────────────
+    getPlans: async (req, res, next) => {
+        try {
+            const [plans, locations] = await Promise.all([
+                PlatformBillingDao.findAllCurrentBillingPlans(),
+                LocationDao.findActiveLocations()
+            ]);
+            res.render('platform-billing/plans', {
+                title: 'Billing Plans',
+                plans,
+                locations,
+                today: dateFormat(new Date(), 'yyyy-mm-dd'),
+                user: req.user
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    // ─── POST /platform-billing/plans (master) ──────────────────────────────
+    savePlan: async (req, res) => {
+        try {
+            const { location_code, plan_duration_months, plan_rate, discount_type, discount_value, effective_start_date, remarks } = req.body;
+            if (!location_code || !effective_start_date || plan_rate == null) {
+                return res.status(400).json({ error: 'location_code, plan_rate and effective_start_date are required' });
+            }
+            const userId = req.user.User_Name || req.user.Person_Name;
+            await PlatformBillingSvc.updateBillingPlan({
+                location_code, plan_duration_months, plan_rate, discount_type, discount_value, effective_start_date, remarks
+            }, userId);
+            res.json({ success: true });
+        } catch (err) {
+            console.error('PlatformBillingController.savePlan:', err);
+            res.status(500).json({ error: 'Failed to save billing plan' });
+        }
+    },
+
+    // ─── POST /platform-billing/:invoiceId/adjustment (master) ─────────────
+    addAdjustment: async (req, res) => {
+        try {
+            const { description, amount } = req.body;
+            if (!description || amount == null) {
+                return res.status(400).json({ error: 'description and amount are required' });
+            }
+            const userId = req.user.User_Name || req.user.Person_Name;
+            await PlatformBillingSvc.addInvoiceAdjustment(req.params.invoiceId, description, amount, userId);
+            res.json({ success: true });
+        } catch (err) {
+            console.error('PlatformBillingController.addAdjustment:', err);
+            res.status(500).json({ error: err.message || 'Failed to add adjustment' });
+        }
+    },
+
+    // ─── GET /platform-billing/ledger (master) ──────────────────────────────
+    getLedger: async (req, res, next) => {
+        try {
+            const locationCode = req.query.locationCode || null;
+            const locations = await LocationDao.findActiveLocations();
+            const ledger = locationCode ? await PlatformBillingSvc.getLocationLedger(locationCode) : [];
+            res.render('platform-billing/ledger', {
+                title: 'Location Ledger',
+                ledger,
+                locations,
+                locationCode,
+                user: req.user
+            });
+        } catch (err) {
+            next(err);
         }
     },
 
