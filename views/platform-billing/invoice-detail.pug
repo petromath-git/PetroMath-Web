@@ -1,0 +1,36 @@
+extends ../layout
+
+block content
+    .d-flex.justify-content-between.align-items-center.mb-3
+        h4 Invoice — #{invoice.invoice_number}
+        a.btn.btn-outline-secondary.btn-sm(href='/platform-billing/my-invoices') « Back to My Invoices
+
+    .card
+        .card-body
+            .row.mb-3
+                .col-md-6
+                    p: strong Period:
+                    p= new Date(invoice.period_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) + ' – ' + new Date(invoice.period_end_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                .col-md-6
+                    p: strong Due Date:
+                    p= new Date(invoice.due_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+
+            table.table.table-bordered
+                thead.thead-light
+                    tr
+                        th Description
+                        th.text-right Amount
+                tbody
+                    each it in invoice.items
+                        tr
+                            td= it.description
+                            td.text-right ₹#{Number(it.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                tfoot
+                    tr
+                        th Net Amount
+                        th.text-right ₹#{Number(invoice.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+
+            p.mt-3
+                strong Status:
+                = ' '
+                span= invoice.status
