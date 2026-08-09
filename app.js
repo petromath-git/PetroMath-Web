@@ -144,6 +144,10 @@ const { handleVersionRouting } = require('./utils/version-routing');
 db.sequelize.sync();
 // ORM DB - end
 
+// Platform billing monthly auto-generation - start
+require('./services/platform-billing-scheduler').start();
+// Platform billing monthly auto-generation - end
+
 // Router business
 const HomeController = require("./controllers/home-controller");
 const ClosingEditController = require("./controllers/closing-edit-controller");

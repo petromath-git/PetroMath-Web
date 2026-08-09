@@ -166,6 +166,53 @@ async function recalculateInvoiceStatus(invoiceId, userId) {
     await PlatformBillingDao.updateInvoiceStatus(invoiceId, status, userId);
 }
 
+/**
+ * Update a location's billing plan (rate/discount/duration). Closes out the
+ * current open-ended plan the day before newStartDate and inserts a new
+ * one — same effective-dated pattern as m_location_config, so historical
+ * invoices keep referencing the rate that was actually in force.
+ */
+async function updateBillingPlan(planData, userId) {
+    const dayBefore = addDays(planData.effective_start_date, -1);
+    await PlatformBillingDao.closeBillingPlan(planData.location_code, dayBefore);
+    return PlatformBillingDao.upsertBillingPlan({
+        location_code: planData.location_code,
+        plan_duration_months: planData.plan_duration_months || 1,
+        plan_rate: planData.plan_rate,
+        discount_type: planData.discount_type || 'NONE',
+        discount_value: planData.discount_value || 0,
+        trial_end_date: planData.trial_end_date || null,
+        effective_start_date: planData.effective_start_date,
+        effective_end_date: '9999-12-31',
+        remarks: planData.remarks || null,
+        created_by: userId,
+        creation_date: new Date(),
+        updated_by: userId,
+        updation_date: new Date()
+    });
+}
+
+/**
+ * Add a one-off adjustment line to an already-generated invoice (e.g. a
+ * goodwill credit for one month). amount is signed: negative = discount,
+ * positive = extra charge. Recalculates invoice status afterward since the
+ * net amount — and therefore what counts as fully paid — changes.
+ */
+async function addInvoiceAdjustment(invoiceId, description, amount, userId) {
+    await PlatformBillingDao.addInvoiceAdjustment(invoiceId, description, amount, userId);
+    await recalculateInvoiceStatus(invoiceId, userId);
+}
+
+/** Chronological ledger for a location with a running balance. */
+async function getLocationLedger(locationCode) {
+    const rows = await PlatformBillingDao.getLedgerForLocation(locationCode);
+    let balance = 0;
+    return rows.map(r => {
+        balance += r.entry_type === 'INVOICE' ? Number(r.amount) : -Number(r.amount);
+        return { ...r, balance };
+    });
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function computeDiscount(gross, discountType, discountValue) {
@@ -197,5 +244,8 @@ module.exports = {
     generateInvoicesForPeriod,
     recordPayment,
     recordBulkPayment,
+    updateBillingPlan,
+    addInvoiceAdjustment,
+    getLocationLedger,
     recalculateInvoiceStatus
 };

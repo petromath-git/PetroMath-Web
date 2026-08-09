@@ -13,6 +13,7 @@ const guard = [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')
 router.get('/', guard, controller.getList);
 router.post('/', guard, controller.createDistributor);
 router.post('/assignments', guard, controller.createAssignment);
+router.get('/ledger', guard, controller.getLedger);
 router.get('/:id/pending-commissions', guard, controller.getPendingCommissions);
 router.post('/payouts', guard, controller.recordPayout);
 

@@ -107,6 +107,24 @@ const DistributorController = {
             console.error('DistributorController.recordPayout:', err);
             res.status(500).json({ error: err.message || 'Failed to record payout' });
         }
+    },
+
+    // ─── GET /distributors/ledger ───────────────────────────────────────────
+    getLedger: async (req, res, next) => {
+        try {
+            const distributorId = req.query.distributorId || null;
+            const distributors = await DistributorDao.findAll();
+            const ledger = distributorId ? await DistributorSvc.getDistributorLedger(distributorId) : [];
+            res.render('platform-billing/distributor-ledger', {
+                title: 'Distributor Ledger',
+                ledger,
+                distributors,
+                distributorId,
+                user: req.user
+            });
+        } catch (err) {
+            next(err);
+        }
     }
 };
 

@@ -119,6 +119,21 @@ const DistributorDao = {
             where: { distributor_id: distributorId },
             order: [['payout_date', 'DESC']]
         });
+    },
+
+    // Chronological ledger for one distributor: commissions (owed) + payouts (paid)
+    getLedgerForDistributor: (distributorId) => {
+        return db.sequelize.query(
+            `SELECT 'COMMISSION' AS entry_type, commission_id AS entry_id, creation_date AS entry_date,
+                    CONCAT(location_code, ' - ', commission_percent, '%') AS reference, commission_amount AS amount, status
+             FROM t_distributor_commission WHERE distributor_id = :distributorId
+             UNION ALL
+             SELECT 'PAYOUT' AS entry_type, payout_id AS entry_id, payout_date AS entry_date,
+                    CONCAT(payment_mode, COALESCE(CONCAT(' - ', reference_number), '')) AS reference, amount, 'PAID' AS status
+             FROM t_distributor_payout WHERE distributor_id = :distributorId
+             ORDER BY entry_date, entry_type DESC`,
+            { replacements: { distributorId }, type: QueryTypes.SELECT }
+        );
     }
 };
 

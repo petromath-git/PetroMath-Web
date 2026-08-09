@@ -28,4 +28,19 @@ router.post('/payments', [isLoginEnsured, security.hasPermission('MANAGE_PLATFOR
 // GET /platform-billing/outstanding/:locationCode
 router.get('/outstanding/:locationCode', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getOutstandingForLocation);
 
+// GET /platform-billing/payments
+router.get('/payments', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getPayments);
+
+// GET /platform-billing/plans
+router.get('/plans', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getPlans);
+
+// POST /platform-billing/plans
+router.post('/plans', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.savePlan);
+
+// GET /platform-billing/ledger
+router.get('/ledger', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getLedger);
+
+// POST /platform-billing/:invoiceId/adjustment
+router.post('/:invoiceId/adjustment', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.addAdjustment);
+
 module.exports = router;
