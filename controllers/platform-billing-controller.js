@@ -2,9 +2,30 @@
 const dateFormat = require('dateformat');
 const pug = require('pug');
 const path = require('path');
+const fs = require('fs');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
 const PlatformBillingSvc = require('../services/platform-billing-service');
 const LocationDao = require('../dao/location-dao');
+
+// Static PDF assets (logo, signature) base64-embedded so the PDF is
+// self-contained — page.setContent() has no base URL to resolve a relative
+// /images/... path against. Cached in memory since these files don't change
+// at runtime.
+const pdfImageCache = {};
+function getImageBase64(filename) {
+    if (pdfImageCache[filename]) return pdfImageCache[filename];
+    try {
+        const imagePath = path.join(__dirname, '..', 'public', 'images', filename);
+        const imageBuffer = fs.readFileSync(imagePath);
+        const ext = path.extname(filename).slice(1).toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+        pdfImageCache[filename] = `data:${mime};base64,${imageBuffer.toString('base64')}`;
+    } catch (err) {
+        console.error(`PlatformBillingController: failed to load image ${filename} for PDF:`, err);
+        pdfImageCache[filename] = null;
+    }
+    return pdfImageCache[filename];
+}
 
 const PlatformBillingController = {
 
@@ -245,7 +266,11 @@ const PlatformBillingController = {
             }
 
             const templatePath = path.join(__dirname, '..', 'views', 'platform-billing', 'invoice-print.pug');
-            const htmlContent = pug.renderFile(templatePath, { invoice });
+            const htmlContent = pug.renderFile(templatePath, {
+                invoice,
+                logoDataUri: getImageBase64('mc_logo.jpg'),
+                signatureDataUri: getImageBase64('petromath-signature.jpg')
+            });
 
             const { getBrowser } = require('../utils/browserHelper');
             const browser = await getBrowser();
