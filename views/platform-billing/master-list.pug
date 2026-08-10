@@ -44,6 +44,14 @@ block content
                         | Record Payment
         .card-body
             .row.g-3
+                .col-md-2.col-6
+                    label.form-label Period:
+                    select.form-control#periodPreset(onchange="glSetPeriod(this)" data-from="fromPeriod" data-to="toPeriod")
+                        option(value="this_month") This Month
+                        option(value="last_month") Last Month
+                        option(value="this_fy") This Financial Year
+                        option(value="last_fy") Last Financial Year
+                        option(value="custom" selected) Custom
                 .col-md-3.col-6
                     label.form-label From Period:
                     input#fromPeriod.form-control(type='date' value=fromPeriod)
@@ -76,6 +84,7 @@ block content
                             th.text-right Paid
                             th.text-right Balance
                             th.text-center Status
+                            th.text-center PDF
                             th.text-center Adjust
                     tbody
                         each inv in invoices
@@ -90,6 +99,9 @@ block content
                                 td.text-right= (Number(inv.net_amount) - Number(inv.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})
                                 td.text-center
                                     span.badge(class=`badge-status-${inv.status}`)= inv.status
+                                td.text-center
+                                    a.btn.btn-outline-secondary.btn-sm(href=`/platform-billing/${inv.invoice_id}/pdf` title='Download PDF')
+                                        i.bi.bi-file-earmark-pdf
                                 td.text-center
                                     button.btn.btn-outline-secondary.btn-sm.btn-adjust(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
                                         i.bi.bi-pencil-square

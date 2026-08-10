@@ -356,7 +356,7 @@ getDigitalSales: async (locationCode, reportDate) => {
         const closing_id = data.map(item => item.closing_id);
 
     const result = await db.sequelize.query(
-        `select tc.bill_no,COALESCE (mcl.short_name,mcl.company_name) name,mp.product_name,tc.price,tc.qty,round((tc.price_discount*tc.qty),2) discount,round(tc.amount,2) amt
+        `select tc.bill_no,COALESCE (NULLIF(mcl.short_name,''),mcl.company_name) name,mp.product_name,tc.price,tc.qty,round((tc.price_discount*tc.qty),2) discount,round(tc.amount,2) amt
                                                 from t_credits tc,m_credit_list mcl,m_product mp
                                                 where tc.creditlist_id = mcl.creditlist_id
                                                 and   tc.product_id = mp.product_id
@@ -383,17 +383,17 @@ getDigitalSales: async (locationCode, reportDate) => {
         `SELECT 
             DATE_FORMAT(COALESCE(tds.transaction_date, tc.closing_date), '%d/%m/%Y') as transaction_date,
             tds.vendor_id as creditlist_id,
-            COALESCE(mcl.short_name, mcl.company_name) name,
+            COALESCE(NULLIF(mcl.short_name,''), mcl.company_name) name,
             ROUND(SUM(tds.amount), 2) amt
          FROM t_digital_sales tds
          INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
          INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
          WHERE mcl.card_flag = 'Y'
            AND tds.closing_id IN (:closing_id)
-         GROUP BY DATE(COALESCE(tds.transaction_date, tc.closing_date)), 
-                  tds.vendor_id, 
-                  COALESCE(mcl.short_name, mcl.company_name)
-         ORDER BY COALESCE(mcl.short_name, mcl.company_name), 
+         GROUP BY DATE(COALESCE(tds.transaction_date, tc.closing_date)),
+                  tds.vendor_id,
+                  COALESCE(NULLIF(mcl.short_name,''), mcl.company_name)
+         ORDER BY COALESCE(NULLIF(mcl.short_name,''), mcl.company_name),
                   COALESCE(tds.transaction_date, tc.closing_date)`,
         {
             replacements: { closing_id: closing_id}, 
@@ -554,7 +554,7 @@ getCashsales: async (locationCode, reportDate) => {
     const result = await db.sequelize.query(
         `SELECT tr.receipt_no,
                 date_format(tr.receipt_date,'%d-%m-%Y') receipt_date,
-                COALESCE(mcl.short_name, mcl.company_name) name,
+                COALESCE(NULLIF(mcl.short_name,''), mcl.company_name) name,
                 tr.receipt_type,
                 tr.amount, tr.notes
          FROM t_receipts tr, m_credit_list mcl

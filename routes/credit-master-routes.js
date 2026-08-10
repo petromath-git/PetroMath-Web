@@ -130,7 +130,7 @@ router.put('/api/:id', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MA
         
         const updateData = {
             Company_Name: req.body.Company_Name,
-            short_name: req.body.short_name,
+            short_name: req.body.short_name ? req.body.short_name : null,
             address: req.body.address,
             phoneno: req.body.phoneno,
             gst: req.body.gst,
