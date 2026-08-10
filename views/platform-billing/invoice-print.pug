@@ -102,7 +102,7 @@ html(lang='en')
                 thead
                     tr
                         th Description
-                        th.amount Amount (₹)
+                        th.amount Amount (Rs.)
                 tbody
                     each it in invoice.items
                         tr
@@ -111,7 +111,7 @@ html(lang='en')
                 tfoot
                     tr
                         td Net Amount
-                        td.amount ₹#{Number(invoice.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                        td.amount Rs. #{Number(invoice.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
 
             .remittance-block
                 .remittance-label Remittance Details
