@@ -1,5 +1,7 @@
 // controllers/platform-billing-controller.js
 const dateFormat = require('dateformat');
+const pug = require('pug');
+const path = require('path');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
 const PlatformBillingSvc = require('../services/platform-billing-service');
 const LocationDao = require('../dao/location-dao');
@@ -230,6 +232,46 @@ const PlatformBillingController = {
             });
         } catch (err) {
             next(err);
+        }
+    },
+
+    // ─── GET /platform-billing/:invoiceId/pdf (master) ──────────────────────
+    printInvoicePDF: async (req, res) => {
+        let page = null;
+        try {
+            const invoice = await PlatformBillingDao.findInvoiceForPrint(req.params.invoiceId);
+            if (!invoice) {
+                return res.status(404).send('Invoice not found');
+            }
+
+            const templatePath = path.join(__dirname, '..', 'views', 'platform-billing', 'invoice-print.pug');
+            const htmlContent = pug.renderFile(templatePath, { invoice });
+
+            const { getBrowser } = require('../utils/browserHelper');
+            const browser = await getBrowser();
+            page = await browser.newPage();
+            await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 15000 });
+
+            const pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' }
+            });
+
+            await page.close();
+            page = null;
+
+            res.writeHead(200, {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment; filename="${invoice.invoice_number}.pdf"`,
+                'Content-Length': pdfBuffer.length,
+                'Cache-Control': 'no-cache'
+            });
+            res.end(pdfBuffer, 'binary');
+        } catch (err) {
+            console.error('PlatformBillingController.printInvoicePDF:', err);
+            if (page) { try { await page.close(); } catch (e) {} }
+            res.status(500).send('Failed to generate invoice PDF');
         }
     }
 };

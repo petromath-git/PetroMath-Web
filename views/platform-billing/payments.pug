@@ -12,6 +12,14 @@ block content
                     | Back to Invoices
         .card-body
             .row.g-3
+                .col-md-2.col-6
+                    label.form-label Period:
+                    select.form-control#periodPreset(onchange="glSetPeriod(this)" data-from="fromDate" data-to="toDate")
+                        option(value="this_month") This Month
+                        option(value="last_month") Last Month
+                        option(value="this_fy") This Financial Year
+                        option(value="last_fy") Last Financial Year
+                        option(value="custom" selected) Custom
                 .col-md-3.col-6
                     label.form-label From Date:
                     input#fromDate.form-control(type='date' value=fromDate)

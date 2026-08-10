@@ -96,6 +96,26 @@ const PlatformBillingDao = {
         });
     },
 
+    // Invoice + line items + billed-to location details, for the printable PDF
+    findInvoiceForPrint: async (invoiceId) => {
+        const rows = await db.sequelize.query(
+            `SELECT pi.invoice_id, pi.location_code, pi.invoice_number, pi.period_start_date, pi.period_end_date,
+                    pi.gross_amount, pi.discount_amount, pi.net_amount, pi.due_date, pi.status, pi.generated_date,
+                    l.location_name, l.address, l.gst_number, l.phone
+             FROM t_platform_invoice pi
+             JOIN m_location l ON l.location_code = pi.location_code
+             WHERE pi.invoice_id = :invoiceId`,
+            { replacements: { invoiceId }, type: QueryTypes.SELECT }
+        );
+        if (!rows.length) return null;
+        const invoice = rows[0];
+        invoice.items = await db.platform_invoice_items.findAll({
+            where: { invoice_id: invoiceId },
+            order: [['sort_order', 'ASC']]
+        });
+        return invoice;
+    },
+
     findInvoiceById: (invoiceId) => {
         return db.platform_invoice.findOne({
             where: { invoice_id: invoiceId },
