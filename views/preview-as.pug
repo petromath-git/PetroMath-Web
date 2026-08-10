@@ -1,0 +1,52 @@
+extends layout
+
+block content
+    style.
+        .preview-container { max-width: 480px; margin: 40px auto; }
+        .preview-card { border-radius: 8px; }
+        .preview-card .card-header { background: #6f42c1; color: #fff; }
+        .preview-current { background: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.9rem; }
+
+    div.preview-container
+        div.card.preview-card.shadow-sm
+            div.card-header.py-3
+                h5.mb-0
+                    i.bi.bi-eye.me-2
+                    | Preview As
+            div.card-body.p-4
+                p.text-muted.mb-3 See the app exactly as a given Role at a given Location would see it — menu access and permissions are Role+Location scoped, so this matches what a real user there sees.
+
+                if isPreviewing && previewMeta
+                    div.preview-current
+                        i.bi.bi-info-circle.me-1
+                        | Currently previewing as
+                        strong &nbsp;#{previewMeta.role}&nbsp;
+                        | at
+                        strong &nbsp;#{previewMeta.location}
+                        form(method='POST' action='/preview-as/exit' style='display:inline; margin-left: 10px;')
+                            button.btn.btn-sm.btn-outline-secondary(type='submit') Exit Preview
+
+                form(method='POST' action='/preview-as')
+                    div.form-group.mb-3
+                        label.form-label.text-muted.fw-bold Role:
+                        select.form-control(name='role', required)
+                            option(value='') -- Select Role --
+                            each role in roles
+                                option(value=role.role_name, selected=previewMeta && previewMeta.role === role.role_name) #{role.role_display_name || role.role_name}
+
+                    div.form-group.mb-4
+                        label.form-label.text-muted.fw-bold Location:
+                        select.form-control(name='location', required)
+                            option(value='') -- Select Location --
+                            each location in locations
+                                option(value=location.location_code, selected=previewMeta && previewMeta.location === location.location_code) #{location.location_name} (#{location.location_code})
+
+                    div.row.g-2
+                        div.col-6
+                            button.btn.btn-primary.w-100(type='submit')
+                                i.bi.bi-eye.me-1
+                                | Preview
+                        div.col-6
+                            button.btn.btn-outline-secondary.w-100(type='button', onclick="window.location.href='/home'")
+                                i.bi.bi-x.me-1
+                                | Cancel

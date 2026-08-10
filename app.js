@@ -139,6 +139,7 @@ var CreditDao = require("./dao/credits-dao");
 const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 const LocationDao = require("./dao/location-dao");
+const MenuManagementDao = require("./dao/menu-management-dao");
 const { handleVersionRouting } = require('./utils/version-routing');
 
 db.sequelize.sync();
@@ -317,7 +318,10 @@ const bypassLoginInDev = async (req, res, next) => {
         const currentLocation = req.session.selectedLocation || "MUE";
         
         // Check if user needs to be created or location changed
-        if (!req.user || req.user.location_code !== currentLocation || req.session.menuCacheCleared) {
+        // (skip while a preview is active — its location_code intentionally differs
+        // from the session's real selectedLocation)
+        if (!req.session.previewOriginal &&
+            (!req.user || req.user.location_code !== currentLocation || req.session.menuCacheCleared)) {
             try {
                 const role = "SuperUser";
                 
@@ -357,9 +361,15 @@ const addUserLocationInfo = async (req, res, next) => {
     if (req.user && req.user.Person_id) {
         try {
             const personId = req.user.Person_id;
-            
-            // SuperUsers always get the location switcher (can access all locations)
-            if (req.user.Role === 'SuperUser') {
+            const isPreviewing = !!(req.session && req.session.previewOriginal);
+
+            if (isPreviewing) {
+                // Previewing as another role/location — the location switcher (which
+                // resolves against the real person's own access) doesn't apply here.
+                req.user.hasMultipleLocations = false;
+                req.user.availableLocations = [];
+            } else if (req.user.Role === 'SuperUser') {
+                // SuperUsers always get the location switcher (can access all locations)
                 req.user.hasMultipleLocations = true;
                 // Get all locations for SuperUsers
                 const allLocations = await LocationDao.findAllLocations();
@@ -372,11 +382,11 @@ const addUserLocationInfo = async (req, res, next) => {
             } else {
                 // Regular users: check their actual location access
                 const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
-                
+
                 req.user.hasMultipleLocations = userLocations.length > 1;
                 req.user.availableLocations = userLocations;
             }
-            
+
         } catch (error) {
             console.error('Error adding user location info:', error);
             // Don't break the request - just set defaults
@@ -384,7 +394,7 @@ const addUserLocationInfo = async (req, res, next) => {
             req.user.availableLocations = [];
         }
     }
-    
+
     next();
 };
 
@@ -394,6 +404,8 @@ app.use(addDebugLogging);
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
     res.locals.SERVER_PORT = process.env.SERVER_PORT;
+    res.locals.isPreviewing = !!(req.session && req.session.previewOriginal);
+    res.locals.previewMeta = (req.session && req.session.previewMeta) || null;
     next();
 });
 
@@ -1752,6 +1764,110 @@ app.post('/select-location', isLoginEnsured, async function (req, res) {
     } catch (error) {
         console.error("Error processing location selection:", error);
         res.status(500).send("An error occurred while processing your request.");
+    }
+});
+
+// SuperUser "Preview As" — lets a SuperUser see the app exactly as another Role+Location
+// would (menu access and hasPermission checks are both Role+Location scoped, not per-person,
+// so this reproduces what a real user at that location sees without touching their account).
+// Allowed while already previewing too, so it can be used to switch target or to exit.
+function isSuperUserOrPreviewing(req, res, next) {
+    if ((req.user && req.user.Role === 'SuperUser') || (req.session && req.session.previewOriginal)) {
+        return next();
+    }
+    res.status(403).send('You do not have access to this page.');
+}
+
+app.get('/preview-as', isLoginEnsured, isSuperUserOrPreviewing, async function (req, res) {
+    try {
+        const allRoles = await MenuManagementDao.getAllRoles();
+        const roles = allRoles.filter(r => r.role_name !== 'SuperUser');
+        const locations = await LocationDao.findActiveLocations();
+
+        res.render('preview-as', {
+            title: 'Preview As',
+            roles: roles,
+            locations: locations,
+            isPreviewing: !!req.session.previewOriginal,
+            previewMeta: req.session.previewMeta || null
+        });
+    } catch (error) {
+        console.error("Error loading preview-as page:", error);
+        res.status(500).send("An error occurred while loading the preview page.");
+    }
+});
+
+app.post('/preview-as', isLoginEnsured, isSuperUserOrPreviewing, async function (req, res) {
+    try {
+        const { role, location } = req.body;
+
+        if (!role || !location) {
+            return res.status(400).send('Role and location are required.');
+        }
+        if (role === 'SuperUser') {
+            return res.status(400).send('Cannot preview as SuperUser.');
+        }
+
+        // Capture the real identity only once, so switching the preview target mid-preview
+        // doesn't overwrite it with a previously-previewed role/location.
+        if (!req.session.previewOriginal) {
+            req.session.previewOriginal = {
+                Role: req.user.Role,
+                location_code: req.user.location_code,
+                isAdmin: req.user.isAdmin,
+                allowedMenus: req.user.allowedMenus,
+                menuDetails: req.user.menuDetails,
+                service_tier: req.user.service_tier
+            };
+        }
+
+        const locationStatus = await LocationDao.isLocationActive(location);
+        const menus = await MenuAccessDao.getAllowedMenusForUser(role, location);
+
+        req.user.Role = role;
+        req.user.location_code = location;
+        req.user.isAdmin = security.isAdminChk({ Role: role });
+        req.user.allowedMenus = menus.map(m => m.menu_code);
+        req.user.menuDetails = menus;
+        req.user.service_tier = locationStatus.service_tier || 'standard';
+
+        req.session.previewMeta = {
+            role: role,
+            location: location,
+            startedAt: (req.session.previewMeta && req.session.previewMeta.startedAt) || new Date()
+        };
+
+        // req.user.User_Name/Person_id stay the real SuperUser's throughout preview, so
+        // existing route/login logging still attributes activity to them, not the target role.
+        console.log(`[PREVIEW] ${req.user.User_Name} previewing as role=${role} location=${location}`);
+
+        res.redirect('/home');
+    } catch (error) {
+        console.error("Error starting preview:", error);
+        res.status(500).send("An error occurred while starting preview.");
+    }
+});
+
+app.post('/preview-as/exit', isLoginEnsured, isSuperUserOrPreviewing, async function (req, res) {
+    try {
+        if (req.session.previewOriginal) {
+            const original = req.session.previewOriginal;
+            req.user.Role = original.Role;
+            req.user.location_code = original.location_code;
+            req.user.isAdmin = original.isAdmin;
+            req.user.allowedMenus = original.allowedMenus;
+            req.user.menuDetails = original.menuDetails;
+            req.user.service_tier = original.service_tier;
+
+            console.log(`[PREVIEW] ${req.user.User_Name} exited preview mode`);
+
+            delete req.session.previewOriginal;
+            delete req.session.previewMeta;
+        }
+        res.redirect('/home');
+    } catch (error) {
+        console.error("Error exiting preview:", error);
+        res.status(500).send("An error occurred while exiting preview.");
     }
 });
 
