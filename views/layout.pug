@@ -33,6 +33,19 @@ html
       style.
         @media (max-width: 1600px) { body { zoom: #{desktopZoom}; } }
 
+    if isPreviewing
+      style.
+        body { padding-top: 34px !important; }
+        .sidebar { top: 34px !important; height: calc(100% - 34px) !important; }
+        .preview-mode-banner {
+          position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+          height: 34px; display: flex; align-items: center; justify-content: center; gap: 12px;
+          background: #6f42c1; color: #fff; font-size: 0.85rem;
+        }
+        .preview-mode-banner a, .preview-mode-banner button {
+          color: #fff; text-decoration: underline; background: none; border: none; font-size: 0.85rem; padding: 0;
+        }
+
     style.
       @media print {
         table.table-bordered {
@@ -50,7 +63,15 @@ html
     - isFreezedRecord = true;
 
   body(onload='populateSummaryFn(' + isFreezedRecord +');')
-    
+
+    if isPreviewing && previewMeta
+      .preview-mode-banner
+        i.bi.bi-eye-fill
+        span Previewing as #{previewMeta.role} @ #{previewMeta.location}
+        a(href="/preview-as") Switch
+        form(method="POST" action="/preview-as/exit" style="display:inline;")
+          button(type="submit") Exit Preview
+
     if user
       div#ajax-loading.d-sm-none
         img#loading-image(src=`/images/ajax-loader.gif?v=${CACHE_BUST}`, alt="Loading...", width="300px", height="300px")
@@ -77,6 +98,11 @@ html
             if APP_VERSION === 'canary'
               br
               span(style='background-color: orange; color: white; font-size: 0.6rem; padding: 1px 3px; border-radius: 2px;') CANARY
+            if user.Role === 'SuperUser' && !isPreviewing
+              br
+              a(href="/preview-as" style="font-size: 0.8rem;")
+                i.bi.bi-eye.me-1
+                | Preview As...
 
         
         // Dynamic Menu Grouping Logic - Unified approach
