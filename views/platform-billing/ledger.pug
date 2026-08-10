@@ -1,0 +1,57 @@
+extends ../layout
+
+block content
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-journal-text.me-2
+                    | Location Ledger
+                a.btn.btn-outline-secondary.btn-sm(href='/platform-billing')
+                    i.bi.bi-arrow-left.me-1
+                    | Back to Invoices
+        .card-body
+            .row.g-3
+                .col-md-4.col-6
+                    label.form-label Location:
+                    select#filterLocation.form-control
+                        option(value='') -- Select a location --
+                        each loc in locations
+                            option(value=loc.location_code selected=(locationCode === loc.location_code))= loc.location_name + ' (' + loc.location_code + ')'
+                .col-md-2.d-flex.align-items-end
+                    button.btn.btn-primary.w-100(type='button' onclick='applyFilter()')
+                        i.bi.bi-search.me-2
+                        | Go
+
+    div.container-fluid
+        if locationCode
+            if ledger && ledger.length
+                .table-responsive
+                    table.table.table-desktop(style='width:100% !important;')
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Type
+                                th Reference
+                                th.text-right Invoiced
+                                th.text-right Paid
+                                th.text-right Balance Owed
+                        tbody
+                            each e in ledger
+                                tr
+                                    td= new Date(e.entry_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                    td= e.entry_type
+                                    td= e.reference
+                                    td.text-right= e.entry_type === 'INVOICE' ? '₹' + Number(e.amount).toLocaleString('en-IN', {minimumFractionDigits: 2}) : '-'
+                                    td.text-right= e.entry_type === 'PAYMENT' ? '₹' + Number(e.amount).toLocaleString('en-IN', {minimumFractionDigits: 2}) : '-'
+                                    td.text-right ₹#{Number(e.balance).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+            else
+                .alert.alert-info No activity for this location yet.
+        else
+            .alert.alert-info Select a location to view its ledger.
+
+    script.
+        function applyFilter() {
+            const loc = document.getElementById('filterLocation').value;
+            window.location.href = '/platform-billing/ledger?locationCode=' + loc;
+        }

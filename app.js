@@ -144,6 +144,10 @@ const { handleVersionRouting } = require('./utils/version-routing');
 db.sequelize.sync();
 // ORM DB - end
 
+// Platform billing monthly auto-generation - start
+require('./services/platform-billing-scheduler').start();
+// Platform billing monthly auto-generation - end
+
 // Router business
 const HomeController = require("./controllers/home-controller");
 const ClosingEditController = require("./controllers/closing-edit-controller");
@@ -251,6 +255,8 @@ const campaignPublicRoutes = require('./routes/campaign-public-routes');
 const gstRoutes = require('./routes/gst-routes');
 const transactionUploadRoutes = require('./routes/transaction-upload-routes');
 const dayBillRoutes = require('./routes/day-bill-routes');
+const platformBillingRoutes = require('./routes/platform-billing-routes');
+const distributorRoutes = require('./routes/distributor-routes');
 const glRoutes = require('./routes/gl-routes');
 const employeeRoutes  = require('./routes/employee-routes');
 const documentRoutes  = require('./routes/document-routes');
@@ -465,6 +471,8 @@ app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/day-bill', dayBillRoutes);
+app.use('/platform-billing', platformBillingRoutes);
+app.use('/distributors', distributorRoutes);
 app.use('/tank-receipts', tankReceiptRoutes);
 app.use('/purchases',    purchasesRoutes);
 app.use('/employees', employeeRoutes);

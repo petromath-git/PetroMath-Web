@@ -1,0 +1,65 @@
+extends ../layout
+
+block content
+    style.
+        .badge-status-UNPAID { background-color: #dc3545; }
+        .badge-status-PARTIAL { background-color: #fd7e14; }
+        .badge-status-PAID { background-color: #198754; }
+        .badge-status-CANCELLED { background-color: #6c757d; }
+
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            h6.mb-0
+                i.bi.bi-receipt.me-2
+                | My Invoices
+
+    div.container-fluid
+        if invoices && invoices.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th Invoice #
+                            th Period
+                            th.text-right Amount
+                            th Due Date
+                            th.text-center Status
+                            th.text-center View
+                    tbody
+                        each inv in invoices
+                            tr
+                                td= inv.invoice_number
+                                td= new Date(inv.period_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) + ' – ' + new Date(inv.period_end_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td.text-right ₹#{Number(inv.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td= new Date(inv.due_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td.text-center
+                                    span.badge(class=`badge-status-${inv.status}`)= inv.status
+                                td.text-center
+                                    a.action-btn.btn-edit(href=`/platform-billing/my-invoices/${inv.invoice_id}`)
+                                        i.bi.bi-eye
+                                        |  View
+        else
+            .alert.alert-info No invoices yet.
+
+    if payments && payments.length
+        .card.mt-4
+            .card-header(style='background-color: #f8f9fa;')
+                h6.mb-0
+                    i.bi.bi-cash-coin.me-2
+                    | Payment History
+            .card-body
+                .table-responsive
+                    table.table.table-desktop(style='width:100% !important;')
+                        thead.thead-light
+                            tr
+                                th Date
+                                th.text-right Amount
+                                th Mode
+                                th Reference
+                        tbody
+                            each p in payments
+                                tr
+                                    td= new Date(p.payment_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                    td.text-right ₹#{Number(p.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                    td= p.payment_mode
+                                    td= p.reference_number || '-'

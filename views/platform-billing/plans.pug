@@ -1,0 +1,149 @@
+extends ../layout
+
+block content
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-sliders.me-2
+                    | Billing Plans
+                div
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing')
+                        i.bi.bi-arrow-left.me-1
+                        | Back to Invoices
+                    button.btn.btn-primary.btn-sm#btnOpenPlan(type='button')
+                        i.bi.bi-plus-lg.me-1
+                        | Add / Update Plan
+
+    div.container-fluid
+        if plans && plans.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th Location
+                            th Duration
+                            th.text-right Rate
+                            th Discount
+                            th Since
+                            th Remarks
+                            th.text-center Edit
+                    tbody
+                        each p in plans
+                            tr
+                                td= p.location_name + ' (' + p.location_code + ')'
+                                td= p.plan_duration_months >= 12 ? 'Annual' : 'Monthly'
+                                td.text-right ₹#{Number(p.plan_rate).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                td
+                                    if p.discount_type === 'NONE'
+                                        | —
+                                    else if p.discount_type === 'PERCENT'
+                                        = Number(p.discount_value) + '%'
+                                    else
+                                        | ₹#{Number(p.discount_value).toLocaleString('en-IN')}
+                                td= new Date(p.effective_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td= p.remarks || '-'
+                                td.text-center
+                                    button.btn.btn-outline-secondary.btn-sm.btn-edit-plan(
+                                        type='button'
+                                        data-location=p.location_code
+                                        data-duration=p.plan_duration_months
+                                        data-rate=p.plan_rate
+                                        data-discount-type=p.discount_type
+                                        data-discount-value=p.discount_value
+                                        data-remarks=p.remarks || ''
+                                    )
+                                        i.bi.bi-pencil-square
+        else
+            .alert.alert-info No billing plans yet.
+
+    //- ── Add / Update Plan Modal ──────────────────────────────────────────
+    #planModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#planModalTitle Add / Update Billing Plan
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Location:
+                        select#planLocation.form-control
+                            option(value='') -- Select --
+                            each loc in locations
+                                option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
+                    .mb-3
+                        label.form-label Duration:
+                        select#planDuration.form-control
+                            option(value='1') Monthly
+                            option(value='12') Annual
+                    .mb-3
+                        label.form-label Rate (for the whole duration):
+                        input#planRate.form-control(type='number' step='0.01' min='0')
+                    .mb-3
+                        label.form-label Discount Type:
+                        select#planDiscountType.form-control
+                            option(value='NONE') None
+                            option(value='PERCENT') Percent
+                            option(value='FIXED') Fixed Amount
+                    .mb-3
+                        label.form-label Discount Value:
+                        input#planDiscountValue.form-control(type='number' step='0.01' min='0' value='0')
+                    .mb-3
+                        label.form-label Effective From:
+                        input#planStartDate.form-control(type='date' value=today)
+                        small.text-muted This closes out the previous plan (if any) the day before, so old invoices keep their original rate.
+                    .mb-3
+                        label.form-label Remarks (optional):
+                        input#planRemarks.form-control(type='text')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSavePlan(type='button') Save
+
+    script.
+        function openPlanModal(prefill) {
+            $('#planModalTitle').text(prefill ? 'Update Billing Plan' : 'Add Billing Plan');
+            $('#planLocation').val(prefill ? prefill.location : '');
+            $('#planDuration').val(prefill ? prefill.duration : '1');
+            $('#planRate').val(prefill ? prefill.rate : '');
+            $('#planDiscountType').val(prefill ? prefill.discountType : 'NONE');
+            $('#planDiscountValue').val(prefill ? prefill.discountValue : '0');
+            $('#planStartDate').val('#{today}');
+            $('#planRemarks').val(prefill ? prefill.remarks : '');
+            $('#planModal').modal('show');
+        }
+
+        $('#btnOpenPlan').on('click', function() { openPlanModal(null); });
+
+        $('.btn-edit-plan').on('click', function() {
+            openPlanModal({
+                location: $(this).data('location'),
+                duration: $(this).data('duration'),
+                rate: $(this).data('rate'),
+                discountType: $(this).data('discount-type'),
+                discountValue: $(this).data('discount-value'),
+                remarks: $(this).data('remarks')
+            });
+        });
+
+        $('#btnSavePlan').on('click', function() {
+            const location_code = $('#planLocation').val();
+            const plan_rate = parseFloat($('#planRate').val());
+            if (!location_code || isNaN(plan_rate)) { alert('Location and rate are required.'); return; }
+            $.ajax({
+                url: '/platform-billing/plans',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    location_code: location_code,
+                    plan_duration_months: parseInt($('#planDuration').val(), 10),
+                    plan_rate: plan_rate,
+                    discount_type: $('#planDiscountType').val(),
+                    discount_value: parseFloat($('#planDiscountValue').val()) || 0,
+                    effective_start_date: $('#planStartDate').val(),
+                    remarks: $('#planRemarks').val()
+                }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });

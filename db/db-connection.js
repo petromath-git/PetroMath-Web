@@ -83,6 +83,17 @@ db.day_bill = require("./day-bill")(sequelize, Sequelize);
 db.day_bill_header = require("./day-bill-header")(sequelize, Sequelize);
 db.day_bill_items = require("./day-bill-items")(sequelize, Sequelize);
 
+db.location_billing_plan = require("./location-billing-plan")(sequelize, Sequelize);
+db.platform_invoice = require("./platform-invoice")(sequelize, Sequelize);
+db.platform_invoice_items = require("./platform-invoice-items")(sequelize, Sequelize);
+db.platform_payment = require("./platform-payment")(sequelize, Sequelize);
+db.platform_payment_allocation = require("./platform-payment-allocation")(sequelize, Sequelize);
+
+db.distributor = require("./distributor")(sequelize, Sequelize);
+db.location_distributor = require("./location-distributor")(sequelize, Sequelize);
+db.distributor_commission = require("./distributor-commission")(sequelize, Sequelize);
+db.distributor_payout = require("./distributor-payout")(sequelize, Sequelize);
+db.distributor_payout_allocation = require("./distributor-payout-allocation")(sequelize, Sequelize);
 db.document_store = require("./document-store")(sequelize, Sequelize);
 db.employee = require("./employee")(sequelize, Sequelize);
 db.employee_salary = require("./employee-salary")(sequelize, Sequelize);
@@ -314,6 +325,28 @@ db.day_bill_header.hasMany(db.day_bill_items, {foreignKey: 'header_id', as: 'ite
 db.day_bill_items.belongsTo(db.day_bill_header, {foreignKey: 'header_id'});
 db.day_bill_header.belongsTo(db.credit, {foreignKey: 'vendor_id', targetKey: 'creditlist_id', as: 'vendor'});
 db.day_bill_items.belongsTo(db.product, {foreignKey: 'product_id', targetKey: 'product_id'});
+
+// Platform billing relations
+db.platform_invoice.hasMany(db.platform_invoice_items, {foreignKey: 'invoice_id', as: 'items'});
+db.platform_invoice_items.belongsTo(db.platform_invoice, {foreignKey: 'invoice_id'});
+db.platform_invoice.hasMany(db.platform_payment_allocation, {foreignKey: 'invoice_id', as: 'allocations'});
+db.platform_payment_allocation.belongsTo(db.platform_invoice, {foreignKey: 'invoice_id'});
+db.platform_payment.hasMany(db.platform_payment_allocation, {foreignKey: 'payment_id', as: 'allocations'});
+db.platform_payment_allocation.belongsTo(db.platform_payment, {foreignKey: 'payment_id'});
+
+// Distributor payables relations
+db.distributor.hasMany(db.location_distributor, {foreignKey: 'distributor_id', as: 'locationAssignments'});
+db.location_distributor.belongsTo(db.distributor, {foreignKey: 'distributor_id'});
+db.distributor.hasMany(db.distributor_commission, {foreignKey: 'distributor_id', as: 'commissions'});
+db.distributor_commission.belongsTo(db.distributor, {foreignKey: 'distributor_id'});
+db.platform_payment.hasOne(db.distributor_commission, {foreignKey: 'payment_id', as: 'commission'});
+db.distributor_commission.belongsTo(db.platform_payment, {foreignKey: 'payment_id'});
+db.distributor.hasMany(db.distributor_payout, {foreignKey: 'distributor_id', as: 'payouts'});
+db.distributor_payout.belongsTo(db.distributor, {foreignKey: 'distributor_id'});
+db.distributor_payout.hasMany(db.distributor_payout_allocation, {foreignKey: 'payout_id', as: 'allocations'});
+db.distributor_payout_allocation.belongsTo(db.distributor_payout, {foreignKey: 'payout_id'});
+db.distributor_commission.hasMany(db.distributor_payout_allocation, {foreignKey: 'commission_id', as: 'allocations'});
+db.distributor_payout_allocation.belongsTo(db.distributor_commission, {foreignKey: 'commission_id'});
 
 // Tank invoice relations
 db.tank_invoice.hasMany(db.tank_invoice_dtl, {foreignKey: 'invoice_id', as: 'lines'});

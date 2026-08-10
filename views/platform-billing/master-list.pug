@@ -1,0 +1,290 @@
+extends ../layout
+
+block content
+    style.
+        .table-responsive {
+            max-height: calc(100vh - 350px);
+            overflow-y: auto;
+        }
+        table.table-desktop thead.thead-light {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa;
+        }
+        .badge-status-UNPAID { background-color: #dc3545; }
+        .badge-status-PARTIAL { background-color: #fd7e14; }
+        .badge-status-PAID { background-color: #198754; }
+        .badge-status-CANCELLED { background-color: #6c757d; }
+
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-receipt.me-2
+                    | Platform Billing — All Locations
+                div
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/plans')
+                        i.bi.bi-sliders.me-1
+                        | Billing Plans
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/payments')
+                        i.bi.bi-cash-stack.me-1
+                        | Payments
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/ledger')
+                        i.bi.bi-journal-text.me-1
+                        | Ledger
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/distributors')
+                        i.bi.bi-people.me-1
+                        | Distributors
+                    button.btn.btn-outline-success.btn-sm.me-2#btnOpenGenerate(type='button')
+                        i.bi.bi-lightning-charge.me-1
+                        | Generate Invoices
+                    button.btn.btn-primary.btn-sm#btnOpenPayment(type='button')
+                        i.bi.bi-cash-coin.me-1
+                        | Record Payment
+        .card-body
+            .row.g-3
+                .col-md-3.col-6
+                    label.form-label From Period:
+                    input#fromPeriod.form-control(type='date' value=fromPeriod)
+                .col-md-3.col-6
+                    label.form-label To Period:
+                    input#toPeriod.form-control(type='date' value=toPeriod max=today)
+                .col-md-3.col-6
+                    label.form-label Location:
+                    select#filterLocation.form-control
+                        option(value='') All Locations
+                        each loc in locations
+                            option(value=loc.location_code selected=(locationCode === loc.location_code))= loc.location_name + ' (' + loc.location_code + ')'
+                .col-md-2.d-flex.align-items-end
+                    button.btn.btn-primary.w-100(type='button' onclick='applyFilter()')
+                        i.bi.bi-search.me-2
+                        | Go
+
+    div.container-fluid
+        if invoices && invoices.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light.sticky-top
+                        tr
+                            th Location
+                            th Invoice #
+                            th Period
+                            th.text-right Gross
+                            th.text-right Discount
+                            th.text-right Net
+                            th.text-right Paid
+                            th.text-right Balance
+                            th.text-center Status
+                            th.text-center Adjust
+                    tbody
+                        each inv in invoices
+                            tr
+                                td= inv.location_name + ' (' + inv.location_code + ')'
+                                td= inv.invoice_number
+                                td= new Date(inv.period_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) + ' – ' + new Date(inv.period_end_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td.text-right= Number(inv.gross_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right= Number(inv.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right= Number(inv.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right= Number(inv.paid_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right= (Number(inv.net_amount) - Number(inv.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-center
+                                    span.badge(class=`badge-status-${inv.status}`)= inv.status
+                                td.text-center
+                                    button.btn.btn-outline-secondary.btn-sm.btn-adjust(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
+                                        i.bi.bi-pencil-square
+        else
+            .alert.alert-info No invoices found for the selected period.
+
+    //- ── Generate Invoices Modal ──────────────────────────────────────────
+    #generateModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Generate Invoices
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    label.form-label Billing Month (1st of month):
+                    input#genPeriodStart.form-control(type='date')
+                    small.text-muted Generates one invoice per active location for this period. Locations already covered by an existing invoice (e.g. annual prepay) or still in trial are skipped automatically.
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-success#btnGenerate(type='button') Generate
+
+    //- ── Record Payment Modal ─────────────────────────────────────────────
+    #paymentModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Record Payment
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Location:
+                        select#payLocation.form-control
+                            option(value='') -- Select --
+                            each loc in locations
+                                option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
+                    .mb-3
+                        label.form-label Payment Date:
+                        input#payDate.form-control(type='date' value=today)
+                    .mb-3
+                        label.form-label Amount:
+                        input#payAmount.form-control(type='number' step='0.01' min='0')
+                    .mb-3
+                        label.form-label Mode:
+                        select#payMode.form-control
+                            option(value='MANUAL_CASH') Cash
+                            option(value='MANUAL_UPI') UPI / GPay
+                            option(value='MANUAL_BANK') Bank Transfer
+                            option(value='MANUAL_CHEQUE') Cheque
+                            option(value='OTHER') Other
+                    .mb-3
+                        label.form-label Reference No. (optional):
+                        input#payReference.form-control(type='text')
+                    .mb-3#outstandingBlock(style='display:none;')
+                        label.form-label Outstanding invoices for this location (optional — leave all unchecked to auto-apply the amount oldest-invoice-first):
+                        div#outstandingList.border.rounded.p-2(style='max-height:200px; overflow-y:auto;')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSavePayment(type='button') Save Payment
+
+    //- ── Adjustment Modal ─────────────────────────────────────────────────
+    #adjustModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title#adjustModalTitle Add Adjustment
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .mb-3
+                        label.form-label Reason:
+                        input#adjustDescription.form-control(type='text' placeholder='e.g. Goodwill credit')
+                    .mb-3
+                        label.form-label Amount (negative = discount, positive = extra charge):
+                        input#adjustAmount.form-control(type='number' step='0.01')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnSaveAdjustment(type='button') Save
+
+    script.
+        function applyFilter() {
+            const from = document.getElementById('fromPeriod').value;
+            const to   = document.getElementById('toPeriod').value;
+            const loc  = document.getElementById('filterLocation').value;
+            window.location.href = '/platform-billing?fromPeriod=' + from + '&toPeriod=' + to + '&locationCode=' + loc;
+        }
+
+        let adjustInvoiceId = null;
+        $('.btn-adjust').on('click', function() {
+            adjustInvoiceId = $(this).data('invoice-id');
+            $('#adjustModalTitle').text('Add Adjustment — ' + $(this).data('invoice-number'));
+            $('#adjustDescription').val('');
+            $('#adjustAmount').val('');
+            $('#adjustModal').modal('show');
+        });
+
+        $('#btnSaveAdjustment').on('click', function() {
+            const description = $('#adjustDescription').val();
+            const amount = parseFloat($('#adjustAmount').val());
+            if (!description || isNaN(amount)) { alert('Reason and amount are required.'); return; }
+            $.ajax({
+                url: '/platform-billing/' + adjustInvoiceId + '/adjustment',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ description, amount }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });
+
+        $('#btnOpenGenerate').on('click', function() {
+            $('#genPeriodStart').val('');
+            $('#generateModal').modal('show');
+        });
+
+        $('#btnGenerate').on('click', function() {
+            const period = $('#genPeriodStart').val();
+            if (!period) { alert('Please select a billing month.'); return; }
+            $(this).prop('disabled', true).text('Generating...');
+            $.ajax({
+                url: '/platform-billing/generate',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ periodStartDate: period }),
+                success: function(res) {
+                    alert('Generated: ' + res.generated.length + ', Skipped: ' + res.skipped.length);
+                    window.location.reload();
+                },
+                error: function() {
+                    alert('Invoice generation failed.');
+                    $('#btnGenerate').prop('disabled', false).text('Generate');
+                }
+            });
+        });
+
+        $('#btnOpenPayment').on('click', function() {
+            $('#payLocation').val('');
+            $('#payAmount').val('');
+            $('#payReference').val('');
+            $('#outstandingBlock').hide();
+            $('#outstandingList').empty();
+            $('#paymentModal').modal('show');
+        });
+
+        $('#payLocation').on('change', function() {
+            const loc = $(this).val();
+            if (!loc) { $('#outstandingBlock').hide(); return; }
+            $.get('/platform-billing/outstanding/' + loc, function(res) {
+                const list = $('#outstandingList').empty();
+                if (!res.invoices.length) {
+                    list.append('<div class="text-muted">No outstanding invoices.</div>');
+                } else {
+                    res.invoices.forEach(function(inv) {
+                        list.append(
+                            '<div class="form-check">' +
+                            '<input class="form-check-input alloc-check" type="checkbox" value="' + inv.invoice_id + '" data-net="' + inv.net_amount + '">' +
+                            '<label class="form-check-label">' + inv.invoice_number + ' — ₹' + Number(inv.net_amount).toLocaleString('en-IN') + '</label>' +
+                            '</div>'
+                        );
+                    });
+                }
+                $('#outstandingBlock').show();
+            });
+        });
+
+        $('#btnSavePayment').on('click', function() {
+            const location_code = $('#payLocation').val();
+            const amount = parseFloat($('#payAmount').val());
+            if (!location_code || !amount) { alert('Location and amount are required.'); return; }
+
+            const allocations = [];
+            $('.alloc-check:checked').each(function() {
+                allocations.push({ invoice_id: parseInt($(this).val(), 10), allocated_amount: parseFloat($(this).data('net')) });
+            });
+
+            $(this).prop('disabled', true).text('Saving...');
+            $.ajax({
+                url: '/platform-billing/payments',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    location_code: location_code,
+                    payment_date: $('#payDate').val(),
+                    amount: amount,
+                    payment_mode: $('#payMode').val(),
+                    reference_number: $('#payReference').val(),
+                    allocations: allocations
+                }),
+                success: function() {
+                    window.location.reload();
+                },
+                error: function(xhr) {
+                    alert('Failed to save payment: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error'));
+                    $('#btnSavePayment').prop('disabled', false).text('Save Payment');
+                }
+            });
+        });
