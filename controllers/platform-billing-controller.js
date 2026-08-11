@@ -1,8 +1,31 @@
 // controllers/platform-billing-controller.js
 const dateFormat = require('dateformat');
+const pug = require('pug');
+const path = require('path');
+const fs = require('fs');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
 const PlatformBillingSvc = require('../services/platform-billing-service');
 const LocationDao = require('../dao/location-dao');
+
+// Static PDF assets (logo, signature) base64-embedded so the PDF is
+// self-contained — page.setContent() has no base URL to resolve a relative
+// /images/... path against. Cached in memory since these files don't change
+// at runtime.
+const pdfImageCache = {};
+function getImageBase64(filename) {
+    if (pdfImageCache[filename]) return pdfImageCache[filename];
+    try {
+        const imagePath = path.join(__dirname, '..', 'public', 'images', filename);
+        const imageBuffer = fs.readFileSync(imagePath);
+        const ext = path.extname(filename).slice(1).toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+        pdfImageCache[filename] = `data:${mime};base64,${imageBuffer.toString('base64')}`;
+    } catch (err) {
+        console.error(`PlatformBillingController: failed to load image ${filename} for PDF:`, err);
+        pdfImageCache[filename] = null;
+    }
+    return pdfImageCache[filename];
+}
 
 const PlatformBillingController = {
 
@@ -230,6 +253,50 @@ const PlatformBillingController = {
             });
         } catch (err) {
             next(err);
+        }
+    },
+
+    // ─── GET /platform-billing/:invoiceId/pdf (master) ──────────────────────
+    printInvoicePDF: async (req, res) => {
+        let page = null;
+        try {
+            const invoice = await PlatformBillingDao.findInvoiceForPrint(req.params.invoiceId);
+            if (!invoice) {
+                return res.status(404).send('Invoice not found');
+            }
+
+            const templatePath = path.join(__dirname, '..', 'views', 'platform-billing', 'invoice-print.pug');
+            const htmlContent = pug.renderFile(templatePath, {
+                invoice,
+                logoDataUri: getImageBase64('mc_logo.jpg'),
+                signatureDataUri: getImageBase64('petromath-signature.jpg')
+            });
+
+            const { getBrowser } = require('../utils/browserHelper');
+            const browser = await getBrowser();
+            page = await browser.newPage();
+            await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 15000 });
+
+            const pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' }
+            });
+
+            await page.close();
+            page = null;
+
+            res.writeHead(200, {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment; filename="${invoice.invoice_number}.pdf"`,
+                'Content-Length': pdfBuffer.length,
+                'Cache-Control': 'no-cache'
+            });
+            res.end(pdfBuffer, 'binary');
+        } catch (err) {
+            console.error('PlatformBillingController.printInvoicePDF:', err);
+            if (page) { try { await page.close(); } catch (e) {} }
+            res.status(500).send('Failed to generate invoice PDF');
         }
     }
 };

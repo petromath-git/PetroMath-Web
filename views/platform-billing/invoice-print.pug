@@ -1,0 +1,145 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        title Invoice #{invoice.invoice_number}
+        style.
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; font-size: 12px; color: #222; }
+            .header {
+                display: flex; justify-content: space-between; align-items: center;
+                background: linear-gradient(135deg, #343a40 0%, #212529 100%);
+                color: white; padding: 20px 24px; margin-bottom: 24px;
+            }
+            .biller-block { display: flex; align-items: center; }
+            .logo-badge {
+                width: 56px; height: 56px; border-radius: 16px;
+                background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
+                display: flex; align-items: center; justify-content: center;
+                margin-right: 14px; overflow: hidden; flex-shrink: 0;
+            }
+            .logo-badge img { width: 44px; height: 44px; object-fit: contain; }
+            .biller-name { font-size: 22px; font-weight: 700; }
+            .biller-subtitle { font-size: 11px; color: #f7dc6f; margin-top: 2px; }
+            .biller-web { font-size: 11px; color: #e9ecef; margin-top: 4px; display: flex; align-items: center; }
+            .biller-web svg { margin-right: 5px; }
+            .invoice-title { font-size: 26px; font-weight: 700; text-align: right; color: #f4d03f; letter-spacing: 1px; }
+            .invoice-meta { text-align: right; font-size: 12px; margin-top: 6px; color: #e9ecef; }
+            .body-content { padding: 0 24px; }
+            .parties { display: flex; justify-content: space-between; margin-bottom: 20px; }
+            .party-block { width: 48%; }
+            .party-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 4px; font-weight: 700; }
+            .party-name { font-weight: bold; font-size: 14px; margin-bottom: 2px; color: #212529; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th, td { border: 1px solid #dee2e6; padding: 10px; font-size: 12px; }
+            th { background: #343a40; color: white; text-align: left; }
+            td.amount, th.amount { text-align: right; }
+            tfoot td { font-weight: bold; background: #fef9c3; border-top: 2px solid #f4d03f; }
+            .signature-block { display: flex; justify-content: flex-end; margin-top: 50px; }
+            .signature-box { text-align: center; width: 220px; }
+            .signature-date { text-align: left; font-size: 12px; margin-bottom: 30px; }
+            .signature-img { height: 50px; }
+            .signature-photo {
+                width: 112px; height: 106px; margin: 0 auto;
+                background-image: url(#{signatureDataUri});
+                background-size: 181px 230px;
+                background-position: -36px -124px;
+                background-repeat: no-repeat;
+            }
+            .signature-line { border-top: 1px solid #999; margin-top: 4px; padding-top: 6px; font-size: 11px; color: #666; }
+            .remittance-block { background: #f8f9fa; border: 1px solid #dee2e6; border-left: 4px solid #f4d03f; padding: 12px 16px; margin-bottom: 20px; }
+            .remittance-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #999; margin-bottom: 6px; font-weight: 700; }
+            .remittance-row { display: flex; }
+            .remittance-row div { width: 33%; font-size: 12px; }
+            .remittance-row strong { display: block; font-size: 10px; color: #666; font-weight: 700; }
+            .footer-ribbon {
+                display: flex; justify-content: space-between; align-items: center;
+                background: linear-gradient(135deg, #343a40 0%, #212529 100%);
+                color: #f7dc6f; padding: 14px 24px; margin-top: 40px; font-size: 11px;
+            }
+            .footer-ribbon .thanks { color: white; font-weight: 700; font-size: 13px; }
+    body
+        .header
+            .biller-block
+                .logo-badge
+                    if logoDataUri
+                        img(src=logoDataUri, alt='PetroMath')
+                div
+                    .biller-name PetroMath
+                    .biller-subtitle PLATFORM SUBSCRIPTION BILLING
+                    .biller-web
+                        svg(width="12" height="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg")
+                            circle(cx="12" cy="12" r="10" fill="none" stroke="#f7dc6f" stroke-width="1.5")
+                            ellipse(cx="12" cy="12" rx="4.2" ry="10" fill="none" stroke="#f7dc6f" stroke-width="1.5")
+                            line(x1="2" y1="12" x2="22" y2="12" stroke="#f7dc6f" stroke-width="1.5")
+                        | petromath.co.in
+            div
+                .invoice-title INVOICE
+                .invoice-meta
+                    div #{invoice.invoice_number}
+
+        .body-content
+            .parties
+                .party-block
+                    .party-label Billed To
+                    .party-name= invoice.location_name
+                    if invoice.address
+                        div= invoice.address
+                    if invoice.gst_number
+                        div GSTIN: #{invoice.gst_number}
+                    if invoice.phone
+                        div Phone: #{invoice.phone}
+                .party-block
+                    .party-label Invoice Details
+                    div: strong Period:
+                        | #{new Date(invoice.period_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})} – #{new Date(invoice.period_end_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})}
+                    div: strong Generated:
+                        | #{new Date(invoice.generated_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})}
+                    div: strong Due Date:
+                        | #{new Date(invoice.due_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})}
+
+            table
+                thead
+                    tr
+                        th Description
+                        th.amount Amount (Rs.)
+                tbody
+                    each it in invoice.items
+                        tr
+                            td= it.description
+                            td.amount= Number(it.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                tfoot
+                    tr
+                        td Net Amount
+                        td.amount Rs. #{Number(invoice.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+
+            .remittance-block
+                .remittance-label Remittance Details
+                .remittance-row
+                    div
+                        strong Account Number
+                        | 008101000021495
+                    div
+                        strong IFSC Code
+                        | IOBA0000081
+                    div
+                        strong Bank Name
+                        | Indian Overseas Bank
+
+            .signature-date
+                strong Date:
+                | #{new Date(invoice.generated_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})}
+
+            .signature-block
+                .signature-box
+                    if signatureDataUri
+                        .signature-photo
+                    else
+                        //- Fallback placeholder if no signature image is configured
+                        svg.signature-img(viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg")
+                            path(d="M10,45 C25,15 35,50 50,30 C60,18 65,42 78,35 C90,29 95,45 110,32 C125,20 135,48 150,28 C160,16 168,38 185,25" fill="none" stroke="#212529" stroke-width="2" stroke-linecap="round")
+                    .signature-line Authorized Signatory
+
+        .footer-ribbon
+            div.thanks Thank you for your business!
+            div PetroMath — Platform Subscription Billing

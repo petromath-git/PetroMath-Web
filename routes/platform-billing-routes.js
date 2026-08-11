@@ -47,4 +47,7 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_B
 // POST /platform-billing/:invoiceId/adjustment
 router.post('/:invoiceId/adjustment', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.addAdjustment);
 
+// GET /platform-billing/:invoiceId/pdf
+router.get('/:invoiceId/pdf', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.printInvoicePDF);
+
 module.exports = router;
