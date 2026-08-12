@@ -700,7 +700,7 @@ block content
             $('#bowserQuickAddVehicleModal').modal('show');
         }
 
-        function quickSaveBowserVehicle() {
+        function quickSaveBowserVehicle(force) {
             if (!bc_quickAddContext) return;
 
             const vehicleNumber = document.getElementById('bowserQuickVehicleNumber').value.trim().toUpperCase();
@@ -721,12 +721,25 @@ block content
                 body: JSON.stringify({
                     creditlist_id: bc_quickAddContext.creditListId,
                     vehicle_number: vehicleNumber,
-                    vehicle_type: vehicleType
+                    vehicle_type: vehicleType,
+                    force: !!force
                 })
             })
             .then(async (response) => ({ ok: response.ok, data: await response.json() }))
             .then(({ ok, data }) => {
                 if (!ok || !data.success) {
+                    if (data.warning) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Add Vehicle';
+                        const proceed = confirm(
+                            (data.error || 'A similar vehicle already exists for this customer.') +
+                            `\n\nAre you sure "${vehicleNumber}" is a different vehicle? Click OK to add it anyway.`
+                        );
+                        if (proceed) {
+                            quickSaveBowserVehicle(true);
+                        }
+                        return;
+                    }
                     if ((data.error || '').includes('already exists')) {
                         document.getElementById('bowserQuickVehicleDupMsg').classList.remove('d-none');
                     } else {
