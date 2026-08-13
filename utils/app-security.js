@@ -62,7 +62,31 @@ module.exports = {
         };
     },
 
-    
+    // 🔹 Permission-based access — passes if the user has ANY of the given permissions
+    hasAnyPermission: (permissionTypes) => {
+        return async (req, res, next) => {
+            try {
+                const userRole = req.user?.Role;
+                const userLocation = req.user?.location_code;
+                if (!userRole || !userLocation) {
+                    return res.status(403).send('Access Denied: Invalid user session.');
+                }
+                for (const permissionType of permissionTypes) {
+                    const hasPermission = await rolePermissionsDao.hasPermission(
+                        userRole,
+                        userLocation,
+                        permissionType
+                    );
+                    if (hasPermission) return next();
+                }
+                res.status(403).send(`Access Denied: You do not have permission for ${permissionTypes.join(' or ')}.`);
+            } catch (error) {
+                console.error(`Error checking permissions ${permissionTypes.join(', ')}:`, error);
+                res.status(500).send('Internal server error while checking permissions.');
+            }
+        };
+    },
+
    // 🔹 Global app hardening middleware
     secureApp: (app) => {
         // Hide Express fingerprint
