@@ -1,6 +1,7 @@
 const EmployeeDao     = require('../dao/employee-dao');
 const LookupDao       = require('../dao/lookup-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
+const RolePermissionsDao = require('../dao/role-permissions-dao');
 const { getLocationConfigValue } = require('../utils/location-config');
 const dateFormat      = require('dateformat');
 const db              = require('../db/db-connection');
@@ -360,12 +361,19 @@ module.exports.getReportPage = async (req, res) => {
                             .toISOString().slice(0, 10);
         const toDate   = today.toISOString().slice(0, 10);
 
+        // Report-only users (e.g. VIEW_EMPLOYEE_REPORT without VIEW_EMPLOYEE) don't have
+        // access to the full employee list page, so don't link the breadcrumb to it.
+        const canViewEmployeeList = await RolePermissionsDao.hasPermission(
+            req.user.Role, locationCode, 'VIEW_EMPLOYEE'
+        );
+
         res.render('employee/employee-report', {
             title:     'Employee Report',
             user:      req.user,
             employees: employees.map(e => ({ employee_id: e.employee_id, name: e.name, employee_code: e.employee_code })),
             fromDate,
-            toDate
+            toDate,
+            canViewEmployeeList
         });
     } catch (err) {
         console.error('employee getReportPage error:', err);

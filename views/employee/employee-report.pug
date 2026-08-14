@@ -9,7 +9,10 @@ block content
                     | Employee Report
                 nav(aria-label="breadcrumb")
                     ol.breadcrumb.mb-0
-                        li.breadcrumb-item: a(href="/employees") Employees
+                        if canViewEmployeeList
+                            li.breadcrumb-item: a(href="/employees") Employees
+                        else
+                            li.breadcrumb-item Employees
                         li.breadcrumb-item.active Employee Report
 
         //- ── Tabs ────────────────────────────────────────────────────────────

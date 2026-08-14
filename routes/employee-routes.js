@@ -45,19 +45,23 @@ router.post('/',
 );
 
 // ── Report page ───────────────────────────────────────────────────────────────
+// Accepts VIEW_EMPLOYEE (full employee section) OR VIEW_EMPLOYEE_REPORT
+// (read-only report access, e.g. granted to Manager role at specific locations)
+const canViewReport = security.hasAnyPermission(['VIEW_EMPLOYEE', 'VIEW_EMPLOYEE_REPORT']);
+
 router.get('/report',
-    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    [isLoginEnsured, canViewReport],
     ctrl.getReportPage
 );
 
 // ── Report APIs ───────────────────────────────────────────────────────────────
 router.get('/api/report/statement',
-    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    [isLoginEnsured, canViewReport],
     ctrl.getStatementData
 );
 
 router.get('/api/report/summary',
-    [isLoginEnsured, security.hasPermission('VIEW_EMPLOYEE')],
+    [isLoginEnsured, canViewReport],
     ctrl.getSummaryData
 );
 
