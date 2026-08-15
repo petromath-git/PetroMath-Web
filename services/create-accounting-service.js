@@ -1375,14 +1375,12 @@ async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy)
     const external_source = txn.external_source ? txn.external_source.toLowerCase() : null;
 
     if (external_source === 'static' || (!external_source && ledger_name)) {
-        const info = await resolveLedgerByName(locationCode, ledger_name);
-        if (!info) throw new Error(`GL ledger '${ledger_name}' not found for location ${locationCode}`);
-        if (info.group_name === 'Purchase Accounts') {
-            // Purchase invoices are journaled by the PURCHASE_INVOICE handler — skip here
+        const { treatment, ledgerId } = await resolveStaticLedger(locationCode, ledger_name);
+        if (treatment === 'SKIP') {
             await markEventProcessed(eventId, null, processedBy);
             return null;
         }
-        return info.ledger_id;
+        return ledgerId;
     }
 
     if (external_source === 'credit') {
@@ -1447,9 +1445,12 @@ async function resolveSplitCounterLedger(split, locationCode) {
     const errCtx = `split_id=${split_id}`;
 
     if (external_source === 'Static') {
-        const info = await resolveLedgerByName(locationCode, ledger_name);
-        if (!info) throw new Error(`Static GL ledger '${ledger_name}' not found for ${errCtx}`);
-        return info.ledger_id;
+        // allowSkip=false — a split leg is one piece of a multi-line voucher that
+        // must balance against the bank total, so it can never be silently
+        // dropped the way a whole (non-split) transaction can; a SKIP-mapped
+        // label still lands in Unclassified here instead.
+        const { ledgerId } = await resolveStaticLedger(locationCode, ledger_name, false);
+        return ledgerId;
     }
     if (external_source === 'Credit') {
         const id = await resolveLedger(locationCode, 'CREDIT', external_id);
@@ -1650,6 +1651,44 @@ async function resolveLedgerByName(locationCode, ledgerName) {
         type: QueryTypes.SELECT
     });
     return rows[0] || null;
+}
+
+// Resolves a Static (free-text) bank-transaction ledger_name via the explicit
+// gl_static_ledger_map — deliberately does NOT match ledger_name against
+// gl_ledgers by name. These labels are typed by whoever sets up a bank
+// "ledger rule" (a feature that predates the GL engine), so two labels can
+// mean the same real ledger, or a label can coincidentally collide with an
+// unrelated GL ledger name — exact-name matching would silently post to the
+// wrong place with no review. Unmapped/unreviewed labels never block and
+// never guess: they land in "Unclassified Bank Transaction" until reviewed.
+// allowSkip=false (used for split legs) treats a SKIP-mapped label as
+// Unclassified instead, since one leg of a split can't be silently dropped
+// without unbalancing the voucher.
+async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true) {
+    const rows = await db.sequelize.query(`
+        SELECT treatment, gl_ledger_id FROM gl_static_ledger_map
+        WHERE location_code = :locationCode AND ledger_name = :ledgerName
+        LIMIT 1
+    `, { replacements: { locationCode, ledgerName }, type: QueryTypes.SELECT });
+
+    let mapped = rows[0];
+    if (!mapped) {
+        // Never-seen-before label — register it (unreviewed) so it shows up
+        // on the review screen going forward, not just for labels present
+        // at migration time. INSERT IGNORE handles the race safely since
+        // (location_code, ledger_name) is unique.
+        await db.sequelize.query(`
+            INSERT IGNORE INTO gl_static_ledger_map (location_code, ledger_name, created_by, updated_by)
+            VALUES (:locationCode, :ledgerName, 'ENGINE', 'ENGINE')
+        `, { replacements: { locationCode, ledgerName }, type: QueryTypes.INSERT });
+        mapped = null;
+    }
+    if (allowSkip && mapped?.treatment === 'SKIP') return { treatment: 'SKIP', ledgerId: null };
+    if (mapped?.treatment === 'POST' && mapped.gl_ledger_id) return { treatment: 'POST', ledgerId: mapped.gl_ledger_id };
+
+    const fallback = await resolveLedgerByName(locationCode, 'Unclassified Bank Transaction');
+    if (!fallback) throw new Error(`No 'Unclassified Bank Transaction' ledger set up for location ${locationCode} — run db/migrations/gl-static-ledger-map.sql`);
+    return { treatment: 'POST', ledgerId: fallback.ledger_id };
 }
 
 async function resolveCashLedger(locationCode) {
