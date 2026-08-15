@@ -1044,6 +1044,12 @@ router.get('/static-ledger-map', [isLoginEnsured, security.isAdmin()], async fun
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
         ]);
 
+        rows.forEach(r => {
+            r.last_txn_date_display = r.last_txn_date
+                ? String(r.last_txn_date).substring(0, 10)
+                : null;
+        });
+
         res.render('gl-static-ledger-map', {
             title:  'Static Ledger Map',
             user:   req.user,
