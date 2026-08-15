@@ -43,7 +43,7 @@ block content
                         tr(class=(!r.treatment ? 'table-warning' : ''))
                             td.small= r.ledger_name
                             td.text-center.small= r.txn_count
-                            td.text-center.small= r.last_txn_date ? r.last_txn_date.toISOString().substring(0,10) : '—'
+                            td.text-center.small= r.last_txn_date_display || '—'
                             td.text-center
                                 if r.treatment === 'POST'
                                     span.badge.badge-success Post
