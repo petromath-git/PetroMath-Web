@@ -1048,12 +1048,11 @@ async function processLubesInvoiceEvent(event, processedBy) {
 }
 
 // ─── TANK_INVOICE Handler ─────────────────────────────────────────────────────
-// Supplier CR (sum of product lines + charges) →
-//   Per t_tank_invoice_dtl: DR Product Purchase (total_line_amount)
-//   Per t_tank_invoice_charges: DR charge ledger by name (resolveLedgerByName)
-//
-// charge_type is free text in t_tank_invoice_charges — admin must create a GL ledger
-// with the exact same name, otherwise the engine throws a descriptive error.
+// Supplier CR → DR Product Purchase per t_tank_invoice_dtl, total_line_amount
+// plus every t_tank_invoice_charges row for that line folded straight in
+// (VAT, ADDITIONAL_VAT, DELIVERY_CHARGE, and any future charge_type) — none
+// of them are separately recoverable, so they're landed cost, not a distinct
+// ledger. No charge-type-to-ledger mapping needed at all.
 
 async function processTankInvoiceEvent(event, processedBy) {
     const { location_code, fy_id, source_id: invoiceId, event_date } = event;
@@ -1080,6 +1079,17 @@ async function processTankInvoiceEvent(event, processedBy) {
     const journalLines = [];
     let totalCr = 0;
 
+    // All charges (VAT, ADDITIONAL_VAT, DELIVERY_CHARGE, ...) per line — folded into that line's purchase amount
+    const chargeRows = await db.sequelize.query(`
+        SELECT c.invoice_dtl_id, SUM(c.charge_amount) AS charge_amount
+        FROM t_tank_invoice_charges c
+        JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id
+        WHERE d.invoice_id = :invoiceId
+          AND c.charge_amount > 0
+        GROUP BY c.invoice_dtl_id
+    `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
+    const chargesByDtl = new Map(chargeRows.map(r => [r.invoice_dtl_id, parseFloat(r.charge_amount)]));
+
     // Product purchase lines
     const dtlRows = await db.sequelize.query(`
         SELECT
@@ -1094,42 +1104,19 @@ async function processTankInvoiceEvent(event, processedBy) {
     `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
 
     for (const dtl of dtlRows) {
-        const lineAmt = parseFloat(dtl.total_line_amount);
-        totalCr      += lineAmt;
+        const chargeAmt = chargesByDtl.get(dtl.dtl_id) || 0;
+        const lineAmt   = parseFloat(dtl.total_line_amount) + chargeAmt;
+        totalCr        += lineAmt;
 
         const purchaseLedgerId = await resolveProductLedger(location_code, dtl.product_id, 'PURCHASE');
         if (!purchaseLedgerId) throw new Error(`PURCHASE ledger not configured for product ${dtl.product_name} (id:${dtl.product_id})`);
 
+        const chargeNote = chargeAmt > 0 ? ` (incl. charges ₹${chargeAmt.toFixed(2)})` : '';
         journalLines.push({
             ledger_id:  purchaseLedgerId,
             dr_amount:  lineAmt,
             cr_amount:  0,
-            narration:  `${dtl.product_name} | ₹${lineAmt.toFixed(2)} | ${narration}`
-        });
-    }
-
-    // Charge lines (free-text charge_type → GL ledger by name)
-    const chargeRows = await db.sequelize.query(`
-        SELECT c.charge_type, SUM(c.charge_amount) AS amount
-        FROM t_tank_invoice_charges c
-        JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id
-        WHERE d.invoice_id = :invoiceId
-          AND c.charge_amount > 0
-        GROUP BY c.charge_type
-    `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
-
-    for (const ch of chargeRows) {
-        const chargeAmt = parseFloat(ch.amount);
-        totalCr        += chargeAmt;
-
-        const info = await resolveLedgerByName(location_code, ch.charge_type);
-        if (!info) throw new Error(`GL ledger '${ch.charge_type}' not found for location ${location_code} — create a ledger with this exact name to map the charge`);
-
-        journalLines.push({
-            ledger_id:  info.ledger_id,
-            dr_amount:  chargeAmt,
-            cr_amount:  0,
-            narration:  `${ch.charge_type} | ₹${chargeAmt.toFixed(2)} | ${narration}`
+            narration:  `${dtl.product_name} | ₹${lineAmt.toFixed(2)}${chargeNote} | ${narration}`
         });
     }
 
