@@ -11,6 +11,16 @@
 //   BOWSER_DIGITAL_SALE (source_id = digital_id)       — Vendor DR / Sales CR
 //   LUBES_INVOICE       (source_id = lubes_hdr_id)     — Purchase DR + Input CGST/SGST DR / Supplier CR
 //   TANK_INVOICE        (source_id = t_tank_invoice.id)— Purchase DR + Charges DR / Supplier CR
+//   CASHFLOW_TXN        (source_id = transaction_id)   — calc_flag='N' cashflow-close lines only.
+//                                                         Ledger resolved by (in order): explicit
+//                                                         gl_cashflow_ledger_map row, exact ledger-name
+//                                                         match on the cashflow type, else falls back to
+//                                                         the per-location "Unclassified Cashflow" ledger
+//                                                         (never blocks processing — see resolveCashflowLedger).
+//   ADJUSTMENT          (source_id = adjustment_id)    — customer/vendor/bank corrections + opening
+//                                                         balances (adjustment_type=201 → "Opening Balance
+//                                                         Equity", off the P&L; other types resolve by
+//                                                         their own lookup name, else "General Adjustment").
 //
 // Raised automatically by DB triggers on source tables.
 // UPDATE events reverse existing vouchers and regenerate fresh ones.
@@ -294,6 +304,41 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
           )
     `);
 
+    await run('CASHFLOW_TXN', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT tcc.location_code, fy.fy_id, 'CASHFLOW_TXN', tct.transaction_id, 'CREATE',
+               tcc.cashflow_date, 'UNPROCESSED', :createdBy
+        FROM t_cashflow_transaction tct
+        JOIN t_cashflow_closing tcc ON tcc.cashflow_id = tct.cashflow_id
+        JOIN gl_financial_years fy ON fy.location_code = tcc.location_code
+            AND tcc.cashflow_date BETWEEN fy.start_date AND fy.end_date
+        WHERE tcc.location_code = :locationCode
+          AND tct.calc_flag = 'N'
+          AND tcc.cashflow_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'CASHFLOW_TXN' AND e.source_id = tct.transaction_id
+          )
+    `);
+
+    await run('ADJUSTMENT', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT adj.location_code, fy.fy_id, 'ADJUSTMENT', adj.adjustment_id, 'CREATE',
+               adj.adjustment_date, 'UNPROCESSED', :createdBy
+        FROM t_adjustments adj
+        JOIN gl_financial_years fy ON fy.location_code = adj.location_code
+            AND adj.adjustment_date BETWEEN fy.start_date AND fy.end_date
+        WHERE adj.location_code = :locationCode
+          AND adj.status = 'ACTIVE'
+          AND adj.adjustment_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'ADJUSTMENT' AND e.source_id = adj.adjustment_id
+          )
+    `);
+
     log.info(`Generate Events done — total inserted=${total}` +
         (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
@@ -322,6 +367,8 @@ async function processEvent(event, processedBy) {
         case 'BOWSER_DIGITAL_SALE': return await processBowserDigitalSaleEvent(event, processedBy);
         case 'LUBES_INVOICE':       return await processLubesInvoiceEvent(event, processedBy);
         case 'TANK_INVOICE':        return await processTankInvoiceEvent(event, processedBy);
+        case 'CASHFLOW_TXN':        return await processCashflowTxnEvent(event, processedBy);
+        case 'ADJUSTMENT':          return await processAdjustmentEvent(event, processedBy);
         default:
             throw new Error(`Unhandled source_type: ${event.source_type}`);
     }
@@ -651,8 +698,8 @@ async function processBankTxnEvent(event, processedBy) {
     if (!rows.length) throw new Error(`Bank transaction not found: t_bank_id=${tBankId}`);
     const txn = rows[0];
 
-    // Skip: transaction not yet classified (no ledger assigned)
-    if (!txn.ledger_name) {
+    // Skip: not yet classified (no ledger) or placeholder 'Others' — reclassify to reprocess
+    if (!txn.ledger_name || txn.ledger_name === 'Others') {
         await markEventProcessed(event.event_id, null, processedBy);
         return { voucherCount: 0 };
     }
@@ -667,16 +714,17 @@ async function processBankTxnEvent(event, processedBy) {
     }
 
     const isOilCo = txn.is_oil_company === 'Y';
+    const extSrc   = txn.external_source ? txn.external_source.toLowerCase() : null;
 
     // Skip: all external_source='Bank' lines on oil-company SOA (our payment receipt lines —
     // the real bank statement already journals the payment)
-    if (isOilCo && txn.external_source === 'Bank') {
+    if (isOilCo && extSrc === 'bank') {
         await markEventProcessed(event.event_id, null, processedBy);
         return { voucherCount: 0 };
     }
 
     // Skip: receiving side of a contra between real banks
-    if (!isOilCo && txn.external_source === 'Bank' && creditAmt > 0) {
+    if (!isOilCo && extSrc === 'bank' && creditAmt > 0) {
         await markEventProcessed(event.event_id, null, processedBy);
         return { voucherCount: 0 };
     }
@@ -1106,6 +1154,222 @@ async function processTankInvoiceEvent(event, processedBy) {
     return { voucherCount: 1 };
 }
 
+// ─── CASHFLOW_TXN Handler ─────────────────────────────────────────────────────
+// Only calc_flag='N' rows reach this handler (calc_flag='Y' rows never raise an
+// event — see trg_cashflow_txn_gl_insert). tag='OUT' → cash left the drawer
+// (DR resolved ledger / CR Cash-in-Hand). tag='IN' → cash came in (reverse).
+// See resolveCashflowLedger for how the counterpart ledger is resolved.
+
+async function processCashflowTxnEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: transactionId, event_date } = event;
+
+    const rows = await db.sequelize.query(`
+        SELECT tct.transaction_id, tct.type, tct.description, tct.amount, tct.calc_flag
+        FROM t_cashflow_transaction tct
+        WHERE tct.transaction_id = :transactionId
+    `, { replacements: { transactionId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Cashflow transaction not found: transaction_id=${transactionId}`);
+    const row = rows[0];
+
+    // Defensive — trigger already filters this, but calc_flag can flip on a later UPDATE
+    if (row.calc_flag !== 'N') {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const amount = parseFloat(row.amount || 0);
+    if (amount <= 0) {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const tagRows = await db.sequelize.query(`
+        SELECT tag FROM m_lookup
+        WHERE lookup_type = 'CashFlow' AND description = :type
+          AND (location_code = :locationCode OR location_code IS NULL)
+        ORDER BY (location_code = :locationCode) DESC
+        LIMIT 1
+    `, { replacements: { type: row.type, locationCode: location_code }, type: QueryTypes.SELECT });
+
+    if (!tagRows.length) throw new Error(`Cashflow type '${row.type}' has no matching m_lookup CashFlow entry — cannot determine IN/OUT direction`);
+    const tag = tagRows[0].tag;
+    if (tag !== 'IN' && tag !== 'OUT') throw new Error(`Cashflow type '${row.type}' has an unexpected tag '${tag}' (expected IN/OUT)`);
+
+    const cashLedgerId = await resolveCashLedger(location_code);
+    if (!cashLedgerId) throw new Error(`Cash-in-Hand ledger not found for location ${location_code}`);
+
+    const { ledgerId: counterLedgerId, isContra } = await resolveCashflowLedger(location_code, row.type, processedBy);
+
+    const narration = `${row.type}${row.description ? ' | ' + row.description : ''} | ₹${amount.toFixed(2)} | ${event_date}`;
+    const voucherType = isContra ? 'CONTRA' : 'JOURNAL';
+
+    const lines = tag === 'OUT'
+        ? [ { ledger_id: counterLedgerId, dr_amount: amount, cr_amount: 0,      narration },
+            { ledger_id: cashLedgerId,    dr_amount: 0,      cr_amount: amount, narration } ]
+        : [ { ledger_id: cashLedgerId,    dr_amount: amount, cr_amount: 0,      narration },
+            { ledger_id: counterLedgerId, dr_amount: 0,      cr_amount: amount, narration } ];
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType,
+        voucherDate:  event_date,
+        sourceType:   'CASHFLOW_TXN',
+        sourceId:     transactionId,
+        narration,
+        lines,
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+// Resolves the counterpart ledger for a calc_flag='N' cashflow type, in order:
+//   1. gl_cashflow_ledger_map.bank_id  → that bank's own GL ledger (contra — deposit/withdrawal)
+//   2. gl_cashflow_ledger_map.ledger_id → explicit override
+//   3. exact ledger-name match on the cashflow type text (same convention as TANK_INVOICE charge_type)
+//   4. per-location "Unclassified Cashflow" ledger — never blocks processing; reprocess later once mapped
+async function resolveCashflowLedger(locationCode, cashflowType, processedBy) {
+    const mapRows = await db.sequelize.query(`
+        SELECT ledger_id, bank_id FROM gl_cashflow_ledger_map
+        WHERE location_code = :locationCode AND cashflow_type = :cashflowType
+        LIMIT 1
+    `, { replacements: { locationCode, cashflowType }, type: QueryTypes.SELECT });
+
+    if (mapRows.length && mapRows[0].bank_id) {
+        const ledgerId = await resolveLedger(locationCode, 'BANK', mapRows[0].bank_id);
+        if (!ledgerId) throw new Error(`gl_cashflow_ledger_map for '${cashflowType}' points at bank_id=${mapRows[0].bank_id}, but that bank has no GL ledger`);
+        return { ledgerId, isContra: true };
+    }
+
+    if (mapRows.length && mapRows[0].ledger_id) {
+        return { ledgerId: mapRows[0].ledger_id, isContra: false };
+    }
+
+    const byName = await resolveLedgerByName(locationCode, cashflowType);
+    if (byName) return { ledgerId: byName.ledger_id, isContra: false };
+
+    const fallback = await resolveLedgerByName(locationCode, 'Unclassified Cashflow');
+    if (!fallback) throw new Error(`No 'Unclassified Cashflow' ledger set up for location ${locationCode} — run db/migrations/gl-cashflow-adjustments-triggers.sql`);
+    return { ledgerId: fallback.ledger_id, isContra: false };
+}
+
+// ─── ADJUSTMENT Handler ───────────────────────────────────────────────────────
+// t_adjustments carries its own debit_amount/credit_amount — the "counterpart"
+// side (customer/vendor/bank) resolves via external_source, the "type" side
+// resolves via adjustment_type (see resolveAdjustmentTypeLedger). Two-line
+// voucher, direction taken straight from whichever amount column is set.
+
+async function processAdjustmentEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: adjustmentId, event_date } = event;
+
+    const rows = await db.sequelize.query(`
+        SELECT adjustment_id, description, external_id, external_source, ledger_name,
+               debit_amount, credit_amount, adjustment_type, status
+        FROM t_adjustments
+        WHERE adjustment_id = :adjustmentId
+    `, { replacements: { adjustmentId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Adjustment not found: adjustment_id=${adjustmentId}`);
+    const row = rows[0];
+
+    if (row.status !== 'ACTIVE') {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const debitAmt  = parseFloat(row.debit_amount  || 0);
+    const creditAmt = parseFloat(row.credit_amount || 0);
+    const amount    = debitAmt > 0 ? debitAmt : creditAmt;
+
+    if (amount <= 0) {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const counterLedgerId = await resolveAdjustmentCounterpartLedger(row, location_code);
+    const typeLedgerId    = await resolveAdjustmentTypeLedger(row.adjustment_type, location_code);
+
+    const narration = `Adjustment #${adjustmentId}${row.description ? ' | ' + row.description : ''} | ₹${amount.toFixed(2)} | ${event_date}`;
+
+    // debit_amount set → counterpart is DR, type ledger is CR. credit_amount set → reverse.
+    const lines = debitAmt > 0
+        ? [ { ledger_id: counterLedgerId, dr_amount: amount, cr_amount: 0,      narration },
+            { ledger_id: typeLedgerId,    dr_amount: 0,      cr_amount: amount, narration } ]
+        : [ { ledger_id: typeLedgerId,    dr_amount: amount, cr_amount: 0,      narration },
+            { ledger_id: counterLedgerId, dr_amount: 0,      cr_amount: amount, narration } ];
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType:  'JOURNAL',
+        voucherDate:  event_date,
+        sourceType:   'ADJUSTMENT',
+        sourceId:     adjustmentId,
+        narration,
+        lines,
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+async function resolveAdjustmentCounterpartLedger(row, locationCode) {
+    const src = (row.external_source || '').toUpperCase();
+
+    if (src === 'CUSTOMER' || src === 'DIGITAL_VENDOR') {
+        const id = await resolveLedger(locationCode, 'CREDIT', row.external_id);
+        if (!id) throw new Error(`CREDIT GL ledger not found for ${src.toLowerCase()} creditlist_id=${row.external_id} (adjustment_id:${row.adjustment_id})`);
+        return id;
+    }
+    if (src === 'SUPPLIER') {
+        const id = await resolveLedger(locationCode, 'SUPPLIER', row.external_id);
+        if (!id) throw new Error(`SUPPLIER GL ledger not found for supplier_id=${row.external_id} (adjustment_id:${row.adjustment_id})`);
+        return id;
+    }
+    if (src === 'BANK') {
+        const id = await resolveLedger(locationCode, 'BANK', row.external_id);
+        if (!id) throw new Error(`BANK GL ledger not found for bank_id=${row.external_id} (adjustment_id:${row.adjustment_id})`);
+        return id;
+    }
+    if (src === 'EXPENSE') {
+        if (!row.ledger_name) throw new Error(`Adjustment id=${row.adjustment_id} has external_source=EXPENSE but no ledger_name set`);
+        const info = await resolveLedgerByName(locationCode, row.ledger_name);
+        if (!info) throw new Error(`GL ledger '${row.ledger_name}' not found for location ${locationCode} (adjustment_id:${row.adjustment_id})`);
+        return info.ledger_id;
+    }
+    throw new Error(`Cannot resolve adjustment counterpart: external_source='${row.external_source}' (adjustment_id:${row.adjustment_id})`);
+}
+
+// adjustment_type=201 ("Opening Balance Entry") always goes to the dedicated
+// equity ledger, off the P&L. Every other type resolves by its own m_lookup
+// description (matches the ADJUSTMENT_TYPE lookup name to a same-named
+// ledger — e.g. 205 "Digital Vendor Charges", 207 "POS Rental Charges").
+// Anything that can't resolve (including adjustment_type='REVERSAL', which
+// isn't a lookup code) falls back to "General Adjustment" — never blocks.
+async function resolveAdjustmentTypeLedger(adjustmentType, locationCode) {
+    if (adjustmentType === '201') {
+        const info = await resolveLedgerByName(locationCode, 'Opening Balance Equity');
+        if (info) return info.ledger_id;
+    } else if (/^\d+$/.test(adjustmentType)) {
+        const lookupRows = await db.sequelize.query(`
+            SELECT description FROM m_lookup WHERE lookup_type = 'ADJUSTMENT_TYPE' AND lookup_id = :adjustmentType LIMIT 1
+        `, { replacements: { adjustmentType }, type: QueryTypes.SELECT });
+
+        if (lookupRows.length) {
+            const info = await resolveLedgerByName(locationCode, lookupRows[0].description);
+            if (info) return info.ledger_id;
+        }
+    }
+
+    const fallback = await resolveLedgerByName(locationCode, 'General Adjustment');
+    if (!fallback) throw new Error(`No 'General Adjustment' ledger set up for location ${locationCode} — run db/migrations/gl-cashflow-adjustments-triggers.sql`);
+    return fallback.ledger_id;
+}
+
 // Derives the Tally voucher type from bank transaction context.
 //   CONTRA  — inter-bank transfer (external_source='Bank', debit/paying side)
 //   PAYMENT — money leaves the bank (bank is CR side)
@@ -1113,16 +1377,17 @@ async function processTankInvoiceEvent(event, processedBy) {
 //   JOURNAL — oil company SOA entries (supplier account adjustments)
 function deriveBankVoucherType(txn, bankIsDr) {
     if (txn.is_oil_company === 'Y') return 'JOURNAL';
-    if (txn.external_source === 'Bank') return 'CONTRA';
+    if (txn.external_source?.toLowerCase() === 'bank') return 'CONTRA';
     return bankIsDr ? 'RECEIPT' : 'PAYMENT';
 }
 
 // Returns counterpart ledger_id, or null if the event was already marked PROCESSED (skip).
 // Throws on unresolvable ledger.
 async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy) {
-    const { external_source, external_id, ledger_name } = txn;
+    const { external_id, ledger_name } = txn;
+    const external_source = txn.external_source ? txn.external_source.toLowerCase() : null;
 
-    if (external_source === 'Static' || (!external_source && ledger_name)) {
+    if (external_source === 'static' || (!external_source && ledger_name)) {
         const info = await resolveLedgerByName(locationCode, ledger_name);
         if (!info) throw new Error(`GL ledger '${ledger_name}' not found for location ${locationCode}`);
         if (info.group_name === 'Purchase Accounts') {
@@ -1133,26 +1398,31 @@ async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy)
         return info.ledger_id;
     }
 
-    if (external_source === 'Credit') {
+    if (external_source === 'credit') {
+        // external_id=0 means unlinked placeholder (e.g. IOCL SOA 'Others') — skip
+        if (!external_id) {
+            await markEventProcessed(eventId, null, processedBy);
+            return null;
+        }
         const id = await resolveLedger(locationCode, 'CREDIT', external_id);
         if (!id) throw new Error(`CREDIT GL ledger not found for creditlist_id=${external_id}`);
         return id;
     }
 
-    if (external_source === 'Supplier') {
+    if (external_source === 'supplier') {
         const id = await resolveLedger(locationCode, 'SUPPLIER', external_id);
         if (!id) throw new Error(`SUPPLIER GL ledger not found for supplier_id=${external_id}`);
         return id;
     }
 
-    if (external_source === 'Bank') {
+    if (external_source === 'bank') {
         // Debit-side of a real-bank contra (credit side was already skipped above)
         const id = await resolveLedger(locationCode, 'BANK', external_id);
         if (!id) throw new Error(`BANK GL ledger not found for contra bank_id=${external_id}`);
         return id;
     }
 
-    throw new Error(`Cannot resolve counterpart ledger: external_source='${external_source}', external_id=${external_id}, ledger_name='${ledger_name}'`);
+    throw new Error(`Cannot resolve counterpart ledger: external_source='${txn.external_source}', external_id=${external_id}, ledger_name='${ledger_name}'`);
 }
 
 async function buildSplitLines(tBankId, bankLedgerId, bankIsDr, txnAmount, narration, locationCode) {
