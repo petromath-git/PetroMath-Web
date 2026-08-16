@@ -341,12 +341,25 @@ router.put('/api/ledger-maps/:productId/:mapType', [isLoginEnsured, security.isA
     const locationCode = req.user.location_code;
     const updatedBy = req.user.username || req.user.Person_id;
     try {
+        // trg_product_ledger_map_gl_update/_delete log any stale-voucher
+        // fallout from this write directly (DB-level, catches this route,
+        // raw SQL, and future migrations alike). Capture a DB-clock
+        // timestamp first just to report back the count for the UI.
+        const [{ ts: beforeTs }] = await db.sequelize.query(`SELECT NOW(6) AS ts`, { type: db.Sequelize.QueryTypes.SELECT });
+
         if (!ledger_id) {
             await ProductLedgerMapDao.deleteMapping(locationCode, productId, mapType);
         } else {
             await ProductLedgerMapDao.upsertMapping(locationCode, productId, mapType, ledger_id, updatedBy);
         }
-        res.json({ success: true });
+
+        const mappingKey = `product:${productId}:${mapType}`;
+        const [{ cnt: queuedCount }] = await db.sequelize.query(`
+            SELECT COUNT(*) AS cnt FROM gl_correction_queue
+            WHERE location_code = :locationCode AND mapping_key = :mappingKey AND creation_date >= :beforeTs
+        `, { replacements: { locationCode, mappingKey, beforeTs }, type: db.Sequelize.QueryTypes.SELECT });
+
+        res.json({ success: true, queuedCorrections: queuedCount });
     } catch (err) {
         console.error('Error saving product ledger map:', err);
         res.status(500).json({ success: false, error: err.message });
