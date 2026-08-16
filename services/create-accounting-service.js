@@ -130,7 +130,70 @@ async function reprocessEvents(locationCode, fromDate, toDate, processedBy, logg
     return await processEvents(locationCode, fromDate, toDate, processedBy, log);
 }
 
-module.exports = { processEvents, reprocessEvents, generateMissingEvents };
+// Reprocesses exactly the events named by a set of gl_correction_queue rows
+// (a mapping changed after they were posted) — not a date range, so
+// everything else already correct in that window is left untouched. Same
+// reverse-then-repost mechanics as reprocessEvents, just targeted.
+async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
+    const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
+    const summary = { processed: 0, errors: 0, details: [] };
+
+    const queueRows = await db.sequelize.query(`
+        SELECT queue_id, source_type, source_id
+        FROM gl_correction_queue
+        WHERE queue_id IN (:queueIds) AND status = 'PENDING'
+    `, { replacements: { queueIds }, type: QueryTypes.SELECT });
+
+    if (!queueRows.length) return summary;
+
+    const uniqueEvents = [...new Map(queueRows.map(r => [`${r.source_type}#${r.source_id}`, r])).values()];
+    log.info(`Reprocessing ${uniqueEvents.length} queued correction(s) from ${queueRows.length} queue entr(y/ies)`);
+
+    for (const { source_type, source_id } of uniqueEvents) {
+        await db.sequelize.query(`
+            UPDATE gl_accounting_events
+            SET event_status  = 'UNPROCESSED',
+                event_type    = 'UPDATE',
+                voucher_id    = NULL,
+                error_message = NULL,
+                processed_at  = NULL,
+                processed_by  = NULL
+            WHERE source_type = :source_type AND source_id = :source_id
+              AND event_status IN ('PROCESSED', 'ERROR')
+        `, { replacements: { source_type, source_id }, type: QueryTypes.UPDATE });
+
+        const [event] = await db.sequelize.query(`
+            SELECT * FROM gl_accounting_events
+            WHERE source_type = :source_type AND source_id = :source_id AND event_status = 'UNPROCESSED'
+            ORDER BY event_id DESC LIMIT 1
+        `, { replacements: { source_type, source_id }, type: QueryTypes.SELECT });
+
+        if (!event) continue;
+
+        try {
+            const result = await processEvent(event, processedBy);
+            summary.processed += result.voucherCount;
+            log.debug(`REPROCESSED ${source_type}#${source_id} → ${result.voucherCount} voucher(s)`);
+            summary.details.push({ source_type, source_id, status: 'PROCESSED' });
+        } catch (err) {
+            await markEventError(event.event_id, err.message);
+            summary.errors++;
+            log.error(`ERROR reprocessing ${source_type}#${source_id}: ${err.message}`);
+            summary.details.push({ source_type, source_id, status: 'ERROR', message: err.message });
+        }
+    }
+
+    await db.sequelize.query(`
+        UPDATE gl_correction_queue
+        SET status = 'REPROCESSED', resolved_by = :processedBy, resolved_date = NOW()
+        WHERE queue_id IN (:queueIds) AND status = 'PENDING'
+    `, { replacements: { processedBy, queueIds }, type: QueryTypes.UPDATE });
+
+    log.info(`Reprocess queued corrections done — processed=${summary.processed} errors=${summary.errors}`);
+    return summary;
+}
+
+module.exports = { processEvents, reprocessEvents, reprocessQueuedCorrections, generateMissingEvents };
 
 // ─── Generate Missing Events ──────────────────────────────────────────────────
 // Backfill tool: scan each source table for records with no event and INSERT them.

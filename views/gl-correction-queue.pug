@@ -1,0 +1,112 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        h4.mb-1 Correction Queue
+        p.text-muted.small.mb-3
+            | Vouchers that were already posted when a ledger mapping changed underneath them. Reprocessing here reverses and reposts
+            strong  only the listed events
+            | , not a whole date range.
+
+        if messages && messages.error && messages.error.length
+            .alert.alert-danger.py-2= messages.error[0]
+
+        - const pending = rows.filter(r => r.status === 'PENDING')
+        - const resolved = rows.filter(r => r.status !== 'PENDING')
+
+        if pending.length
+            .d-flex.justify-content-between.align-items-center.mb-2
+                .alert.alert-warning.py-2.small.mb-0.flex-grow-1.mr-2
+                    i.bi.bi-exclamation-triangle.mr-1
+                    strong= pending.length
+                    |  stale voucher(s) pending correction.
+                button.btn.btn-primary.btn-sm#btnReprocessSelected(disabled)
+                    i.bi.bi-arrow-repeat.mr-1
+                    | Reprocess Selected
+        else
+            .alert.alert-success.py-2.small
+                i.bi.bi-check-circle.mr-1
+                | Nothing pending.
+
+        .table-responsive
+            table.table.table-sm.table-bordered.table-hover
+                thead.thead-light
+                    tr
+                        th(style="width:30px")
+                            input#chkAll(type="checkbox")
+                        th Label / Mapping
+                        th Old Resolution
+                        th New Resolution
+                        th Source
+                        th.text-center(style="width:90px") Status
+                        th.text-center(style="width:110px") Changed
+                tbody
+                    each r in pending.concat(resolved)
+                        tr
+                            td.text-center
+                                if r.status === 'PENDING'
+                                    input.chk-row(type="checkbox" value=r.queue_id)
+                            td.small= r.mapping_key
+                            td.small.text-danger= r.old_description
+                            td.small.text-success= r.new_description
+                            td.small= r.source_type + ' #' + r.source_id
+                            td.text-center
+                                if r.status === 'PENDING'
+                                    span.badge.badge-warning Pending
+                                else if r.status === 'REPROCESSED'
+                                    span.badge.badge-success Reprocessed
+                                else
+                                    span.badge.badge-secondary Ignored
+                            td.text-center.small= r.creation_date ? String(r.creation_date).substring(0,10) : ''
+
+    script.
+        function updateReprocessBtn() {
+            const checked = document.querySelectorAll('.chk-row:checked').length;
+            const btn = document.getElementById('btnReprocessSelected');
+            btn.disabled = checked === 0;
+            btn.innerHTML = checked
+                ? '<i class="bi bi-arrow-repeat mr-1"></i> Reprocess Selected (' + checked + ')'
+                : '<i class="bi bi-arrow-repeat mr-1"></i> Reprocess Selected';
+        }
+
+        const chkAll = document.getElementById('chkAll');
+        if (chkAll) {
+            chkAll.addEventListener('change', function() {
+                document.querySelectorAll('.chk-row').forEach(c => c.checked = chkAll.checked);
+                updateReprocessBtn();
+            });
+        }
+        document.querySelectorAll('.chk-row').forEach(function(c) {
+            c.addEventListener('change', updateReprocessBtn);
+        });
+
+        const reprocessBtn = document.getElementById('btnReprocessSelected');
+        if (reprocessBtn) {
+            reprocessBtn.addEventListener('click', async function() {
+                const ids = [...document.querySelectorAll('.chk-row:checked')].map(c => parseInt(c.value));
+                if (!ids.length) return;
+                if (!confirm('Reprocess ' + ids.length + ' voucher(s)? Each will be reversed and reposted with the corrected mapping.')) return;
+                this.disabled = true;
+                this.textContent = 'Reprocessing…';
+                try {
+                    const resp = await fetch('/gl/api/correction-queue/reprocess', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ queue_ids: ids })
+                    });
+                    const data = await resp.json();
+                    if (data.success) {
+                        alert('Done — ' + data.summary.processed + ' voucher(s) reprocessed' + (data.summary.errors ? ', ' + data.summary.errors + ' error(s)' : '') + '.');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.error);
+                        this.disabled = false;
+                    }
+                } catch (e) {
+                    alert('Network error.');
+                    this.disabled = false;
+                }
+            });
+        }

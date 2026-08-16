@@ -148,6 +148,11 @@ block content
                     body: JSON.stringify({ treatment, gl_ledger_id, skip_reason })
                 });
                 const data = await resp.json();
-                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+                if (data.success) {
+                    if (data.queuedCorrections) {
+                        alert(data.queuedCorrections + ' already-posted voucher(s) used the old mapping — queued for review at Correction Queue.');
+                    }
+                    location.reload();
+                } else { alert('Error: ' + data.error); this.disabled = false; }
             } catch (e) { alert('Network error.'); this.disabled = false; }
         });

@@ -1082,6 +1082,20 @@ router.put('/api/static-ledger-map/:id', [isLoginEnsured, security.isAdmin()], a
     }
 
     try {
+        const [existing] = await db.sequelize.query(`
+            SELECT ledger_name FROM gl_static_ledger_map WHERE map_id = :mapId AND location_code = :locationCode
+        `, { replacements: { mapId, locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
+
+        const newLedgerId = treatment === 'POST' ? parseInt(gl_ledger_id) : null;
+        const newReason    = treatment === 'SKIP' ? skip_reason.trim() : null;
+
+        // trg_static_ledger_map_gl_update logs any stale-voucher fallout from
+        // this write directly — capture a DB-clock timestamp first so we can
+        // report back how many rows it just queued (UI feedback only; the
+        // trigger is the source of truth regardless of who calls this route).
+        const [{ ts: beforeTs }] = await db.sequelize.query(`SELECT NOW(6) AS ts`, { type: db.Sequelize.QueryTypes.SELECT });
+
         await db.sequelize.query(`
             UPDATE gl_static_ledger_map
             SET treatment    = :treatment,
@@ -1090,16 +1104,77 @@ router.put('/api/static-ledger-map/:id', [isLoginEnsured, security.isAdmin()], a
                 updated_by   = :user
             WHERE map_id = :mapId AND location_code = :locationCode
         `, {
-            replacements: {
-                mapId, locationCode, treatment, user,
-                gl_ledger_id: treatment === 'POST' ? parseInt(gl_ledger_id) : null,
-                skip_reason:  treatment === 'SKIP' ? skip_reason.trim() : null
-            },
+            replacements: { mapId, locationCode, treatment, user, gl_ledger_id: newLedgerId, skip_reason: newReason },
             type: db.Sequelize.QueryTypes.UPDATE
         });
-        res.json({ success: true });
+
+        const [{ cnt: queuedCount }] = await db.sequelize.query(`
+            SELECT COUNT(*) AS cnt FROM gl_correction_queue
+            WHERE location_code = :locationCode AND mapping_key = :ledgerName AND creation_date >= :beforeTs
+        `, { replacements: { locationCode, ledgerName: existing.ledger_name, beforeTs }, type: db.Sequelize.QueryTypes.SELECT });
+
+        res.json({ success: true, queuedCorrections: queuedCount });
     } catch (err) {
         console.error('Static ledger map update error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ── Correction Queue ──────────────────────────────────────────────────────────
+// GET /gl/correction-queue — vouchers that went stale because a mapping
+// changed after they were posted (see gl_correction_queue). Reprocessing
+// here only touches the specific events listed, not a date range.
+
+router.get('/correction-queue', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const rows = await db.sequelize.query(`
+            SELECT queue_id, mapping_source, mapping_key, old_description, new_description,
+                   source_type, source_id, voucher_id, status, created_by, creation_date,
+                   resolved_by, resolved_date
+            FROM gl_correction_queue
+            WHERE location_code = :locationCode
+            ORDER BY (status = 'PENDING') DESC, creation_date DESC
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+
+        res.render('gl-correction-queue', {
+            title:  'Correction Queue',
+            user:   req.user,
+            config: require('../config/app-config').APP_CONFIGS,
+            rows,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Correction queue error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/control');
+    }
+});
+
+router.post('/api/correction-queue/reprocess', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
+    const { queue_ids } = req.body;
+
+    if (!Array.isArray(queue_ids) || !queue_ids.length) {
+        return res.status(400).json({ success: false, error: 'queue_ids is required' });
+    }
+
+    try {
+        // Scope to this location — belt and suspenders against a stray id
+        const owned = await db.sequelize.query(`
+            SELECT queue_id FROM gl_correction_queue
+            WHERE queue_id IN (:queueIds) AND location_code = :locationCode AND status = 'PENDING'
+        `, { replacements: { queueIds: queue_ids.map(Number), locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+
+        if (!owned.length) return res.json({ success: true, summary: { processed: 0, errors: 0 } });
+
+        const summary = await createAccountingService.reprocessQueuedCorrections(
+            owned.map(o => o.queue_id), user
+        );
+        res.json({ success: true, summary });
+    } catch (err) {
+        console.error('Correction queue reprocess error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

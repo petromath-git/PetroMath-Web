@@ -177,6 +177,9 @@ block content
                     updateBadge(productId);
                     statusEl.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
                     setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
+                    if (data.queuedCorrections) {
+                        alert(data.queuedCorrections + ' already-posted voucher(s) used the old mapping — queued for review at Accounting > Correction Queue.');
+                    }
                 } else {
                     statusEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger" title="' + data.error + '"></i>';
                 }
