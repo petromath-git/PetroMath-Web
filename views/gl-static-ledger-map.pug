@@ -1,0 +1,153 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        h4.mb-1 Static Ledger Map
+        p.text-muted.small.mb-3
+            | Bank/SOA transactions categorized with a free-text "Static" label (set on the
+            strong  Ledger Rules
+            |  screen) resolve here instead of matching against Ledgers by name. Review each label once —
+            strong  Post
+            |  it to the real GL ledger, or
+            strong  Skip
+            |  it if it's already covered elsewhere (e.g. a purchase invoice that also appears on the oil-company SOA). Unreviewed labels post to
+            code Unclassified Bank Transaction
+            |  until you decide.
+
+        if messages && messages.error && messages.error.length
+            .alert.alert-danger.py-2= messages.error[0]
+
+        - const unreviewed = rows.filter(r => !r.treatment)
+        - const reviewed = rows.filter(r => r.treatment)
+
+        if unreviewed.length
+            .alert.alert-warning.py-2.small.mb-3
+                i.bi.bi-exclamation-triangle.mr-1
+                strong= unreviewed.length
+                |  label(s) not yet reviewed — posting to Unclassified Bank Transaction in the meantime.
+
+        .table-responsive
+            table.table.table-sm.table-bordered.table-hover
+                thead.thead-light
+                    tr
+                        th Label (from Ledger Rules)
+                        th.text-center(style="width:90px") Txns
+                        th.text-center(style="width:110px") Last Seen
+                        th.text-center(style="width:100px") Status
+                        th Resolution
+                        th.text-center(style="width:80px")
+                tbody
+                    each r in unreviewed.concat(reviewed)
+                        tr(class=(!r.treatment ? 'table-warning' : ''))
+                            td.small= r.ledger_name
+                            td.text-center.small= r.txn_count
+                            td.text-center.small= r.last_txn_date_display || '—'
+                            td.text-center
+                                if r.treatment === 'POST'
+                                    span.badge.badge-success Post
+                                else if r.treatment === 'SKIP'
+                                    span.badge.badge-secondary Skip
+                                else
+                                    span.badge.badge-warning Unreviewed
+                            td.small
+                                if r.treatment === 'POST'
+                                    span= r.target_ledger_name
+                                    span.text-muted  (#{r.target_group_name})
+                                else if r.treatment === 'SKIP'
+                                    span.text-muted.font-italic= r.skip_reason
+                                else
+                                    span.text-muted.font-italic → Unclassified Bank Transaction (temporary)
+                            td.text-center
+                                button.btn.btn-outline-primary.btn-sm.btn-edit-map(
+                                    data-id=r.map_id
+                                    data-name=r.ledger_name
+                                    data-treatment=r.treatment || ''
+                                    data-ledger=r.gl_ledger_id || ''
+                                    data-reason=r.skip_reason || ''
+                                    title="Review")
+                                    i.bi.bi-pencil
+
+    //- ── Modal ────────────────────────────────────────────────────────────────
+    .modal.fade#mapModal(tabindex="-1")
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Review Label
+                    button.close(data-dismiss="modal" aria-label="Close")
+                        span &times;
+                .modal-body
+                    p.small.mb-3
+                        | Label:
+                        strong.ml-1#mLabelName
+
+                    .form-group
+                        .form-check.form-check-inline
+                            input.form-check-input#mTreatmentPost(type="radio" name="mTreatment" value="POST")
+                            label.form-check-label.small(for="mTreatmentPost") Post to a ledger
+                        .form-check.form-check-inline
+                            input.form-check-input#mTreatmentSkip(type="radio" name="mTreatment" value="SKIP")
+                            label.form-check-label.small(for="mTreatmentSkip") Skip (already covered elsewhere)
+
+                    .form-group#mPostFields
+                        label.small Target Ledger *
+                        select.form-control.form-control-sm#mLedger
+                            option(value="") — select —
+                            each l in ledgers
+                                option(value=l.ledger_id data-group=l.group_name)= l.ledger_name + ' (' + l.group_name + ')'
+
+                    .form-group#mSkipFields(style="display:none")
+                        label.small Reason *
+                        textarea.form-control.form-control-sm#mReason(rows="2" placeholder="e.g. Duplicate of TANK_INVOICE purchase — SOA mirror line")
+
+                .modal-footer
+                    button.btn.btn-secondary.btn-sm(data-dismiss="modal") Cancel
+                    button.btn.btn-primary.btn-sm#btnSaveMap Save
+
+    script.
+        let editingMapId = null;
+
+        function showTreatmentFields(treatment) {
+            document.getElementById('mPostFields').style.display = treatment === 'POST' ? '' : 'none';
+            document.getElementById('mSkipFields').style.display = treatment === 'SKIP' ? '' : 'none';
+        }
+        document.getElementById('mTreatmentPost').addEventListener('change', function() { showTreatmentFields('POST'); });
+        document.getElementById('mTreatmentSkip').addEventListener('change', function() { showTreatmentFields('SKIP'); });
+
+        document.querySelectorAll('.btn-edit-map').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                editingMapId = this.dataset.id;
+                document.getElementById('mLabelName').textContent = this.dataset.name;
+                const treatment = this.dataset.treatment || 'POST';
+                document.getElementById('mTreatmentPost').checked = treatment !== 'SKIP';
+                document.getElementById('mTreatmentSkip').checked = treatment === 'SKIP';
+                document.getElementById('mLedger').value = this.dataset.ledger || '';
+                document.getElementById('mReason').value = this.dataset.reason || '';
+                showTreatmentFields(treatment === 'SKIP' ? 'SKIP' : 'POST');
+                $('#mapModal').modal('show');
+                setTimeout(function() {
+                    $('#mLedger').select2({ width: '100%', dropdownParent: $('#mapModal') });
+                }, 50);
+            });
+        });
+
+        document.getElementById('btnSaveMap').addEventListener('click', async function() {
+            const treatment = document.querySelector('input[name="mTreatment"]:checked').value;
+            const gl_ledger_id = document.getElementById('mLedger').value;
+            const skip_reason = document.getElementById('mReason').value.trim();
+
+            if (treatment === 'POST' && !gl_ledger_id) { alert('Select a target ledger.'); return; }
+            if (treatment === 'SKIP' && !skip_reason) { alert('Enter a reason.'); return; }
+
+            this.disabled = true;
+            try {
+                const resp = await fetch('/gl/api/static-ledger-map/' + editingMapId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ treatment, gl_ledger_id, skip_reason })
+                });
+                const data = await resp.json();
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+            } catch (e) { alert('Network error.'); this.disabled = false; }
+        });

@@ -1005,6 +1005,105 @@ router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async functi
     }
 });
 
+// ── Static Ledger Map ───────────────────────────────────────────────────────
+// GET /gl/static-ledger-map
+// Review screen for Static bank/SOA ledger_name labels (see resolveStaticLedger
+// in create-accounting-service.js) — an accountant marks each label POST
+// (pick the real GL ledger) or SKIP (with a reason), instead of the engine
+// guessing off an exact-name match.
+
+router.get('/static-ledger-map', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const [rows, ledgers] = await Promise.all([
+            db.sequelize.query(`
+                SELECT m.map_id, m.ledger_name, m.treatment, m.gl_ledger_id, m.skip_reason,
+                       m.updated_by, m.updation_date,
+                       l.ledger_name AS target_ledger_name,
+                       g.group_name  AS target_group_name,
+                       (SELECT COUNT(*) FROM t_bank_transaction tbt
+                          JOIN m_bank mb ON mb.bank_id = tbt.bank_id
+                         WHERE mb.location_code = m.location_code
+                           AND tbt.ledger_name = m.ledger_name) AS txn_count,
+                       (SELECT MAX(tbt.trans_date) FROM t_bank_transaction tbt
+                          JOIN m_bank mb ON mb.bank_id = tbt.bank_id
+                         WHERE mb.location_code = m.location_code
+                           AND tbt.ledger_name = m.ledger_name) AS last_txn_date
+                FROM gl_static_ledger_map m
+                LEFT JOIN gl_ledgers l ON l.ledger_id = m.gl_ledger_id
+                LEFT JOIN gl_ledger_groups g ON g.group_id = l.group_id
+                WHERE m.location_code = :locationCode
+                ORDER BY (m.treatment IS NULL) DESC, txn_count DESC, m.ledger_name
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+            db.sequelize.query(`
+                SELECT l.ledger_id, l.ledger_name, g.group_name
+                FROM gl_ledgers l
+                JOIN gl_ledger_groups g ON g.group_id = l.group_id
+                WHERE l.location_code = :locationCode AND l.active_flag = 'Y'
+                ORDER BY l.ledger_name
+            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
+        ]);
+
+        rows.forEach(r => {
+            r.last_txn_date_display = r.last_txn_date
+                ? String(r.last_txn_date).substring(0, 10)
+                : null;
+        });
+
+        res.render('gl-static-ledger-map', {
+            title:  'Static Ledger Map',
+            user:   req.user,
+            config: require('../config/app-config').APP_CONFIGS,
+            rows,
+            ledgers,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Static ledger map error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/control');
+    }
+});
+
+router.put('/api/static-ledger-map/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const mapId = parseInt(req.params.id);
+    const { treatment, gl_ledger_id, skip_reason } = req.body;
+    const user = req.user.username || String(req.user.Person_id);
+
+    if (treatment !== 'POST' && treatment !== 'SKIP') {
+        return res.status(400).json({ success: false, error: "treatment must be 'POST' or 'SKIP'" });
+    }
+    if (treatment === 'POST' && !gl_ledger_id) {
+        return res.status(400).json({ success: false, error: 'gl_ledger_id is required when treatment=POST' });
+    }
+    if (treatment === 'SKIP' && !skip_reason?.trim()) {
+        return res.status(400).json({ success: false, error: 'skip_reason is required when treatment=SKIP' });
+    }
+
+    try {
+        await db.sequelize.query(`
+            UPDATE gl_static_ledger_map
+            SET treatment    = :treatment,
+                gl_ledger_id = :gl_ledger_id,
+                skip_reason  = :skip_reason,
+                updated_by   = :user
+            WHERE map_id = :mapId AND location_code = :locationCode
+        `, {
+            replacements: {
+                mapId, locationCode, treatment, user,
+                gl_ledger_id: treatment === 'POST' ? parseInt(gl_ledger_id) : null,
+                skip_reason:  treatment === 'SKIP' ? skip_reason.trim() : null
+            },
+            type: db.Sequelize.QueryTypes.UPDATE
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Static ledger map update error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ── Tally Import ──────────────────────────────────────────────────────────────
 // GET  /gl/tally-import  — upload page
 // POST /gl/tally-import  — parse file, return reconcile data as JSON
