@@ -12,11 +12,11 @@
 //   LUBES_INVOICE       (source_id = lubes_hdr_id)     — Purchase DR + Input CGST/SGST DR / Supplier CR
 //   TANK_INVOICE        (source_id = t_tank_invoice.id)— Purchase DR + Charges DR / Supplier CR
 //   CASHFLOW_TXN        (source_id = transaction_id)   — calc_flag='N' cashflow-close lines only.
-//                                                         Direction + ledger resolution both come from
-//                                                         ledger_rule_id -> m_ledger_rules (shared with
-//                                                         BANK_TXN's Static labels — see resolveStaticLedger).
-//                                                         Never blocks processing; unmapped labels fall
-//                                                         back to "Unclassified Cashflow".
+//                                                         Direction comes from entry_type on the row itself;
+//                                                         ledger resolution goes through the linked Account
+//                                                         Head's name -> resolveStaticLedger (shared with
+//                                                         BANK_TXN's Static labels). Never blocks processing;
+//                                                         unmapped labels fall back to "Unclassified Cashflow".
 //   ADJUSTMENT          (source_id = adjustment_id)    — customer/vendor/bank corrections + opening
 //                                                         balances (adjustment_type=201 → "Opening Balance
 //                                                         Equity", off the P&L; other types resolve by
@@ -1206,20 +1206,22 @@ async function processTankInvoiceEvent(event, processedBy) {
 
 // ─── CASHFLOW_TXN Handler ─────────────────────────────────────────────────────
 // Only calc_flag='N' rows reach this handler (calc_flag='Y' rows never raise an
-// event — see trg_cashflow_txn_gl_insert). Direction and ledger resolution both
-// come from t_cashflow_transaction.ledger_rule_id -> m_ledger_rules — the same
-// Static Ledger label system BANK_TXN uses (see resolveStaticLedger), not a
-// separate cashflow-only mapping. tag='OUT' → cash left the drawer (DR resolved
-// ledger / CR Cash-in-Hand). tag='IN' → cash came in (reverse).
+// event — see trg_cashflow_txn_gl_insert). Direction comes straight off
+// t_cashflow_transaction.entry_type (resolved before processing time by the
+// account-head trigger, or by the entry UI once that ships). Ledger resolution
+// goes through the Account Head's name -> resolveStaticLedger -> gl_static_ledger_map,
+// same as BANK_TXN. The engine never joins m_ledger_rules or m_account_heads for
+// direction — allowed_entry_type there is a data-entry-time constraint, not a
+// per-row fact.
 
 async function processCashflowTxnEvent(event, processedBy) {
     const { location_code, fy_id, source_id: transactionId, event_date } = event;
 
     const rows = await db.sequelize.query(`
         SELECT tct.transaction_id, tct.type, tct.description, tct.amount, tct.calc_flag,
-               mlr.ledger_name AS rule_ledger_name, mlr.allowed_entry_type
+               tct.entry_type, mah.account_head_name
         FROM t_cashflow_transaction tct
-        LEFT JOIN m_ledger_rules mlr ON mlr.rule_id = tct.ledger_rule_id
+        LEFT JOIN m_account_heads mah ON mah.account_head_id = tct.account_head_id
         WHERE tct.transaction_id = :transactionId
     `, { replacements: { transactionId }, type: QueryTypes.SELECT });
 
@@ -1238,36 +1240,15 @@ async function processCashflowTxnEvent(event, processedBy) {
         return { voucherCount: 0 };
     }
 
-    let tag;
-    if (row.allowed_entry_type === 'CREDIT') {
-        tag = 'IN';
-    } else if (row.allowed_entry_type === 'DEBIT') {
-        tag = 'OUT';
-    } else if (row.allowed_entry_type === 'BOTH') {
-        // No per-entry Cr/Dr column exists yet on t_cashflow_transaction — a
-        // BOTH-direction rule can't be resolved automatically. Not hit by any
-        // real data today (verified: every CashFlow type in use is strictly
-        // IN or OUT), so this is a deliberate stop, not a silent guess.
-        throw new Error(`Cashflow type '${row.type}' is mapped to ledger rule '${row.rule_ledger_name}' with allowed_entry_type=BOTH — direction can't be inferred per-entry. Split into separate CREDIT/DEBIT rules, or add an entry-level direction column.`);
-    } else {
-        // Legacy fallback — row predates the ledger_rule_id backfill/trigger
-        // (shouldn't happen post-migration; kept as a safety net).
-        const tagRows = await db.sequelize.query(`
-            SELECT tag FROM m_lookup
-            WHERE lookup_type = 'CashFlow' AND description = :type
-              AND (location_code = :locationCode OR location_code IS NULL)
-            ORDER BY (location_code = :locationCode) DESC
-            LIMIT 1
-        `, { replacements: { type: row.type, locationCode: location_code }, type: QueryTypes.SELECT });
-        if (!tagRows.length) throw new Error(`Cashflow type '${row.type}' has no ledger rule and no legacy m_lookup CashFlow entry — cannot determine direction`);
-        tag = tagRows[0].tag;
-        if (tag !== 'IN' && tag !== 'OUT') throw new Error(`Cashflow type '${row.type}' has an unexpected legacy tag '${tag}' (expected IN/OUT)`);
+    if (row.entry_type !== 'CREDIT' && row.entry_type !== 'DEBIT') {
+        throw new Error(`Cashflow transaction ${transactionId} (type '${row.type}') has no entry_type set — cannot determine direction`);
     }
+    const tag = row.entry_type === 'CREDIT' ? 'IN' : 'OUT';
 
     const cashLedgerId = await resolveCashLedger(location_code);
     if (!cashLedgerId) throw new Error(`Cash-in-Hand ledger not found for location ${location_code}`);
 
-    const staticLedgerName = row.rule_ledger_name || row.type;
+    const staticLedgerName = row.account_head_name || row.type;
     const { treatment, ledgerId: counterLedgerId, isContra } =
         await resolveStaticLedger(location_code, staticLedgerName, true, 'Unclassified Cashflow');
 

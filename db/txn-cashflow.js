@@ -21,6 +21,11 @@ module.exports = function(sequelize, DataTypes) {
             field: 'type',
             type: DataTypes.STRING
         },
+        account_head_id: {
+            field: 'account_head_id',
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
         amount: {
             field: 'amount',
             type: DataTypes.DECIMAL

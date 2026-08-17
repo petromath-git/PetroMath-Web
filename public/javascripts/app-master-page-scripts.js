@@ -302,6 +302,7 @@ function formCashFlowTxn(txnId, prefix, rowNum, user) {
         'cashflowId': document.getElementById('cashflowId_hiddenId').value,
         'description': document.getElementById(prefix + 'remarks-' + rowNum).value,
         'type': typeObj.options[typeObj.selectedIndex].text,
+        'account_head_id': typeObj.value,
         'amount': document.getElementById(prefix + 'amt-' + rowNum).value,
         'calcFlag': 'N',
         'created_by': user.User_Name,
