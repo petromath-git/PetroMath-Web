@@ -63,6 +63,7 @@ block content
                                     th Active
                                     th Effective From
                                     th Effective To
+                                    th GL Group
                                     if canEdit
                                         th Edit
                                     if canDisable
@@ -71,7 +72,10 @@ block content
                                 each head, index in accountHeads
                                     tr.head-row
                                         th(scope="row")= index + 1
-                                        td.searchable= head.account_head_name
+                                        td.searchable
+                                            = head.account_head_name
+                                            if head.is_system_type === 'Y'
+                                                i.bi.bi-lock-fill.text-muted.ml-1(title="System-generated — used by cashflow auto-generation, name/deactivation locked")
                                         td.searchable= head.account_head_type
                                         td
                                             span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
@@ -79,6 +83,13 @@ block content
                                         td= head.active_flag
                                         td= head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'
                                         td= head.effective_end_date   ? new Date(head.effective_end_date).toLocaleDateString('en-GB')   : '-'
+                                        td
+                                            select.form-control.form-control-sm.gl-group-select(
+                                                data-id=head.account_head_id,
+                                                style="min-width:160px;")
+                                                option(value="") — Not Set —
+                                                each g in glGroups
+                                                    option(value=g.group_id, selected=(head.gl_group_id === g.group_id))= g.group_name
                                         if canEdit
                                             td
                                                 button.btn.btn-primary.btn-sm.btn-edit-head(
@@ -89,19 +100,27 @@ block content
                                                     data-entry-type=head.allowed_entry_type,
                                                     data-notes=head.notes_required_flag,
                                                     data-active=head.active_flag,
+                                                    data-system=head.is_system_type,
                                                     data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
                                                     data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
                                                     i.bi.bi-pencil
                                         if canDisable
                                             td
-                                                button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
-                                                    i.bi.bi-trash
+                                                if head.is_system_type === 'Y'
+                                                    button.btn.btn-danger.btn-sm(type="button", disabled, title="System-generated — cannot be deactivated")
+                                                        i.bi.bi-trash
+                                                else
+                                                    button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
+                                                        i.bi.bi-trash
 
                 .mobile-cards-view.d-block.d-lg-none
                     each head in accountHeads
                         .card.shadow-sm.mb-2.head-card
                             .card-header.d-flex.justify-content-between.align-items-center
-                                h6.mb-0.text-uppercase= head.account_head_name
+                                h6.mb-0.text-uppercase
+                                    = head.account_head_name
+                                    if head.is_system_type === 'Y'
+                                        i.bi.bi-lock-fill.text-muted.ml-1
                                 .actions
                                     if canEdit
                                         button.btn.btn-primary.btn-sm.mr-1.btn-edit-head(
@@ -112,12 +131,17 @@ block content
                                             data-entry-type=head.allowed_entry_type,
                                             data-notes=head.notes_required_flag,
                                             data-active=head.active_flag,
+                                            data-system=head.is_system_type,
                                             data-start=head.effective_start_date ? head.effective_start_date.toString().substring(0,10) : '',
                                             data-end=head.effective_end_date     ? head.effective_end_date.toString().substring(0,10)   : '')
                                             i.bi.bi-pencil
                                     if canDisable
-                                        button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
-                                            i.bi.bi-trash
+                                        if head.is_system_type === 'Y'
+                                            button.btn.btn-danger.btn-sm(type="button", disabled, title="System-generated — cannot be deactivated")
+                                                i.bi.bi-trash
+                                        else
+                                            button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
+                                                i.bi.bi-trash
                             .card-body.p-2
                                 p.mb-1
                                     b Head Type:&nbsp;
@@ -147,7 +171,8 @@ block content
                                     i.bi.bi-x-circle
                     .col-auto
                         select.form-control#filterBank
-                            option(value="") All Banks
+                            option(value="") All Banks / Cashflow
+                            option(value="CASHFLOW") Cashflow
                             each bank in banks
                                 option(value=bank.bank_id)
                                     = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
@@ -166,7 +191,7 @@ block content
                                 tr
                                     th #
                                     th Type
-                                    th Bank
+                                    th Bank / Context
                                     th Ledger Name
                                     th Entry Type
                                     th Max Amt
@@ -177,7 +202,7 @@ block content
                             tbody#rulesTableBody
                                 each rule, index in allRules
                                     - const isStatic = rule.source_type === 'Static'
-                                    tr.rule-row(data-bank-id=rule.bank_id, data-source-type=rule.source_type)
+                                    tr.rule-row(data-bank-id=rule.bank_id, data-source-type=rule.source_type, data-applies-cashflow=rule.applies_to_cashflow)
                                         th(scope="row")= index + 1
                                         td
                                             span.badge(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : (rule.source_type === 'Bank' ? 'badge-primary' : 'badge-warning')))= rule.source_type
@@ -211,6 +236,7 @@ block content
                                                         data-notes=rule.notes_required_flag,
                                                         data-max-amount=rule.max_amount || '',
                                                         data-allow-split=(rule.allow_split_flag || 'N'),
+                                                        data-applies-cashflow=rule.applies_to_cashflow,
                                                         data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
                                                         data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
                                                         i.bi.bi-pencil
@@ -229,7 +255,7 @@ block content
                 .mobile-cards-view.d-block.d-lg-none
                     each rule in allRules
                         - const isStatic = rule.source_type === 'Static'
-                        .card.shadow-sm.mb-2.rule-card(data-bank-id=rule.bank_id, data-source-type=rule.source_type)
+                        .card.shadow-sm.mb-2.rule-card(data-bank-id=rule.bank_id, data-source-type=rule.source_type, data-applies-cashflow=rule.applies_to_cashflow)
                             .card-header.d-flex.justify-content-between.align-items-center
                                 div
                                     span.badge.mr-1(class=isStatic ? 'badge-info' : (rule.source_type === 'Credit' ? 'badge-success' : 'badge-warning'))= rule.source_type
@@ -247,6 +273,7 @@ block content
                                                 data-notes=rule.notes_required_flag,
                                                 data-max-amount=rule.max_amount || '',
                                                 data-allow-split=(rule.allow_split_flag || 'N'),
+                                                data-applies-cashflow=rule.applies_to_cashflow,
                                                 data-start=rule.effective_start_date ? rule.effective_start_date.toString().substring(0,10) : '',
                                                 data-end=rule.effective_end_date     ? rule.effective_end_date.toString().substring(0,10)   : '')
                                                 i.bi.bi-pencil
@@ -332,6 +359,9 @@ block content
                 .modal-body
                     form#editHeadForm(method='POST', action='/account-heads/update')
                         input(type="hidden", name="account_head_id", id="edit_account_head_id")
+                        p.text-muted.small.mb-2#editHeadSystemNote(style="display:none;")
+                            i.bi.bi-lock-fill.mr-1
+                            | System-generated — name is locked (used by cashflow auto-generation).
                         .form-group
                             label Account Head Name *
                             input.form-control(type="text", name="account_head_name", id="edit_account_head_name", required, style="text-transform:uppercase;", autocomplete="off")
@@ -380,15 +410,24 @@ block content
                     button.close(type="button", data-dismiss="modal", aria-label="Close")
                         span(aria-hidden="true") &times;
                 .modal-body
-                    p.text-muted.small Select the bank and the account head it should map to for statement uploads.
+                    p.text-muted.small Select what this rule applies to and the account head it should map to.
                     form#addRuleForm(method='POST', action='/account-heads/rules')
                         input(type="hidden", name="account_head_id", id="add_rule_head_id")
                         input(type="hidden", name="ledger_name",     id="add_rule_ledger_name")
+                        input(type="hidden", name="applies_to_cashflow", id="add_rule_applies_cashflow", value="N")
+                        .form-group
+                            label Applies To *
+                            .form-check.form-check-inline
+                                input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_bank", value="BANK", checked)
+                                label.form-check-label(for="add_rule_context_bank") Bank
+                            .form-check.form-check-inline
+                                input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_cashflow", value="CASHFLOW")
+                                label.form-check-label(for="add_rule_context_cashflow") Cashflow
                         .form-row
-                            .col-md-6
+                            .col-md-6#add_rule_bank_wrapper
                                 .form-group
                                     label Bank *
-                                    select.form-control(name="bank_id", required)
+                                    select.form-control(name="bank_id", id="add_rule_bank_select", required)
                                         option(value="") — Select Bank —
                                         each bank in banks
                                             option(value=bank.bank_id)
@@ -449,8 +488,17 @@ block content
                         input(type="hidden", name="rule_id",         id="edit_rule_id")
                         input(type="hidden", name="account_head_id", id="edit_rule_head_id")
                         input(type="hidden", name="ledger_name",     id="edit_rule_ledger_name")
+                        input(type="hidden", name="applies_to_cashflow", id="edit_rule_applies_cashflow", value="N")
+                        .form-group
+                            label Applies To *
+                            .form-check.form-check-inline
+                                input.form-check-input.edit-rule-context(type="radio", name="context_type", id="edit_rule_context_bank", value="BANK")
+                                label.form-check-label(for="edit_rule_context_bank") Bank
+                            .form-check.form-check-inline
+                                input.form-check-input.edit-rule-context(type="radio", name="context_type", id="edit_rule_context_cashflow", value="CASHFLOW")
+                                label.form-check-label(for="edit_rule_context_cashflow") Cashflow
                         .form-row
-                            .col-md-6
+                            .col-md-6#edit_rule_bank_wrapper
                                 .form-group
                                     label Bank *
                                     select.form-control(name="bank_id", id="edit_rule_bank_id", required)
@@ -599,19 +647,25 @@ block content
             const ruleRows    = document.querySelectorAll('#rulesTableBody tr.rule-row');
             const ruleCards   = document.querySelectorAll('.rule-card');
 
+            function ruleBankMatches(el, bankId) {
+                if (!bankId) return true;
+                if (bankId === 'CASHFLOW') return el.dataset.appliesCashflow === 'Y';
+                return el.dataset.bankId === bankId;
+            }
+
             function applyRuleFilters() {
                 const term   = searchRules.value.toLowerCase().trim();
                 const bankId = filterBank.value;
                 const type   = filterType.value;
                 ruleRows.forEach(r => {
                     const textOk = !term   || Array.from(r.querySelectorAll('.searchable')).map(el => el.textContent.toLowerCase()).join(' ').includes(term);
-                    const bankOk = !bankId || r.dataset.bankId === bankId;
+                    const bankOk = ruleBankMatches(r, bankId);
                     const typeOk = !type   || r.dataset.sourceType === type;
                     r.style.display = (textOk && bankOk && typeOk) ? '' : 'none';
                 });
                 ruleCards.forEach(c => {
                     const textOk = !term   || c.textContent.toLowerCase().includes(term);
-                    const bankOk = !bankId || c.dataset.bankId === bankId;
+                    const bankOk = ruleBankMatches(c, bankId);
                     const typeOk = !type   || c.dataset.sourceType === type;
                     c.style.display = (textOk && bankOk && typeOk) ? '' : 'none';
                 });
@@ -636,10 +690,24 @@ block content
                 document.getElementById('add_rule_ledger_name').value = opt.dataset.name || '';
             });
 
+            // ── Add Rule: Bank vs Cashflow context toggle ──────────────────
+            function setAddRuleContext(isCashflow) {
+                document.getElementById('add_rule_applies_cashflow').value = isCashflow ? 'Y' : 'N';
+                document.getElementById('add_rule_bank_wrapper').style.display = isCashflow ? 'none' : '';
+                document.getElementById('add_rule_bank_select').required = !isCashflow;
+                if (isCashflow) document.getElementById('add_rule_bank_select').value = '';
+            }
+            document.querySelectorAll('.add-rule-context').forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    setAddRuleContext(this.value === 'CASHFLOW');
+                });
+            });
+
             $('#addRuleModal').on('hidden.bs.modal', function () {
                 document.getElementById('addRuleForm').reset();
                 document.getElementById('add_rule_head_id').value     = '';
                 document.getElementById('add_rule_ledger_name').value = '';
+                setAddRuleContext(false);
             });
 
             // ── Edit Account Head ─────────────────────────────────────────
@@ -655,7 +723,24 @@ block content
                 document.getElementById('edit_active_flag').value          = d.active;
                 document.getElementById('edit_effective_start_date').value = d.start;
                 document.getElementById('edit_effective_end_date').value   = d.end;
+                const isSystem = d.system === 'Y';
+                document.getElementById('edit_account_head_name').readOnly = isSystem;
+                document.getElementById('editHeadSystemNote').style.display = isSystem ? '' : 'none';
                 $('#editHeadModal').modal('show');
+            });
+
+            // ── Edit Rule: Bank vs Cashflow context toggle ─────────────────
+            function setEditRuleContext(isCashflow) {
+                document.getElementById('edit_rule_applies_cashflow').value = isCashflow ? 'Y' : 'N';
+                document.getElementById('edit_rule_bank_wrapper').style.display = isCashflow ? 'none' : '';
+                document.getElementById('edit_rule_bank_id').required = !isCashflow;
+                if (isCashflow) document.getElementById('edit_rule_bank_id').value = '';
+                document.getElementById(isCashflow ? 'edit_rule_context_cashflow' : 'edit_rule_context_bank').checked = true;
+            }
+            document.querySelectorAll('.edit-rule-context').forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    setEditRuleContext(this.value === 'CASHFLOW');
+                });
             });
 
             // ── Edit Static Rule ──────────────────────────────────────────
@@ -664,7 +749,6 @@ block content
                 if (!btn) return;
                 const d = btn.dataset;
                 document.getElementById('edit_rule_id').value          = d.id;
-                document.getElementById('edit_rule_bank_id').value     = d.bankId;
                 document.getElementById('edit_rule_head_id').value     = d.accountHeadId;
                 document.getElementById('edit_rule_ledger_name').value = d.ledgerName;
                 document.getElementById('edit_rule_head_select').value = d.accountHeadId;
@@ -674,6 +758,9 @@ block content
                 document.getElementById('edit_rule_max_amount').value  = d.maxAmount;
                 document.getElementById('edit_rule_start').value       = d.start;
                 document.getElementById('edit_rule_end').value         = d.end;
+                const isCashflow = d.appliesCashflow === 'Y';
+                setEditRuleContext(isCashflow);
+                document.getElementById('edit_rule_bank_id').value = isCashflow ? '' : (d.bankId || '');
                 $('#editRuleModal').modal('show');
             });
 
@@ -736,3 +823,32 @@ block content
                 form.submit();
             }
         }
+
+        // GL Group auto-save — fires on dropdown change
+        document.querySelectorAll('.gl-group-select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                const id      = this.dataset.id;
+                const groupId = this.value;
+                const orig    = this;
+                orig.disabled = true;
+                fetch('/account-heads/' + id + '/gl-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gl_group_id: groupId || null })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    orig.disabled = false;
+                    if (data.success) {
+                        orig.style.borderColor = '#28a745';
+                        setTimeout(() => orig.style.borderColor = '', 1500);
+                    } else {
+                        alert('Failed to save GL group: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(() => {
+                    orig.disabled = false;
+                    alert('Network error saving GL group');
+                });
+            });
+        });

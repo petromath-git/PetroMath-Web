@@ -3,6 +3,18 @@ const AccountHeadsDao    = require("../dao/account-heads-dao");
 const LedgerRulesDao     = require("../dao/ledger-rules-dao");
 const BankDao            = require("../dao/bank-dao");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
+const { getLedgersByGroup } = require('../routes/gl-routes');
+const db = require('../db/db-connection');
+const { QueryTypes } = require('sequelize');
+
+async function getAllGlGroups(locationCode) {
+    return db.sequelize.query(`
+        SELECT group_id, group_name, group_nature
+        FROM gl_ledger_groups
+        WHERE location_code = :locationCode AND active_flag = 'Y'
+        ORDER BY group_nature, group_name
+    `, { replacements: { locationCode }, type: QueryTypes.SELECT });
+}
 
 module.exports = {
 
@@ -12,11 +24,12 @@ module.exports = {
             const role         = req.user.Role;
             const activeTab    = req.query.tab || 'heads';
 
-            const [accountHeads, allRules, banks,
+            const [accountHeads, allRules, banks, glGroups,
                    canEdit, canAdd, canDisable] = await Promise.all([
                 AccountHeadsDao.getAccountHeads(locationCode),
                 LedgerRulesDao.getAllRules(locationCode),
                 BankDao.findAll(locationCode),
+                getAllGlGroups(locationCode),
                 rolePermissionsDao.hasPermission(role, locationCode, 'EDIT_ACCOUNT_HEADS'),
                 rolePermissionsDao.hasPermission(role, locationCode, 'ADD_ACCOUNT_HEADS'),
                 rolePermissionsDao.hasPermission(role, locationCode, 'DISABLE_ACCOUNT_HEADS'),
@@ -28,6 +41,7 @@ module.exports = {
                 accountHeads,
                 allRules,
                 banks,
+                glGroups,
                 canEdit,
                 canAdd,
                 canDisable,
@@ -84,7 +98,7 @@ module.exports = {
             res.redirect("/account-heads");
         } catch (err) {
             console.error("Error updating account head:", err);
-            req.flash("error", "Error updating account head");
+            req.flash("error", err.message || "Error updating account head");
             res.redirect("/account-heads");
         }
     },
@@ -99,7 +113,7 @@ module.exports = {
             res.redirect("/account-heads");
         } catch (err) {
             console.error("Error deactivating account head:", err);
-            req.flash("error", "Error deactivating account head");
+            req.flash("error", err.message || "Error deactivating account head");
             res.redirect("/account-heads");
         }
     },
@@ -110,10 +124,17 @@ module.exports = {
 
     createRule: async (req, res, next) => {
         try {
+            const appliesToCashflow = req.body.applies_to_cashflow === 'Y' ? 'Y' : 'N';
+
+            if (appliesToCashflow === 'Y') {
+                const dup = await LedgerRulesDao.findCashflowRuleByHead(req.user.location_code, req.body.account_head_id);
+                if (dup) throw new Error("A Cashflow rule for this Account Head already exists");
+            }
+
             // external_id and ledger_name come from the account head dropdown selection
             const data = {
                 location_code:        req.user.location_code,
-                bank_id:              req.body.bank_id,
+                bank_id:              appliesToCashflow === 'Y' ? null : req.body.bank_id,
                 external_id:          req.body.account_head_id,
                 ledger_name:          req.body.ledger_name,
                 allowed_entry_type:   req.body.allowed_entry_type,
@@ -122,6 +143,7 @@ module.exports = {
                 effective_start_date: req.body.effective_start_date  || null,
                 effective_end_date:   req.body.effective_end_date    || null,
                 allow_split_flag:     req.body.allow_split_flag      === 'Y' ? 'Y' : 'N',
+                applies_to_cashflow:  appliesToCashflow,
                 created_by:           req.user.username || req.user.Person_id
             };
 
@@ -132,7 +154,7 @@ module.exports = {
             console.error("Error creating ledger rule:", err);
             const msg = err.original?.code === 'ER_DUP_ENTRY'
                 ? "A rule for this Bank + Account Head combination already exists"
-                : (err.original?.sqlMessage || "Error creating ledger rule");
+                : (err.original?.sqlMessage || err.message || "Error creating ledger rule");
             req.flash("error", msg);
             res.redirect("/account-heads?tab=rules");
         }
@@ -140,9 +162,16 @@ module.exports = {
 
     updateRule: async (req, res, next) => {
         try {
+            const appliesToCashflow = req.body.applies_to_cashflow === 'Y' ? 'Y' : 'N';
+
+            if (appliesToCashflow === 'Y') {
+                const dup = await LedgerRulesDao.findCashflowRuleByHead(req.user.location_code, req.body.account_head_id, req.body.rule_id);
+                if (dup) throw new Error("A Cashflow rule for this Account Head already exists");
+            }
+
             const data = {
                 rule_id:              req.body.rule_id,
-                bank_id:              req.body.bank_id,
+                bank_id:              appliesToCashflow === 'Y' ? null : req.body.bank_id,
                 external_id:          req.body.account_head_id,
                 ledger_name:          req.body.ledger_name,
                 allowed_entry_type:   req.body.allowed_entry_type,
@@ -151,6 +180,7 @@ module.exports = {
                 effective_start_date: req.body.effective_start_date  || null,
                 effective_end_date:   req.body.effective_end_date    || null,
                 allow_split_flag:     req.body.allow_split_flag      === 'Y' ? 'Y' : 'N',
+                applies_to_cashflow:  appliesToCashflow,
                 updated_by:           req.user.username || req.user.Person_id
             };
 
@@ -161,7 +191,7 @@ module.exports = {
             console.error("Error updating ledger rule:", err);
             const msg = err.original?.code === 'ER_DUP_ENTRY'
                 ? "A rule for this Bank + Account Head combination already exists"
-                : (err.original?.sqlMessage || "Error updating ledger rule");
+                : (err.original?.sqlMessage || err.message || "Error updating ledger rule");
             req.flash("error", msg);
             res.redirect("/account-heads?tab=rules");
         }
@@ -198,6 +228,19 @@ module.exports = {
     },
 
     // ── Credit / Supplier — entry type override only ──────────────────────
+
+    updateGlGroup: async (req, res, next) => {
+        try {
+            const id       = req.params.id;
+            const glGroupId = req.body.gl_group_id || null;
+            const updatedBy = req.user.username || req.user.Person_id;
+            await AccountHeadsDao.updateGlGroup(id, glGroupId, updatedBy);
+            res.json({ success: true });
+        } catch (err) {
+            console.error('Error updating GL group:', err);
+            res.status(500).json({ error: err.message });
+        }
+    },
 
     updateEntryType: async (req, res, next) => {
         try {
