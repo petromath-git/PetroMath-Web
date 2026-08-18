@@ -56,7 +56,10 @@ block content
                                 each row in g.rows
                                     tr
                                         td.pl-4
-                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                            if row.ledger_id
+                                                a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                            else
+                                                span.text-muted= row.ledger_name
                                         td.text-right.small= fmt(row.amount)
                                 tr.group-subtotal
                                     td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
@@ -79,7 +82,10 @@ block content
                                 each row in g.rows
                                     tr
                                         td.pl-4
-                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                            if row.ledger_id
+                                                a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fromDate + '&to_date=' + toDate)= row.ledger_name
+                                            else
+                                                span.text-muted= row.ledger_name
                                         td.text-right.small= fmt(row.amount)
                                 tr.group-subtotal
                                     td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total

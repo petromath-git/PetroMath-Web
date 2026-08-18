@@ -7,6 +7,7 @@ const security = require('../utils/app-security');
 const db = require('../db/db-connection');
 const createAccountingService = require('../services/create-accounting-service');
 const glBatchService = require('../services/gl-batch-service');
+const stockValuationService = require('../services/stock-valuation-service');
 
 // GET /gl/api/ledgers/search?location=&group=&q=
 // Returns [{ledger_id, ledger_name}] — used by Select2 ajax typeahead on product ledger fields
@@ -463,6 +464,60 @@ router.get('/profit-loss', [isLoginEnsured, security.isAdmin()], async function(
                 g.rows.push({ ledger_id: row.ledger_id, ledger_name: row.ledger_name, amount: net });
                 g.subtotal    += net;
                 totalExpenses += net;
+            }
+        }
+
+        // Stock-adjusted COGS — only for products with a gl_stock_opening_balance
+        // seed for the FY covering fromDate. Never changes the per-ledger figures
+        // above (those still match the trial balance); adds one visible
+        // adjustment line per group instead, so the swap from raw invoiced
+        // purchases to actual COGS (opening + purchases - closing) is auditable,
+        // not a silent number change. See services/stock-valuation-service.js.
+        const [fy] = await db.sequelize.query(`
+            SELECT fy_id FROM gl_financial_years
+            WHERE location_code = :locationCode AND :fromDate BETWEEN start_date AND end_date
+            LIMIT 1
+        `, { replacements: { locationCode, fromDate }, type: db.Sequelize.QueryTypes.SELECT });
+
+        if (fy) {
+            const stockResults = await stockValuationService.computeStockCOGS(locationCode, fy.fy_id, fromDate, toDate);
+
+            if (stockResults.length) {
+                const productLedgers = await db.sequelize.query(`
+                    SELECT product_id, ledger_id FROM gl_product_ledger_map
+                    WHERE location_code = :locationCode AND map_type = 'PURCHASE'
+                `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+                const ledgerByProduct = new Map(productLedgers.map(r => [r.product_id, r.ledger_id]));
+
+                // Multiple products can share one purchase ledger (e.g. MS and
+                // HSD both post to "PURCHASE DIESEL EBMS" for SFS) — aggregate
+                // computed COGS by ledger before comparing against that
+                // ledger's raw total, or a shared ledger gets compared against
+                // itself twice and produces nonsense.
+                const stockCogsByLedger = new Map();
+                for (const r of stockResults) {
+                    const ledgerId = ledgerByProduct.get(r.productId);
+                    if (!ledgerId) continue;
+                    stockCogsByLedger.set(ledgerId, (stockCogsByLedger.get(ledgerId) || 0) + r.cogs);
+                }
+
+                let totalAdjustment = 0;
+                for (const [ledgerId, cogs] of stockCogsByLedger) {
+                    const rawRow = rows.find(row => row.ledger_id === ledgerId);
+                    const rawAmount = rawRow ? (parseFloat(rawRow.total_dr) - parseFloat(rawRow.total_cr)) : 0;
+                    totalAdjustment += (cogs - rawAmount);
+                }
+
+                if (Math.abs(totalAdjustment) > 0.01 && expenseGroupMap.has('Purchase Accounts')) {
+                    const g = expenseGroupMap.get('Purchase Accounts');
+                    g.rows.push({
+                        ledger_id: null,
+                        ledger_name: 'Stock Adjustment (Opening + Purchases − Closing vs. Invoiced)',
+                        amount: totalAdjustment
+                    });
+                    g.subtotal    += totalAdjustment;
+                    totalExpenses += totalAdjustment;
+                }
             }
         }
 
