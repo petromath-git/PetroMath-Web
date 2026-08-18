@@ -165,10 +165,19 @@ async function computeProductStockCOGS(locationCode, fyId, productId, fromDate, 
         runningValue += purchaseValue;
 
         let cogsToday = 0;
-        if (qtySold > 0) {
-            const avgCost = runningQty > 0 ? runningValue / runningQty : 0;
-            cogsToday     = qtySold * avgCost;
-            runningQty   -= qtySold;
+        if (qtySold > 0 && runningQty > 0) {
+            const avgCost   = runningValue / runningQty;
+            // Clamp at what's actually tracked — a partial/in-progress month
+            // where sales have been recorded faster than purchases were
+            // entered (e.g. this month's invoices not in yet) must never
+            // drive the balance negative: that corrupts every average-cost
+            // calculation from that point forward. The uncovered portion is
+            // left unrecognized (zero-cost) rather than invented — it gets
+            // picked up correctly once the missing purchase is entered and
+            // this is recomputed.
+            const qtyCovered = Math.min(qtySold, runningQty);
+            cogsToday     = qtyCovered * avgCost;
+            runningQty   -= qtyCovered;
             runningValue -= cogsToday;
         }
 
