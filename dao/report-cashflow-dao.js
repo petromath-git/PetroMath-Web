@@ -13,21 +13,21 @@ module.exports = {
     const result = await db.sequelize.query(
         `SELECT tct.type,
                 tct.description,
-                IF(ml.tag = 'IN', tct.amount, '') credit,
-                IF(ml.tag = 'OUT', tct.amount, '') debit
+                IF(tct.entry_type = 'CREDIT', tct.amount, '') credit,
+                IF(tct.entry_type = 'DEBIT', tct.amount, '') debit
             FROM
-                t_cashflow_transaction tct,
-                t_cashflow_closing tcc,
-                m_lookup ml
+                t_cashflow_transaction tct
+                JOIN t_cashflow_closing tcc ON tcc.cashflow_id = tct.cashflow_id
+                LEFT JOIN m_ledger_rules mlr
+                    ON  mlr.location_code = tcc.location_code
+                    AND mlr.external_id   = tct.account_head_id
+                    AND mlr.source_type   = 'Static'
+                    AND mlr.applies_to_cashflow = 'Y'
             WHERE
                 tcc.location_code = :locationCode
                     AND DATE(tcc.cashflow_date) = :cashflowDate
-                    AND tcc.cashflow_id = tct.cashflow_id
-                    AND ml.lookup_type = 'CashFlow'
-                    AND ml.description = tct.type
-                    AND ml.location_code = tcc.location_code
                     AND tcc.closing_status = 'CLOSED'
-            ORDER BY CONVERT( ml.attribute1 , SIGNED)`,
+            ORDER BY COALESCE(mlr.display_sequence, 999999), tct.type`,
         {
           replacements: { locationCode: locationCode, cashflowDate: cashhflowDate },
           type: Sequelize.QueryTypes.SELECT

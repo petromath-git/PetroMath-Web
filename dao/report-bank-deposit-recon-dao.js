@@ -10,37 +10,33 @@ module.exports = {
      */
     getCashflowBankDeposits: async (locationCode, fromDate, toDate) => {
         const query = `
-            SELECT 
+            SELECT
                 DATE_FORMAT(tcc.cashflow_date, '%d-%m-%Y') as Date,
                 tcc.cashflow_date as DateObj,
                 tct.description as Description,
                 tct.type as BankAccount,
                 tct.amount as Amount,
-                
+
                 -- Source tracking
                 't_cashflow_transaction' as source_table,
                 tct.transaction_id as source_id,
-                
+
                 -- Reconciliation fields
                 tct.recon_match_id,
                 tct.manual_recon_flag,
                 tct.manual_recon_by,
                 tct.manual_recon_date,
-                
+
                 -- Additional metadata
-                tcc.cashflow_id,
-                ml.lookup_id
-                
+                tcc.cashflow_id
+
             FROM t_cashflow_transaction tct
             INNER JOIN t_cashflow_closing tcc ON tct.cashflow_id = tcc.cashflow_id
-            LEFT JOIN m_lookup ml ON ml.lookup_type = 'CashFlow' 
-                AND ml.description = tct.type
-                AND ml.location_code = tcc.location_code
-            WHERE 
+            WHERE
                 tcc.location_code = :locationCode
                 AND DATE(tcc.cashflow_date) BETWEEN :fromDate AND :toDate
                 AND tcc.closing_status = 'CLOSED'
-                AND ml.tag = 'OUT'
+                AND tct.entry_type = 'DEBIT'
                 AND tct.type LIKE 'To Bank%'
                 AND tct.amount > 0
             ORDER BY tcc.cashflow_date ASC
@@ -210,14 +206,11 @@ module.exports = {
                 SUM(CASE WHEN tct.recon_match_id IS NOT NULL THEN tct.amount ELSE 0 END) as matched_amount
             FROM t_cashflow_transaction tct
             INNER JOIN t_cashflow_closing tcc ON tct.cashflow_id = tcc.cashflow_id
-            LEFT JOIN m_lookup ml ON ml.lookup_type = 'CashFlow' 
-                AND ml.description = tct.type
-                AND ml.location_code = tcc.location_code
-            WHERE 
+            WHERE
                 tcc.location_code = :locationCode
                 AND DATE(tcc.cashflow_date) BETWEEN :fromDate AND :toDate
                 AND tcc.closing_status = 'CLOSED'
-                AND ml.tag = 'OUT'
+                AND tct.entry_type = 'DEBIT'
                 AND tct.type LIKE 'To Bank%'
                 AND tct.amount > 0
 
