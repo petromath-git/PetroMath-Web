@@ -101,7 +101,7 @@ module.exports = {
                 AND mlr.applies_to_cashflow = 'Y'
                 AND mlr.allowed_entry_type IN (:entryType, 'BOTH')
             WHERE ah.location_code = :location AND ah.active_flag = 'Y'
-            ORDER BY ah.account_head_name
+            ORDER BY COALESCE(mlr.display_sequence, 999999), ah.account_head_name
         `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
 
         const transactions = await db.sequelize.query(`
