@@ -105,11 +105,16 @@ module.exports = {
         `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
 
         const transactions = await db.sequelize.query(`
-            SELECT transaction_id, description, amount, type, calc_flag AS calcFlag
-            FROM t_cashflow_transaction
-            WHERE cashflow_id = :id AND entry_type = :entryType
-            ORDER BY transaction_id
-        `, { replacements: { id, entryType }, type: Sequelize.QueryTypes.SELECT });
+            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag
+            FROM t_cashflow_transaction tct
+            LEFT JOIN m_ledger_rules mlr
+                ON  mlr.location_code = :location
+                AND mlr.external_id   = tct.account_head_id
+                AND mlr.source_type   = 'Static'
+                AND mlr.applies_to_cashflow = 'Y'
+            WHERE tct.cashflow_id = :id AND tct.entry_type = :entryType
+            ORDER BY COALESCE(mlr.display_sequence, 999999), tct.type, tct.transaction_id
+        `, { replacements: { location, id, entryType }, type: Sequelize.QueryTypes.SELECT });
 
         return { options, transactions };
     },
