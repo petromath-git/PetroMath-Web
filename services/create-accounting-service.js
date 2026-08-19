@@ -12,11 +12,11 @@
 //   LUBES_INVOICE       (source_id = lubes_hdr_id)     — Purchase DR + Input CGST/SGST DR / Supplier CR
 //   TANK_INVOICE        (source_id = t_tank_invoice.id)— Purchase DR + Charges DR / Supplier CR
 //   CASHFLOW_TXN        (source_id = transaction_id)   — calc_flag='N' cashflow-close lines only.
-//                                                         Ledger resolved by (in order): explicit
-//                                                         gl_cashflow_ledger_map row, exact ledger-name
-//                                                         match on the cashflow type, else falls back to
-//                                                         the per-location "Unclassified Cashflow" ledger
-//                                                         (never blocks processing — see resolveCashflowLedger).
+//                                                         Direction comes from entry_type on the row itself;
+//                                                         ledger resolution goes through the linked Account
+//                                                         Head's name -> resolveStaticLedger (shared with
+//                                                         BANK_TXN's Static labels). Never blocks processing;
+//                                                         unmapped labels fall back to "Unclassified Cashflow".
 //   ADJUSTMENT          (source_id = adjustment_id)    — customer/vendor/bank corrections + opening
 //                                                         balances (adjustment_type=201 → "Opening Balance
 //                                                         Equity", off the P&L; other types resolve by
@@ -1206,16 +1206,22 @@ async function processTankInvoiceEvent(event, processedBy) {
 
 // ─── CASHFLOW_TXN Handler ─────────────────────────────────────────────────────
 // Only calc_flag='N' rows reach this handler (calc_flag='Y' rows never raise an
-// event — see trg_cashflow_txn_gl_insert). tag='OUT' → cash left the drawer
-// (DR resolved ledger / CR Cash-in-Hand). tag='IN' → cash came in (reverse).
-// See resolveCashflowLedger for how the counterpart ledger is resolved.
+// event — see trg_cashflow_txn_gl_insert). Direction comes straight off
+// t_cashflow_transaction.entry_type (resolved before processing time by the
+// account-head trigger, or by the entry UI once that ships). Ledger resolution
+// goes through the Account Head's name -> resolveStaticLedger -> gl_static_ledger_map,
+// same as BANK_TXN. The engine never joins m_ledger_rules or m_account_heads for
+// direction — allowed_entry_type there is a data-entry-time constraint, not a
+// per-row fact.
 
 async function processCashflowTxnEvent(event, processedBy) {
     const { location_code, fy_id, source_id: transactionId, event_date } = event;
 
     const rows = await db.sequelize.query(`
-        SELECT tct.transaction_id, tct.type, tct.description, tct.amount, tct.calc_flag
+        SELECT tct.transaction_id, tct.type, tct.description, tct.amount, tct.calc_flag,
+               tct.entry_type, mah.account_head_name
         FROM t_cashflow_transaction tct
+        LEFT JOIN m_account_heads mah ON mah.account_head_id = tct.account_head_id
         WHERE tct.transaction_id = :transactionId
     `, { replacements: { transactionId }, type: QueryTypes.SELECT });
 
@@ -1234,22 +1240,22 @@ async function processCashflowTxnEvent(event, processedBy) {
         return { voucherCount: 0 };
     }
 
-    const tagRows = await db.sequelize.query(`
-        SELECT tag FROM m_lookup
-        WHERE lookup_type = 'CashFlow' AND description = :type
-          AND (location_code = :locationCode OR location_code IS NULL)
-        ORDER BY (location_code = :locationCode) DESC
-        LIMIT 1
-    `, { replacements: { type: row.type, locationCode: location_code }, type: QueryTypes.SELECT });
-
-    if (!tagRows.length) throw new Error(`Cashflow type '${row.type}' has no matching m_lookup CashFlow entry — cannot determine IN/OUT direction`);
-    const tag = tagRows[0].tag;
-    if (tag !== 'IN' && tag !== 'OUT') throw new Error(`Cashflow type '${row.type}' has an unexpected tag '${tag}' (expected IN/OUT)`);
+    if (row.entry_type !== 'CREDIT' && row.entry_type !== 'DEBIT') {
+        throw new Error(`Cashflow transaction ${transactionId} (type '${row.type}') has no entry_type set — cannot determine direction`);
+    }
+    const tag = row.entry_type === 'CREDIT' ? 'IN' : 'OUT';
 
     const cashLedgerId = await resolveCashLedger(location_code);
     if (!cashLedgerId) throw new Error(`Cash-in-Hand ledger not found for location ${location_code}`);
 
-    const { ledgerId: counterLedgerId, isContra } = await resolveCashflowLedger(location_code, row.type, processedBy);
+    const staticLedgerName = row.account_head_name || row.type;
+    const { treatment, ledgerId: counterLedgerId, isContra } =
+        await resolveStaticLedger(location_code, staticLedgerName, true, 'Unclassified Cashflow');
+
+    if (treatment === 'SKIP') {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
 
     const narration = `${row.type}${row.description ? ' | ' + row.description : ''} | ₹${amount.toFixed(2)} | ${event_date}`;
     const voucherType = isContra ? 'CONTRA' : 'JOURNAL';
@@ -1274,36 +1280,6 @@ async function processCashflowTxnEvent(event, processedBy) {
 
     await markEventProcessed(event.event_id, vid, processedBy);
     return { voucherCount: 1 };
-}
-
-// Resolves the counterpart ledger for a calc_flag='N' cashflow type, in order:
-//   1. gl_cashflow_ledger_map.bank_id  → that bank's own GL ledger (contra — deposit/withdrawal)
-//   2. gl_cashflow_ledger_map.ledger_id → explicit override
-//   3. exact ledger-name match on the cashflow type text (same convention as TANK_INVOICE charge_type)
-//   4. per-location "Unclassified Cashflow" ledger — never blocks processing; reprocess later once mapped
-async function resolveCashflowLedger(locationCode, cashflowType, processedBy) {
-    const mapRows = await db.sequelize.query(`
-        SELECT ledger_id, bank_id FROM gl_cashflow_ledger_map
-        WHERE location_code = :locationCode AND cashflow_type = :cashflowType
-        LIMIT 1
-    `, { replacements: { locationCode, cashflowType }, type: QueryTypes.SELECT });
-
-    if (mapRows.length && mapRows[0].bank_id) {
-        const ledgerId = await resolveLedger(locationCode, 'BANK', mapRows[0].bank_id);
-        if (!ledgerId) throw new Error(`gl_cashflow_ledger_map for '${cashflowType}' points at bank_id=${mapRows[0].bank_id}, but that bank has no GL ledger`);
-        return { ledgerId, isContra: true };
-    }
-
-    if (mapRows.length && mapRows[0].ledger_id) {
-        return { ledgerId: mapRows[0].ledger_id, isContra: false };
-    }
-
-    const byName = await resolveLedgerByName(locationCode, cashflowType);
-    if (byName) return { ledgerId: byName.ledger_id, isContra: false };
-
-    const fallback = await resolveLedgerByName(locationCode, 'Unclassified Cashflow');
-    if (!fallback) throw new Error(`No 'Unclassified Cashflow' ledger set up for location ${locationCode} — run db/migrations/gl-cashflow-adjustments-triggers.sql`);
-    return { ledgerId: fallback.ledger_id, isContra: false };
 }
 
 // ─── ADJUSTMENT Handler ───────────────────────────────────────────────────────
@@ -1727,9 +1703,9 @@ async function resolveLedgerByName(locationCode, ledgerName) {
 // allowSkip=false (used for split legs) treats a SKIP-mapped label as
 // Unclassified instead, since one leg of a split can't be silently dropped
 // without unbalancing the voucher.
-async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true) {
+async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true, fallbackLedgerName = 'Unclassified Bank Transaction') {
     const rows = await db.sequelize.query(`
-        SELECT treatment, gl_ledger_id FROM gl_static_ledger_map
+        SELECT treatment, gl_ledger_id, bank_id FROM gl_static_ledger_map
         WHERE location_code = :locationCode AND ledger_name = :ledgerName
         LIMIT 1
     `, { replacements: { locationCode, ledgerName }, type: QueryTypes.SELECT });
@@ -1746,12 +1722,19 @@ async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true) {
         `, { replacements: { locationCode, ledgerName }, type: QueryTypes.INSERT });
         mapped = null;
     }
-    if (allowSkip && mapped?.treatment === 'SKIP') return { treatment: 'SKIP', ledgerId: null };
-    if (mapped?.treatment === 'POST' && mapped.gl_ledger_id) return { treatment: 'POST', ledgerId: mapped.gl_ledger_id };
+    if (allowSkip && mapped?.treatment === 'SKIP') return { treatment: 'SKIP', ledgerId: null, isContra: false };
 
-    const fallback = await resolveLedgerByName(locationCode, 'Unclassified Bank Transaction');
-    if (!fallback) throw new Error(`No 'Unclassified Bank Transaction' ledger set up for location ${locationCode} — run db/migrations/gl-static-ledger-map.sql`);
-    return { treatment: 'POST', ledgerId: fallback.ledger_id };
+    if (mapped?.treatment === 'CONTRA' && mapped.bank_id) {
+        const ledgerId = await resolveLedger(locationCode, 'BANK', mapped.bank_id);
+        if (!ledgerId) throw new Error(`gl_static_ledger_map for '${ledgerName}' points at bank_id=${mapped.bank_id}, but that bank has no GL ledger`);
+        return { treatment: 'CONTRA', ledgerId, isContra: true };
+    }
+
+    if (mapped?.treatment === 'POST' && mapped.gl_ledger_id) return { treatment: 'POST', ledgerId: mapped.gl_ledger_id, isContra: false };
+
+    const fallback = await resolveLedgerByName(locationCode, fallbackLedgerName);
+    if (!fallback) throw new Error(`No '${fallbackLedgerName}' ledger set up for location ${locationCode} — run db/migrations/gl-static-ledger-map.sql`);
+    return { treatment: 'POST', ledgerId: fallback.ledger_id, isContra: false };
 }
 
 async function resolveCashLedger(locationCode) {

@@ -3,7 +3,6 @@ const CashFlowClosing = db.cashflow_closing;
 const CashFlowTxn = db.txn_cashflow;
 const ClosingTxn = db.txn_closing;
 const CashFlowDenoms = db.cashflow_denoms;
-const Lookup = db.lookup;
 const config = require("../config/app-config");
 const { Sequelize, Op } = require("sequelize");
 
@@ -84,21 +83,40 @@ module.exports = {
     addNew: (cashflowClosing) => {
         return CashFlowClosing.create(cashflowClosing)
     },
-    findCashflowTxnById: (location, id, type) => {
-        return Lookup.findAll({
-            where: {
-                location_code: location,
-                tag: type
-            },
-            include: [
-                {
-                    model: CashFlowTxn,
-                    where: {
-                        cashflow_id: id,
-                    },
-                    required: false
-                }],
-        });
+    // Dropdown options + existing entries for one flow direction (Credit/InFlow
+    // or Debit/OutFlow) of a cashflow. Options come from Account Heads that
+    // have a cashflow-scoped Ledger Rule (applies_to_cashflow='Y') for this
+    // direction; existing entries come straight off t_cashflow_transaction.entry_type
+    // (set at insert time — see trg_cashflow_txn_account_head_insert).
+    findCashflowTxnById: async (location, id, type) => {
+        const entryType = type === 'IN' ? 'CREDIT' : 'DEBIT';
+
+        const options = await db.sequelize.query(`
+            SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name
+            FROM m_account_heads ah
+            INNER JOIN m_ledger_rules mlr
+                ON  mlr.location_code = ah.location_code
+                AND mlr.external_id   = ah.account_head_id
+                AND mlr.source_type   = 'Static'
+                AND mlr.applies_to_cashflow = 'Y'
+                AND mlr.allowed_entry_type IN (:entryType, 'BOTH')
+            WHERE ah.location_code = :location AND ah.active_flag = 'Y'
+            ORDER BY COALESCE(mlr.display_sequence, 999999), ah.account_head_name
+        `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
+
+        const transactions = await db.sequelize.query(`
+            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag
+            FROM t_cashflow_transaction tct
+            LEFT JOIN m_ledger_rules mlr
+                ON  mlr.location_code = :location
+                AND mlr.external_id   = tct.account_head_id
+                AND mlr.source_type   = 'Static'
+                AND mlr.applies_to_cashflow = 'Y'
+            WHERE tct.cashflow_id = :id AND tct.entry_type = :entryType
+            ORDER BY COALESCE(mlr.display_sequence, 999999), tct.type, tct.transaction_id
+        `, { replacements: { location, id, entryType }, type: Sequelize.QueryTypes.SELECT });
+
+        return { options, transactions };
     },
     triggerGenerateCashflow : (cashflowId) => {
         const cashflowTxn = db.sequelize.query('CALL generate_cashflow(' + cashflowId + ');', null, { raw: true });
@@ -106,7 +124,7 @@ module.exports = {
     },
     saveCashflowTxns: (data) => {
         const txns = CashFlowTxn.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["description", "type", "amount", "updated_by", "updation_date"]});
+            updateOnDuplicate: ["description", "type", "account_head_id", "amount", "updated_by", "updation_date"]});
         return txns;
     },
     delete: (id) => {

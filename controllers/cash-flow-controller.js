@@ -297,26 +297,16 @@ function getManagerNames(closingValues, cashflowDate, personData) {
     return managers.toString();
 }
 
-function collectCreditAndDebits(tableJoinData) {
-    let creditOrDebits = [], options = [];
-    if(tableJoinData) {
-        tableJoinData.forEach((data) => {
-            options.push({id: data.lookup_id, name: data.description});
-            let t_cashflows = data.t_cashflow_transactions;
-            if (t_cashflows && t_cashflows.length > 0) {
-                t_cashflows.forEach((t_cashflow) => {
-                    creditOrDebits.push({
-                        txn_id: t_cashflow.transaction_id,
-                        description: t_cashflow.description,
-                        amount: t_cashflow.amount,
-                        type: t_cashflow.type,
-                        calcFlag: t_cashflow.calcFlag
-                    });
-                });
-            }
-        });
-    }
-    return {data : creditOrDebits, options: options};
+function collectCreditAndDebits(result) {
+    if (!result) return { data: [], options: [] };
+    const creditOrDebits = (result.transactions || []).map((t) => ({
+        txn_id: t.transaction_id,
+        description: t.description,
+        amount: t.amount,
+        type: t.type,
+        calcFlag: t.calcFlag
+    }));
+    return { data: creditOrDebits, options: result.options || [] };
 }
 
 
