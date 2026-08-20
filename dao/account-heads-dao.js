@@ -59,10 +59,27 @@ module.exports = {
                 :created_by
             )
         `;
-        return await db.sequelize.query(query, {
+        const result = await db.sequelize.query(query, {
             replacements: data,
             type: QueryTypes.INSERT
         });
+
+        // Every Account Head IS a Static Ledger by definition — register it in
+        // gl_static_ledger_map right away (unreviewed) so it shows up on the
+        // review screen from day one, rather than relying on the GL engine to
+        // discover it reactively the first time some transaction happens to use
+        // that exact name. That reactive-only path is also what lets things
+        // that were never really Static (e.g. a mis-linked customer name) end
+        // up looking identical to a deliberately-defined Static ledger.
+        await db.sequelize.query(`
+            INSERT IGNORE INTO gl_static_ledger_map (location_code, ledger_name, created_by, updated_by)
+            VALUES (:location_code, :account_head_name, :created_by, :created_by)
+        `, {
+            replacements: data,
+            type: QueryTypes.INSERT
+        });
+
+        return result;
     },
 
     updateAccountHead: async (data) => {
