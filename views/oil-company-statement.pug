@@ -170,9 +170,9 @@ block content
                     tbody#transaction-rows
                         if transactionList && transactionList.length > 0
                             each val, index in transactionList
-                                - const isUnclassified = !val.ledger_name
-                                - const canReclassify = !['Credit', 'Supplier'].includes(val.external_source)
-                                tr(id='transaction_row_'+index data-search-text=(val.trans_date + ' ' + val.account_nickname + ' ' + (val.ledger_name || 'Unclassified') + ' ' + val.remarks))
+                                - const isUnclassified = !val.ledger_name || val.ledger_name === '' || val.ledger_name.toUpperCase() === 'OTHERS'
+                                - const canReclassify = !['Credit', 'Supplier'].includes(val.external_source) || !val.external_id
+                                tr(id='transaction_row_'+index data-search-text=(val.trans_date + ' ' + val.account_nickname + ' ' + (isUnclassified ? 'Unclassified ' + (val.ledger_name || '') : val.ledger_name) + ' ' + val.remarks))
                                     if allowOilReclassify === 'true'
                                         td
                                             if isUnclassified && canReclassify
