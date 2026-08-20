@@ -1703,6 +1703,15 @@ async function resolveLedgerByName(locationCode, ledgerName) {
 // allowSkip=false (used for split legs) treats a SKIP-mapped label as
 // Unclassified instead, since one leg of a split can't be silently dropped
 // without unbalancing the voucher.
+//
+// Does NOT auto-register an unmapped label into gl_static_ledger_map — that
+// used to happen here, but it meant any free-text ledger_name a bank
+// transaction happened to carry (including an unlinked customer/supplier
+// name — a data-entry gap, not a real Static category) would silently show
+// up looking identical to a deliberately-defined Static ledger. The only
+// legitimate way into gl_static_ledger_map now is via a real Account Head
+// (see AccountHeadsDao.createAccountHead) — an unmapped label here is a
+// genuine gap to go fix at the source, not something to paper over.
 async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true, fallbackLedgerName = 'Unclassified Bank Transaction') {
     const rows = await db.sequelize.query(`
         SELECT treatment, gl_ledger_id, bank_id FROM gl_static_ledger_map
@@ -1710,18 +1719,7 @@ async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true, f
         LIMIT 1
     `, { replacements: { locationCode, ledgerName }, type: QueryTypes.SELECT });
 
-    let mapped = rows[0];
-    if (!mapped) {
-        // Never-seen-before label — register it (unreviewed) so it shows up
-        // on the review screen going forward, not just for labels present
-        // at migration time. INSERT IGNORE handles the race safely since
-        // (location_code, ledger_name) is unique.
-        await db.sequelize.query(`
-            INSERT IGNORE INTO gl_static_ledger_map (location_code, ledger_name, created_by, updated_by)
-            VALUES (:locationCode, :ledgerName, 'ENGINE', 'ENGINE')
-        `, { replacements: { locationCode, ledgerName }, type: QueryTypes.INSERT });
-        mapped = null;
-    }
+    const mapped = rows[0];
     if (allowSkip && mapped?.treatment === 'SKIP') return { treatment: 'SKIP', ledgerId: null, isContra: false };
 
     if (mapped?.treatment === 'CONTRA' && mapped.bank_id) {
