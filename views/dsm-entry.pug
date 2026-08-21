@@ -934,7 +934,7 @@ html(lang='en')
                 newEntryPhotoPreview.style.display = '';
                 newEntryPhotoButtons.style.display = 'none';
                 setOcrStatus('', '');
-                readBillPhoto(blob, myToken);
+                if (pageData.allowBillOcr) readBillPhoto(blob, myToken);
             } catch (e) {
                 console.error('Photo staging error:', e);
                 showToast('Could not process photo. Try again.', 'danger');
