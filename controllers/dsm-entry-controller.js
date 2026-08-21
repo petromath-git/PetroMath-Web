@@ -20,6 +20,11 @@ module.exports = {
             // OCR auto-fill (e.g. handwritten bills, or before the regex extraction
             // has been tuned against a sample from that location's bill format).
             const allowBillOcr = allowBillPhoto && (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_OCR', 'N')) === 'Y';
+            // Separate gate again: loads a heavy (~8-10MB) client-side CV library
+            // (OpenCV.js + jscanify) to auto-detect/crop the bill's edges. Kept
+            // independent so it can be switched off per-location without
+            // affecting photo capture or OCR if it misbehaves on a device.
+            const allowBillAutoCrop = allowBillPhoto && (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_AUTOCROP', 'N')) === 'Y';
 
             // Check for active shift
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
@@ -36,6 +41,7 @@ module.exports = {
                     entries,
                     allowBillPhoto,
                     allowBillOcr,
+                    allowBillAutoCrop,
                     pageData: JSON.stringify({
                         activeClosing: null,
                         products: [],
@@ -43,7 +49,8 @@ module.exports = {
                         entries,
                         allVehicles: [],
                         allowBillPhoto,
-                        allowBillOcr
+                        allowBillOcr,
+                        allowBillAutoCrop
                     })
                 });
             }
@@ -62,7 +69,8 @@ module.exports = {
                 entries,
                 allVehicles,
                 allowBillPhoto,
-                allowBillOcr
+                allowBillOcr,
+                allowBillAutoCrop
             };
 
             return res.render("dsm-entry", {
@@ -74,6 +82,7 @@ module.exports = {
                 entries,
                 allowBillPhoto,
                 allowBillOcr,
+                allowBillAutoCrop,
                 pageData: JSON.stringify(pageData)
             });
 

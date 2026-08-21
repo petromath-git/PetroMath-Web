@@ -778,6 +778,23 @@ html(lang='en')
             handlePhotoFileSelected(this.files[0], 'CAMERA');
         });
 
+        // Loads a File/Blob into an HTMLImageElement. Standalone from
+        // compressImage so the auto-crop step (which needs a decoded image
+        // before compression happens) can reuse it.
+        function loadImageFromFile(file) {
+            return new Promise(function(resolve, reject) {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = function() { resolve(img); };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         // Resize/compress client-side before upload — DSM phones are often old
         // Android devices on weak connections, so this cuts upload time and
         // bandwidth before the server-side size limit is even checked.
@@ -786,46 +803,101 @@ html(lang='en')
         // before JPEG encoding. Done via getImageData/putImageData rather than
         // ctx.filter = 'grayscale(1)' since the filter API isn't supported on
         // older Android WebViews these DSM phones may be running.
-        function compressImage(file, maxDim, quality) {
+        //
+        // `source` is either a File/Blob (the common case) or an already-decoded
+        // HTMLImageElement/HTMLCanvasElement (used when auto-crop has already
+        // produced one) — either way it ends up through the same resize/
+        // grayscale/encode pipeline.
+        async function compressImage(source, maxDim, quality) {
             maxDim = maxDim || 1600;
             quality = quality || 0.6;
+            const img = (source instanceof Blob) ? await loadImageFromFile(source) : source;
+            const srcWidth = img.naturalWidth || img.width;
+            const srcHeight = img.naturalHeight || img.height;
+
+            let width = srcWidth, height = srcHeight;
+            if (width > height && width > maxDim) {
+                height = Math.round(height * (maxDim / width));
+                width = maxDim;
+            } else if (height > maxDim) {
+                width = Math.round(width * (maxDim / height));
+                height = maxDim;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const px = imageData.data;
+            for (let i = 0; i < px.length; i += 4) {
+                const gray = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+                px[i] = px[i + 1] = px[i + 2] = gray;
+            }
+            ctx.putImageData(imageData, 0, 0);
+
             return new Promise(function(resolve, reject) {
-                const reader = new FileReader();
-                reader.onerror = reject;
-                reader.onload = function(e) {
-                    const img = new Image();
-                    img.onerror = reject;
-                    img.onload = function() {
-                        let width = img.width, height = img.height;
-                        if (width > height && width > maxDim) {
-                            height = Math.round(height * (maxDim / width));
-                            width = maxDim;
-                        } else if (height > maxDim) {
-                            width = Math.round(width * (maxDim / height));
-                            height = maxDim;
-                        }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        const imageData = ctx.getImageData(0, 0, width, height);
-                        const px = imageData.data;
-                        for (let i = 0; i < px.length; i += 4) {
-                            const gray = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
-                            px[i] = px[i + 1] = px[i + 2] = gray;
-                        }
-                        ctx.putImageData(imageData, 0, 0);
-
-                        canvas.toBlob(function(blob) {
-                            if (blob) resolve(blob); else reject(new Error('Compression failed'));
-                        }, 'image/jpeg', quality);
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
+                canvas.toBlob(function(blob) {
+                    if (blob) resolve(blob); else reject(new Error('Compression failed'));
+                }, 'image/jpeg', quality);
             });
+        }
+
+        // ─── Automatic bill-edge detection/crop (Adobe-Scan-style) ─────────────
+        // Gated by ALLOW_DSM_BILL_AUTOCROP. Loads OpenCV.js + jscanify lazily —
+        // triggered once as soon as the New Entry photo section is available so
+        // the ~8-10MB download has a head start before the DSM actually takes a
+        // photo, rather than blocking on first tap.
+        let scannerLoadPromise = null;
+
+        function loadDocumentScanner() {
+            if (scannerLoadPromise) return scannerLoadPromise;
+            scannerLoadPromise = new Promise(function(resolve) {
+                const cvScript = document.createElement('script');
+                cvScript.src = 'https://docs.opencv.org/4.9.0/opencv.js';
+                cvScript.async = true;
+                cvScript.onerror = function() { resolve(false); };
+                cvScript.onload = function() {
+                    if (!window.cv) { resolve(false); return; }
+                    window.cv['onRuntimeInitialized'] = function() {
+                        const jsScanScript = document.createElement('script');
+                        jsScanScript.src = 'https://cdn.jsdelivr.net/npm/jscanify@1.3.1/src/jscanify.min.js';
+                        jsScanScript.async = true;
+                        jsScanScript.onerror = function() { resolve(false); };
+                        jsScanScript.onload = function() { resolve(!!window.jscanify); };
+                        document.head.appendChild(jsScanScript);
+                    };
+                };
+                document.head.appendChild(cvScript);
+            });
+            return scannerLoadPromise;
+        }
+
+        // Auto-detects and crops the bill from a decoded image, like Adobe Scan.
+        // Returns a cropped HTMLCanvasElement, or null if the scanner isn't
+        // ready/available or detection isn't confident — callers MUST fall back
+        // to the original uncropped image in that case, never block on this.
+        async function autoCropBillPhoto(imgEl) {
+            try {
+                const ready = await loadDocumentScanner();
+                if (!ready || !window.jscanify) return null;
+
+                const scanner = new window.jscanify();
+                const resultCanvas = scanner.extractPaper(imgEl, imgEl.naturalWidth, imgEl.naturalHeight);
+                if (!resultCanvas || !resultCanvas.width || !resultCanvas.height) return null;
+
+                // Reject an implausibly small crop relative to the original —
+                // more likely a false detection than the actual bill.
+                const cropArea = resultCanvas.width * resultCanvas.height;
+                const originalArea = imgEl.naturalWidth * imgEl.naturalHeight;
+                if (cropArea < originalArea * 0.15) return null;
+
+                return resultCanvas;
+            } catch (e) {
+                console.error('Auto-crop error:', e);
+                return null;
+            }
         }
 
         async function handlePhotoFileSelected(file, captureSource) {
@@ -920,11 +992,28 @@ html(lang='en')
             clearPendingPhoto();
         });
 
+        // Pre-warm the ~8-10MB scanner download in the background as soon as
+        // this section is live, rather than waiting for the first photo tap.
+        if (pageData.allowBillAutoCrop) {
+            loadDocumentScanner();
+        }
+
         async function stagePendingPhoto(file, captureSource) {
             if (!file) return;
             const myToken = ++photoStageToken;
             try {
-                const blob = await compressImage(file);
+                let source = file;
+                if (pageData.allowBillAutoCrop) {
+                    setOcrStatus('Detecting bill edges...', '');
+                    const img = await loadImageFromFile(file);
+                    if (myToken !== photoStageToken) return;
+                    const cropped = await autoCropBillPhoto(img);
+                    if (myToken !== photoStageToken) return;
+                    source = cropped || img; // fall back to the already-decoded full photo if crop failed
+                    setOcrStatus('', '');
+                }
+
+                const blob = await compressImage(source);
                 if (myToken !== photoStageToken) return; // a newer photo was staged/cleared while this one compressed
                 pendingPhotoBlob = blob;
                 pendingPhotoCaptureSource = captureSource;
