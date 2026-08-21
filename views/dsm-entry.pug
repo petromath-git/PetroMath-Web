@@ -1129,14 +1129,21 @@ html(lang='en')
         // largest plausible currency-looking number anywhere in the text.
         function extractBillAmount(text) {
             const keywordRe = /(total|amount|amt|net\s*amt|grand\s*total)/i;
-            const numRe = /(?:₹|rs\.?|inr)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+\.[0-9]{1,2})/i;
+            // A leading digit, then any run of further digits/commas, then an
+            // optional decimal part. The previous version capped the leading
+            // run at 1-3 digits before requiring either a comma group or the
+            // decimal to follow immediately — a plain zero-padded amount like
+            // "00160.00" (5 digits before the point, no commas) doesn't fit
+            // that shape, so it matched only the first 3 digits ("001") and
+            // stopped there instead of continuing to the actual number.
+            const numRe = /(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
 
             for (const line of text.split('\n')) {
                 if (keywordRe.test(line)) {
                     const m = line.match(numRe);
                     if (m) {
                         const val = parseFloat(m[1].replace(/,/g, ''));
-                        if (val > 0) return val;
+                        if (val > 0 && val < 1000000) return val;
                     }
                 }
             }
