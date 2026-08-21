@@ -102,8 +102,17 @@ module.exports = {
         return result[0]; // insertId
     },
 
-    // Get all today's entries for this cashier across all their shifts
+    // Entries to show in the DSM "Today's Entries" list.
+    // With an active closing (closingId given), scope directly to that shift —
+    // NOT to calendar date. Shifts run 24hr and can span midnight, and a bill's
+    // credit_bill_date can legitimately be the previous day; filtering by
+    // DATE(cl.closing_date) = CURDATE() would drop an entire still-open shift
+    // (and every entry in it) as soon as the calendar date rolls over past its
+    // closing_date. Without an active closing (locked/read-only view after the
+    // shift closed), there's no closing_id to scope to, so fall back to
+    // "closings dated today" for that cashier/location.
     getEntriesByClosing: async (closingId, cashierId, locationCode) => {
+        const closingFilter = closingId ? 'tc.closing_id = :closingId' : 'DATE(cl.closing_date) = CURDATE()';
         return db.sequelize.query(`
             SELECT
                 tc.tcredit_id,
@@ -129,10 +138,10 @@ module.exports = {
                 ON ds.entity_type = 'CREDIT_BILL' AND ds.entity_id = tc.tcredit_id AND ds.status = 'ACTIVE'
             WHERE cl.cashier_id = :cashierId
               AND cl.location_code = :locationCode
-              AND DATE(cl.closing_date) = CURDATE()
+              AND ${closingFilter}
             ORDER BY tc.creation_date DESC
         `, {
-            replacements: { cashierId, locationCode },
+            replacements: { cashierId, locationCode, closingId },
             type: db.Sequelize.QueryTypes.SELECT
         });
     },
