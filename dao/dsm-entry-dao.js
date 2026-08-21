@@ -118,12 +118,15 @@ module.exports = {
                 mp.product_name,
                 mp.rgb_color,
                 mcl.Company_Name,
-                COALESCE(mv.vehicle_number, '') as vehicle_number
+                COALESCE(mv.vehicle_number, '') as vehicle_number,
+                ds.doc_id AS photo_doc_id
             FROM t_credits tc
             JOIN t_closing cl ON tc.closing_id = cl.closing_id
             JOIN m_product mp ON tc.product_id = mp.product_id
             JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
             LEFT JOIN m_creditlist_vehicles mv ON tc.vehicle_id = mv.vehicle_id
+            LEFT JOIN t_document_store ds
+                ON ds.entity_type = 'CREDIT_BILL' AND ds.entity_id = tc.tcredit_id AND ds.status = 'ACTIVE'
             WHERE cl.cashier_id = :cashierId
               AND cl.location_code = :locationCode
               AND DATE(cl.closing_date) = CURDATE()
@@ -132,6 +135,19 @@ module.exports = {
             replacements: { cashierId, locationCode },
             type: db.Sequelize.QueryTypes.SELECT
         });
+    },
+
+    // Ownership guard for photo endpoints — confirm this entry belongs to the given closing
+    entryBelongsToClosing: async (tcreditId, closingId) => {
+        const results = await db.sequelize.query(`
+            SELECT tcredit_id FROM t_credits
+            WHERE tcredit_id = :tcreditId AND closing_id = :closingId
+            LIMIT 1
+        `, {
+            replacements: { tcreditId, closingId },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return results.length > 0;
     },
 
     // Get all active vehicles across all customers for this location (for vehicle-first mode)
