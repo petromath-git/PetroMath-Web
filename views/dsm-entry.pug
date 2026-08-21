@@ -887,17 +887,46 @@ html(lang='en')
                 const resultCanvas = scanner.extractPaper(imgEl, imgEl.naturalWidth, imgEl.naturalHeight);
                 if (!resultCanvas || !resultCanvas.width || !resultCanvas.height) return null;
 
-                // Reject an implausibly small crop relative to the original —
-                // more likely a false detection than the actual bill.
-                const cropArea = resultCanvas.width * resultCanvas.height;
-                const originalArea = imgEl.naturalWidth * imgEl.naturalHeight;
-                if (cropArea < originalArea * 0.15) return null;
+                // extractPaper always returns a canvas sized to the requested
+                // output dimensions (here, the original photo's size) regardless
+                // of how good the detected quadrilateral was — a comparison
+                // against the original photo's area is therefore always a no-op
+                // and can't catch a bad detection. What a bad detection actually
+                // produces (e.g. edge detection locking onto a low-contrast
+                // background instead of the receipt) is a degenerate/near-
+                // collinear source quad warped to fill the full canvas — visibly
+                // a smeared/stretched mess, not a legible document. Receipts are
+                // overwhelmingly white/light background with sparse text, so
+                // reject the crop unless a solid majority of sampled pixels are
+                // near-white.
+                if (!looksLikeLightBackgroundDocument(resultCanvas)) return null;
 
                 return resultCanvas;
             } catch (e) {
                 console.error('Auto-crop error:', e);
                 return null;
             }
+        }
+
+        // Cheap plausibility check: draws the candidate onto a small offscreen
+        // canvas (avoids scanning millions of pixels at full photo resolution)
+        // and measures the near-white pixel fraction.
+        function looksLikeLightBackgroundDocument(canvasEl) {
+            const sampleDim = 100;
+            const sampleCanvas = document.createElement('canvas');
+            sampleCanvas.width = sampleDim;
+            sampleCanvas.height = sampleDim;
+            const ctx = sampleCanvas.getContext('2d');
+            ctx.drawImage(canvasEl, 0, 0, sampleDim, sampleDim);
+
+            const data = ctx.getImageData(0, 0, sampleDim, sampleDim).data;
+            let whiteish = 0;
+            const totalPixels = sampleDim * sampleDim;
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                if (gray > 170) whiteish++;
+            }
+            return (whiteish / totalPixels) >= 0.45;
         }
 
         async function handlePhotoFileSelected(file, captureSource) {
