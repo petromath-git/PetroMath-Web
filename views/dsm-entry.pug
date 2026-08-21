@@ -632,6 +632,26 @@ html(lang='en')
                             step='0.01'
                         )
 
+                //- Bill photo — captured here, uploaded right after the entry saves
+                //- (there's no tcredit_id to attach to until then). Staged as a
+                //- compressed blob in memory; the after-save camera icon on the
+                //- entry card remains available for viewing/swapping/removing it.
+                .mb-3
+                    label.form-label Bill Photo
+                    #newEntryPhotoPreview(style='display:none')
+                        img#newEntryPhotoImg(style='width:100%;border-radius:8px;margin-bottom:8px' alt='Bill photo')
+                        button#btnNewEntryPhotoRemove.btn.btn-link.text-danger.btn-sm.p-0(type='button') Remove Photo
+                    #newEntryPhotoButtons
+                        .d-flex(style='gap:8px')
+                            button#btnNewEntryUpload.btn.btn-outline-primary.flex-fill(type='button')
+                                i.bi.bi-folder2-open
+                                |  Upload
+                            button#btnNewEntryCamera.btn.btn-outline-primary.flex-fill(type='button')
+                                i.bi.bi-camera
+                                |  Take Photo
+                    input#newEntryUploadInput(type='file' accept='image/*' style='display:none')
+                    input#newEntryCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+
                 button#btnSave.btn.btn-save(type='button' disabled) Save Entry
 
             //- Today's entries
@@ -844,6 +864,81 @@ html(lang='en')
             el.innerHTML = docId
                 ? `<img class="entry-photo-thumb" src="/documents/${docId}" alt="Bill photo">`
                 : `<i class="bi bi-camera entry-photo-icon"></i>`;
+        }
+
+        // ─── New-entry bill photo staging ──────────────────────────────────────
+        // Captured/compressed here before the entry exists; actually uploaded
+        // right after Save succeeds and a tcredit_id is available.
+        let pendingPhotoBlob = null;
+        let pendingPhotoCaptureSource = null;
+        let pendingPhotoObjectUrl = null;
+
+        const newEntryPhotoPreview  = document.getElementById('newEntryPhotoPreview');
+        const newEntryPhotoImg      = document.getElementById('newEntryPhotoImg');
+        const newEntryPhotoButtons  = document.getElementById('newEntryPhotoButtons');
+        const newEntryUploadInput   = document.getElementById('newEntryUploadInput');
+        const newEntryCameraInput   = document.getElementById('newEntryCameraInput');
+
+        document.getElementById('btnNewEntryUpload')?.addEventListener('click', function() {
+            newEntryUploadInput.value = '';
+            newEntryUploadInput.click();
+        });
+        document.getElementById('btnNewEntryCamera')?.addEventListener('click', function() {
+            newEntryCameraInput.value = '';
+            newEntryCameraInput.click();
+        });
+        newEntryUploadInput?.addEventListener('change', function() {
+            stagePendingPhoto(this.files[0], 'UPLOAD');
+        });
+        newEntryCameraInput?.addEventListener('change', function() {
+            stagePendingPhoto(this.files[0], 'CAMERA');
+        });
+        document.getElementById('btnNewEntryPhotoRemove')?.addEventListener('click', function() {
+            clearPendingPhoto();
+        });
+
+        async function stagePendingPhoto(file, captureSource) {
+            if (!file) return;
+            try {
+                pendingPhotoBlob = await compressImage(file);
+                pendingPhotoCaptureSource = captureSource;
+                if (pendingPhotoObjectUrl) URL.revokeObjectURL(pendingPhotoObjectUrl);
+                pendingPhotoObjectUrl = URL.createObjectURL(pendingPhotoBlob);
+                newEntryPhotoImg.src = pendingPhotoObjectUrl;
+                newEntryPhotoPreview.style.display = '';
+                newEntryPhotoButtons.style.display = 'none';
+            } catch (e) {
+                console.error('Photo staging error:', e);
+                showToast('Could not process photo. Try again.', 'danger');
+            }
+        }
+
+        function clearPendingPhoto() {
+            pendingPhotoBlob = null;
+            pendingPhotoCaptureSource = null;
+            if (pendingPhotoObjectUrl) { URL.revokeObjectURL(pendingPhotoObjectUrl); pendingPhotoObjectUrl = null; }
+            newEntryPhotoImg.src = '';
+            newEntryPhotoPreview.style.display = 'none';
+            newEntryPhotoButtons.style.display = '';
+        }
+
+        // Uploads the staged photo against a just-saved entry. Returns the new
+        // doc_id on success, or null on failure (entry itself is already saved
+        // either way — failure here just means the photo needs re-attaching
+        // from the entry card afterwards).
+        async function uploadPendingPhoto(tcreditId) {
+            if (!pendingPhotoBlob) return null;
+            try {
+                const form = new FormData();
+                form.append('photo', pendingPhotoBlob, 'bill.jpg');
+                form.append('capture_source', pendingPhotoCaptureSource || 'UPLOAD');
+                const resp = await fetch(`/dsm-entry/${tcreditId}/photo`, { method: 'POST', body: form });
+                const data = await resp.json();
+                return data.success ? data.photo.doc_id : null;
+            } catch (e) {
+                console.error('Pending photo upload error:', e);
+                return null;
+            }
         }
 
         // Product button selection
@@ -1318,9 +1413,19 @@ html(lang='en')
                 const data = await resp.json();
 
                 if (data.success) {
-                    showToast('Entry saved!', 'success');
+                    let photoDocId = null;
+                    if (pendingPhotoBlob) {
+                        this.textContent = 'Saving photo...';
+                        photoDocId = await uploadPendingPhoto(data.insertId);
+                    }
+                    if (pendingPhotoBlob) {
+                        showToast(photoDocId ? 'Entry & photo saved!' : 'Entry saved, but photo upload failed — attach it from the list below.', photoDocId ? 'success' : 'danger');
+                    } else {
+                        showToast('Entry saved!', 'success');
+                    }
                     resetForm();
                     renderEntries(data.entries);
+                    if (photoDocId) updateEntryPhotoUI(data.insertId, photoDocId, true);
                 } else {
                     showToast(data.message || 'Save failed.', 'danger');
                 }
@@ -1413,6 +1518,7 @@ html(lang='en')
             }
             document.getElementById('billNoInput').value = '0';
             document.getElementById('notesInput').value = '';
+            clearPendingPhoto();
         }
 
         // Toast
