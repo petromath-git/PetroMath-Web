@@ -15,6 +15,8 @@ module.exports = {
             const locationCode = user.location_code;
             const cashierId = user.Person_id;
 
+            const allowBillPhoto = (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_PHOTO', 'N')) === 'Y';
+
             // Check for active shift
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
 
@@ -28,12 +30,14 @@ module.exports = {
                     products: [],
                     credits: [],
                     entries,
+                    allowBillPhoto,
                     pageData: JSON.stringify({
                         activeClosing: null,
                         products: [],
                         credits: [],
                         entries,
-                        allVehicles: []
+                        allVehicles: [],
+                        allowBillPhoto
                     })
                 });
             }
@@ -50,7 +54,8 @@ module.exports = {
                 products,
                 credits,
                 entries,
-                allVehicles
+                allVehicles,
+                allowBillPhoto
             };
 
             return res.render("dsm-entry", {
@@ -60,6 +65,7 @@ module.exports = {
                 products,
                 credits,
                 entries,
+                allowBillPhoto,
                 pageData: JSON.stringify(pageData)
             });
 
@@ -203,13 +209,19 @@ module.exports = {
     // matches the existing delete-entry ownership rule on this screen.
     uploadPhoto: async (req, res) => {
         try {
+            const user = req.user;
+            const locationCode = user.location_code;
+            const cashierId = user.Person_id;
+
+            const allowBillPhoto = (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_PHOTO', 'N')) === 'Y';
+            if (!allowBillPhoto) {
+                return res.status(403).json({ success: false, message: "Bill photo capture is not enabled for this location." });
+            }
+
             if (!req.file) {
                 return res.status(400).json({ success: false, message: "No photo uploaded." });
             }
 
-            const user = req.user;
-            const locationCode = user.location_code;
-            const cashierId = user.Person_id;
             const tcreditId = parseInt(req.params.tcreditId);
 
             if (!tcreditId) {
