@@ -468,17 +468,19 @@ html(lang='en')
 
     //- Bill photo modal (view / upload / take photo / replace / remove) — rendered
     //- at top level so it's available whether or not there's an active shift.
-    #billPhotoModal.modal.fade(tabindex='-1' role='dialog')
-        .modal-dialog.modal-dialog-centered(role='document')
-            .modal-content
-                .modal-header
-                    h6.modal-title Bill Photo
-                    button.close(type='button' data-dismiss='modal' aria-label='Close')
-                        span(aria-hidden='true') &times;
-                .modal-body#billPhotoModalBody
-                .modal-footer#billPhotoModalFooter
-    input#billPhotoUploadInput(type='file' accept='image/*' style='display:none')
-    input#billPhotoCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+    //- Gated by ALLOW_DSM_BILL_PHOTO location config.
+    if allowBillPhoto
+        #billPhotoModal.modal.fade(tabindex='-1' role='dialog')
+            .modal-dialog.modal-dialog-centered(role='document')
+                .modal-content
+                    .modal-header
+                        h6.modal-title Bill Photo
+                        button.close(type='button' data-dismiss='modal' aria-label='Close')
+                            span(aria-hidden='true') &times;
+                    .modal-body#billPhotoModalBody
+                    .modal-footer#billPhotoModalFooter
+        input#billPhotoUploadInput(type='file' accept='image/*' style='display:none')
+        input#billPhotoCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
 
     if !activeClosing
         .dsm-container
@@ -501,11 +503,12 @@ html(lang='en')
                                     |  · #{entry.qty} L
                                     span.entry-shift  · Shift ##{entry.closing_id}
                             .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
-                            .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable='0')
-                                if entry.photo_doc_id
-                                    img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
-                                else
-                                    i.bi.bi-camera.entry-photo-icon
+                            if allowBillPhoto
+                                .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable='0')
+                                    if entry.photo_doc_id
+                                        img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                    else
+                                        i.bi.bi-camera.entry-photo-icon
                             span.entry-locked(title='Shift closed — cannot delete') 🔒
 
     else
@@ -636,21 +639,23 @@ html(lang='en')
                 //- (there's no tcredit_id to attach to until then). Staged as a
                 //- compressed blob in memory; the after-save camera icon on the
                 //- entry card remains available for viewing/swapping/removing it.
-                .mb-3
-                    label.form-label Bill Photo
-                    #newEntryPhotoPreview(style='display:none')
-                        img#newEntryPhotoImg(style='width:100%;border-radius:8px;margin-bottom:8px' alt='Bill photo')
-                        button#btnNewEntryPhotoRemove.btn.btn-link.text-danger.btn-sm.p-0(type='button') Remove Photo
-                    #newEntryPhotoButtons
-                        .d-flex(style='gap:8px')
-                            button#btnNewEntryUpload.btn.btn-outline-primary.flex-fill(type='button')
-                                i.bi.bi-folder2-open
-                                |  Upload
-                            button#btnNewEntryCamera.btn.btn-outline-primary.flex-fill(type='button')
-                                i.bi.bi-camera
-                                |  Take Photo
-                    input#newEntryUploadInput(type='file' accept='image/*' style='display:none')
-                    input#newEntryCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+                //- Gated by ALLOW_DSM_BILL_PHOTO location config.
+                if allowBillPhoto
+                    .mb-3
+                        label.form-label Bill Photo
+                        #newEntryPhotoPreview(style='display:none')
+                            img#newEntryPhotoImg(style='width:100%;border-radius:8px;margin-bottom:8px' alt='Bill photo')
+                            button#btnNewEntryPhotoRemove.btn.btn-link.text-danger.btn-sm.p-0(type='button') Remove Photo
+                        #newEntryPhotoButtons
+                            .d-flex(style='gap:8px')
+                                button#btnNewEntryUpload.btn.btn-outline-primary.flex-fill(type='button')
+                                    i.bi.bi-folder2-open
+                                    |  Upload
+                                button#btnNewEntryCamera.btn.btn-outline-primary.flex-fill(type='button')
+                                    i.bi.bi-camera
+                                    |  Take Photo
+                        input#newEntryUploadInput(type='file' accept='image/*' style='display:none')
+                        input#newEntryCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
 
                 button#btnSave.btn.btn-save(type='button' disabled) Save Entry
 
@@ -671,11 +676,12 @@ html(lang='en')
                                         |  · #{entry.qty} L
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
-                                .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable=entry.closing_status === 'DRAFT' ? '1' : '0')
-                                    if entry.photo_doc_id
-                                        img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
-                                    else
-                                        i.bi.bi-camera.entry-photo-icon
+                                if allowBillPhoto
+                                    .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable=entry.closing_status === 'DRAFT' ? '1' : '0')
+                                        if entry.photo_doc_id
+                                            img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                        else
+                                            i.bi.bi-camera.entry-photo-icon
                                 if entry.closing_status === 'DRAFT'
                                     button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
                                 else
@@ -764,10 +770,10 @@ html(lang='en')
             if (removeBtn) removeBtn.addEventListener('click', removeCurrentPhoto);
         }
 
-        billPhotoUploadInput.addEventListener('change', function() {
+        billPhotoUploadInput?.addEventListener('change', function() {
             handlePhotoFileSelected(this.files[0], 'UPLOAD');
         });
-        billPhotoCameraInput.addEventListener('change', function() {
+        billPhotoCameraInput?.addEventListener('change', function() {
             handlePhotoFileSelected(this.files[0], 'CAMERA');
         });
 
@@ -932,6 +938,8 @@ html(lang='en')
             pendingPhotoBlob = null;
             pendingPhotoCaptureSource = null;
             if (pendingPhotoObjectUrl) { URL.revokeObjectURL(pendingPhotoObjectUrl); pendingPhotoObjectUrl = null; }
+            // resetForm() always calls this — no-op when the photo section isn't rendered (config off)
+            if (!newEntryPhotoImg) return;
             newEntryPhotoImg.src = '';
             newEntryPhotoPreview.style.display = 'none';
             newEntryPhotoButtons.style.display = '';
@@ -1498,12 +1506,13 @@ html(lang='en')
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
                     <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
+                    ${pageData.allowBillPhoto ? `
                     <div class="entry-photo" data-id="${e.tcredit_id}" data-photo="${e.photo_doc_id || ''}" data-editable="${e.closing_status === 'DRAFT' ? '1' : '0'}">
                         ${e.photo_doc_id
                             ? `<img class="entry-photo-thumb" src="/documents/${e.photo_doc_id}" alt="Bill photo">`
                             : `<i class="bi bi-camera entry-photo-icon"></i>`
                         }
-                    </div>
+                    </div>` : ''}
                     ${e.closing_status === 'DRAFT'
                         ? `<button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>`
                         : `<span class="entry-locked" title="Shift closed — cannot delete">🔒</span>`
