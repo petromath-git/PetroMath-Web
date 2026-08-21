@@ -16,6 +16,10 @@ module.exports = {
             const cashierId = user.Person_id;
 
             const allowBillPhoto = (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_PHOTO', 'N')) === 'Y';
+            // Separate from allowBillPhoto: a location can capture photos without
+            // OCR auto-fill (e.g. handwritten bills, or before the regex extraction
+            // has been tuned against a sample from that location's bill format).
+            const allowBillOcr = allowBillPhoto && (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_OCR', 'N')) === 'Y';
 
             // Check for active shift
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
@@ -31,13 +35,15 @@ module.exports = {
                     credits: [],
                     entries,
                     allowBillPhoto,
+                    allowBillOcr,
                     pageData: JSON.stringify({
                         activeClosing: null,
                         products: [],
                         credits: [],
                         entries,
                         allVehicles: [],
-                        allowBillPhoto
+                        allowBillPhoto,
+                        allowBillOcr
                     })
                 });
             }
@@ -55,7 +61,8 @@ module.exports = {
                 credits,
                 entries,
                 allVehicles,
-                allowBillPhoto
+                allowBillPhoto,
+                allowBillOcr
             };
 
             return res.render("dsm-entry", {
@@ -66,6 +73,7 @@ module.exports = {
                 credits,
                 entries,
                 allowBillPhoto,
+                allowBillOcr,
                 pageData: JSON.stringify(pageData)
             });
 
