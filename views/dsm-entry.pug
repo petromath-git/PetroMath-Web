@@ -996,6 +996,7 @@ html(lang='en')
         let pendingPhotoCaptureSource = null;
         let pendingPhotoObjectUrl = null;
         let photoStageToken = 0; // bumped on every stage/clear — guards against a late-resolving OCR overwriting a newer/cleared photo's fields
+        let lastExtractedBillRate = null; // per-litre rate OCR'd from the bill, for the product-price mismatch check
 
         const newEntryPhotoPreview  = document.getElementById('newEntryPhotoPreview');
         const newEntryPhotoImg      = document.getElementById('newEntryPhotoImg');
@@ -1106,9 +1107,18 @@ html(lang='en')
                     filled.push('Bill No');
                 }
 
+                // Product mismatch check: fuel-pump receipts print a per-litre
+                // rate, and comparing that against the selected product's price
+                // is far more reliable than matching product *names* — a pump
+                // prints "Petrol" while the app might call the same fuel "MS",
+                // so string-matching names would need a location-specific alias
+                // table. Price is numeric and needs no such mapping.
+                lastExtractedBillRate = extractBillRate(cleaned);
+                const mismatchMsg = checkProductPriceMismatch();
+
                 setOcrStatus(
-                    filled.length ? `Auto-filled ${filled.join(' & ')} from photo — please verify.` : 'Bill read OK.',
-                    'success'
+                    mismatchMsg || (filled.length ? `Auto-filled ${filled.join(' & ')} from photo — please verify.` : 'Bill read OK.'),
+                    mismatchMsg ? 'error' : 'success'
                 );
                 checkFormReady();
             } catch (e) {
@@ -1154,8 +1164,41 @@ html(lang='en')
         }
 
         function extractBillNo(text) {
-            const m = text.match(/(?:bill|invoice|receipt)\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Za-z0-9\/\-]{2,20})/i);
+            // Fuel-pump receipts commonly print "Inv.No" rather than the full
+            // word "Invoice" — \b keeps "inv" from matching mid-word.
+            const m = text.match(/\b(?:bill|invoice|inv|receipt)\b\.?\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Za-z0-9\/\-]{2,20})/i);
             return m && m[1] ? m[1] : null;
+        }
+
+        // Per-litre rate off the bill (e.g. "Rate(Rs/L): 108.69") — used only
+        // to cross-check against the selected product's price, not auto-filled
+        // into any field.
+        function extractBillRate(text) {
+            const keywordRe = /(rate|price)/i;
+            const numRe = /(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+            for (const line of text.split('\n')) {
+                if (keywordRe.test(line)) {
+                    const m = line.match(numRe);
+                    if (m) {
+                        const val = parseFloat(m[1].replace(/,/g, ''));
+                        if (val > 0 && val < 100000) return val;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Warns when the bill's printed rate and the currently selected
+        // product's price differ by more than a small tolerance — a likely
+        // sign the wrong product was picked (fuel grades differ by several
+        // rupees/litre; this threshold tolerates day-to-day price movement
+        // and OCR rounding without tolerating a genuinely different fuel).
+        // Returns a warning string, or null if there's nothing to flag (yet).
+        function checkProductPriceMismatch() {
+            if (!lastExtractedBillRate || !selectedProductPrice) return null;
+            const pctDiff = Math.abs(lastExtractedBillRate - selectedProductPrice) / selectedProductPrice;
+            if (pctDiff <= 0.08) return null;
+            return `⚠ Bill rate ₹${lastExtractedBillRate.toFixed(2)}/L doesn't match the selected product's price (₹${selectedProductPrice.toFixed(2)}/L) — check you picked the right product.`;
         }
 
         // Uploads the staged photo against a just-saved entry. Returns the new
@@ -1192,6 +1235,10 @@ html(lang='en')
                 } else if (amt > 0 && selectedProductPrice > 0) {
                     document.getElementById('qtyInput').value = (amt / selectedProductPrice).toFixed(3);
                 }
+                // Re-check in case a bill photo (with its own OCR'd rate) was
+                // already staged before the product was picked/changed.
+                const mismatchMsg = checkProductPriceMismatch();
+                if (mismatchMsg) setOcrStatus(mismatchMsg, 'error');
                 checkFormReady();
             });
         });
