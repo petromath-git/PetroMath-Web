@@ -774,9 +774,14 @@ html(lang='en')
         // Resize/compress client-side before upload — DSM phones are often old
         // Android devices on weak connections, so this cuts upload time and
         // bandwidth before the server-side size limit is even checked.
+        // Bill photos are black text on white thermal paper — color channels are
+        // pure waste here, so pixels are desaturated to grayscale (luminance)
+        // before JPEG encoding. Done via getImageData/putImageData rather than
+        // ctx.filter = 'grayscale(1)' since the filter API isn't supported on
+        // older Android WebViews these DSM phones may be running.
         function compressImage(file, maxDim, quality) {
             maxDim = maxDim || 1600;
-            quality = quality || 0.72;
+            quality = quality || 0.6;
             return new Promise(function(resolve, reject) {
                 const reader = new FileReader();
                 reader.onerror = reject;
@@ -795,7 +800,17 @@ html(lang='en')
                         const canvas = document.createElement('canvas');
                         canvas.width = width;
                         canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        const imageData = ctx.getImageData(0, 0, width, height);
+                        const px = imageData.data;
+                        for (let i = 0; i < px.length; i += 4) {
+                            const gray = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+                            px[i] = px[i + 1] = px[i + 2] = gray;
+                        }
+                        ctx.putImageData(imageData, 0, 0);
+
                         canvas.toBlob(function(blob) {
                             if (blob) resolve(blob); else reject(new Error('Compression failed'));
                         }, 'image/jpeg', quality);
