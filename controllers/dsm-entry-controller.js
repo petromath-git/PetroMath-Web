@@ -1,4 +1,9 @@
 const dsmEntryDao = require("../dao/dsm-entry-dao");
+const DocumentStoreDao = require("../dao/document-store-dao");
+const { getLocationConfigValue } = require("../utils/location-config");
+
+const PHOTO_ENTITY_TYPE = 'CREDIT_BILL';
+const PHOTO_DOC_CATEGORY = 'BILL_PHOTO';
 
 module.exports = {
 
@@ -189,6 +194,112 @@ module.exports = {
         } catch (err) {
             console.error("DSM get all vehicles error:", err);
             return res.status(500).json({ success: false, message: "Server error." });
+        }
+    },
+
+    // POST /dsm-entry/:tcreditId/photo
+    // Attach (or swap) the printed-bill photo for a credit entry.
+    // Only entries in the cashier's own active (DRAFT) closing can be touched here —
+    // matches the existing delete-entry ownership rule on this screen.
+    uploadPhoto: async (req, res) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ success: false, message: "No photo uploaded." });
+            }
+
+            const user = req.user;
+            const locationCode = user.location_code;
+            const cashierId = user.Person_id;
+            const tcreditId = parseInt(req.params.tcreditId);
+
+            if (!tcreditId) {
+                return res.status(400).json({ success: false, message: "Invalid entry ID." });
+            }
+
+            const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
+            if (!activeClosing) {
+                return res.status(400).json({ success: false, message: "No active shift found." });
+            }
+
+            const belongs = await dsmEntryDao.entryBelongsToClosing(tcreditId, activeClosing.closing_id);
+            if (!belongs) {
+                return res.status(403).json({ success: false, message: "Entry not found in your active shift." });
+            }
+
+            // Enforce configurable size limit (DOC_MAX_UPLOAD_MB, default 2) — same key/pattern as employee photos
+            const maxMb = parseFloat(await getLocationConfigValue(locationCode, 'DOC_MAX_UPLOAD_MB', '2'));
+            const maxBytes = maxMb * 1024 * 1024;
+            if (req.file.size > maxBytes) {
+                return res.status(400).json({ success: false, message: `Photo must be ${maxMb} MB or smaller.` });
+            }
+
+            const captureSource = req.body.capture_source === 'CAMERA' ? 'CAMERA' : 'UPLOAD';
+
+            // If a photo is already linked, this is a swap: create the new one, then
+            // flip the old row to REPLACED (kept for audit trail, not deleted).
+            const existing = await DocumentStoreDao.findActiveByEntity(PHOTO_ENTITY_TYPE, tcreditId, PHOTO_DOC_CATEGORY);
+
+            const newDoc = await DocumentStoreDao.create({
+                entity_type:    PHOTO_ENTITY_TYPE,
+                entity_id:      tcreditId,
+                doc_category:   PHOTO_DOC_CATEGORY,
+                file_name:      req.file.originalname,
+                mime_type:      req.file.mimetype,
+                file_size:      req.file.size,
+                file_data:      req.file.buffer,
+                capture_source: captureSource,
+                location_code:  locationCode,
+                created_by:     user.User_Name
+            });
+
+            if (existing) {
+                await DocumentStoreDao.markReplaced(existing.doc_id, newDoc.doc_id);
+            }
+
+            return res.json({ success: true, photo: { doc_id: newDoc.doc_id, url: `/documents/${newDoc.doc_id}` } });
+
+        } catch (err) {
+            console.error("DSM upload photo error:", err);
+            return res.status(500).json({ success: false, message: "Server error while uploading photo." });
+        }
+    },
+
+    // DELETE /dsm-entry/:tcreditId/photo/:docId
+    // Soft-unlink — the row and blob stay in t_document_store (status=UNLINKED)
+    // for search/relink; only the link to this bill is removed.
+    deletePhoto: async (req, res) => {
+        try {
+            const user = req.user;
+            const locationCode = user.location_code;
+            const cashierId = user.Person_id;
+            const tcreditId = parseInt(req.params.tcreditId);
+            const docId = parseInt(req.params.docId);
+
+            if (!tcreditId || !docId) {
+                return res.status(400).json({ success: false, message: "Invalid request." });
+            }
+
+            const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
+            if (!activeClosing) {
+                return res.status(400).json({ success: false, message: "No active shift found." });
+            }
+
+            const belongs = await dsmEntryDao.entryBelongsToClosing(tcreditId, activeClosing.closing_id);
+            if (!belongs) {
+                return res.status(403).json({ success: false, message: "Entry not found in your active shift." });
+            }
+
+            const doc = await DocumentStoreDao.findMetaById(docId);
+            if (!doc || doc.entity_type !== PHOTO_ENTITY_TYPE || doc.entity_id !== tcreditId) {
+                return res.status(404).json({ success: false, message: "Photo not found." });
+            }
+
+            await DocumentStoreDao.unlink(docId, user.User_Name);
+            return res.json({ success: true });
+
+        } catch (err) {
+            console.error("DSM delete photo error:", err);
+            return res.status(500).json({ success: false, message: "Server error while removing photo." });
         }
     }
 

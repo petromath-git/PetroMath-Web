@@ -248,6 +248,38 @@ html(lang='en')
             opacity: 0.5;
         }
 
+        .entry-photo {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            cursor: pointer;
+        }
+
+        .entry-photo-thumb {
+            width: 34px;
+            height: 34px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .entry-photo-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1.5px dashed #ced4da;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #adb5bd;
+            font-size: 15px;
+        }
+
+        #billPhotoModalBody img {
+            width: 100%;
+            border-radius: 8px;
+        }
+
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -434,6 +466,20 @@ html(lang='en')
                 span.shift-badge Shift ##{activeClosing.closing_id} · Active
         a.logout-link(href='/logout') Logout
 
+    //- Bill photo modal (view / upload / take photo / replace / remove) — rendered
+    //- at top level so it's available whether or not there's an active shift.
+    #billPhotoModal.modal.fade(tabindex='-1' role='dialog')
+        .modal-dialog.modal-dialog-centered(role='document')
+            .modal-content
+                .modal-header
+                    h6.modal-title Bill Photo
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body#billPhotoModalBody
+                .modal-footer#billPhotoModalFooter
+    input#billPhotoUploadInput(type='file' accept='image/*' style='display:none')
+    input#billPhotoCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+
     if !activeClosing
         .dsm-container
             .no-shift-card
@@ -455,6 +501,11 @@ html(lang='en')
                                     |  · #{entry.qty} L
                                     span.entry-shift  · Shift ##{entry.closing_id}
                             .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                            .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable='0')
+                                if entry.photo_doc_id
+                                    img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                else
+                                    i.bi.bi-camera.entry-photo-icon
                             span.entry-locked(title='Shift closed — cannot delete') 🔒
 
     else
@@ -600,6 +651,11 @@ html(lang='en')
                                         |  · #{entry.qty} L
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                                .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable=entry.closing_status === 'DRAFT' ? '1' : '0')
+                                    if entry.photo_doc_id
+                                        img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                    else
+                                        i.bi.bi-camera.entry-photo-icon
                                 if entry.closing_status === 'DRAFT'
                                     button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
                                 else
@@ -626,6 +682,169 @@ html(lang='en')
 
         let selectedProductId = null;
         let selectedProductPrice = 0;
+
+        // ─── Bill photo modal ───────────────────────────────────────────────────
+        // Registered early (before the form-only JS below, which assumes an active
+        // shift and its elements exist) so photos stay viewable/editable even on
+        // the read-only "no active shift" page.
+        let currentPhotoTcreditId = null;
+        let currentPhotoDocId = null;
+        let currentPhotoEditable = false;
+
+        const billPhotoModalBody   = document.getElementById('billPhotoModalBody');
+        const billPhotoModalFooter = document.getElementById('billPhotoModalFooter');
+        const billPhotoUploadInput = document.getElementById('billPhotoUploadInput');
+        const billPhotoCameraInput = document.getElementById('billPhotoCameraInput');
+
+        // Delegated at document level so it works for both the editable entries list
+        // and the read-only locked list shown when there's no active shift.
+        document.addEventListener('click', function(e) {
+            const photoEl = e.target.closest('.entry-photo');
+            if (!photoEl) return;
+            openPhotoModal(photoEl.dataset.id, photoEl.dataset.photo || null, photoEl.dataset.editable === '1');
+        });
+
+        function openPhotoModal(tcreditId, docId, editable) {
+            currentPhotoTcreditId = tcreditId;
+            currentPhotoDocId = docId || null;
+            currentPhotoEditable = editable;
+            renderPhotoModalContent();
+            $('#billPhotoModal').modal('show');
+        }
+
+        function renderPhotoModalContent() {
+            billPhotoModalBody.innerHTML = currentPhotoDocId
+                ? `<img src="/documents/${currentPhotoDocId}" alt="Bill photo">`
+                : `<p class="text-muted text-center mb-0">No photo attached yet.</p>`;
+
+            if (!currentPhotoEditable) {
+                billPhotoModalFooter.innerHTML = `<button class="btn btn-secondary btn-block" type="button" data-dismiss="modal">Close</button>`;
+                return;
+            }
+
+            let footerHtml = `
+                <div style="display:flex;gap:8px;width:100%">
+                    <button id="btnPhotoUpload" class="btn btn-outline-primary flex-fill" type="button"><i class="bi bi-folder2-open"></i> Upload</button>
+                    <button id="btnPhotoCamera" class="btn btn-outline-primary flex-fill" type="button"><i class="bi bi-camera"></i> Take Photo</button>
+                </div>`;
+            if (currentPhotoDocId) {
+                footerHtml += `<button id="btnPhotoRemove" class="btn btn-link text-danger btn-block mt-2" type="button">Remove Photo</button>`;
+            }
+            billPhotoModalFooter.innerHTML = footerHtml;
+
+            document.getElementById('btnPhotoUpload').addEventListener('click', function() {
+                billPhotoUploadInput.value = '';
+                billPhotoUploadInput.click();
+            });
+            document.getElementById('btnPhotoCamera').addEventListener('click', function() {
+                billPhotoCameraInput.value = '';
+                billPhotoCameraInput.click();
+            });
+            const removeBtn = document.getElementById('btnPhotoRemove');
+            if (removeBtn) removeBtn.addEventListener('click', removeCurrentPhoto);
+        }
+
+        billPhotoUploadInput.addEventListener('change', function() {
+            handlePhotoFileSelected(this.files[0], 'UPLOAD');
+        });
+        billPhotoCameraInput.addEventListener('change', function() {
+            handlePhotoFileSelected(this.files[0], 'CAMERA');
+        });
+
+        // Resize/compress client-side before upload — DSM phones are often old
+        // Android devices on weak connections, so this cuts upload time and
+        // bandwidth before the server-side size limit is even checked.
+        function compressImage(file, maxDim, quality) {
+            maxDim = maxDim || 1600;
+            quality = quality || 0.72;
+            return new Promise(function(resolve, reject) {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = function() {
+                        let width = img.width, height = img.height;
+                        if (width > height && width > maxDim) {
+                            height = Math.round(height * (maxDim / width));
+                            width = maxDim;
+                        } else if (height > maxDim) {
+                            width = Math.round(width * (maxDim / height));
+                            height = maxDim;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        canvas.toBlob(function(blob) {
+                            if (blob) resolve(blob); else reject(new Error('Compression failed'));
+                        }, 'image/jpeg', quality);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handlePhotoFileSelected(file, captureSource) {
+            if (!file || !currentPhotoTcreditId) return;
+
+            billPhotoModalBody.innerHTML = `<p class="text-center text-muted mb-0">Compressing &amp; uploading...</p>`;
+            billPhotoModalFooter.innerHTML = '';
+
+            try {
+                const blob = await compressImage(file);
+                const form = new FormData();
+                form.append('photo', blob, 'bill.jpg');
+                form.append('capture_source', captureSource);
+
+                const resp = await fetch(`/dsm-entry/${currentPhotoTcreditId}/photo`, { method: 'POST', body: form });
+                const data = await resp.json();
+
+                if (data.success) {
+                    currentPhotoDocId = data.photo.doc_id;
+                    updateEntryPhotoUI(currentPhotoTcreditId, currentPhotoDocId, currentPhotoEditable);
+                    showToast('Photo saved.', 'success');
+                } else {
+                    showToast(data.message || 'Upload failed.', 'danger');
+                }
+            } catch (e) {
+                console.error('Photo upload error:', e);
+                showToast('Upload failed. Try again.', 'danger');
+            }
+            renderPhotoModalContent();
+        }
+
+        async function removeCurrentPhoto() {
+            if (!currentPhotoDocId || !currentPhotoTcreditId) return;
+            if (!confirm('Remove this photo?')) return;
+
+            try {
+                const resp = await fetch(`/dsm-entry/${currentPhotoTcreditId}/photo/${currentPhotoDocId}`, { method: 'DELETE' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    currentPhotoDocId = null;
+                    updateEntryPhotoUI(currentPhotoTcreditId, null, currentPhotoEditable);
+                    showToast('Photo removed.', 'success');
+                } else {
+                    showToast(data.message || 'Remove failed.', 'danger');
+                }
+            } catch (e) {
+                showToast('Network error. Try again.', 'danger');
+            }
+            renderPhotoModalContent();
+        }
+
+        function updateEntryPhotoUI(tcreditId, docId, editable) {
+            const el = document.querySelector(`.entry-photo[data-id="${tcreditId}"]`);
+            if (!el) return;
+            el.dataset.photo = docId || '';
+            el.dataset.editable = editable ? '1' : '0';
+            el.innerHTML = docId
+                ? `<img class="entry-photo-thumb" src="/documents/${docId}" alt="Bill photo">`
+                : `<i class="bi bi-camera entry-photo-icon"></i>`;
+        }
 
         // Product button selection
         document.querySelectorAll('.product-btn').forEach(btn => {
@@ -1159,6 +1378,12 @@ html(lang='en')
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
                     <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
+                    <div class="entry-photo" data-id="${e.tcredit_id}" data-photo="${e.photo_doc_id || ''}" data-editable="${e.closing_status === 'DRAFT' ? '1' : '0'}">
+                        ${e.photo_doc_id
+                            ? `<img class="entry-photo-thumb" src="/documents/${e.photo_doc_id}" alt="Bill photo">`
+                            : `<i class="bi bi-camera entry-photo-icon"></i>`
+                        }
+                    </div>
                     ${e.closing_status === 'DRAFT'
                         ? `<button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>`
                         : `<span class="entry-locked" title="Shift closed — cannot delete">🔒</span>`
