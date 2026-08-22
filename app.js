@@ -1570,16 +1570,20 @@ app.post('/lubes-invoice/save-from-pdf', isLoginEnsured, function(req, res, next
 
 // Get suppliers list
 app.get('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    supplierController.findSuppliers(req.user.location_code).then(data => {
-        res.render('suppliers', { 
-            title: 'Suppliers', 
-            user: req.user, 
-            suppliers: data 
+    Promise.all([
+        supplierController.findSuppliers(req.user.location_code),
+        supplierController.findBanksByLocation(req.user.location_code)
+    ]).then(([suppliers, banks]) => {
+        res.render('suppliers', {
+            title: 'Suppliers',
+            user: req.user,
+            suppliers: suppliers,
+            banks: banks
         });
     }).catch(err => {
         console.error('Error fetching suppliers:', err);
-        res.status(500).render('error', { 
-            message: 'Error fetching suppliers' 
+        res.status(500).render('error', {
+            message: 'Error fetching suppliers'
         });
     });
 });
@@ -1591,11 +1595,15 @@ app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res)
     SupplierDao.findSupplierByName(newSupplier.supplier_name, newSupplier.location_code).then(
         (data) => {
             if (data && data.length > 0) {
-                supplierController.findSuppliers(newSupplier.location_code).then((data) => {
+                Promise.all([
+                    supplierController.findSuppliers(newSupplier.location_code),
+                    supplierController.findBanksByLocation(newSupplier.location_code)
+                ]).then(([suppliers, banks]) => {
                     res.status(400).render('suppliers', {
                         title: 'Suppliers',
                         user: req.user,
-                        suppliers: data,
+                        suppliers: suppliers,
+                        banks: banks,
                         messages: { warning: msg.WARN_SUPPLIER_DUPLICATE }
                     });
                 });
@@ -1612,9 +1620,33 @@ app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res)
         }
     ).catch(err => {
         console.error('Error checking supplier existence:', err);
-        res.status(500).render('error', { 
-            message: 'Error processing supplier creation' 
+        res.status(500).render('error', {
+            message: 'Error processing supplier creation'
         });
+    });
+});
+
+// Update existing supplier
+app.put('/suppliers/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
+    supplierController.findById(req.params.id).then(existing => {
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Supplier not found' });
+        }
+        supplierController.updateSupplier({
+            id: req.params.id,
+            name: req.body.name,
+            shortName: req.body.shortName,
+            gstin: req.body.gstin,
+            remittanceBankId: req.body.remittanceBankId
+        }, req.user.username).then(() => {
+            res.json({ success: true });
+        }).catch(err => {
+            console.error('Error updating supplier:', err);
+            res.status(500).json({ success: false, message: 'Error updating supplier' });
+        });
+    }).catch(err => {
+        console.error('Error checking supplier existence:', err);
+        res.status(500).json({ success: false, message: 'Error updating supplier' });
     });
 });
 

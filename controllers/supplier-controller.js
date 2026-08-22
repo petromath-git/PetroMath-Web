@@ -15,7 +15,10 @@ module.exports = {
                             locationCode: supplier.location_code,
                             effective_start_date: dateFormat(supplier.effective_start_date, "dd-mm-yyyy"),
                             createdBy: supplier.created_by,
-                            creation_date: dateFormat(supplier.creation_date, "dd-mm-yyyy")
+                            creation_date: dateFormat(supplier.creation_date, "dd-mm-yyyy"),
+                            gstin: supplier.gstin,
+                            remittanceBankId: supplier.remittance_bank_id,
+                            bankName: supplier.RemittanceBank ? (supplier.RemittanceBank.account_nickname || supplier.RemittanceBank.bank_name) : null
                         });
                     });
                     resolve(suppliers);
@@ -25,6 +28,10 @@ module.exports = {
                     reject(err);
                 });
         });
+    },
+
+    findBanksByLocation: (locationCode) => {
+        return SupplierDao.findBanksByLocation(locationCode);
     },
 
     findDisabledSuppliers: (locationCode) => {
@@ -83,8 +90,8 @@ module.exports = {
                 supplier_id: supplierData.id,
                 supplier_name: supplierData.name,
                 supplier_short_name: supplierData.shortName,
-                location_code: supplierData.locationCode,
-                location_id: supplierData.locationId,
+                gstin: supplierData.gstin || null,
+                remittance_bank_id: supplierData.remittanceBankId || null,
                 updated_by: username,
                 updation_date: new Date()
             };
@@ -98,6 +105,10 @@ module.exports = {
                     reject(err);
                 });
         });
+    },
+
+    findById: (supplierId) => {
+        return SupplierDao.findById(supplierId);
     },
 
     disableSupplier: (supplierId, username) => {
