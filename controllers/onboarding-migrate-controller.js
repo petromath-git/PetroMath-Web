@@ -282,21 +282,11 @@ module.exports = {
                     );
                     if (rb) remitBankId = rb.bank_id;
                 }
-                const creditlistId = await insertRow(
-                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
-                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
-                    { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null }
+                await insertRow(
+                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, remittance_bank_id, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
+                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :remitBankId, CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
+                    { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null, remitBankId }
                 );
-                // Regular (card_flag='N') customers' remittance banks live in
-                // m_credit_remittance_bank, not m_credit_list.remittance_bank_id —
-                // that column/trigger pair is Digital-vendor-only now.
-                if (remitBankId) {
-                    await insertRow(
-                        `INSERT INTO m_credit_remittance_bank (creditlist_id, bank_id, created_by)
-                         VALUES (:creditlistId, :remitBankId, 'onboarding')`,
-                        { creditlistId, remitBankId }
-                    );
-                }
             }));
 
             // ── Step 10: Account Heads (copy from template) ───────────────────────
