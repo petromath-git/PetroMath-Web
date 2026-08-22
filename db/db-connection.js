@@ -135,6 +135,8 @@ db.location.hasMany(db.txn_truck_expense, {foreignKey:'expense_cost_center_id'})
 db.txn_truck_expense.belongsTo(db.location, {foreignKey:'expense_cost_center_id'});
 db.m_bank.hasMany(db.txn_bank_account, {foreignKey: 'bank_id'});
 db.txn_bank_account.belongsTo(db.m_bank,{foreignKey: 'bank_id'});
+db.m_bank.hasMany(db.m_supplier, {foreignKey: 'remittance_bank_id'});
+db.m_supplier.belongsTo(db.m_bank, {foreignKey: 'remittance_bank_id', as: 'RemittanceBank'});
 db.location.hasMany(db.m_bank, {foreignKey: 'location_id'});
 db.m_bank.belongsTo(db.location, {foreignKey: 'location_id'});
 db.location.hasMany(db.txn_bank_account, {foreignKey: 'location_id'});

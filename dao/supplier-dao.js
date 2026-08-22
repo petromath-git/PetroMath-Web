@@ -1,5 +1,6 @@
 const db = require("../db/db-connection");
 const Supplier = db.m_supplier;
+const Bank = db.m_bank;
 const { Op } = require("sequelize");
 const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
@@ -16,13 +17,23 @@ module.exports = {
                         { 'effective_end_date': { [Op.gte]: currentDate } }
                     ]
                 },
+                include: [{ model: Bank, as: 'RemittanceBank', attributes: ['bank_id', 'bank_name', 'account_nickname'] }],
                 order: [
                     ['effective_start_date', 'ASC']
                 ]
             });
         } else {
-            return Supplier.findAll();
+            return Supplier.findAll({
+                include: [{ model: Bank, as: 'RemittanceBank', attributes: ['bank_id', 'bank_name', 'account_nickname'] }]
+            });
         }
+    },
+
+    findBanksByLocation: (locationCode) => {
+        return Bank.findAll({
+            where: { location_code: locationCode },
+            order: [['account_nickname', 'ASC'], ['bank_name', 'ASC']]
+        });
     },
 
     findSupplierByName: (supplierName, locationCode) => {

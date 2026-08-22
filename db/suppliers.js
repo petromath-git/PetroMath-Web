@@ -25,6 +25,11 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: true,
             comment: 'Supplier GSTIN for GST ITC claims'
         },
+        remittance_bank_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            field: 'remittance_bank_id'
+        },
         location_id: {
             type: DataTypes.INTEGER,
             allowNull: true,

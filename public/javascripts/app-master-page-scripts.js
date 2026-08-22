@@ -139,6 +139,10 @@ function hideMasterEntryRow(prefix, rowId) {
         for (let input of inputs) {
             input.value = '';
         }
+        const selects = row.getElementsByTagName('select');
+        for (let select of selects) {
+            select.value = '';
+        }
     }
 }
 
