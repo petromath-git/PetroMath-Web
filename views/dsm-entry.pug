@@ -248,6 +248,38 @@ html(lang='en')
             opacity: 0.5;
         }
 
+        .entry-photo {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            cursor: pointer;
+        }
+
+        .entry-photo-thumb {
+            width: 34px;
+            height: 34px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .entry-photo-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1.5px dashed #ced4da;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #adb5bd;
+            font-size: 15px;
+        }
+
+        #billPhotoModalBody img {
+            width: 100%;
+            border-radius: 8px;
+        }
+
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -434,6 +466,22 @@ html(lang='en')
                 span.shift-badge Shift ##{activeClosing.closing_id} · Active
         a.logout-link(href='/logout') Logout
 
+    //- Bill photo modal (view / upload / take photo / replace / remove) — rendered
+    //- at top level so it's available whether or not there's an active shift.
+    //- Gated by ALLOW_DSM_BILL_PHOTO location config.
+    if allowBillPhoto
+        #billPhotoModal.modal.fade(tabindex='-1' role='dialog')
+            .modal-dialog.modal-dialog-centered(role='document')
+                .modal-content
+                    .modal-header
+                        h6.modal-title Bill Photo
+                        button.close(type='button' data-dismiss='modal' aria-label='Close')
+                            span(aria-hidden='true') &times;
+                    .modal-body#billPhotoModalBody
+                    .modal-footer#billPhotoModalFooter
+        input#billPhotoUploadInput(type='file' accept='image/*' style='display:none')
+        input#billPhotoCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+
     if !activeClosing
         .dsm-container
             .no-shift-card
@@ -455,6 +503,12 @@ html(lang='en')
                                     |  · #{entry.qty} L
                                     span.entry-shift  · Shift ##{entry.closing_id}
                             .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                            if allowBillPhoto
+                                .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable='0')
+                                    if entry.photo_doc_id
+                                        img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                    else
+                                        i.bi.bi-camera.entry-photo-icon
                             span.entry-locked(title='Shift closed — cannot delete') 🔒
 
     else
@@ -581,6 +635,29 @@ html(lang='en')
                             step='0.01'
                         )
 
+                //- Bill photo — captured here, uploaded right after the entry saves
+                //- (there's no tcredit_id to attach to until then). Staged as a
+                //- compressed blob in memory; the after-save camera icon on the
+                //- entry card remains available for viewing/swapping/removing it.
+                //- Gated by ALLOW_DSM_BILL_PHOTO location config.
+                if allowBillPhoto
+                    .mb-3
+                        label.form-label Bill Photo
+                        #newEntryPhotoPreview(style='display:none')
+                            img#newEntryPhotoImg(style='width:100%;border-radius:8px;margin-bottom:6px' alt='Bill photo')
+                            #newEntryPhotoOcrStatus(style='font-size:12px;color:#6c757d;min-height:16px;margin-bottom:4px')
+                            button#btnNewEntryPhotoRemove.btn.btn-link.text-danger.btn-sm.p-0(type='button') Remove Photo
+                        #newEntryPhotoButtons
+                            .d-flex(style='gap:8px')
+                                button#btnNewEntryUpload.btn.btn-outline-primary.flex-fill(type='button')
+                                    i.bi.bi-folder2-open
+                                    |  Upload
+                                button#btnNewEntryCamera.btn.btn-outline-primary.flex-fill(type='button')
+                                    i.bi.bi-camera
+                                    |  Take Photo
+                        input#newEntryUploadInput(type='file' accept='image/*' style='display:none')
+                        input#newEntryCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
+
                 button#btnSave.btn.btn-save(type='button' disabled) Save Entry
 
             //- Today's entries
@@ -600,6 +677,12 @@ html(lang='en')
                                         |  · #{entry.qty} L
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
+                                if allowBillPhoto
+                                    .entry-photo(data-id=entry.tcredit_id data-photo=entry.photo_doc_id || '' data-editable=entry.closing_status === 'DRAFT' ? '1' : '0')
+                                        if entry.photo_doc_id
+                                            img.entry-photo-thumb(src=`/documents/${entry.photo_doc_id}` alt='Bill photo')
+                                        else
+                                            i.bi.bi-camera.entry-photo-icon
                                 if entry.closing_status === 'DRAFT'
                                     button.btn-delete(type='button' data-id=entry.tcredit_id title='Delete') ✕
                                 else
@@ -627,6 +710,516 @@ html(lang='en')
         let selectedProductId = null;
         let selectedProductPrice = 0;
 
+        // ─── Bill photo modal ───────────────────────────────────────────────────
+        // Registered early (before the form-only JS below, which assumes an active
+        // shift and its elements exist) so photos stay viewable/editable even on
+        // the read-only "no active shift" page.
+        let currentPhotoTcreditId = null;
+        let currentPhotoDocId = null;
+        let currentPhotoEditable = false;
+
+        const billPhotoModalBody   = document.getElementById('billPhotoModalBody');
+        const billPhotoModalFooter = document.getElementById('billPhotoModalFooter');
+        const billPhotoUploadInput = document.getElementById('billPhotoUploadInput');
+        const billPhotoCameraInput = document.getElementById('billPhotoCameraInput');
+
+        // Delegated at document level so it works for both the editable entries list
+        // and the read-only locked list shown when there's no active shift.
+        document.addEventListener('click', function(e) {
+            const photoEl = e.target.closest('.entry-photo');
+            if (!photoEl) return;
+            openPhotoModal(photoEl.dataset.id, photoEl.dataset.photo || null, photoEl.dataset.editable === '1');
+        });
+
+        function openPhotoModal(tcreditId, docId, editable) {
+            currentPhotoTcreditId = tcreditId;
+            currentPhotoDocId = docId || null;
+            currentPhotoEditable = editable;
+            renderPhotoModalContent();
+            $('#billPhotoModal').modal('show');
+        }
+
+        function renderPhotoModalContent() {
+            billPhotoModalBody.innerHTML = currentPhotoDocId
+                ? `<img src="/documents/${currentPhotoDocId}" alt="Bill photo">`
+                : `<p class="text-muted text-center mb-0">No photo attached yet.</p>`;
+
+            if (!currentPhotoEditable) {
+                billPhotoModalFooter.innerHTML = `<button class="btn btn-secondary btn-block" type="button" data-dismiss="modal">Close</button>`;
+                return;
+            }
+
+            let footerHtml = `
+                <div style="display:flex;gap:8px;width:100%">
+                    <button id="btnPhotoUpload" class="btn btn-outline-primary flex-fill" type="button"><i class="bi bi-folder2-open"></i> Upload</button>
+                    <button id="btnPhotoCamera" class="btn btn-outline-primary flex-fill" type="button"><i class="bi bi-camera"></i> Take Photo</button>
+                </div>`;
+            if (currentPhotoDocId) {
+                footerHtml += `<button id="btnPhotoRemove" class="btn btn-link text-danger btn-block mt-2" type="button">Remove Photo</button>`;
+            }
+            billPhotoModalFooter.innerHTML = footerHtml;
+
+            document.getElementById('btnPhotoUpload').addEventListener('click', function() {
+                billPhotoUploadInput.value = '';
+                billPhotoUploadInput.click();
+            });
+            document.getElementById('btnPhotoCamera').addEventListener('click', function() {
+                billPhotoCameraInput.value = '';
+                billPhotoCameraInput.click();
+            });
+            const removeBtn = document.getElementById('btnPhotoRemove');
+            if (removeBtn) removeBtn.addEventListener('click', removeCurrentPhoto);
+        }
+
+        billPhotoUploadInput?.addEventListener('change', function() {
+            handlePhotoFileSelected(this.files[0], 'UPLOAD');
+        });
+        billPhotoCameraInput?.addEventListener('change', function() {
+            handlePhotoFileSelected(this.files[0], 'CAMERA');
+        });
+
+        // Loads a File/Blob into an HTMLImageElement. Standalone from
+        // compressImage so the auto-crop step (which needs a decoded image
+        // before compression happens) can reuse it.
+        function loadImageFromFile(file) {
+            return new Promise(function(resolve, reject) {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = function() { resolve(img); };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Resize/compress client-side before upload — DSM phones are often old
+        // Android devices on weak connections, so this cuts upload time and
+        // bandwidth before the server-side size limit is even checked.
+        // Bill photos are black text on white thermal paper — color channels are
+        // pure waste here, so pixels are desaturated to grayscale (luminance)
+        // before JPEG encoding. Done via getImageData/putImageData rather than
+        // ctx.filter = 'grayscale(1)' since the filter API isn't supported on
+        // older Android WebViews these DSM phones may be running.
+        //
+        // `source` is either a File/Blob (the common case) or an already-decoded
+        // HTMLImageElement/HTMLCanvasElement (used when auto-crop has already
+        // produced one) — either way it ends up through the same resize/
+        // grayscale/encode pipeline.
+        async function compressImage(source, maxDim, quality) {
+            maxDim = maxDim || 1600;
+            quality = quality || 0.6;
+            const img = (source instanceof Blob) ? await loadImageFromFile(source) : source;
+            const srcWidth = img.naturalWidth || img.width;
+            const srcHeight = img.naturalHeight || img.height;
+
+            let width = srcWidth, height = srcHeight;
+            if (width > height && width > maxDim) {
+                height = Math.round(height * (maxDim / width));
+                width = maxDim;
+            } else if (height > maxDim) {
+                width = Math.round(width * (maxDim / height));
+                height = maxDim;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const px = imageData.data;
+            for (let i = 0; i < px.length; i += 4) {
+                const gray = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+                px[i] = px[i + 1] = px[i + 2] = gray;
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            return new Promise(function(resolve, reject) {
+                canvas.toBlob(function(blob) {
+                    if (blob) resolve(blob); else reject(new Error('Compression failed'));
+                }, 'image/jpeg', quality);
+            });
+        }
+
+        // ─── Automatic bill-edge detection/crop (Adobe-Scan-style) ─────────────
+        // Gated by ALLOW_DSM_BILL_AUTOCROP. Loads OpenCV.js + jscanify lazily —
+        // triggered once as soon as the New Entry photo section is available so
+        // the ~8-10MB download has a head start before the DSM actually takes a
+        // photo, rather than blocking on first tap.
+        let scannerLoadPromise = null;
+
+        function loadDocumentScanner() {
+            if (scannerLoadPromise) return scannerLoadPromise;
+            scannerLoadPromise = new Promise(function(resolve) {
+                const cvScript = document.createElement('script');
+                cvScript.src = 'https://docs.opencv.org/4.9.0/opencv.js';
+                cvScript.async = true;
+                cvScript.onerror = function() { resolve(false); };
+                cvScript.onload = function() {
+                    if (!window.cv) { resolve(false); return; }
+                    window.cv['onRuntimeInitialized'] = function() {
+                        const jsScanScript = document.createElement('script');
+                        jsScanScript.src = 'https://cdn.jsdelivr.net/npm/jscanify@1.3.1/src/jscanify.min.js';
+                        jsScanScript.async = true;
+                        jsScanScript.onerror = function() { resolve(false); };
+                        jsScanScript.onload = function() { resolve(!!window.jscanify); };
+                        document.head.appendChild(jsScanScript);
+                    };
+                };
+                document.head.appendChild(cvScript);
+            });
+            return scannerLoadPromise;
+        }
+
+        // Auto-detects and crops the bill from a decoded image, like Adobe Scan.
+        // Returns a cropped HTMLCanvasElement, or null if the scanner isn't
+        // ready/available or detection isn't confident — callers MUST fall back
+        // to the original uncropped image in that case, never block on this.
+        async function autoCropBillPhoto(imgEl) {
+            try {
+                const ready = await loadDocumentScanner();
+                if (!ready || !window.jscanify) return null;
+
+                const scanner = new window.jscanify();
+                const resultCanvas = scanner.extractPaper(imgEl, imgEl.naturalWidth, imgEl.naturalHeight);
+                if (!resultCanvas || !resultCanvas.width || !resultCanvas.height) return null;
+
+                // extractPaper always returns a canvas sized to the requested
+                // output dimensions (here, the original photo's size) regardless
+                // of how good the detected quadrilateral was — a comparison
+                // against the original photo's area is therefore always a no-op
+                // and can't catch a bad detection. What a bad detection actually
+                // produces (e.g. edge detection locking onto a low-contrast
+                // background instead of the receipt) is a degenerate/near-
+                // collinear source quad warped to fill the full canvas — visibly
+                // a smeared/stretched mess, not a legible document. Receipts are
+                // overwhelmingly white/light background with sparse text, so
+                // reject the crop unless a solid majority of sampled pixels are
+                // near-white.
+                if (!looksLikeLightBackgroundDocument(resultCanvas)) return null;
+
+                return resultCanvas;
+            } catch (e) {
+                console.error('Auto-crop error:', e);
+                return null;
+            }
+        }
+
+        // Cheap plausibility check: draws the candidate onto a small offscreen
+        // canvas (avoids scanning millions of pixels at full photo resolution)
+        // and measures the near-white pixel fraction.
+        function looksLikeLightBackgroundDocument(canvasEl) {
+            const sampleDim = 100;
+            const sampleCanvas = document.createElement('canvas');
+            sampleCanvas.width = sampleDim;
+            sampleCanvas.height = sampleDim;
+            const ctx = sampleCanvas.getContext('2d');
+            ctx.drawImage(canvasEl, 0, 0, sampleDim, sampleDim);
+
+            const data = ctx.getImageData(0, 0, sampleDim, sampleDim).data;
+            let whiteish = 0;
+            const totalPixels = sampleDim * sampleDim;
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                if (gray > 170) whiteish++;
+            }
+            return (whiteish / totalPixels) >= 0.45;
+        }
+
+        async function handlePhotoFileSelected(file, captureSource) {
+            if (!file || !currentPhotoTcreditId) return;
+
+            billPhotoModalBody.innerHTML = `<p class="text-center text-muted mb-0">Compressing &amp; uploading...</p>`;
+            billPhotoModalFooter.innerHTML = '';
+
+            try {
+                const blob = await compressImage(file);
+                const form = new FormData();
+                form.append('photo', blob, 'bill.jpg');
+                form.append('capture_source', captureSource);
+
+                const resp = await fetch(`/dsm-entry/${currentPhotoTcreditId}/photo`, { method: 'POST', body: form });
+                const data = await resp.json();
+
+                if (data.success) {
+                    currentPhotoDocId = data.photo.doc_id;
+                    updateEntryPhotoUI(currentPhotoTcreditId, currentPhotoDocId, currentPhotoEditable);
+                    showToast('Photo saved.', 'success');
+                } else {
+                    showToast(data.message || 'Upload failed.', 'danger');
+                }
+            } catch (e) {
+                console.error('Photo upload error:', e);
+                showToast('Upload failed. Try again.', 'danger');
+            }
+            renderPhotoModalContent();
+        }
+
+        async function removeCurrentPhoto() {
+            if (!currentPhotoDocId || !currentPhotoTcreditId) return;
+            if (!confirm('Remove this photo?')) return;
+
+            try {
+                const resp = await fetch(`/dsm-entry/${currentPhotoTcreditId}/photo/${currentPhotoDocId}`, { method: 'DELETE' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    currentPhotoDocId = null;
+                    updateEntryPhotoUI(currentPhotoTcreditId, null, currentPhotoEditable);
+                    showToast('Photo removed.', 'success');
+                } else {
+                    showToast(data.message || 'Remove failed.', 'danger');
+                }
+            } catch (e) {
+                showToast('Network error. Try again.', 'danger');
+            }
+            renderPhotoModalContent();
+        }
+
+        function updateEntryPhotoUI(tcreditId, docId, editable) {
+            const el = document.querySelector(`.entry-photo[data-id="${tcreditId}"]`);
+            if (!el) return;
+            el.dataset.photo = docId || '';
+            el.dataset.editable = editable ? '1' : '0';
+            el.innerHTML = docId
+                ? `<img class="entry-photo-thumb" src="/documents/${docId}" alt="Bill photo">`
+                : `<i class="bi bi-camera entry-photo-icon"></i>`;
+        }
+
+        // ─── New-entry bill photo staging ──────────────────────────────────────
+        // Captured/compressed here before the entry exists; actually uploaded
+        // right after Save succeeds and a tcredit_id is available.
+        let pendingPhotoBlob = null;
+        let pendingPhotoCaptureSource = null;
+        let pendingPhotoObjectUrl = null;
+        let photoStageToken = 0; // bumped on every stage/clear — guards against a late-resolving OCR overwriting a newer/cleared photo's fields
+        let lastExtractedBillRate = null; // per-litre rate OCR'd from the bill, for the product-price mismatch check
+
+        const newEntryPhotoPreview  = document.getElementById('newEntryPhotoPreview');
+        const newEntryPhotoImg      = document.getElementById('newEntryPhotoImg');
+        const newEntryPhotoButtons  = document.getElementById('newEntryPhotoButtons');
+        const newEntryUploadInput   = document.getElementById('newEntryUploadInput');
+        const newEntryCameraInput   = document.getElementById('newEntryCameraInput');
+
+        document.getElementById('btnNewEntryUpload')?.addEventListener('click', function() {
+            newEntryUploadInput.value = '';
+            newEntryUploadInput.click();
+        });
+        document.getElementById('btnNewEntryCamera')?.addEventListener('click', function() {
+            newEntryCameraInput.value = '';
+            newEntryCameraInput.click();
+        });
+        newEntryUploadInput?.addEventListener('change', function() {
+            stagePendingPhoto(this.files[0], 'UPLOAD');
+        });
+        newEntryCameraInput?.addEventListener('change', function() {
+            stagePendingPhoto(this.files[0], 'CAMERA');
+        });
+        document.getElementById('btnNewEntryPhotoRemove')?.addEventListener('click', function() {
+            clearPendingPhoto();
+        });
+
+        // Pre-warm the ~8-10MB scanner download in the background as soon as
+        // this section is live, rather than waiting for the first photo tap.
+        if (pageData.allowBillAutoCrop) {
+            loadDocumentScanner();
+        }
+
+        async function stagePendingPhoto(file, captureSource) {
+            if (!file) return;
+            const myToken = ++photoStageToken;
+            try {
+                let source = file;
+                if (pageData.allowBillAutoCrop) {
+                    setOcrStatus('Detecting bill edges...', '');
+                    const img = await loadImageFromFile(file);
+                    if (myToken !== photoStageToken) return;
+                    const cropped = await autoCropBillPhoto(img);
+                    if (myToken !== photoStageToken) return;
+                    source = cropped || img; // fall back to the already-decoded full photo if crop failed
+                    setOcrStatus('', '');
+                }
+
+                const blob = await compressImage(source);
+                if (myToken !== photoStageToken) return; // a newer photo was staged/cleared while this one compressed
+                pendingPhotoBlob = blob;
+                pendingPhotoCaptureSource = captureSource;
+                if (pendingPhotoObjectUrl) URL.revokeObjectURL(pendingPhotoObjectUrl);
+                pendingPhotoObjectUrl = URL.createObjectURL(pendingPhotoBlob);
+                newEntryPhotoImg.src = pendingPhotoObjectUrl;
+                newEntryPhotoPreview.style.display = '';
+                newEntryPhotoButtons.style.display = 'none';
+                setOcrStatus('', '');
+                if (pageData.allowBillOcr) readBillPhoto(blob, myToken);
+            } catch (e) {
+                console.error('Photo staging error:', e);
+                showToast('Could not process photo. Try again.', 'danger');
+            }
+        }
+
+        function clearPendingPhoto() {
+            photoStageToken++; // invalidate any in-flight OCR for the photo being cleared
+            pendingPhotoBlob = null;
+            pendingPhotoCaptureSource = null;
+            if (pendingPhotoObjectUrl) { URL.revokeObjectURL(pendingPhotoObjectUrl); pendingPhotoObjectUrl = null; }
+            // resetForm() always calls this — no-op when the photo section isn't rendered (config off)
+            if (!newEntryPhotoImg) return;
+            newEntryPhotoImg.src = '';
+            newEntryPhotoPreview.style.display = 'none';
+            newEntryPhotoButtons.style.display = '';
+            setOcrStatus('', '');
+        }
+
+        // Best-effort OCR over the staged photo: flags an unreadable/blurry shot,
+        // and auto-fills Bill No / Amount when confident — DSM can always edit
+        // before saving. Tesseract handles printed thermal-receipt text
+        // reasonably; it does NOT usefully read handwritten bills (a different
+        // problem, deferred — see project_dsm_bill_photo memory).
+        async function readBillPhoto(blob, token) {
+            setOcrStatus('Reading bill...', '');
+            try {
+                const { data: { text } } = await Tesseract.recognize(blob, 'eng', { logger: () => {} });
+                if (token !== photoStageToken) return; // superseded by a newer/cleared photo
+
+                const cleaned = (text || '').trim();
+                const alnumCount = (cleaned.match(/[A-Za-z0-9]/g) || []).length;
+                if (alnumCount < 6) {
+                    setOcrStatus('Could not read bill clearly — you can still save, or retake for a clearer shot.', 'error');
+                    return;
+                }
+
+                const amount = extractBillAmount(cleaned);
+                const billNo = extractBillNo(cleaned);
+                const amountInput = document.getElementById('amountInput');
+                const billNoInput = document.getElementById('billNoInput');
+                const filled = [];
+
+                if (amount && amountInput && (!amountInput.value || parseFloat(amountInput.value) === 0)) {
+                    amountInput.value = amount.toFixed(2);
+                    amountInput.dispatchEvent(new Event('input'));
+                    filled.push('Amount');
+                }
+                if (billNo && billNoInput && (!billNoInput.value || billNoInput.value === '0')) {
+                    billNoInput.value = billNo;
+                    filled.push('Bill No');
+                }
+
+                // Product mismatch check: fuel-pump receipts print a per-litre
+                // rate, and comparing that against the selected product's price
+                // is far more reliable than matching product *names* — a pump
+                // prints "Petrol" while the app might call the same fuel "MS",
+                // so string-matching names would need a location-specific alias
+                // table. Price is numeric and needs no such mapping.
+                lastExtractedBillRate = extractBillRate(cleaned);
+                const mismatchMsg = checkProductPriceMismatch();
+
+                setOcrStatus(
+                    mismatchMsg || (filled.length ? `Auto-filled ${filled.join(' & ')} from photo — please verify.` : 'Bill read OK.'),
+                    mismatchMsg ? 'error' : 'success'
+                );
+                checkFormReady();
+            } catch (e) {
+                if (token !== photoStageToken) return;
+                console.error('Bill OCR error:', e);
+                setOcrStatus('', '');
+            }
+        }
+
+        function setOcrStatus(msg, type) {
+            const el = document.getElementById('newEntryPhotoOcrStatus');
+            if (!el) return;
+            el.textContent = msg;
+            el.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#198754' : '#6c757d';
+        }
+
+        // Prefer a number on a line with "total"/"amount"/etc; fall back to the
+        // largest plausible currency-looking number anywhere in the text.
+        function extractBillAmount(text) {
+            const keywordRe = /(total|amount|amt|net\s*amt|grand\s*total)/i;
+            // A leading digit, then any run of further digits/commas, then an
+            // optional decimal part. The previous version capped the leading
+            // run at 1-3 digits before requiring either a comma group or the
+            // decimal to follow immediately — a plain zero-padded amount like
+            // "00160.00" (5 digits before the point, no commas) doesn't fit
+            // that shape, so it matched only the first 3 digits ("001") and
+            // stopped there instead of continuing to the actual number.
+            const numRe = /(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+
+            for (const line of text.split('\n')) {
+                if (keywordRe.test(line)) {
+                    const m = line.match(numRe);
+                    if (m) {
+                        const val = parseFloat(m[1].replace(/,/g, ''));
+                        if (val > 0 && val < 1000000) return val;
+                    }
+                }
+            }
+
+            const allMatches = text.match(/[0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2}/g) || [];
+            const values = allMatches.map(s => parseFloat(s.replace(/,/g, ''))).filter(v => v > 0 && v < 1000000);
+            return values.length ? Math.max(...values) : null;
+        }
+
+        function extractBillNo(text) {
+            // Fuel-pump receipts commonly print "Inv.No" rather than the full
+            // word "Invoice" — \b keeps "inv" from matching mid-word.
+            const m = text.match(/\b(?:bill|invoice|inv|receipt)\b\.?\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Za-z0-9\/\-]{2,20})/i);
+            return m && m[1] ? m[1] : null;
+        }
+
+        // Per-litre rate off the bill (e.g. "Rate(Rs/L): 108.69") — used only
+        // to cross-check against the selected product's price, not auto-filled
+        // into any field.
+        function extractBillRate(text) {
+            const keywordRe = /(rate|price)/i;
+            const numRe = /(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+            for (const line of text.split('\n')) {
+                if (keywordRe.test(line)) {
+                    const m = line.match(numRe);
+                    if (m) {
+                        const val = parseFloat(m[1].replace(/,/g, ''));
+                        if (val > 0 && val < 100000) return val;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Warns when the bill's printed rate and the currently selected
+        // product's price differ by more than a small tolerance — a likely
+        // sign the wrong product was picked (fuel grades differ by several
+        // rupees/litre; this threshold tolerates day-to-day price movement
+        // and OCR rounding without tolerating a genuinely different fuel).
+        // Returns a warning string, or null if there's nothing to flag (yet).
+        function checkProductPriceMismatch() {
+            if (!lastExtractedBillRate || !selectedProductPrice) return null;
+            const pctDiff = Math.abs(lastExtractedBillRate - selectedProductPrice) / selectedProductPrice;
+            if (pctDiff <= 0.08) return null;
+            return `⚠ Bill rate ₹${lastExtractedBillRate.toFixed(2)}/L doesn't match the selected product's price (₹${selectedProductPrice.toFixed(2)}/L) — check you picked the right product.`;
+        }
+
+        // Uploads the staged photo against a just-saved entry. Returns the new
+        // doc_id on success, or null on failure (entry itself is already saved
+        // either way — failure here just means the photo needs re-attaching
+        // from the entry card afterwards).
+        async function uploadPendingPhoto(tcreditId) {
+            if (!pendingPhotoBlob) return null;
+            try {
+                const form = new FormData();
+                form.append('photo', pendingPhotoBlob, 'bill.jpg');
+                form.append('capture_source', pendingPhotoCaptureSource || 'UPLOAD');
+                const resp = await fetch(`/dsm-entry/${tcreditId}/photo`, { method: 'POST', body: form });
+                const data = await resp.json();
+                return data.success ? data.photo.doc_id : null;
+            } catch (e) {
+                console.error('Pending photo upload error:', e);
+                return null;
+            }
+        }
+
         // Product button selection
         document.querySelectorAll('.product-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -642,6 +1235,10 @@ html(lang='en')
                 } else if (amt > 0 && selectedProductPrice > 0) {
                     document.getElementById('qtyInput').value = (amt / selectedProductPrice).toFixed(3);
                 }
+                // Re-check in case a bill photo (with its own OCR'd rate) was
+                // already staged before the product was picked/changed.
+                const mismatchMsg = checkProductPriceMismatch();
+                if (mismatchMsg) setOcrStatus(mismatchMsg, 'error');
                 checkFormReady();
             });
         });
@@ -1099,9 +1696,19 @@ html(lang='en')
                 const data = await resp.json();
 
                 if (data.success) {
-                    showToast('Entry saved!', 'success');
+                    let photoDocId = null;
+                    if (pendingPhotoBlob) {
+                        this.textContent = 'Saving photo...';
+                        photoDocId = await uploadPendingPhoto(data.insertId);
+                    }
+                    if (pendingPhotoBlob) {
+                        showToast(photoDocId ? 'Entry & photo saved!' : 'Entry saved, but photo upload failed — attach it from the list below.', photoDocId ? 'success' : 'danger');
+                    } else {
+                        showToast('Entry saved!', 'success');
+                    }
                     resetForm();
                     renderEntries(data.entries);
+                    if (photoDocId) updateEntryPhotoUI(data.insertId, photoDocId, true);
                 } else {
                     showToast(data.message || 'Save failed.', 'danger');
                 }
@@ -1159,6 +1766,13 @@ html(lang='en')
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
                     <div class="entry-amount">₹${parseFloat(e.amount).toLocaleString('en-IN')}</div>
+                    ${pageData.allowBillPhoto ? `
+                    <div class="entry-photo" data-id="${e.tcredit_id}" data-photo="${e.photo_doc_id || ''}" data-editable="${e.closing_status === 'DRAFT' ? '1' : '0'}">
+                        ${e.photo_doc_id
+                            ? `<img class="entry-photo-thumb" src="/documents/${e.photo_doc_id}" alt="Bill photo">`
+                            : `<i class="bi bi-camera entry-photo-icon"></i>`
+                        }
+                    </div>` : ''}
                     ${e.closing_status === 'DRAFT'
                         ? `<button class="btn-delete" type="button" data-id="${e.tcredit_id}" title="Delete">✕</button>`
                         : `<span class="entry-locked" title="Shift closed — cannot delete">🔒</span>`
@@ -1188,6 +1802,7 @@ html(lang='en')
             }
             document.getElementById('billNoInput').value = '0';
             document.getElementById('notesInput').value = '';
+            clearPendingPhoto();
         }
 
         // Toast
