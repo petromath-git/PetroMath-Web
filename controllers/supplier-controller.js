@@ -15,7 +15,9 @@ module.exports = {
                             locationCode: supplier.location_code,
                             effective_start_date: dateFormat(supplier.effective_start_date, "dd-mm-yyyy"),
                             createdBy: supplier.created_by,
-                            creation_date: dateFormat(supplier.creation_date, "dd-mm-yyyy")
+                            creation_date: dateFormat(supplier.creation_date, "dd-mm-yyyy"),
+                            remittanceBankId: supplier.remittance_bank_id,
+                            bankName: supplier.RemittanceBank ? (supplier.RemittanceBank.account_nickname || supplier.RemittanceBank.bank_name) : null
                         });
                     });
                     resolve(suppliers);
@@ -25,6 +27,10 @@ module.exports = {
                     reject(err);
                 });
         });
+    },
+
+    findBanksByLocation: (locationCode) => {
+        return SupplierDao.findBanksByLocation(locationCode);
     },
 
     findDisabledSuppliers: (locationCode) => {

@@ -1570,16 +1570,20 @@ app.post('/lubes-invoice/save-from-pdf', isLoginEnsured, function(req, res, next
 
 // Get suppliers list
 app.get('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    supplierController.findSuppliers(req.user.location_code).then(data => {
-        res.render('suppliers', { 
-            title: 'Suppliers', 
-            user: req.user, 
-            suppliers: data 
+    Promise.all([
+        supplierController.findSuppliers(req.user.location_code),
+        supplierController.findBanksByLocation(req.user.location_code)
+    ]).then(([suppliers, banks]) => {
+        res.render('suppliers', {
+            title: 'Suppliers',
+            user: req.user,
+            suppliers: suppliers,
+            banks: banks
         });
     }).catch(err => {
         console.error('Error fetching suppliers:', err);
-        res.status(500).render('error', { 
-            message: 'Error fetching suppliers' 
+        res.status(500).render('error', {
+            message: 'Error fetching suppliers'
         });
     });
 });
@@ -1591,11 +1595,15 @@ app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res)
     SupplierDao.findSupplierByName(newSupplier.supplier_name, newSupplier.location_code).then(
         (data) => {
             if (data && data.length > 0) {
-                supplierController.findSuppliers(newSupplier.location_code).then((data) => {
+                Promise.all([
+                    supplierController.findSuppliers(newSupplier.location_code),
+                    supplierController.findBanksByLocation(newSupplier.location_code)
+                ]).then(([suppliers, banks]) => {
                     res.status(400).render('suppliers', {
                         title: 'Suppliers',
                         user: req.user,
-                        suppliers: data,
+                        suppliers: suppliers,
+                        banks: banks,
                         messages: { warning: msg.WARN_SUPPLIER_DUPLICATE }
                     });
                 });
