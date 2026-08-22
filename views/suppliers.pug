@@ -11,7 +11,7 @@ block content
                     th(scope="col") Short Name
                     th(scope="col") Remittance Bank
                     th(scope="col") Start Date
-                    th(scope="col") Disable Supplier
+                    th(scope="col") Actions
             tbody
                 each val, index in suppliers
                     tr(id='supplier-' + index)
@@ -22,6 +22,9 @@ block content
                         td= val.effective_start_date
                         td
                             div.align-items-start
+                                button.btn.btn-primary(id="edit-supplier-"+index, title="Edit Supplier", data-toggle="modal", data-target="#editSupplierModal", onclick="openEditSupplierModal('"+index+"')")
+                                    span.oi.oi-pencil
+                                span &nbsp;
                                 button.btn.btn-info(id="disable-supplier-"+index, onclick="disableSupplier('"+index+"', '"+ val.id +"')")
                                     span.oi.oi-delete
                 - var rowCnt = 0
@@ -33,3 +36,75 @@ block content
             button.btn.btn-info(type="button", onClick="showSupplierMasterEntryRow(this, 'suppliers')", id='suppliers-add-new', title="Only one can be added at a time.") Add New
             span &nbsp;&nbsp;&nbsp;&nbsp;
             button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='suppliers-save') Save
+
+    // Edit Supplier Modal
+    .modal.fade#editSupplierModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title Edit Supplier
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#editSupplierForm
+                        input(type="hidden", name="supplier_id", id="edit_supplier_id")
+                        .form-group
+                            label Name *
+                            input.form-control(type="text", name="name", id="edit_supplier_name", required)
+                        .form-group
+                            label Short Name *
+                            input.form-control(type="text", name="shortName", id="edit_supplier_short_name", required)
+                        .form-group
+                            label GSTIN
+                            input.form-control(type="text", name="gstin", id="edit_supplier_gstin", maxlength="15")
+                        .form-group
+                            label Remittance Bank
+                            select.form-control(name="remittanceBankId", id="edit_supplier_remittance_bank_id")
+                                option(value="") Select Bank
+                                if banks
+                                    each bank in banks
+                                        option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary(type="button", onclick="saveSupplierEdit()") Save
+
+    script.
+        let suppliersData = !{JSON.stringify(suppliers || [])};
+
+        function openEditSupplierModal(index) {
+            const supplier = suppliersData[index];
+            if (!supplier) return;
+            document.getElementById('edit_supplier_id').value = supplier.id;
+            document.getElementById('edit_supplier_name').value = supplier.name || '';
+            document.getElementById('edit_supplier_short_name').value = supplier.shortName || '';
+            document.getElementById('edit_supplier_gstin').value = supplier.gstin || '';
+            document.getElementById('edit_supplier_remittance_bank_id').value = supplier.remittanceBankId || '';
+        }
+
+        function saveSupplierEdit() {
+            const supplierId = document.getElementById('edit_supplier_id').value;
+            const payload = {
+                name: document.getElementById('edit_supplier_name').value,
+                shortName: document.getElementById('edit_supplier_short_name').value,
+                gstin: document.getElementById('edit_supplier_gstin').value,
+                remittanceBankId: document.getElementById('edit_supplier_remittance_bank_id').value
+            };
+
+            fetch('/suppliers/' + supplierId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Error updating supplier');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating supplier');
+            });
+        }
