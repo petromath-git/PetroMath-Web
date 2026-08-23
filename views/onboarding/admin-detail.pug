@@ -99,11 +99,9 @@ block content
                         thead.thead-light
                             tr
                                 th Product Name
-                                th Short Name
                         tbody
                             each p in formData.metered_products
                                 tr
-                                    td= p.product_name || '—'
                                     td= p.short_name || '—'
                 else
                     p.text-muted.mb-0 No entries
@@ -115,14 +113,12 @@ block content
                             tr
                                 th Tank Name
                                 th Capacity (L)
-                                th Short Name
                                 th Product
                         tbody
                             each t in formData.tanks
                                 tr
                                     td= t.tank_name || '—'
                                     td= t.tank_capacity || '—'
-                                    td= t.tank_short_name || '—'
                                     td= t.product_short_name || '—'
                 else
                     p.text-muted.mb-0 No entries
@@ -261,8 +257,8 @@ block content
                                 each p in formData.metered_products
                                     tr(data-tax-section="metered-products" data-tax-id=p.id)
                                         td.small.text-muted Metered
-                                        td.small= p.product_name || '—'
                                         td.small= p.short_name || '—'
+                                        td.small —
                                         td: input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(p.hsn_code||'') placeholder="e.g. 27101290")
                                         td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(p.cgst_percent!=null?p.cgst_percent:'') placeholder="e.g. 9")
                                         td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(p.sgst_percent!=null?p.sgst_percent:'') placeholder="e.g. 9")
@@ -342,12 +338,13 @@ block content
             var issues = [], warnings = [];
 
             // Build lookup sets (case-insensitive)
+            var STANDARD_SHORT_NAMES = ['MS', 'HSD', 'XP95', 'XMS'];
             var productSN = new Set();
             (fd.metered_products || []).forEach(function(p) {
                 var sn = (p.short_name || '').trim().toUpperCase();
-                if (sn) productSN.add(sn);
-                if (!p.product_name || !p.product_name.trim()) issues.push('Metered product row with empty name');
-                else if (!sn) warnings.push('Product "' + p.product_name + '" has no Short Name — name will be used as product_code in tanks/nozzles');
+                if (!sn) { issues.push('Metered product row with empty name'); return; }
+                productSN.add(sn);
+                if (STANDARD_SHORT_NAMES.indexOf(sn) === -1) warnings.push('Product "' + sn + '" — expected MS / HSD / XP95 (or XMS). Non-standard names still work but won\'t get the app\'s built-in rate-entry/display handling — verify this is intentional before migrating.');
             });
 
             var tankNames = new Set();

@@ -197,8 +197,7 @@ function buildNewRow(section, id) {
             <td class="text-center align-middle">${del}</td></tr>`,
 
         'metered-products': `<tr ${a}>
-            <td data-label="Product Name"><input class="form-control form-control-sm" type="text" data-field="product_name" placeholder="As per Invoice e.g. EBMS"></td>
-            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="e.g. MS / HSD"></td>
+            <td data-label="Product Name"><input class="form-control form-control-sm" type="text" data-field="short_name" placeholder="e.g. MS / HSD / XP95"></td>
             <td data-label="Selling Price"><input class="form-control form-control-sm" type="number" step="0.01" data-field="selling_price" placeholder="0.00"></td>
             <td data-label="HSN Code"><input class="form-control form-control-sm" type="text" data-field="hsn_code" placeholder="e.g. 27101290" maxlength="20"></td>
             <td data-label="CGST %"><input class="form-control form-control-sm" type="number" step="0.01" min="0" max="50" data-field="cgst_percent" placeholder="e.g. 9"></td>
@@ -208,7 +207,6 @@ function buildNewRow(section, id) {
         'tanks': `<tr ${a}>
             <td data-label="Tank Name"><input class="form-control form-control-sm" type="text" data-field="tank_name" data-no-space="true" placeholder="No spaces e.g. TANK1"></td>
             <td data-label="Capacity (L)"><input class="form-control form-control-sm" type="number" data-field="tank_capacity" placeholder="15000"></td>
-            <td data-label="Short Name"><input class="form-control form-control-sm" type="text" data-field="tank_short_name" placeholder="e.g. MS1"></td>
             <td data-label="Product"><select class="form-control form-control-sm" data-field="product_short_name">${productOpts()}</select></td>
             <td class="text-center align-middle">${del}</td></tr>`,
 

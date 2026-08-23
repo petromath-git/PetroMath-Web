@@ -149,18 +149,21 @@ module.exports = {
             }));
 
             // ── Step 3: Metered Products (with RGB color) ────────────────────────
+            // short_name is the sole name field (no separate "as per Invoice" name) —
+            // it's what Tanks/Nozzles reference, so it must also be what lands in
+            // m_product.product_name or tank/pump linkage silently breaks after migrate.
             results.push(await runSection('Metered Products', data.metered_products, async (p) => {
-                if (!p.product_name) return 'skipped';
+                if (!p.short_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT product_id FROM m_product WHERE product_name = :name AND location_code = :loc AND is_tank_product = 1',
-                    { name: up(p.product_name), loc }
+                    { name: up(p.short_name), loc }
                 );
                 if (exists) return 'skipped';
                 const rgb = PRODUCT_RGB[(p.short_name || '').toUpperCase()] || '200,200,200';
                 await insertRow(
                     `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
                      VALUES (:name, :loc, 1, 'Litres', :price, 1, :rgb, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
-                    { name: up(p.product_name), loc, price: p.selling_price || null, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
+                    { name: up(p.short_name), loc, price: p.selling_price || null, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
                 );
             }));
 
