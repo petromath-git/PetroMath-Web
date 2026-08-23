@@ -416,15 +416,16 @@ block content
                     })
                     .then(function(hints) {
                         var el = document.getElementById('configHintTable');
-                        if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location configs found for MUE / SFS / AACBE.</p>'; return; }
+                        if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location config settings found.</p>'; return; }
                         // Pre-fill new-location column from brand template (IOCL→MUE, BPCL→SFS)
                         var tmplCol = OB_RO_BRAND === 'IOCL' ? 'MUE' : (OB_RO_BRAND === 'BPCL' ? 'SFS' : null);
                         var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered mb-0" style="font-size:12px" id="configHintsTable">';
-                        h += '<thead class="thead-light"><tr><th>Setting</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th><th style="min-width:110px">New Location</th></tr></thead><tbody>';
+                        h += '<thead class="thead-light"><tr><th>Setting</th><th>Default</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th><th style="min-width:110px">New Location</th></tr></thead><tbody>';
                         hints.forEach(function(row) {
                             var prefill = tmplCol ? (row[tmplCol] || '') : '';
                             h += '<tr>';
                             h += '<td>' + row.name + '</td>';
+                            h += '<td>' + (row['*'] || '<span class="text-muted">—</span>') + '</td>';
                             h += '<td>' + (row.MUE || '<span class="text-muted">—</span>') + '</td>';
                             h += '<td>' + (row.SFS || '<span class="text-muted">—</span>') + '</td>';
                             h += '<td>' + (row.AACBE || '<span class="text-muted">—</span>') + '</td>';
