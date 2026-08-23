@@ -261,9 +261,15 @@ mixin optionsForProductRates(cashOrCreditSalePrefix)
 
 
 //- Add new page: Dom elements to show credit details
+//- Renders two rows per credit line:
+//-  1. A compact, read-only summary row that's always what the user sees in the list.
+//-  2. A hidden detail row holding the real, submitted form fields. Its fields are
+//-     moved into the shared #creditEntryModal (see creditEntryModal mixin below)
+//-     whenever the row is opened for add/edit, and moved back on close.
 mixin addCredits(creditRowNo, rowData)
     - var prefix = 'credit-';
     - var trId = prefix + 'table-row-'+creditRowNo;
+    - var summaryTrId = prefix + 'summary-row-' + creditRowNo;
     - var trClass = 'd-md-none';
     - var price = 0;
     - var creditType = undefined, creditName = undefined;
@@ -275,7 +281,29 @@ mixin addCredits(creditRowNo, rowData)
         - rowData = {price:price, priceDiscount:0, billNo:0, qty:0, amount:0, creditType: config.creditTypes[0], companyName: creditName, vehicleId: null, odometerReading: null, offMeterSale: 0, creditBillDate: (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)};
     if(rowData.tCreditId && parseInt(rowData.tCreditId) > 0)
         - trClass = ''
-    tr(class=trClass id=trId)
+    - var summaryClass = trClass === 'd-md-none' ? 'd-md-none' : ''
+
+    tr.credit-summary-row(class=summaryClass id=summaryTrId data-credit-row=creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-date-' + creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-product-' + creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-billno-' + creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-company-' + creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-vehicle-' + creditRowNo)
+        td.credit-summary-cell.text-right
+            span(id=prefix + 'summary-amt-' + creditRowNo)
+        td.credit-summary-actions.text-center
+            if !freezedRecord
+                button.btn.btn-sm.btn-link.text-primary.p-1(type='button' title='Edit' aria-label='Edit credit sale' onclick='openCreditRowModal(' + creditRowNo + ', false)')
+                    i.bi.bi-pencil-square
+                button.btn.btn-sm.btn-link.text-danger.p-1(type='button' title='Delete' aria-label='Delete credit sale' onclick='deleteCreditRow(' + creditRowNo + ')')
+                    i.bi.bi-trash
+
+    tr(class=trClass id=trId style='display:none')
         input(type='hidden' id=prefix + creditRowNo + '_hiddenId' value=rowData.tCreditId)
         td
             - var defaultCreditDate = rowData.creditBillDate || (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)
@@ -305,7 +333,7 @@ mixin addCredits(creditRowNo, rowData)
                 each party in allCreditParties
                     option(value=`${party.creditorId}` selected= rowData.creditListId === party.creditorId)= party.creditorName
         td
-            .d-flex.align-items-center(style='gap:4px')
+            .d-flex.align-items-center(id=prefix + 'vehicle-wrap-' + creditRowNo style='gap:4px')
                 .flex-grow-1
                     select.form-control.select2-vehicle(name=prefix + 'vehicle-' + creditRowNo id=prefix + 'vehicle-' + creditRowNo data-row=creditRowNo)
                         option(value='') Select Vehicle
@@ -329,12 +357,86 @@ mixin addCredits(creditRowNo, rowData)
         td
             textarea.form-control(name=prefix + 'notes-' + creditRowNo id=prefix + 'notes-' + creditRowNo style="height:36px")= rowData.notes
         if allowOffMeterSale
-            td.text-center
+            td
                 - var offMeterStyle = rowData.isLubeProduct ? '' : 'display:none'
                 input(type='checkbox' name=prefix + 'off-meter-' + creditRowNo id=prefix + 'off-meter-' + creditRowNo checked=(rowData.offMeterSale == 1) style=offMeterStyle)
-        td
-            button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\', "remove-credit-sale", calculateCreditTotal)')
-                span(aria-hidden="true") &times;
+
+//- Shared Add/Edit modal for a single credit sale line. The actual field elements from
+//- the detail row (see addCredits above) are relocated into the slot divs below by
+//- credit-entry-modal.js while the row is being edited, and relocated back on close.
+mixin creditEntryModal(allowOffMeterSale)
+    style.
+        .modal-backdrop + .modal-backdrop { z-index: 1052; }
+        #creditEntryModal .form-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            margin-bottom: 4px;
+        }
+        #creditEntryModal .select2-container { width: 100% !important; }
+    #creditEntryModal.modal.fade(tabindex='-1' role='dialog' aria-labelledby='creditEntryModalLabel' aria-hidden='true')
+        .modal-dialog.modal-lg(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title#creditEntryModalLabel
+                        i.bi.bi-receipt.mr-2
+                        span#creditEntryModalTitleText Credit Sale
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    .row
+                        .col-md-4.form-group
+                            label Bill Date
+                            div#creditModalSlot-bill-date
+                        .col-md-4.form-group
+                            label Product
+                            div#creditModalSlot-product
+                        .col-md-4.form-group
+                            label Bill #
+                            div#creditModalSlot-billno
+                    .row
+                        .col-md-6.form-group
+                            label Company
+                            div#creditModalSlot-creditparty
+                        .col-md-6.form-group
+                            label Vehicle Number
+                            div#creditModalSlot-vehiclewrap
+                    .row
+                        .col-md-3.form-group
+                            label Odometer
+                            div#creditModalSlot-odometer
+                        .col-md-3.form-group
+                            label Price
+                            div#creditModalSlot-price
+                        .col-md-3.form-group
+                            label Price Discount
+                            div#creditModalSlot-discount
+                        .col-md-3.form-group
+                            label Quantity
+                            div#creditModalSlot-qty
+                    .row
+                        .col-md-4.form-group
+                            label Sale Amount
+                            div#creditModalSlot-amt
+                        if allowOffMeterSale
+                            .col-md-3.form-group#creditModalOffMeterGroup
+                                label Off Meter
+                                div#creditModalSlot-off-meter
+                            .col-md-5.form-group
+                                label Notes
+                                div#creditModalSlot-notes
+                        else
+                            .col-md-8.form-group
+                                label Notes
+                                div#creditModalSlot-notes
+                .modal-footer
+                    button.btn.btn-outline-danger.mr-auto#creditModalDeleteBtn(type='button' onclick='deleteCreditRowModal()')
+                        i.bi.bi-trash.mr-1
+                        | Delete
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Close
+                    button.btn.btn-primary(type='button' onclick='saveCreditRowModal()') Save
 
 
 //- Add new page: Dom elements to show new custom expenses on 'add'
