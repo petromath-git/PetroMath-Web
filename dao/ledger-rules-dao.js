@@ -135,6 +135,33 @@ module.exports = {
         });
     },
 
+    // ── Credit Party / Supplier rule creation ────────────────────────────────
+    // Lets an admin manually add an extra Bank+Party mapping (e.g. a customer
+    // or supplier that needs to appear against a second bank account) on top
+    // of whatever the after_creditlist_insert_ledger_rule / after_supplier_
+    // insert_ledger_rule triggers already seeded. Same unique key as Static
+    // rules — (location_code, bank_id, source_type, external_id) — so this is
+    // a plain INSERT relying on ER_DUP_ENTRY for duplicate detection.
+    createPartyRule: async (data) => {
+        const query = `
+            INSERT INTO m_ledger_rules (
+                location_code, bank_id, source_type, external_id,
+                ledger_name, allowed_entry_type, notes_required_flag,
+                max_amount, effective_start_date, effective_end_date,
+                allow_split_flag, created_by
+            ) VALUES (
+                :location_code, :bank_id, :source_type, :external_id,
+                :ledger_name, :allowed_entry_type, :notes_required_flag,
+                :max_amount, :effective_start_date, :effective_end_date,
+                :allow_split_flag, :created_by
+            )
+        `;
+        return await db.sequelize.query(query, {
+            replacements: data,
+            type: QueryTypes.INSERT
+        });
+    },
+
     // ── Allow Split flag — editable on all rule types ───────────────────────
 
     updateSplitFlag: async ({ rule_id, allow_split_flag, updated_by }) => {
