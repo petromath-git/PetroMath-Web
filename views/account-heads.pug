@@ -157,7 +157,7 @@ block content
             #tab-rules.tab-pane.fade(role="tabpanel")
                 p.text-muted.small.mb-3
                     i.bi.bi-info-circle.mr-1
-                    | Static rules are fully manageable here. Credit, Supplier and Bank rules are created automatically by the system — only the Entry Type can be overridden.
+                    | Static rules are fully manageable here. Credit, Supplier and Bank rules are created automatically by the system when the party is created — use "Add Rule" to map a Credit Party or Supplier to an additional bank account, and use the pencil icon to override an existing rule's Entry Type.
 
                 .row.mb-3
                     .col-12.col-md-4.col-lg-3
@@ -406,75 +406,141 @@ block content
         .modal-dialog.modal-lg(role="document")
             .modal-content
                 .modal-header
-                    h5.modal-title Add Static Ledger Rule
+                    h5.modal-title Add Ledger Rule
                     button.close(type="button", data-dismiss="modal", aria-label="Close")
                         span(aria-hidden="true") &times;
                 .modal-body
-                    p.text-muted.small Select what this rule applies to and the account head it should map to.
-                    form#addRuleForm(method='POST', action='/account-heads/rules')
-                        input(type="hidden", name="account_head_id", id="add_rule_head_id")
-                        input(type="hidden", name="ledger_name",     id="add_rule_ledger_name")
-                        input(type="hidden", name="applies_to_cashflow", id="add_rule_applies_cashflow", value="N")
-                        .form-group
-                            label Applies To *
-                            .form-check.form-check-inline
-                                input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_bank", value="BANK", checked)
-                                label.form-check-label(for="add_rule_context_bank") Bank
-                            .form-check.form-check-inline
-                                input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_cashflow", value="CASHFLOW")
-                                label.form-check-label(for="add_rule_context_cashflow") Cashflow
-                        .form-row
-                            .col-md-6#add_rule_bank_wrapper
-                                .form-group
-                                    label Bank *
-                                    select.form-control(name="bank_id", id="add_rule_bank_select", required)
-                                        option(value="") — Select Bank —
-                                        each bank in banks
-                                            option(value=bank.bank_id)
-                                                = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
-                            .col-md-6
-                                .form-group
-                                    label Account Head (Ledger) *
-                                    select.form-control#add_rule_head_select(required)
-                                        option(value="") — Select Account Head —
-                                        each head in accountHeads
-                                            option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
-                        .form-row
-                            .col-md-3
-                                .form-group
-                                    label Entry Type *
-                                    select.form-control(name="allowed_entry_type", required)
-                                        option(value="BOTH") BOTH
-                                        option(value="DEBIT") DEBIT
-                                        option(value="CREDIT") CREDIT
-                            .col-md-3
-                                .form-group
-                                    label Notes Required
-                                    select.form-control(name="notes_required_flag")
-                                        option(value="N") No
-                                        option(value="Y") Yes
-                            .col-md-3
-                                .form-group
-                                    label Allow Split
-                                    select.form-control(name="allow_split_flag")
-                                        option(value="N") No
-                                        option(value="Y") Yes
-                            .col-md-3
-                                .form-group
-                                    label Max Amount
-                                    input.form-control(type="number", name="max_amount", step="0.01", placeholder="Blank = unlimited")
-                        .form-row
-                            .col-md-6
-                                .form-group
-                                    label Effective From
-                                    input.form-control(type="date", name="effective_start_date")
-                            .col-md-6
-                                .form-group
-                                    label Effective To
-                                    input.form-control(type="date", name="effective_end_date")
+                    .form-group
+                        label Rule Type *
+                        select.form-control#add_rule_type
+                            option(value="STATIC") Static (Bank / Cashflow)
+                            option(value="CREDIT") Credit Party
+                            option(value="SUPPLIER") Supplier
+
+                    #add_rule_static_section
+                        p.text-muted.small Select what this rule applies to and the account head it should map to.
+                        form#addRuleForm(method='POST', action='/account-heads/rules')
+                            input(type="hidden", name="account_head_id", id="add_rule_head_id")
+                            input(type="hidden", name="ledger_name",     id="add_rule_ledger_name")
+                            input(type="hidden", name="applies_to_cashflow", id="add_rule_applies_cashflow", value="N")
+                            .form-group
+                                label Applies To *
+                                .form-check.form-check-inline
+                                    input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_bank", value="BANK", checked)
+                                    label.form-check-label(for="add_rule_context_bank") Bank
+                                .form-check.form-check-inline
+                                    input.form-check-input.add-rule-context(type="radio", name="context_type", id="add_rule_context_cashflow", value="CASHFLOW")
+                                    label.form-check-label(for="add_rule_context_cashflow") Cashflow
+                            .form-row
+                                .col-md-6#add_rule_bank_wrapper
+                                    .form-group
+                                        label Bank *
+                                        select.form-control(name="bank_id", id="add_rule_bank_select", required)
+                                            option(value="") — Select Bank —
+                                            each bank in banks
+                                                option(value=bank.bank_id)
+                                                    = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
+                                .col-md-6
+                                    .form-group
+                                        label Account Head (Ledger) *
+                                        select.form-control#add_rule_head_select(required)
+                                            option(value="") — Select Account Head —
+                                            each head in accountHeads
+                                                option(value=head.account_head_id, data-name=head.account_head_name)= head.account_head_name
+                            .form-row
+                                .col-md-3
+                                    .form-group
+                                        label Entry Type *
+                                        select.form-control(name="allowed_entry_type", required)
+                                            option(value="BOTH") BOTH
+                                            option(value="DEBIT") DEBIT
+                                            option(value="CREDIT") CREDIT
+                                .col-md-3
+                                    .form-group
+                                        label Notes Required
+                                        select.form-control(name="notes_required_flag")
+                                            option(value="N") No
+                                            option(value="Y") Yes
+                                .col-md-3
+                                    .form-group
+                                        label Allow Split
+                                        select.form-control(name="allow_split_flag")
+                                            option(value="N") No
+                                            option(value="Y") Yes
+                                .col-md-3
+                                    .form-group
+                                        label Max Amount
+                                        input.form-control(type="number", name="max_amount", step="0.01", placeholder="Blank = unlimited")
+                            .form-row
+                                .col-md-6
+                                    .form-group
+                                        label Effective From
+                                        input.form-control(type="date", name="effective_start_date")
+                                .col-md-6
+                                    .form-group
+                                        label Effective To
+                                        input.form-control(type="date", name="effective_end_date")
+
+                    #add_rule_party_section(style="display:none;")
+                        p.text-muted.small Map an existing Credit Party or Supplier to an additional bank account. The default Entry Type is fixed unless the location allows overriding it.
+                        form#addPartyRuleForm(method='POST', action='/account-heads/rules/party')
+                            input(type="hidden", name="source_type", id="add_party_source_type", value="CREDIT")
+                            input(type="hidden", name="party_id",    id="add_party_id")
+                            input(type="hidden", name="ledger_name", id="add_party_ledger_name")
+                            .form-row
+                                .col-md-6
+                                    .form-group
+                                        label Bank *
+                                        select.form-control(name="bank_id", id="add_party_bank_select", required)
+                                            option(value="") — Select Bank —
+                                            each bank in banks
+                                                option(value=bank.bank_id)
+                                                    = bank.account_number ? `${bank.bank_name} (...${bank.account_number.slice(-4)})` : bank.bank_name
+                                .col-md-6
+                                    .form-group
+                                        label#add_party_select_label Credit Party *
+                                        select.form-control#add_party_credit_select(required)
+                                            option(value="") — Select Credit Party —
+                                            each cp in creditParties
+                                                option(value=cp.creditlist_id, data-name=cp.Company_Name)= cp.Company_Name
+                                        select.form-control#add_party_supplier_select(style="display:none;")
+                                            option(value="") — Select Supplier —
+                                            each sup in suppliers
+                                                option(value=sup.supplier_id, data-name=sup.supplier_name)= sup.supplier_name
+                            .form-row
+                                .col-md-3
+                                    .form-group
+                                        label Entry Type
+                                        select.form-control#add_party_entry_type(name="allowed_entry_type", disabled)
+                                            option(value="CREDIT") CREDIT (fixed)
+                                .col-md-3
+                                    .form-group
+                                        label Notes Required
+                                        select.form-control(name="notes_required_flag")
+                                            option(value="N") No
+                                            option(value="Y") Yes
+                                .col-md-3
+                                    .form-group
+                                        label Allow Split
+                                        select.form-control(name="allow_split_flag")
+                                            option(value="N") No
+                                            option(value="Y") Yes
+                                .col-md-3
+                                    .form-group
+                                        label Max Amount
+                                        input.form-control(type="number", name="max_amount", step="0.01", placeholder="Blank = unlimited")
+                            .form-row
+                                .col-md-6
+                                    .form-group
+                                        label Effective From
+                                        input.form-control(type="date", name="effective_start_date")
+                                .col-md-6
+                                    .form-group
+                                        label Effective To
+                                        input.form-control(type="date", name="effective_end_date")
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
-                    button.btn.btn-success(type="submit", form="addRuleForm") Save
+                    button.btn.btn-success#addRuleSaveBtn(type="submit", form="addRuleForm") Save
 
     .modal.fade#editRuleModal(tabindex="-1", role="dialog", aria-hidden="true")
         .modal-dialog.modal-lg(role="document")
@@ -598,6 +664,10 @@ block content
         // ── Tab activation ────────────────────────────────────────────────
         const ACTIVE_TAB = '!{activeTab}';
 
+        // ── Credit/Supplier rule Entry Type override (per-location config) ──
+        const CREDIT_ENTRY_TYPE_OVERRIDE   = !{creditEntryTypeOverride};
+        const SUPPLIER_ENTRY_TYPE_OVERRIDE = !{supplierEntryTypeOverride};
+
         function syncAddBtn(tabId) {
             const addHeadBtn = document.getElementById('addHeadBtn');
             const addRuleBtn = document.getElementById('addRuleBtn');
@@ -708,6 +778,64 @@ block content
                 document.getElementById('add_rule_head_id').value     = '';
                 document.getElementById('add_rule_ledger_name').value = '';
                 setAddRuleContext(false);
+
+                document.getElementById('addPartyRuleForm').reset();
+                document.getElementById('add_party_id').value          = '';
+                document.getElementById('add_party_ledger_name').value = '';
+                document.getElementById('add_rule_type').value = 'STATIC';
+                setAddRuleType('STATIC');
+            });
+
+            // ── Add Rule: Static vs Credit Party vs Supplier ────────────────
+            function setAddRuleType(type) {
+                document.getElementById('add_rule_static_section').style.display = type === 'STATIC' ? '' : 'none';
+                document.getElementById('add_rule_party_section').style.display  = type === 'STATIC' ? 'none' : '';
+                document.getElementById('addRuleSaveBtn').setAttribute('form', type === 'STATIC' ? 'addRuleForm' : 'addPartyRuleForm');
+
+                document.getElementById('add_rule_bank_select').required = (type === 'STATIC');
+                document.getElementById('add_rule_head_select').required = (type === 'STATIC');
+
+                if (type === 'STATIC') return;
+
+                const isCredit = type === 'CREDIT';
+                document.getElementById('add_party_source_type').value = type;
+                document.getElementById('add_party_select_label').textContent = isCredit ? 'Credit Party *' : 'Supplier *';
+
+                const creditSelect   = document.getElementById('add_party_credit_select');
+                const supplierSelect = document.getElementById('add_party_supplier_select');
+                creditSelect.style.display   = isCredit ? '' : 'none';
+                supplierSelect.style.display = isCredit ? 'none' : '';
+                creditSelect.required   = isCredit;
+                supplierSelect.required = !isCredit;
+                document.getElementById('add_party_id').value          = '';
+                document.getElementById('add_party_ledger_name').value = '';
+
+                const override = isCredit ? CREDIT_ENTRY_TYPE_OVERRIDE : SUPPLIER_ENTRY_TYPE_OVERRIDE;
+                const fixed    = isCredit ? 'CREDIT' : 'DEBIT';
+                const entryTypeSelect = document.getElementById('add_party_entry_type');
+                if (override) {
+                    entryTypeSelect.disabled  = false;
+                    entryTypeSelect.innerHTML = '<option value="DEBIT">DEBIT</option><option value="CREDIT">CREDIT</option><option value="BOTH">BOTH</option>';
+                    entryTypeSelect.value     = fixed;
+                } else {
+                    entryTypeSelect.disabled  = true;
+                    entryTypeSelect.innerHTML = `<option value="${fixed}">${fixed} (fixed — enable override in Location Config to change)</option>`;
+                }
+            }
+
+            document.getElementById('add_rule_type').addEventListener('change', function () {
+                setAddRuleType(this.value);
+            });
+
+            document.getElementById('add_party_credit_select').addEventListener('change', function () {
+                const opt = this.options[this.selectedIndex];
+                document.getElementById('add_party_id').value          = opt.value;
+                document.getElementById('add_party_ledger_name').value = opt.dataset.name || '';
+            });
+            document.getElementById('add_party_supplier_select').addEventListener('change', function () {
+                const opt = this.options[this.selectedIndex];
+                document.getElementById('add_party_id').value          = opt.value;
+                document.getElementById('add_party_ledger_name').value = opt.dataset.name || '';
             });
 
             // ── Edit Account Head ─────────────────────────────────────────

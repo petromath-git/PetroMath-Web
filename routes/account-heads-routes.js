@@ -55,6 +55,14 @@ router.post(
     AccountHeadsController.updateRule
 );
 
+// Manual extra Bank+Party mapping for Credit Party / Supplier rules
+router.post(
+    "/rules/party",
+    isLoggedIn,
+    appSecurity.hasPermission("ADD_ACCOUNT_HEADS"),
+    AccountHeadsController.createPartyRule
+);
+
 router.post(
     "/rules/:id/delete",
     isLoggedIn,
