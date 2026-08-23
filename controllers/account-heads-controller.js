@@ -2,10 +2,18 @@
 const AccountHeadsDao    = require("../dao/account-heads-dao");
 const LedgerRulesDao     = require("../dao/ledger-rules-dao");
 const BankDao            = require("../dao/bank-dao");
+const CreditsDao         = require("../dao/credits-dao");
+const SupplierDao        = require("../dao/supplier-dao");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
 const { getLedgersByGroup } = require('../routes/gl-routes');
+const { getLocationConfigValue } = require('../utils/location-config');
 const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
+
+// Credit Party rules default to CREDIT-only, Supplier rules to DEBIT-only —
+// each location can loosen its own via these location config settings.
+const CREDIT_ENTRY_TYPE_OVERRIDE_SETTING   = 'LEDGER_RULES_CREDIT_PARTY_ENTRY_TYPE_OVERRIDE';
+const SUPPLIER_ENTRY_TYPE_OVERRIDE_SETTING = 'LEDGER_RULES_SUPPLIER_ENTRY_TYPE_OVERRIDE';
 
 async function getAllGlGroups(locationCode) {
     return db.sequelize.query(`
@@ -24,15 +32,20 @@ module.exports = {
             const role         = req.user.Role;
             const activeTab    = req.query.tab || 'heads';
 
-            const [accountHeads, allRules, banks, glGroups,
-                   canEdit, canAdd, canDisable] = await Promise.all([
+            const [accountHeads, allRules, banks, glGroups, creditParties, suppliers,
+                   canEdit, canAdd, canDisable,
+                   creditEntryTypeOverride, supplierEntryTypeOverride] = await Promise.all([
                 AccountHeadsDao.getAccountHeads(locationCode),
                 LedgerRulesDao.getAllRules(locationCode),
                 BankDao.findAll(locationCode),
                 getAllGlGroups(locationCode),
+                CreditsDao.findAll(locationCode),
+                SupplierDao.findSuppliers(locationCode),
                 rolePermissionsDao.hasPermission(role, locationCode, 'EDIT_ACCOUNT_HEADS'),
                 rolePermissionsDao.hasPermission(role, locationCode, 'ADD_ACCOUNT_HEADS'),
                 rolePermissionsDao.hasPermission(role, locationCode, 'DISABLE_ACCOUNT_HEADS'),
+                getLocationConfigValue(locationCode, CREDIT_ENTRY_TYPE_OVERRIDE_SETTING, 'N'),
+                getLocationConfigValue(locationCode, SUPPLIER_ENTRY_TYPE_OVERRIDE_SETTING, 'N'),
             ]);
 
             res.render("account-heads", {
@@ -42,9 +55,13 @@ module.exports = {
                 allRules,
                 banks,
                 glGroups,
+                creditParties,
+                suppliers,
                 canEdit,
                 canAdd,
                 canDisable,
+                creditEntryTypeOverride:   creditEntryTypeOverride   === 'Y',
+                supplierEntryTypeOverride: supplierEntryTypeOverride === 'Y',
                 activeTab
             });
         } catch (err) {
@@ -192,6 +209,56 @@ module.exports = {
             const msg = err.original?.code === 'ER_DUP_ENTRY'
                 ? "A rule for this Bank + Account Head combination already exists"
                 : (err.original?.sqlMessage || err.message || "Error updating ledger rule");
+            req.flash("error", msg);
+            res.redirect("/account-heads?tab=rules");
+        }
+    },
+
+    // ── Credit Party / Supplier — manual extra Bank+Party mapping ──────────
+    // Auto-created rules (one per bank, via DB trigger) cover a party the
+    // moment it's created. This lets an admin add one more mapping — e.g. a
+    // customer or supplier that also needs to post against a second bank
+    // account. Entry type defaults to CREDIT (party) / DEBIT (supplier) and
+    // is only overridable when the location config setting allows it.
+
+    createPartyRule: async (req, res, next) => {
+        try {
+            const locationCode = req.user.location_code;
+            const sourceType   = req.body.source_type === 'SUPPLIER' ? 'Supplier' : 'Credit';
+            const defaultEntryType = sourceType === 'Credit' ? 'CREDIT' : 'DEBIT';
+
+            const overrideSetting = sourceType === 'Credit'
+                ? CREDIT_ENTRY_TYPE_OVERRIDE_SETTING
+                : SUPPLIER_ENTRY_TYPE_OVERRIDE_SETTING;
+            const overrideEnabled = (await getLocationConfigValue(locationCode, overrideSetting, 'N')) === 'Y';
+
+            const allowedEntryType = overrideEnabled && ['DEBIT', 'CREDIT', 'BOTH'].includes(req.body.allowed_entry_type)
+                ? req.body.allowed_entry_type
+                : defaultEntryType;
+
+            const data = {
+                location_code:        locationCode,
+                bank_id:              req.body.bank_id,
+                source_type:          sourceType,
+                external_id:          req.body.party_id,
+                ledger_name:          req.body.ledger_name,
+                allowed_entry_type:   allowedEntryType,
+                notes_required_flag:  req.body.notes_required_flag || 'N',
+                max_amount:           req.body.max_amount           || null,
+                effective_start_date: req.body.effective_start_date || null,
+                effective_end_date:   req.body.effective_end_date   || null,
+                allow_split_flag:     req.body.allow_split_flag     === 'Y' ? 'Y' : 'N',
+                created_by:           req.user.username || req.user.Person_id
+            };
+
+            await LedgerRulesDao.createPartyRule(data);
+            req.flash("success", `${sourceType} ledger rule created successfully`);
+            res.redirect("/account-heads?tab=rules");
+        } catch (err) {
+            console.error("Error creating party ledger rule:", err);
+            const msg = err.original?.code === 'ER_DUP_ENTRY'
+                ? "A rule for this Bank + Party combination already exists"
+                : (err.original?.sqlMessage || err.message || "Error creating ledger rule");
             req.flash("error", msg);
             res.redirect("/account-heads?tab=rules");
         }
