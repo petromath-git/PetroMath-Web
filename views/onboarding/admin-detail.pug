@@ -347,6 +347,14 @@ block content
                 if (STANDARD_SHORT_NAMES.indexOf(sn) === -1) warnings.push('Product "' + sn + '" — expected MS / HSD / XP95 (or XMS). Non-standard names still work but won\'t get the app\'s built-in rate-entry/display handling — verify this is intentional before migrating.');
             });
 
+            var lubeNames = new Set();
+            (fd.lubes || []).forEach(function(l) {
+                if (l.product_name) lubeNames.add(l.product_name.trim().toUpperCase());
+            });
+            ['2T LOOSE', '2T POUCH'].forEach(function(req) {
+                if (!lubeNames.has(req)) warnings.push('No "' + req + '" product in Lubes & Other Products — expected by the 2T Sales tab in shift closing.');
+            });
+
             var tankNames = new Set();
             (fd.tanks || []).forEach(function(t) {
                 var tn = (t.tank_name || '').trim().toUpperCase();
