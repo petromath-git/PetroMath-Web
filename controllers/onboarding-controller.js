@@ -71,7 +71,13 @@ module.exports = {
             if (!OnboardingDao.SECTION_MAP[section]) return res.status(400).json({ error: 'Invalid section' });
             const onboarding = await OnboardingDao.findByToken(token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
-            await OnboardingDao.updateRow(onboarding.id, section, parseInt(rowId, 10), req.body);
+            const data = { ...req.body };
+            // Tank Short Name isn't shown on the form anymore (it confused users into
+            // re-typing the product code there) — auto-derive it from Tank Name instead.
+            if (section === 'tanks' && 'tank_name' in data) {
+                data.tank_short_name = (data.tank_name || '').trim().toUpperCase().replace(/\s+/g, '');
+            }
+            await OnboardingDao.updateRow(onboarding.id, section, parseInt(rowId, 10), data);
             res.json({ ok: true });
         } catch (e) {
             next(e);
@@ -201,22 +207,25 @@ module.exports = {
 
     adminConfigHints: async (req, res, next) => {
         try {
+            // All setting names that exist anywhere — not just ones with a row on the
+            // reference locations, so nothing is silently invisible on the review screen.
+            const allNames = await db.sequelize.query(
+                `SELECT DISTINCT setting_name FROM m_location_config ORDER BY setting_name`,
+                { type: QueryTypes.SELECT }
+            );
             const rows = await db.sequelize.query(
                 `SELECT location_code, setting_name, setting_value
                  FROM m_location_config
-                 WHERE location_code IN (:locs)
-                 ORDER BY setting_name, location_code`,
-                { replacements: { locs: CONFIG_HINT_LOCATIONS }, type: QueryTypes.SELECT }
+                 WHERE location_code IN (:locs)`,
+                { replacements: { locs: [...CONFIG_HINT_LOCATIONS, '*'] }, type: QueryTypes.SELECT }
             );
-            // Pivot: setting_name → { MUE: val, SFS: val, AACBE: val }
+            // Pivot: setting_name → { '*': val, MUE: val, SFS: val, AACBE: val }
             const map = {};
             for (const row of rows) {
                 if (!map[row.setting_name]) map[row.setting_name] = {};
                 map[row.setting_name][row.location_code] = row.setting_value;
             }
-            const hints = Object.entries(map)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([name, vals]) => ({ name, ...vals }));
+            const hints = allNames.map(({ setting_name: name }) => ({ name, ...(map[name] || {}) }));
             res.json(hints);
         } catch (e) {
             next(e);

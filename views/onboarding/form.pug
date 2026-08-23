@@ -171,14 +171,14 @@ html(lang="en")
                         .d-flex.justify-content-between.align-items-center.mb-2.section-row
                             div
                                 h6.mb-0 Metered Products
-                                p.section-hint.mb-0 Products sold through Dispensing Units. Short Name is used across Tanks and Nozzles tabs. HSN &amp; GST% will be verified by PetroMath admin before import.
+                                p.section-hint.mb-0 Products sold through Dispensing Units. Use the short canonical name (MS, HSD, XP95) — this is used across Tanks and Nozzles tabs and becomes the product's name in PetroMath. HSN &amp; GST% will be verified by PetroMath admin before import.
                             button.btn.btn-primary.btn-sm(type="button" data-add-section="metered-products") + Add Row
                         .table-responsive
                             table.table.table-sm.table-bordered.ob-table
                                 thead
                                     tr
-                                        th Product Name (as per Invoice)
-                                        th Short Name
+                                        th Product Name
+                                        th Selling Price (₹)
                                         th HSN Code
                                         th CGST %
                                         th SGST %
@@ -186,8 +186,8 @@ html(lang="en")
                                 tbody#tbody-metered-products
                                     each row in formData.metered_products
                                         tr(data-section="metered-products" data-row-id=row.id)
-                                            td(data-label="Product Name"): input.form-control.form-control-sm(type="text" data-field="product_name" value=(row.product_name||'') placeholder="e.g. EBMS, HSD")
-                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. MS / HSD")
+                                            td(data-label="Product Name"): input.form-control.form-control-sm(type="text" data-field="short_name" value=(row.short_name||'') placeholder="e.g. MS / HSD / XP95")
+                                            td(data-label="Selling Price"): input.form-control.form-control-sm(type="number" step="0.01" data-field="selling_price" value=(row.selling_price||'') placeholder="0.00")
                                             td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" data-field="hsn_code" value=(row.hsn_code||'') placeholder="e.g. 27101290" maxlength="20")
                                             td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="cgst_percent" value=(row.cgst_percent!=null?row.cgst_percent:'') placeholder="e.g. 9")
                                             td(data-label="SGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="sgst_percent" value=(row.sgst_percent!=null?row.sgst_percent:'') placeholder="e.g. 9")
@@ -208,7 +208,6 @@ html(lang="en")
                                     tr
                                         th Tank Name
                                         th Capacity (L)
-                                        th Short Name
                                         th Product
                                         th(width="50")
                                 tbody#tbody-tanks
@@ -216,7 +215,6 @@ html(lang="en")
                                         tr(data-section="tanks" data-row-id=row.id)
                                             td(data-label="Tank Name"): input.form-control.form-control-sm(type="text" data-field="tank_name" data-no-space="true" value=(row.tank_name||'') placeholder="No spaces e.g. TANK1")
                                             td(data-label="Capacity (L)"): input.form-control.form-control-sm(type="number" data-field="tank_capacity" value=(row.tank_capacity||'') placeholder="15000")
-                                            td(data-label="Short Name"): input.form-control.form-control-sm(type="text" data-field="tank_short_name" value=(row.tank_short_name||'') placeholder="e.g. MS1")
                                             td(data-label="Product")
                                                 select.form-control.form-control-sm(data-field="product_short_name")
                                                     option(value="" selected=!row.product_short_name) -- Select --

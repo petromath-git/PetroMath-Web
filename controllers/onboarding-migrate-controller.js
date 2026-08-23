@@ -149,18 +149,21 @@ module.exports = {
             }));
 
             // ── Step 3: Metered Products (with RGB color) ────────────────────────
+            // short_name is the sole name field (no separate "as per Invoice" name) —
+            // it's what Tanks/Nozzles reference, so it must also be what lands in
+            // m_product.product_name or tank/pump linkage silently breaks after migrate.
             results.push(await runSection('Metered Products', data.metered_products, async (p) => {
-                if (!p.product_name) return 'skipped';
+                if (!p.short_name) return 'skipped';
                 const exists = await selectOne(
                     'SELECT product_id FROM m_product WHERE product_name = :name AND location_code = :loc AND is_tank_product = 1',
-                    { name: up(p.product_name), loc }
+                    { name: up(p.short_name), loc }
                 );
                 if (exists) return 'skipped';
                 const rgb = PRODUCT_RGB[(p.short_name || '').toUpperCase()] || '200,200,200';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
-                     VALUES (:name, :loc, 1, 'Litres', 1, :rgb, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
-                    { name: up(p.product_name), loc, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
+                     VALUES (:name, :loc, 1, 'Litres', :price, 1, :rgb, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
+                    { name: up(p.short_name), loc, price: p.selling_price || null, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
                 );
             }));
 
@@ -282,25 +285,57 @@ module.exports = {
                     );
                     if (rb) remitBankId = rb.bank_id;
                 }
+                // No separate short-name field is collected on the onboarding sheet —
+                // default it from the customer name so m_credit_list.short_name isn't left blank.
+                const shortName = up(c.customer_name).substring(0, 20);
                 await insertRow(
-                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, remittance_bank_id, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
-                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :remitBankId, CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
-                    { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null, remitBankId }
+                    `INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, gst, address, type, short_name, remittance_bank_id, effective_start_date, effective_end_date, creation_date, created_by, updated_by)
+                     VALUES (:name, :loc, 'N', 0, :gst, :address, :type, :shortName, :remitBankId, CURDATE(), '9999-12-31', NOW(), 'onboarding', 'onboarding')`,
+                    { name: up(c.customer_name), loc, gst: up(c.gstin) || null, address: up(c.address) || null, type: c.customer_type || null, shortName, remitBankId }
                 );
             }));
 
             // ── Step 10: Account Heads (copy from template) ───────────────────────
+            // Inserts only heads missing by name — location creation (Step 1) already
+            // seeds 15 cashflow heads via trg_location_seed_data, so an all-or-nothing
+            // "does this location have any heads at all" guard would always skip here.
             {
-                const [countRow] = await db.sequelize.query(
-                    'SELECT COUNT(*) AS cnt FROM m_account_heads WHERE location_code = :loc',
-                    { replacements: { loc }, type: QueryTypes.SELECT }
-                );
-                if (countRow.cnt > 0) {
-                    results.push({ section: 'Account Heads', inserted: 0, skipped: countRow.cnt, errors: ['Already exist — skipped'] });
-                } else {
-                    try {
-                        // 5a: Copy all common heads (exclude any oil-company-specific heads)
-                        // JOIN to gl_ledger_groups so gl_group_id is resolved by name for the new location
+                try {
+                    const [beforeCountRow] = await db.sequelize.query(
+                        'SELECT COUNT(*) AS cnt FROM m_account_heads WHERE location_code = :loc',
+                        { replacements: { loc }, type: QueryTypes.SELECT }
+                    );
+
+                    // 10a: Copy common heads missing by name (exclude any oil-company-specific heads)
+                    // JOIN to gl_ledger_groups so gl_group_id is resolved by name for the new location
+                    await db.sequelize.query(
+                        `INSERT INTO m_account_heads
+                            (location_code, account_head_name, account_head_type, allowed_entry_type,
+                             notes_required_flag, active_flag, effective_start_date, effective_end_date,
+                             gl_group_id, created_by, updated_by, creation_date, updation_date)
+                         SELECT :loc, ah.account_head_name, ah.account_head_type, ah.allowed_entry_type,
+                            ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
+                            new_grp.group_id, 'system', 'system', NOW(), NOW()
+                         FROM m_account_heads ah
+                         LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id       = ah.gl_group_id
+                         LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code  = :loc
+                                                              AND new_grp.group_name     = tmpl_grp.group_name
+                         WHERE ah.location_code = :tmpl
+                           AND ah.account_head_name NOT IN (
+                               'IOCL LICENSE FEE RECOVERY', 'IOCL CHARGES',
+                               'BPCL LICENSE FEE RECOVERY', 'BPCL CHARGES'
+                           )
+                           AND NOT EXISTS (
+                               SELECT 1 FROM m_account_heads existing
+                               WHERE existing.location_code = :loc
+                                 AND existing.account_head_name = ah.account_head_name
+                           )`,
+                        { replacements: { loc, tmpl }, type: QueryTypes.INSERT }
+                    );
+
+                    // 10b: Add the oil-company-specific heads matching this location's brand, if missing
+                    const ocHeads = OC_HEADS_BY_BRAND[ro.ro_brand];
+                    if (ocHeads) {
                         await db.sequelize.query(
                             `INSERT INTO m_account_heads
                                 (location_code, account_head_name, account_head_type, allowed_entry_type,
@@ -310,46 +345,28 @@ module.exports = {
                                 ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
                                 new_grp.group_id, 'system', 'system', NOW(), NOW()
                              FROM m_account_heads ah
-                             LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id       = ah.gl_group_id
-                             LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code  = :loc
-                                                                  AND new_grp.group_name     = tmpl_grp.group_name
+                             LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id      = ah.gl_group_id
+                             LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code = :loc
+                                                                  AND new_grp.group_name    = tmpl_grp.group_name
                              WHERE ah.location_code = :tmpl
-                               AND ah.account_head_name NOT IN (
-                                   'IOCL LICENSE FEE RECOVERY', 'IOCL CHARGES',
-                                   'BPCL LICENSE FEE RECOVERY', 'BPCL CHARGES'
+                               AND ah.account_head_name IN (:head1, :head2)
+                               AND NOT EXISTS (
+                                   SELECT 1 FROM m_account_heads existing
+                                   WHERE existing.location_code = :loc
+                                     AND existing.account_head_name = ah.account_head_name
                                )`,
-                            { replacements: { loc, tmpl }, type: QueryTypes.INSERT }
+                            { replacements: { loc, tmpl, head1: ocHeads[0], head2: ocHeads[1] }, type: QueryTypes.INSERT }
                         );
-
-                        // 5b: Add the oil-company-specific heads matching this location's brand
-                        const ocHeads = OC_HEADS_BY_BRAND[ro.ro_brand];
-                        if (ocHeads) {
-                            await db.sequelize.query(
-                                `INSERT INTO m_account_heads
-                                    (location_code, account_head_name, account_head_type, allowed_entry_type,
-                                     notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                                     gl_group_id, created_by, updated_by, creation_date, updation_date)
-                                 SELECT :loc, ah.account_head_name, ah.account_head_type, ah.allowed_entry_type,
-                                    ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
-                                    new_grp.group_id, 'system', 'system', NOW(), NOW()
-                                 FROM m_account_heads ah
-                                 LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id      = ah.gl_group_id
-                                 LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code = :loc
-                                                                      AND new_grp.group_name    = tmpl_grp.group_name
-                                 WHERE ah.location_code = :tmpl
-                                   AND ah.account_head_name IN (:head1, :head2)`,
-                                { replacements: { loc, tmpl, head1: ocHeads[0], head2: ocHeads[1] }, type: QueryTypes.INSERT }
-                            );
-                        }
-
-                        const [newCountRow] = await db.sequelize.query(
-                            'SELECT COUNT(*) AS cnt FROM m_account_heads WHERE location_code = :loc',
-                            { replacements: { loc }, type: QueryTypes.SELECT }
-                        );
-                        results.push({ section: 'Account Heads', inserted: newCountRow.cnt, skipped: 0, errors: [] });
-                    } catch (e) {
-                        results.push({ section: 'Account Heads', inserted: 0, skipped: 0, errors: [e.message] });
                     }
+
+                    const [afterCountRow] = await db.sequelize.query(
+                        'SELECT COUNT(*) AS cnt FROM m_account_heads WHERE location_code = :loc',
+                        { replacements: { loc }, type: QueryTypes.SELECT }
+                    );
+                    const insertedCount = afterCountRow.cnt - beforeCountRow.cnt;
+                    results.push({ section: 'Account Heads', inserted: insertedCount, skipped: beforeCountRow.cnt, errors: [] });
+                } catch (e) {
+                    results.push({ section: 'Account Heads', inserted: 0, skipped: 0, errors: [e.message] });
                 }
             }
 
