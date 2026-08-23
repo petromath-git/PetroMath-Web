@@ -556,10 +556,10 @@ block content
                 if (tankCheckbox) {
                     tankCheckbox.checked = !!product.is_tank_product;
                 }
-                const lubeCheckbox = document.getElementById('edit-is-lube-product');
-                if (lubeCheckbox) {
-                    lubeCheckbox.checked = !!product.is_lube_product;
-                }
+            }
+            const lubeCheckbox = document.getElementById('edit-is-lube-product');
+            if (lubeCheckbox) {
+                lubeCheckbox.checked = !!product.is_lube_product;
             }
 
             $('#editProductModal').modal('show');
