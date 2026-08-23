@@ -862,8 +862,12 @@ previewTransactions: async (req, res) => {
                 // it. Rows with no amount (headers, opening/closing balance,
                 // blank separators) or with both debit AND credit set
                 // (total/summary rows) are expected to fail date parsing and
-                // are skipped exactly as before.
-                if ((debitAmount > 0) !== (creditAmount > 0) && rawDateValue) {
+                // are skipped exactly as before. A label like "TOTAL" with
+                // only one side non-zero (e.g. an all-credit statement
+                // period) would otherwise also trip this — require the date
+                // cell to contain at least a digit before treating it as a
+                // plausible-but-misformatted date.
+                if ((debitAmount > 0) !== (creditAmount > 0) && rawDateValue && /\d/.test(String(rawDateValue))) {
                     dateFormatMismatches.push({ row: i + 1, value: rawDateValue, debitAmount, creditAmount });
                 }
                 continue;  // skip opening/closing balance and summary rows
