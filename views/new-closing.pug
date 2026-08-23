@@ -326,54 +326,29 @@ block content
                             white-space: nowrap; /* keeps headers on one line */
                         }
 
-                        /* Column width tuning */
-                        #credit-table .col-product   { width: 10%; }
-                        #credit-table .col-bill      { width: 7%; }
-                        #credit-table .col-company   { width: 16%; }  /* More room for credit party */
-                        #credit-table .col-vehicle   { width: 13%; }  /* More room for vehicle dropdown */
-                        #credit-table .col-odo       { width: 7%; }
-                        #credit-table .col-date      { width: 9%; }
-                        #credit-table .col-price     { width: 7%; }
-                        #credit-table .col-discount  { width: 5%; }
-                        #credit-table .col-qty       { width: 6%; }
-                        #credit-table .col-sale      { width: 8%; }
-                        #credit-table .col-notes     { width: 9%; }
-                        #credit-table .col-off-meter { width: 5%; text-align: center; }
-                        #credit-table th:last-child  { width: 2%; text-align: center; } /* X delete column */
+                        /* Column width tuning for the compact summary list */
+                        #credit-table .col-date      { width: 12%; }
+                        #credit-table .col-product   { width: 14%; }
+                        #credit-table .col-bill      { width: 10%; }
+                        #credit-table .col-company   { width: 22%; }
+                        #credit-table .col-vehicle   { width: 18%; }
+                        #credit-table .col-sale      { width: 12%; }
+                        #credit-table .col-actions   { width: 12%; text-align: center; }
 
-                        #credit-table .col-delete {
+                        #credit-table tbody tr.credit-summary-row td {
+                            vertical-align: middle;
+                        }
+                        #credit-table .credit-summary-cell span:empty::before {
+                            content: '\2014'; /* em dash placeholder */
+                            color: #999;
+                        }
+                        #credit-table .credit-summary-actions {
                             text-align: center;
+                            white-space: nowrap;
                         }
-                        #credit-table .col-delete .close {
-                            font-size: 1.1rem;
-                            color: #dc3545; /* Bootstrap danger red */
-                            opacity: 0.7;
-                            transition: opacity 0.2s;
+                        #credit-table .credit-summary-actions .btn {
+                            line-height: 1;
                         }
-                        #credit-table .col-delete .close:hover {
-                            opacity: 1;
-                        }
-
-                        /* --- Fix Select2 width for vehicle dropdown --- */
-                            #credit-table .select2-container--default .select2-selection--single {
-                                display: inline-block;
-                                width: auto !important;       /* auto-fit to text */
-                                min-width: 120px;
-                                max-width: 240px;             /* don’t overflow layout */
-                                height: 36px;
-                                vertical-align: middle;
-                            }
-
-                            #credit-table .select2-container--default .select2-selection__rendered {
-                                overflow: visible !important;
-                                white-space: nowrap;
-                                text-overflow: clip;
-                                padding-right: 24px;          /* spacing for arrow */
-                            }
-
-                            #credit-table .select2-container--default .select2-selection__arrow {
-                                right: 6px;
-                            }
                     div
                         div.col-16
                             div.table-responsive
@@ -386,31 +361,23 @@ block content
                                                 th.col-bill(scope="col") Bill #
                                                 th.col-company(scope="col") Company
                                                 th.col-vehicle(scope="col") Vehicle Number
-                                                th.col-odo(scope="col") Odometer
-                                                th.col-price(scope="col") Price
-                                                th.col-discount(scope="col") Price Discount
-                                                th.col-qty(scope="col") Quantity
                                                 th.col-sale(scope="col") Sale
-                                                th.col-notes(scope="col") Notes
-                                                if allowOffMeterSale
-                                                    th.col-off-meter(scope="col") Off Meter
-                                                th.col-delete(scope="col")
-                                                th(scope="col")
+                                                th.col-actions(scope="col") Actions
                                             - var rowCnt = 0
                                             while rowCnt < maxCreditsRowCnt
                                                 +addCredits(rowCnt++)
 
                                             tr
                                                 td(colspan=5)
-                                                td Total
-                                                td
-                                                    input.form-control#credit-total(type='text' name='credit-total' readonly value='0')
+                                                td.text-right
+                                                    strong Total:&nbsp;
+                                                    input.form-control.d-inline-block(style='width:120px' type='text' name='credit-total' id='credit-total' readonly value='0')
                                                 td
                     div.row
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedCreditRow('credit')") Add credits
+                            button.btn.btn-info(type="button", onClick="handleAddCreditRowClick()") Add credits
 
                     div.row
                         div.col &nbsp;
@@ -785,34 +752,8 @@ block content
         window.pumpsData = !{JSON.stringify(pumps)};    
         window.productValuesData = !{JSON.stringify(productValues)};
         window.allowSecondaryPump = !{allowSecondaryPump};
-                // Initialize Select2 for vehicle dropdowns
-            function initVehicleSelect2() {
-                $('.select2-vehicle').each(function() {
-                    if ($(this).data('select2')) {
-                        $(this).select2('destroy');
-                    }
-                    $(this).select2({
-                        width: 'style',           // uses CSS width
-                        dropdownAutoWidth: true,  // dropdown expands to content
-                        minimumResultsForSearch: 5,
-                        placeholder: 'Select Vehicle'
-                    });
-                });
-            }
-
-            // Initialize when DOM ready
-            $(document).ready(function() {
-                initVehicleSelect2();
-            });
-
-            // Re-init when "Add credits" adds new rows dynamically
-            const _origShowAddedCreditRow = window.showAddedCreditRow;
-            window.showAddedCreditRow = function(prefix) {
-                if (typeof _origShowAddedCreditRow === 'function') {
-                    _origShowAddedCreditRow(prefix);
-                }
-                initVehicleSelect2(); // ensure new row gets Select2 applied
-            };
+    // Credit sale Add/Edit modal (shared by the compact credit sales list)
+    +creditEntryModal(allowOffMeterSale)
     // Quick Add Vehicle Modal
     .modal.fade#quickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='quickAddVehicleModalLabel' aria-hidden='true')
         .modal-dialog(role='document')
@@ -833,3 +774,4 @@ block content
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
