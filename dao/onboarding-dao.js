@@ -4,7 +4,7 @@ const { QueryTypes } = require('sequelize');
 
 const SECTION_MAP = {
     'employees':        { table: 't_onboarding_employees',        fields: ['employee_name', 'designation'] },
-    'metered-products': { table: 't_onboarding_metered_products', fields: ['product_name', 'short_name', 'hsn_code', 'cgst_percent', 'sgst_percent', 'selling_price'] },
+    'metered-products': { table: 't_onboarding_metered_products', fields: ['short_name', 'hsn_code', 'cgst_percent', 'sgst_percent', 'selling_price'] },
     'tanks':            { table: 't_onboarding_tanks',            fields: ['tank_name', 'tank_capacity', 'tank_short_name', 'product_short_name'] },
     'nozzles':          { table: 't_onboarding_nozzles',          fields: ['nozzle_name', 'nozzle_product', 'du_make', 'tank_connected', 'next_stamping_date'] },
     'lubes':            { table: 't_onboarding_lubes',            fields: ['product_name', 'unit', 'selling_price', 'hsn_code', 'cgst_percent', 'sgst_percent'] },

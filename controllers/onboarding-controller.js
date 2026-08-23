@@ -71,7 +71,13 @@ module.exports = {
             if (!OnboardingDao.SECTION_MAP[section]) return res.status(400).json({ error: 'Invalid section' });
             const onboarding = await OnboardingDao.findByToken(token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
-            await OnboardingDao.updateRow(onboarding.id, section, parseInt(rowId, 10), req.body);
+            const data = { ...req.body };
+            // Tank Short Name isn't shown on the form anymore (it confused users into
+            // re-typing the product code there) — auto-derive it from Tank Name instead.
+            if (section === 'tanks' && 'tank_name' in data) {
+                data.tank_short_name = (data.tank_name || '').trim().toUpperCase().replace(/\s+/g, '');
+            }
+            await OnboardingDao.updateRow(onboarding.id, section, parseInt(rowId, 10), data);
             res.json({ ok: true });
         } catch (e) {
             next(e);
