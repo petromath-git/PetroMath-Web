@@ -129,6 +129,23 @@ saveReadings: (data) => {
     },
     saveCreditReceipts: async (data) => {
     const newRows = data.filter(r => !r.treceipt_id);
+    const updateRows = data.filter(r => r.treceipt_id);
+
+    // A receipt already claimed by a cashflow/day close must not be edited from the
+    // closing screen - the t_cashflow_transaction row already generated from it would
+    // silently desync from a changed amount/type. Mirrors the admin Credit Receipts
+    // page's same guard (credit-receipt-controller.js).
+    if (updateRows.length > 0) {
+        const existing = await CashReceipts.findAll({
+            attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id'],
+            where: { treceipt_id: updateRows.map(r => r.treceipt_id) }
+        });
+        const claimed = existing.some(r => r.cashflow_date !== null || r.pending_cashflow_id !== null);
+        if (claimed) {
+            throw new Error('One or more receipts are already part of a cashflow/day close and cannot be edited from the closing screen.');
+        }
+    }
+
     const locationCode = newRows.length > 0 ? newRows[0].location_code : undefined;
 
     if (locationCode) {
@@ -146,7 +163,14 @@ saveReadings: (data) => {
     });
     return receiptsTxn;
     },
-    deleteCreditReceiptById: (receiptId) => {
+    deleteCreditReceiptById: async (receiptId) => {
+    const receipt = await CashReceipts.findOne({
+        attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id'],
+        where: { treceipt_id: receiptId }
+    });
+    if (receipt && (receipt.cashflow_date !== null || receipt.pending_cashflow_id !== null)) {
+        throw new Error('This receipt is already part of a cashflow/day close and cannot be deleted from the closing screen.');
+    }
     const receiptTxn = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
     return receiptTxn;
     },
@@ -387,22 +411,71 @@ canReopenShift: async (closingId, locationCode) => {
 
 // Reopen shift (update status to DRAFT and set cashflow_id to NULL)
 reopenShift: async (closingId, locationCode, userId) => {
-    const result = await db.sequelize.query(
-        `UPDATE t_closing 
-        SET closing_status = 'DRAFT',
-            cashflow_id = NULL,
-            updated_by = :userId,
-            updation_date = NOW()
-        WHERE closing_id = :closingId
-        AND location_code = :locationCode
-        AND closing_status = 'CLOSED'`,
-        {
-            replacements: { closingId, locationCode, userId },
-            type: db.Sequelize.QueryTypes.UPDATE
+    return db.sequelize.transaction(async (t) => {
+        // A shift can only be reopened while its linked cashflow is still DRAFT
+        // (canReopenShift blocks reopen once the cashflow is CLOSED), so any of
+        // this shift's receipts claimed by that cashflow have pending_cashflow_id
+        // set but cashflow_date still NULL - a provisional claim, not final. Once
+        // the shift goes back to draft, that receipt is no longer "confirmed from
+        // a closed shift", so the claim - and the t_cashflow_transaction row
+        // generate_cashflow created from it - must be released. generate_cashflow's
+        // own cursor has no awareness of shift status, so simply re-running it
+        // would just re-claim the same receipt unchanged; this has to be explicit.
+        const claimedReceipts = await db.sequelize.query(
+            `SELECT tr.treceipt_id, tr.pending_cashflow_id, tr.amount, tr.receipt_no,
+                    COALESCE(mcl.short_name, '') AS short_name, mcl.company_name
+             FROM t_receipts tr
+             JOIN m_credit_list mcl ON mcl.creditlist_id = tr.creditlist_id
+             WHERE tr.closing_id = :closingId
+               AND tr.pending_cashflow_id IS NOT NULL
+               AND tr.cashflow_date IS NULL`,
+            { replacements: { closingId }, type: db.Sequelize.QueryTypes.SELECT, transaction: t }
+        );
+
+        for (const r of claimedReceipts) {
+            // Matches generate_cashflow's own description formula exactly - there's
+            // no FK from t_cashflow_transaction back to t_receipts to match on instead.
+            const description = `${r.short_name}${r.company_name} - Receipt No: ${r.receipt_no}`;
+            await db.sequelize.query(
+                `DELETE FROM t_cashflow_transaction
+                 WHERE cashflow_id = :cashflowId AND type = 'Receipt'
+                   AND description = :description AND amount = :amount
+                 LIMIT 1`,
+                {
+                    replacements: { cashflowId: r.pending_cashflow_id, description, amount: r.amount },
+                    transaction: t
+                }
+            );
         }
-    );
-    
-    return result[1]; // returns number of rows affected
+
+        if (claimedReceipts.length > 0) {
+            await db.sequelize.query(
+                `UPDATE t_receipts SET pending_cashflow_id = NULL
+                 WHERE closing_id = :closingId
+                   AND pending_cashflow_id IS NOT NULL
+                   AND cashflow_date IS NULL`,
+                { replacements: { closingId }, transaction: t }
+            );
+        }
+
+        const result = await db.sequelize.query(
+            `UPDATE t_closing
+            SET closing_status = 'DRAFT',
+                cashflow_id = NULL,
+                updated_by = :userId,
+                updation_date = NOW()
+            WHERE closing_id = :closingId
+            AND location_code = :locationCode
+            AND closing_status = 'CLOSED'`,
+            {
+                replacements: { closingId, locationCode, userId },
+                type: db.Sequelize.QueryTypes.UPDATE,
+                transaction: t
+            }
+        );
+
+        return result[1]; // returns number of rows affected
+    });
 },
 
 
