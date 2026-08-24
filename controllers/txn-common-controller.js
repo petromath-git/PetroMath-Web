@@ -28,6 +28,9 @@ module.exports = {
     txnDigitalSalesPromise: (closingId) => {
     return txnDigitalSalesPromise(closingId);
     },
+    txnCreditReceiptsPromise: (closingId) => {
+    return txnCreditReceiptsPromise(closingId);
+    },
     txnDenominationPromise: (closingId) => {
         return txnDenominationPromise(closingId);
     },
@@ -297,6 +300,32 @@ const txnDigitalSalesPromise = (closingId) => {
                         });
                     });
                     resolve(digitalSalesData);
+                } else {
+                    resolve([]);
+                }
+            });
+    });
+}
+
+// Show closing records flow: Getting txn credit receipts (Collections tab) data based on closing id
+const txnCreditReceiptsPromise = (closingId) => {
+    return new Promise((resolve, reject) => {
+        return TxnReadDao.getReceiptsByClosingId(closingId)
+            .then(data => {
+                if (data && data.length > 0) {
+                    let creditReceiptsData = [];
+                    data.forEach((receipt) => {
+                        creditReceiptsData.push({
+                            receiptId: receipt.treceipt_id,
+                            receiptType: receipt.receipt_type,
+                            creditPartyId: receipt.creditlist_id,
+                            digitalVendorId: receipt.digital_creditlist_id,
+                            amount: receipt.amount,
+                            receiptDate: receipt.receipt_date,
+                            notes: receipt.notes
+                        });
+                    });
+                    resolve(creditReceiptsData);
                 } else {
                     resolve([]);
                 }

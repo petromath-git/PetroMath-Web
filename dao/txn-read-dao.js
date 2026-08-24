@@ -14,6 +14,7 @@ const Expenses = db.expense;
 const TxnAttendance = db.txn_attendance;
 const TxnDeadlineViews = db.txn_deadline_views;
 const TxnDigitalSales = db.txn_digital_sales;
+const CashReceipts = db.credit_receipts;
 const Sequelize = require("sequelize");
 const { Op } = require("sequelize");
 const config = require("../config/app-config");
@@ -514,6 +515,11 @@ getMostRecentClosingDate: async (locationCode) => {
     },
     getDigitalSalesByClosingId: (closingId) => {
     return TxnDigitalSales.findAll({
+        where: {'closing_id': closingId}
+    });
+    },
+    getReceiptsByClosingId: (closingId) => {
+    return CashReceipts.findAll({
         where: {'closing_id': closingId}
     });
     }
