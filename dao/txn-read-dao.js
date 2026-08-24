@@ -520,6 +520,11 @@ getMostRecentClosingDate: async (locationCode) => {
     },
     getReceiptsByClosingId: (closingId) => {
     return CashReceipts.findAll({
+        // receipt_date_fmt is declared on the model but is not a real column on
+        // t_receipts (existing queries against this model always scope attributes
+        // to avoid it) - must list attributes explicitly here too.
+        attributes: ['treceipt_id', 'receipt_type', 'creditlist_id', 'digital_creditlist_id',
+            'amount', 'receipt_date', 'notes', 'closing_id'],
         where: {'closing_id': closingId}
     });
     }
