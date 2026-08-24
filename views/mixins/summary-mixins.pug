@@ -178,13 +178,13 @@ mixin summaryCreditReceiptsData(receiptRowNo)
     - var trClass = 'd-md-none';
     tr(class=trClass id='vis-' + prefix + 'table-row-' + receiptRowNo)
         td
+            span(id='val-' + prefix + 'receipt-date-' + receiptRowNo)
+        td
             span(id='valText-' + prefix + 'type-' + receiptRowNo)
         td
             span(id='valText-' + prefix + 'creditparty-' + receiptRowNo)
         td
             span(id='val-' + prefix + 'amt-' + receiptRowNo)
-        td
-            span(id='val-' + prefix + 'receipt-date-' + receiptRowNo)
 
 //- Add new page: Summary on expenses data
 mixin showExpensesData(rowNo, val)
