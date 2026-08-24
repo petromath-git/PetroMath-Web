@@ -148,7 +148,8 @@ module.exports = {
                         inactiveCreditIds.add(creditlist.creditlist_id);
                     }                   
     
-                    isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null && receipt.dataValues.pending_cashflow_id === null;
+                    isEditOrDeleteAllowed = receipt.dataValues.cashflow_date === null && receipt.dataValues.pending_cashflow_id === null
+                        && receipt.dataValues.closing_id === null;
     
                     
 
@@ -164,7 +165,7 @@ module.exports = {
                         amount: receipt.amount,
                         notes: receipt.notes,
                         receipt_date: receipt.receipt_date_fmt,
-                        showEditOrDelete: receipt.dataValues.cashflow_date === null && receipt.dataValues.pending_cashflow_id === null,
+                        showEditOrDelete: isEditOrDeleteAllowed,
                         creditType: type
                     });
                 } else {
@@ -292,6 +293,9 @@ module.exports = {
                 }
                 if (receipt.cashflow_date !== null || receipt.pending_cashflow_id !== null) {
                     return res.status(400).send({ error: 'Receipt is part of a cashflow and cannot be deleted.' });
+                }
+                if (receipt.closing_id !== null) {
+                    return res.status(400).send({ error: 'Receipt was entered from a shift closing and can only be edited/deleted there.' });
                 }
                 return CreditReceiptsDao.delete(req.query.id);
             })

@@ -23,6 +23,7 @@ module.exports = {
                 'location_code',
                 'cashflow_date',
                 'pending_cashflow_id',
+                'closing_id',
             ],
           where: { [Op.and]: [
                   { location_code: locationCode },
@@ -82,7 +83,7 @@ module.exports = {
     },
     findById: (receiptId) => {
         return CashReceipts.findOne({
-            attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id'],
+            attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id', 'closing_id'],
             where: { treceipt_id: receiptId },
         });
     },
