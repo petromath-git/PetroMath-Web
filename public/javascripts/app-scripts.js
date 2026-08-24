@@ -1476,6 +1476,118 @@ function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) 
     };
 }
 
+// Toggle the digital-vendor cell in a Collections row based on the selected receipt type
+function toggleReceiptVendorCell(selectEl, rowNo) {
+    const vendorCell = document.getElementById('credit-receipts-vendor-cell-' + rowNo);
+    if (!vendorCell) {
+        return;
+    }
+    if (selectEl.value === 'Digital') {
+        vendorCell.style.display = '';
+    } else {
+        vendorCell.style.display = 'none';
+        const vendorField = document.getElementById('credit-receipts-vendor-' + rowNo);
+        if (vendorField) {
+            vendorField.value = '';
+        }
+    }
+}
+
+// Collections tab - add credit receipts to DB via ajax
+function saveCreditReceipts() {
+    return new Promise((resolve, reject) => {
+        const receiptTag = 'credit-receipts-';
+        const receiptRow = receiptTag + 'table-row-';
+        const tabToActivate = 'expenses_tab';
+        const currentTabId = 'new_credit_receipts';
+        const receiptObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + receiptRow + ']:not([type="hidden"])');
+        let newReceipts = [], updateReceipts = [], newHiddenFieldsArr = [];
+        const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+
+        receiptObj.forEach((receiptRowObj) => {
+            if (!receiptRowObj.className.includes('d-md-none')) {
+                const receiptObjRowNum = receiptRowObj.id.replace(receiptRow, '');
+                const typeField = document.getElementById(receiptTag + 'type-' + receiptObjRowNum);
+                const creditPartyField = document.getElementById(receiptTag + 'creditparty-' + receiptObjRowNum);
+                const vendorField = document.getElementById(receiptTag + 'vendor-' + receiptObjRowNum);
+                const amountField = document.getElementById(receiptTag + 'amt-' + receiptObjRowNum);
+                const dateField = document.getElementById(receiptTag + 'receipt-date-' + receiptObjRowNum);
+                const hiddenField = document.getElementById(receiptTag + receiptObjRowNum + '_hiddenId');
+
+                const hasCreditParty = creditPartyField.value;
+                const hasAmount = parseFloat(amountField.value) > 0;
+                const hasDate = dateField.value;
+                const isExistingRecord = hiddenField.value && parseInt(hiddenField.value) > 0;
+
+                if (hasCreditParty || hasAmount || hasDate || isExistingRecord) {
+
+                    if (!hasCreditParty) {
+                        alert('Please select a Credit Party for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (typeField.value === 'Digital' && !vendorField.value) {
+                        alert('Please select a Digital Vendor for digital Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasAmount) {
+                        alert('Please enter an amount greater than 0 for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasDate) {
+                        alert('Please provide a receipt date for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (isExistingRecord) {
+                        updateReceipts.push(formCreditReceipts(hiddenField.value, receiptTag, receiptObjRowNum, user));
+                    } else {
+                        newHiddenFieldsArr.push(receiptTag + receiptObjRowNum);
+                        newReceipts.push(formCreditReceipts(undefined, receiptTag, receiptObjRowNum, user));
+                    }
+                }
+            }
+        });
+
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+        postAjaxNew('new-credit-receipts', newReceipts, updateReceipts, tabToActivate, currentTabId, newHiddenFieldsArr, 'treceipt_id')
+            .then((data) => {
+                resolve(data);
+            });
+
+        if (newReceipts.length === 0 && updateReceipts.length === 0) {
+            resolve(true);      // tab click handled in trackMenu()
+        }
+    });
+}
+
+function formCreditReceipts(receiptId, receiptTag, receiptObjRowNum, user) {
+    const typeValue = document.getElementById(receiptTag + 'type-' + receiptObjRowNum).value;
+    return {
+        'treceipt_id': receiptId,
+        'closing_id': document.getElementById('closing_hiddenId').value,
+        'location_code': user.location_code,
+        'receipt_type': typeValue,
+        'creditlist_id': document.getElementById(receiptTag + 'creditparty-' + receiptObjRowNum).value,
+        'digital_creditlist_id': typeValue === 'Digital' ? document.getElementById(receiptTag + 'vendor-' + receiptObjRowNum).value : null,
+        'amount': document.getElementById(receiptTag + 'amt-' + receiptObjRowNum).value,
+        'receipt_date': document.getElementById(receiptTag + 'receipt-date-' + receiptObjRowNum).value,
+        'notes': document.getElementById(receiptTag + 'notes-' + receiptObjRowNum).value,
+        'created_by': user.User_Name,
+        'updated_by': user.User_Name
+    };
+}
+
 
 
 function getCreditType(creditSaleTag, creditObjRowNum) {
@@ -2856,6 +2968,14 @@ function showAddedDigitalSalesRow(prefix) {
 // (see credit-entry-modal.js) since the row stays off-screen until it's opened there.
 function showAddedCreditRow() {
     showAddedRow('credit', calculateCreditTotal);
+    applyCreditBillDateConstraints();
+}
+
+// Wrapper that calls the generic showAddedRow for the Collections table, then
+// re-applies the shared shift-scoped date constraints (receipt-date shares the
+// credit-bill-date class with the Credit tab's bill-date field).
+function showAddedCreditReceiptsRow() {
+    showAddedRow('credit-receipts', calculateCreditReceiptsTotal);
     applyCreditBillDateConstraints();
 }
 

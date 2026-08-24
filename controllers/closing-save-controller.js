@@ -37,6 +37,9 @@ module.exports = {
     txnWriteDigitalSalesPromise: (saleDataArr) => {
     return txnWriteDigitalSalesPromise(saleDataArr);
     },
+    txnWriteCreditReceiptsPromise: (receiptsArr) => {
+    return txnWriteCreditReceiptsPromise(receiptsArr);
+    },
 }
 
 
@@ -179,6 +182,19 @@ const txnWriteDigitalSalesPromise = (digitalSalesArr) => {
                 resolve(data);
             }).catch((err) => {
             console.error("Error while saving digital sales " + err.toString());
+            resolve({error: err.toString()});
+        });
+    });
+}
+
+// Add new flow: Add credit receipts (Collections tab) data
+const txnWriteCreditReceiptsPromise = (receiptsArr) => {
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.saveCreditReceipts(receiptsArr)
+            .then(data => {
+                resolve(data);
+            }).catch((err) => {
+            console.error("Error while saving credit receipts " + err.toString());
             resolve({error: err.toString()});
         });
     });

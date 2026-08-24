@@ -9,6 +9,8 @@ const TxnExpenses = db.txn_expense;
 const TxnDenoms = db.txn_denom;
 const TxnAttendance = db.txn_attendance;
 const TxnDigitalSales = db.txn_digital_sales;
+const CashReceipts = db.credit_receipts;
+const locationConfigDao = require('./location-config-dao');
 
 module.exports = {
     saveClosingData: (data) => {
@@ -124,6 +126,29 @@ saveReadings: (data) => {
     deleteDigitalSaleById: (digitalSalesId) => {
     const salesTxn = TxnDigitalSales.destroy({ where: { digital_sales_id: digitalSalesId } });
     return salesTxn;
+    },
+    saveCreditReceipts: async (data) => {
+    const newRows = data.filter(r => !r.treceipt_id);
+    const locationCode = newRows.length > 0 ? newRows[0].location_code : undefined;
+
+    if (locationCode) {
+        const cashflowEnabledRaw = await locationConfigDao.getSetting(locationCode, 'CASHFLOW_ENABLED');
+        const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
+        if (!cashflowEnabled) {
+            newRows.forEach(r => { r.cashflow_date = new Date(); });
+        }
+    }
+
+    const receiptsTxn = CashReceipts.bulkCreate(data, {
+        returning: true,
+        updateOnDuplicate: ["receipt_type", "creditlist_id", "digital_creditlist_id",
+            "amount", "receipt_date", "notes", "updated_by", "updation_date"]
+    });
+    return receiptsTxn;
+    },
+    deleteCreditReceiptById: (receiptId) => {
+    const receiptTxn = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
+    return receiptTxn;
     },
     saveExpenses: async (data) => {
     const newExpenses = data.filter(e => !e.texpense_id);  // ✅ Will be empty array for UPDATE calls

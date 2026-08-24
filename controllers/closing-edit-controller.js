@@ -116,6 +116,12 @@ module.exports = {
                 'N'
             );
 
+            const allowCreditReceiptsInClosing = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'ALLOW_CREDIT_RECEIPTS_IN_CLOSING',
+                'N' // default - disabled
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -137,7 +143,8 @@ module.exports = {
                 txnController.txnDigitalSalesPromise(closingId),
                 txnController.shiftProductsPromise(closingId),
                 BowserDao.getActiveBowsersByLocation(locationCode),
-                BowserDao.getIntercompanyByClosingId(closingId)])
+                BowserDao.getIntercompanyByClosingId(closingId),
+                txnController.txnCreditReceiptsPromise(closingId)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -151,6 +158,7 @@ module.exports = {
                         show2TSalesTab: show2TSalesTab === 'Y',
                         allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
                         allowOffMeterSale: allowOffMeterSale === 'Y',
+                        allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
@@ -171,7 +179,8 @@ module.exports = {
                         digitalSalesData: values[17].value,
                         shiftProducts: values[18].value || [],
                         bowserValues: values[19].value || [],
-                        t_intercompany: values[20].value || []
+                        t_intercompany: values[20].value || [],
+                        creditReceiptsData: values[21].value || []
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
