@@ -7,6 +7,7 @@ block content
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
     - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
+    - var maxCreditReceiptsRowCnt = config.maxCreditReceiptsRowCnt;
     - var currency = config.currency;
     - var denominationValues = config.denominationValues;
     - var denominationValuesJson = config.denominationValuesJson;
@@ -62,6 +63,9 @@ block content
                         a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
                     li.nav-item.col-md
                         a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
+                    if allowCreditReceiptsInClosing
+                        li.nav-item.col-md
+                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts" onclick=`calculateCreditReceiptsAndTrackMenu(this)`) Collections
                     li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`calculateExpensesAndDenoms(this)`) Expenses
                     if bowserValues && bowserValues.length > 0
@@ -88,6 +92,9 @@ block content
                         a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
                     li.nav-item.col-md
                         a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
+                    if allowCreditReceiptsInClosing
+                        li.nav-item.col-md
+                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts") Collections
                     li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses") Expenses
                     if bowserValues && bowserValues.length > 0
@@ -469,8 +476,49 @@ block content
                     div.row(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
-                                
-                                
+
+                if allowCreditReceiptsInClosing
+                    // ----------------------- Credit receipts (Collections) details ----------------------------
+                    div.tab-pane.fade#new_credit_receipts(class= divDisableClass)
+                        div
+                            div.col-16
+                                div.table-responsive
+                                    table.table#credit-receipts-table
+                                        tbody.w-100
+                                            thead(class="thead-light")
+                                                tr
+                                                    th(scope="col") Type
+                                                    th(scope="col") Credit Party
+                                                    th(scope="col") Digital Vendor
+                                                    th(scope="col") Amount
+                                                    th(scope="col") Receipt Date
+                                                    th(scope="col") Notes
+                                                    if(!freezedRecord)
+                                                        th(scope="col")
+
+                                                - var rowCnt = 0
+                                                while rowCnt < maxCreditReceiptsRowCnt
+                                                    +addCreditReceipts(rowCnt, creditReceiptsData ? creditReceiptsData[rowCnt] : null)
+                                                    - rowCnt++
+                                            tr
+                                                td(colspan=3)
+                                                td Total
+                                                td
+                                                    input.form-control#credit-receipts-total(type='text' name='credit-receipts-total' readonly value='0')
+                                                td
+                                                td
+                        div.row
+                            div.col &nbsp;
+                        div.row
+                            div.col(align="center")
+                                button.btn.btn-info(type="button", onClick="showAddedCreditReceiptsRow()") Add Collection
+
+                        div.row
+                            div.col &nbsp;
+                        div.row(align="center")
+                            div.col
+                                button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+
                 // ----------------------- New expenses & denominations details ----------------------------
                 div.tab-pane.container.fade#new_expenses(class= divDisableClass)
                     div.row
@@ -694,6 +742,31 @@ block content
                                                                 b#val-intercompany-total 0.000
                                         else
                                             div.col-6
+                                    if allowCreditReceiptsInClosing
+                                        div.row
+                                            // Summary: Credit receipts (Collections)
+                                            div.col-6#v-credit-receipts
+                                                h6.sub-header Collections
+                                                div.table-responsive#vis-credit-receipts-table
+                                                    table.table.table-sm
+                                                        thead.thead-light
+                                                            tr
+                                                                th(scope="col") Type
+                                                                th(scope="col") Credit Party
+                                                                th(scope="col") Amount
+                                                                th(scope="col") Receipt Date
+                                                        - var rowCnt = 0
+                                                        - var maxCreditReceiptsRowCnt = config.maxCreditReceiptsRowCnt
+                                                        while rowCnt < maxCreditReceiptsRowCnt
+                                                            +summaryCreditReceiptsData(rowCnt++)
+                                                        tr
+                                                            td(colspan=2)
+                                                            td
+                                                                span
+                                                                    b Total
+                                                            td
+                                                                span
+                                                                    b#val-credit-receipts-total= 0
                                 div.row
                                     if show2TSalesTab
                                         // 2T loose details
