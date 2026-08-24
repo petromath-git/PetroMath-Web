@@ -709,10 +709,10 @@ block content
                                                 table.table.table-sm
                                                     thead.thead-light
                                                         tr
+                                                            th(scope="col") Receipt Date
                                                             th(scope="col") Type
                                                             th(scope="col") Credit Party
                                                             th(scope="col") Amount
-                                                            th(scope="col") Receipt Date
                                                     - var rowCnt = 0
                                                     - var maxCreditReceiptsRowCnt = config.maxCreditReceiptsRowCnt
                                                     while rowCnt < maxCreditReceiptsRowCnt

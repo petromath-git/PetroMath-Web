@@ -286,8 +286,8 @@ mixin addCreditReceipts(receiptRowNo, rowData)
                 option(value='') Select Credit Party
                 each party in allReceiptCreditParties
                     option(value=`${party.creditorId}` selected= rowData.creditPartyId === party.creditorId)= party.creditorName
-        td(id=prefix + 'vendor-cell-' + receiptRowNo style=vendorCellStyle)
-            select.form-control(name=prefix + 'vendor-' + receiptRowNo id=prefix + 'vendor-' + receiptRowNo)
+        td
+            select.form-control(name=prefix + 'vendor-' + receiptRowNo id=prefix + 'vendor-' + receiptRowNo style=vendorCellStyle)
                 option(value='') Select Digital Vendor
                 if creditCompanyValues
                     each vendor in creditCompanyValues
