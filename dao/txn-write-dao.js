@@ -422,8 +422,8 @@ reopenShift: async (closingId, locationCode, userId) => {
         // own cursor has no awareness of shift status, so simply re-running it
         // would just re-claim the same receipt unchanged; this has to be explicit.
         const claimedReceipts = await db.sequelize.query(
-            `SELECT tr.treceipt_id, tr.pending_cashflow_id, tr.amount, tr.receipt_no,
-                    COALESCE(mcl.short_name, '') AS short_name, mcl.company_name
+            `SELECT tr.treceipt_id, tr.pending_cashflow_id, tr.amount,
+                    CONCAT(COALESCE(mcl.short_name, mcl.company_name), ' - Receipt No: ', tr.receipt_no) AS description
              FROM t_receipts tr
              JOIN m_credit_list mcl ON mcl.creditlist_id = tr.creditlist_id
              WHERE tr.closing_id = :closingId
@@ -433,16 +433,17 @@ reopenShift: async (closingId, locationCode, userId) => {
         );
 
         for (const r of claimedReceipts) {
-            // Matches generate_cashflow's own description formula exactly - there's
-            // no FK from t_cashflow_transaction back to t_receipts to match on instead.
-            const description = `${r.short_name}${r.company_name} - Receipt No: ${r.receipt_no}`;
+            // description computed in SQL above to match generate_cashflow's own
+            // formula exactly (COALESCE picks short_name OR company_name, not both -
+            // there's no FK from t_cashflow_transaction back to t_receipts to match on
+            // instead). type is 'Cash Receipt' on the live procedure, not 'Receipt'.
             await db.sequelize.query(
                 `DELETE FROM t_cashflow_transaction
-                 WHERE cashflow_id = :cashflowId AND type = 'Receipt'
+                 WHERE cashflow_id = :cashflowId AND type = 'Cash Receipt'
                    AND description = :description AND amount = :amount
                  LIMIT 1`,
                 {
-                    replacements: { cashflowId: r.pending_cashflow_id, description, amount: r.amount },
+                    replacements: { cashflowId: r.pending_cashflow_id, description: r.description, amount: r.amount },
                     transaction: t
                 }
             );
