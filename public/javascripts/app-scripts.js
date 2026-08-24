@@ -849,7 +849,10 @@ function populateSummary(obj) {
                     } else {
                         labels[j].textContent = '';
                     }
-                } else {   
+                } else if (getValueFromLabelId.includes('credit-receipts-receipt-date-')) {
+                    const dateElement = document.getElementById(getValueFromLabelId);
+                    labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
+                } else {
                     labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
                 }
 
@@ -1476,20 +1479,28 @@ function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) 
     };
 }
 
-// Toggle the digital-vendor cell in a Collections row based on the selected receipt type
+// Format a yyyy-mm-dd date string as DD-MON-YYYY (project date display standard)
+function formatDateDDMonYYYY(isoDateStr) {
+    if (!isoDateStr) return '';
+    const d = new Date(isoDateStr + 'T00:00:00');
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+// Toggle the digital-vendor dropdown in a Collections row based on the selected receipt
+// type. Toggles the <select> itself (not its <td>) - hiding a td collapses the column
+// for that row and misaligns every cell after it with the header row.
 function toggleReceiptVendorCell(selectEl, rowNo) {
-    const vendorCell = document.getElementById('credit-receipts-vendor-cell-' + rowNo);
-    if (!vendorCell) {
+    const vendorField = document.getElementById('credit-receipts-vendor-' + rowNo);
+    if (!vendorField) {
         return;
     }
     if (selectEl.value === 'Digital') {
-        vendorCell.style.display = '';
+        vendorField.style.display = '';
     } else {
-        vendorCell.style.display = 'none';
-        const vendorField = document.getElementById('credit-receipts-vendor-' + rowNo);
-        if (vendorField) {
-            vendorField.value = '';
-        }
+        vendorField.style.display = 'none';
+        vendorField.value = '';
     }
 }
 
