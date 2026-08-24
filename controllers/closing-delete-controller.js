@@ -48,7 +48,8 @@ module.exports = {
 
         } catch (err) {
             console.error('Error while deleting closing record:', err);
-            res.status(500).send({ error: 'Error while deleting the closing record.' });
+            const spMessage = err && err.parent && err.parent.sqlMessage;
+            res.status(500).send({ error: spMessage || 'Error while deleting the closing record.' });
         }
     },
 
