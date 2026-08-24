@@ -849,7 +849,10 @@ function populateSummary(obj) {
                     } else {
                         labels[j].textContent = '';
                     }
-                } else {   
+                } else if (getValueFromLabelId.includes('credit-receipts-receipt-date-')) {
+                    const dateElement = document.getElementById(getValueFromLabelId);
+                    labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
+                } else {
                     labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
                 }
 
@@ -1471,6 +1474,126 @@ function formDigitalSales(digitalSalesId, digitalSalesTag, saleObjRowNum, user) 
         'amount': document.getElementById(digitalSalesTag + 'amt-' + saleObjRowNum).value,
         'transaction_date': document.getElementById(digitalSalesTag + 'transaction-date-' + saleObjRowNum).value,
         'notes': document.getElementById(digitalSalesTag + 'notes-' + saleObjRowNum).value,
+        'created_by': user.User_Name,
+        'updated_by': user.User_Name
+    };
+}
+
+// Format a yyyy-mm-dd date string as DD-MON-YYYY (project date display standard)
+function formatDateDDMonYYYY(isoDateStr) {
+    if (!isoDateStr) return '';
+    const d = new Date(isoDateStr + 'T00:00:00');
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+// Toggle the digital-vendor dropdown in a Collections row based on the selected receipt
+// type. Toggles the <select> itself (not its <td>) - hiding a td collapses the column
+// for that row and misaligns every cell after it with the header row.
+function toggleReceiptVendorCell(selectEl, rowNo) {
+    const vendorField = document.getElementById('credit-receipts-vendor-' + rowNo);
+    if (!vendorField) {
+        return;
+    }
+    if (selectEl.value === 'Digital') {
+        vendorField.style.display = '';
+    } else {
+        vendorField.style.display = 'none';
+        vendorField.value = '';
+    }
+}
+
+// Collections tab - add credit receipts to DB via ajax
+function saveCreditReceipts() {
+    return new Promise((resolve, reject) => {
+        const receiptTag = 'credit-receipts-';
+        const receiptRow = receiptTag + 'table-row-';
+        const tabToActivate = 'expenses_tab';
+        const currentTabId = 'new_credit_receipts';
+        const receiptObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + receiptRow + ']:not([type="hidden"])');
+        let newReceipts = [], updateReceipts = [], newHiddenFieldsArr = [];
+        const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+
+        receiptObj.forEach((receiptRowObj) => {
+            if (!receiptRowObj.className.includes('d-md-none')) {
+                const receiptObjRowNum = receiptRowObj.id.replace(receiptRow, '');
+                const typeField = document.getElementById(receiptTag + 'type-' + receiptObjRowNum);
+                const creditPartyField = document.getElementById(receiptTag + 'creditparty-' + receiptObjRowNum);
+                const vendorField = document.getElementById(receiptTag + 'vendor-' + receiptObjRowNum);
+                const amountField = document.getElementById(receiptTag + 'amt-' + receiptObjRowNum);
+                const dateField = document.getElementById(receiptTag + 'receipt-date-' + receiptObjRowNum);
+                const hiddenField = document.getElementById(receiptTag + receiptObjRowNum + '_hiddenId');
+
+                const hasCreditParty = creditPartyField.value;
+                const hasAmount = parseFloat(amountField.value) > 0;
+                const hasDate = dateField.value;
+                const isExistingRecord = hiddenField.value && parseInt(hiddenField.value) > 0;
+
+                if (hasCreditParty || hasAmount || hasDate || isExistingRecord) {
+
+                    if (!hasCreditParty) {
+                        alert('Please select a Credit Party for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (typeField.value === 'Digital' && !vendorField.value) {
+                        alert('Please select a Digital Vendor for digital Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasAmount) {
+                        alert('Please enter an amount greater than 0 for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasDate) {
+                        alert('Please provide a receipt date for all Collections entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (isExistingRecord) {
+                        updateReceipts.push(formCreditReceipts(hiddenField.value, receiptTag, receiptObjRowNum, user));
+                    } else {
+                        newHiddenFieldsArr.push(receiptTag + receiptObjRowNum);
+                        newReceipts.push(formCreditReceipts(undefined, receiptTag, receiptObjRowNum, user));
+                    }
+                }
+            }
+        });
+
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+        postAjaxNew('new-credit-receipts', newReceipts, updateReceipts, tabToActivate, currentTabId, newHiddenFieldsArr, 'treceipt_id')
+            .then((data) => {
+                resolve(data);
+            });
+
+        if (newReceipts.length === 0 && updateReceipts.length === 0) {
+            resolve(true);      // tab click handled in trackMenu()
+        }
+    });
+}
+
+function formCreditReceipts(receiptId, receiptTag, receiptObjRowNum, user) {
+    const typeValue = document.getElementById(receiptTag + 'type-' + receiptObjRowNum).value;
+    return {
+        'treceipt_id': receiptId,
+        'closing_id': document.getElementById('closing_hiddenId').value,
+        'location_code': user.location_code,
+        'receipt_type': typeValue,
+        'creditlist_id': document.getElementById(receiptTag + 'creditparty-' + receiptObjRowNum).value,
+        'digital_creditlist_id': typeValue === 'Digital' ? document.getElementById(receiptTag + 'vendor-' + receiptObjRowNum).value : null,
+        'amount': document.getElementById(receiptTag + 'amt-' + receiptObjRowNum).value,
+        'receipt_date': document.getElementById(receiptTag + 'receipt-date-' + receiptObjRowNum).value,
+        'notes': document.getElementById(receiptTag + 'notes-' + receiptObjRowNum).value,
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
@@ -2858,6 +2981,14 @@ function showAddedCreditRow() {
     
     // Then initialize Select2 for any new vehicle dropdowns
     initializeNewVehicleSelects();
+    applyCreditBillDateConstraints();
+}
+
+// Wrapper that calls the generic showAddedRow for the Collections table, then
+// re-applies the shared shift-scoped date constraints (receipt-date shares the
+// credit-bill-date class with the Credit tab's bill-date field).
+function showAddedCreditReceiptsRow() {
+    showAddedRow('credit-receipts', calculateCreditReceiptsTotal);
     applyCreditBillDateConstraints();
 }
 

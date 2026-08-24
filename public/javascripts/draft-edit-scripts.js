@@ -57,6 +57,10 @@ function calculateDigitalSalesTotal() {
     calculateTotal('digital-sales-');
 }
 
+function calculateCreditReceiptsTotal() {
+    calculateTotal('credit-receipts-');
+}
+
 function calculateExpenseTotal() {
     calculateTotal('exp-');
 }
@@ -77,6 +81,13 @@ function calculateDigitalSalesAndTrackMenu(obj) {
      setTimeout(() => {
         trackMenu(obj);
         calculateDigitalSalesTotal();
+    }, 100);
+}
+
+function calculateCreditReceiptsAndTrackMenu(obj) {
+     setTimeout(() => {
+        trackMenu(obj);
+        calculateCreditReceiptsTotal();
     }, 100);
 }
 
@@ -214,6 +225,7 @@ function getSaveFunction(clickedTab) {
             case 'cash_sales_tab':
             case 'credit_sales_tab':
             case 'digital_sales_tab':
+            case 'credit_receipts_tab':
             case 'closing_tab':
             case 'reading_tab':
             case 'sales_2t_tab':
@@ -245,7 +257,10 @@ function getSaveFunction(clickedTab) {
                 break;
             case 'digital_sales_tab':
                 saveFunctionName = 'saveDigitalSales';
-                break;    
+                break;
+            case 'credit_receipts_tab':
+                saveFunctionName = 'saveCreditReceipts';
+                break;
             case 'expenses_tab':
                 saveFunctionName = 'saveExpensesAndDenoms';
                 break;
@@ -302,6 +317,7 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('cash_sales_tab'));
             disableLink(document.getElementById('credit_sales_tab'));
             disableLink(document.getElementById('digital_sales_tab'));
+            disableLink(document.getElementById('credit_receipts_tab'));
             disableLink(document.getElementById('expenses_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
@@ -313,6 +329,7 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('cash_sales_tab'));
             disableLink(document.getElementById('credit_sales_tab'));
             disableLink(document.getElementById('digital_sales_tab'));
+            disableLink(document.getElementById('credit_receipts_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
             break;
@@ -331,6 +348,7 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('cash_sales_tab'));
             enableLink(document.getElementById('credit_sales_tab'));
             enableLink(document.getElementById('digital_sales_tab'));
+            enableLink(document.getElementById('credit_receipts_tab'));
             enableLink(document.getElementById('expenses_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
@@ -342,6 +360,7 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('cash_sales_tab'));
             enableLink(document.getElementById('credit_sales_tab'));
             enableLink(document.getElementById('digital_sales_tab'));
+            enableLink(document.getElementById('credit_receipts_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
             break;

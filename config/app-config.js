@@ -32,6 +32,7 @@ const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 // config related to sales
 const MAX_CREDITS_ROW_CNT = 300;
 const MAX_DIGITAL_ROW_CNT = 20;
+const MAX_CREDIT_RECEIPTS_ROW_CNT = 20;
 const MAX_CASH_SALES_ROW_CNT = 25;
 const MAX_EXPENSES_ROW_CNT = 25;
 const MAX_CASHFLOWS_ROW_CNT = 30;
@@ -212,6 +213,7 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
   APP_CONFIGS: {
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,
       maxDigitalSalesRowCnt:MAX_DIGITAL_ROW_CNT,
+      maxCreditReceiptsRowCnt: MAX_CREDIT_RECEIPTS_ROW_CNT,
       maxCashSalesRowCnt: MAX_CASH_SALES_ROW_CNT,
       maxExpensesRowCnt: MAX_EXPENSES_ROW_CNT,
       maxCashFlowRowsCnt: MAX_CASHFLOWS_ROW_CNT,

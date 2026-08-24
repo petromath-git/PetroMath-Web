@@ -82,6 +82,12 @@ module.exports = {
     'N'
     );
 
+    const allowCreditReceiptsInClosing = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'ALLOW_CREDIT_RECEIPTS_IN_CLOSING',
+    'N' // default - disabled
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -120,7 +126,8 @@ module.exports = {
                             digitalSalesFutureDays: digitalSalesFutureDays,
                             show2TSalesTab: show2TSalesTab === 'Y',
                             allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
-                            allowOffMeterSale: allowOffMeterSale === 'Y'
+                            allowOffMeterSale: allowOffMeterSale === 'Y',
+                            allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y'
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -265,6 +272,19 @@ module.exports = {
     }
 },
 
+    saveCreditReceiptsData: (req, res, next) => {
+    const receiptsData = req.body;
+    if (receiptsData) {
+        saveController.txnWriteCreditReceiptsPromise(receiptsData).then((result) => {
+            if (!result.error) {
+                res.status(200).send({message: 'Saved credit receipts data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    }
+},
+
 
 
     saveExpensesData: (req, res, next) => {
@@ -361,6 +381,23 @@ deleteTxnDigitalSale: ((req, res, next) => {
     const saleId = req.query.id;
     if (saleId) {
         deleteController.txnDeleteDigitalSalePromise(saleId).then((result) => {
+            if (!result.error) {
+                res.status(200).send({
+                    message: result.message
+                });
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    } else {
+        res.status(302).send();
+    }
+}),
+
+deleteTxnCreditReceipt: ((req, res, next) => {
+    const receiptId = req.query.id;
+    if (receiptId) {
+        deleteController.txnDeleteCreditReceiptPromise(receiptId).then((result) => {
             if (!result.error) {
                 res.status(200).send({
                     message: result.message

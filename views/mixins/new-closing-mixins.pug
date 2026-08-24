@@ -253,6 +253,58 @@ mixin addDigitalSales(digitalSalesRowNo, rowData)
                 button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-digital-sales", calculateDigitalSalesTotal)')
                     span(aria-hidden="true") &times;
 
+//- Collections tab: Dom elements to show a credit receipt (payment collected from a
+//- credit customer during the shift, Cash or Digital). Structurally mirrors
+//- addDigitalSales - plain row, no modal - since receipts don't need product/price fields.
+mixin addCreditReceipts(receiptRowNo, rowData)
+    - var prefix = 'credit-receipts-';
+    - var trId = prefix + 'table-row-'+receiptRowNo;
+    - var trClass = 'd-md-none';
+    if(!rowData)
+        - rowData = {amount:0, receiptDate: '', receiptType: 'Cash', creditPartyId: null, digitalVendorId: null, notes: ''};
+    if(rowData.receiptId && parseInt(rowData.receiptId) > 0)
+        - trClass = ''
+    - var vendorCellStyle = rowData.receiptType === 'Digital' ? '' : 'display:none'
+    tr(class=trClass id=trId)
+        input(type='hidden' id=prefix + receiptRowNo + '_hiddenId' value=rowData.receiptId)
+        td
+            select.form-control(name=prefix + 'type-' + receiptRowNo id=prefix + 'type-' + receiptRowNo required onchange='toggleReceiptVendorCell(this, ' + receiptRowNo + ')')
+                option(value='Cash' selected= rowData.receiptType === 'Cash') Cash
+                option(value='Digital' selected= rowData.receiptType === 'Digital') Digital
+        td
+            - var allReceiptCreditParties = [];
+            if creditCompanyValues
+                each val in creditCompanyValues
+                    if val.card_flag !== 'Y'
+                        - allReceiptCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
+            if suspenseValues
+                each val in suspenseValues
+                    if val.card_flag !== 'Y'
+                        - allReceiptCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
+            - allReceiptCreditParties.sort((a, b) => a.creditorName.localeCompare(b.creditorName));
+            select.form-control(name=prefix + 'creditparty-' + receiptRowNo id=prefix + 'creditparty-' + receiptRowNo required)
+                option(value='') Select Credit Party
+                each party in allReceiptCreditParties
+                    option(value=`${party.creditorId}` selected= rowData.creditPartyId === party.creditorId)= party.creditorName
+        td
+            select.form-control(name=prefix + 'vendor-' + receiptRowNo id=prefix + 'vendor-' + receiptRowNo style=vendorCellStyle)
+                option(value='') Select Digital Vendor
+                if creditCompanyValues
+                    each vendor in creditCompanyValues
+                        if vendor.card_flag === 'Y'
+                            option(value=`${vendor.creditorId}` selected= vendor.creditorId === rowData.digitalVendorId)= vendor.creditorName
+        td
+            input.form-control(type='number' name=prefix + 'amount-' + receiptRowNo id=prefix + 'amt-' + receiptRowNo min=0.01 step=0.01 required value=rowData.amount onchange='calculateCreditReceiptsTotal()' oninput='validity.valid||(value="")')
+        td
+            - var defaultReceiptDate = rowData.receiptDate || (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)
+            input.form-control.credit-bill-date(type='date' name=prefix + 'receipt-date-' + receiptRowNo id=prefix + 'receipt-date-' + receiptRowNo required value=defaultReceiptDate data-closing-date=(typeof closingData !== 'undefined' ? closingData.closingDate : currentDate))
+        td
+            textarea.form-control(name=prefix + 'notes-' + receiptRowNo id=prefix + 'notes-' + receiptRowNo style="height:36px")= rowData.notes
+        if(!freezedRecord)
+            td
+                button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-credit-receipt", calculateCreditReceiptsTotal)')
+                    span(aria-hidden="true") &times;
+
 //- Add new page: used by addCredits & addCashSales - a separate fn will populate product rates
 mixin optionsForProductRates(cashOrCreditSalePrefix)
     if productValues

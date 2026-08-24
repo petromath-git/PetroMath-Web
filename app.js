@@ -356,7 +356,6 @@ const bypassLoginInDev = async (req, res, next) => {
 // Apply the bypass middleware
 app.use(bypassLoginInDev);
 
-
 const addUserLocationInfo = async (req, res, next) => {
     if (req.user && req.user.Person_id) {
         try {
@@ -1210,6 +1209,14 @@ app.delete('/remove-digital-sales', isLoginEnsured, function (req, res, next) {
 
 app.delete('/remove-digital-sale', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnDigitalSale(req, res, next);  // response returned inside controller
+});
+
+app.post('/new-credit-receipts', isLoginEnsured, function (req, res, next) {
+    HomeController.saveCreditReceiptsData(req, res, next);  // response returned inside controller
+});
+
+app.delete('/remove-credit-receipt', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnCreditReceipt(req, res, next);  // response returned inside controller
 });
 
 app.post('/new-expenses', isLoginEnsured, function (req, res, next) {
