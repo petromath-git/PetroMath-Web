@@ -356,38 +356,6 @@ const bypassLoginInDev = async (req, res, next) => {
 // Apply the bypass middleware
 app.use(bypassLoginInDev);
 
-// SuperUser idle timeout — SuperUser sessions carry access to confidential/billing data
-// and are sometimes used on other locations' shared PCs, so they get auto-logged-out
-// after a period of inactivity even if the user forgets to sign out manually. Applies
-// while previewing too (req.session.previewOriginal), since the underlying identity is
-// still a SuperUser even though req.user.Role is temporarily the previewed role.
-const SUPERUSER_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
-const enforceSuperUserIdleTimeout = (req, res, next) => {
-    if (!req.user || !req.session) return next();
-    // Skip in the local SKIP_LOGIN dev bypass, which isn't a real passport session
-    // and would otherwise force a broken req.logout() after 15 idle minutes locally.
-    if (process.env.NODE_ENV === 'development' && process.env.SKIP_LOGIN === 'true') return next();
-
-    const isSuperUserSession = req.user.Role === 'SuperUser' || !!req.session.previewOriginal;
-    if (!isSuperUserSession) return next();
-
-    const now = Date.now();
-    if (req.session.lastActivity && (now - req.session.lastActivity > SUPERUSER_IDLE_TIMEOUT_MS)) {
-        const username = req.user.User_Name;
-        return req.logout(function (err) {
-            if (err) console.error('Error during idle-timeout logout:', err);
-            console.log(`[IDLE TIMEOUT] ${username} auto-logged-out after 15 min inactivity`);
-            req.flash('warning', 'You were signed out after 15 minutes of inactivity.');
-            res.redirect('/login');
-        });
-    }
-
-    req.session.lastActivity = now;
-    next();
-};
-app.use(enforceSuperUserIdleTimeout);
-
-
 const addUserLocationInfo = async (req, res, next) => {
     if (req.user && req.user.Person_id) {
         try {
@@ -513,7 +481,6 @@ app.use('/campaign', campaignPublicRoutes);
 app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
-app.use('/admin/bill-ocr-formats', require('./routes/bill-ocr-format-routes'));
 app.use('/day-bill', dayBillRoutes);
 app.use('/platform-billing', platformBillingRoutes);
 app.use('/distributors', distributorRoutes);
@@ -1861,8 +1828,7 @@ app.get('/preview-as', isLoginEnsured, isSuperUserOrPreviewing, async function (
             roles: roles,
             locations: locations,
             isPreviewing: !!req.session.previewOriginal,
-            previewMeta: req.session.previewMeta || null,
-            messages: req.flash()
+            previewMeta: req.session.previewMeta || null
         });
     } catch (error) {
         console.error("Error loading preview-as page:", error);
