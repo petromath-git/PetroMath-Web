@@ -121,6 +121,7 @@ module.exports = {
                 tc.amount,
                 tc.bill_no,
                 tc.credit_bill_date,
+                DATE_FORMAT(tc.credit_bill_date, '%d-%b-%Y') AS credit_bill_date_fmt,
                 tc.notes,
                 tc.creation_date,
                 cl.closing_status,

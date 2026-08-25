@@ -493,14 +493,16 @@ html(lang='en')
                     .section-title Today's Entries
                     each entry in entries
                         .entry-card(data-id=entry.tcredit_id)
-                            span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                            span.entry-dot(style=`background: rgb(${entry.rgb_color || '200,200,200'})`)
                             .entry-info
                                 .entry-customer= entry.Company_Name
                                 .entry-meta
-                                    | #{entry.product_name}
+                                    span(style=`color: rgb(${entry.rgb_color || '200,200,200'})`)= entry.product_name
                                     if entry.vehicle_number
                                         |  · #{entry.vehicle_number}
                                     |  · #{entry.qty} L
+                                    if entry.credit_bill_date_fmt
+                                        |  · #{entry.credit_bill_date_fmt}
                                     span.entry-shift  · Shift ##{entry.closing_id}
                             .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
                             if allowBillPhoto
@@ -530,10 +532,10 @@ html(lang='en')
                                 type='button'
                                 data-product-id=product.product_id
                                 data-product-name=product.product_name
-                                data-color=product.rgb_color || '#6c757d'
+                                data-color=product.rgb_color || '200,200,200'
                                 data-price=product.price || 0
                             )
-                                span.product-dot(style=`background:${product.rgb_color || '#6c757d'}`)
+                                span.product-dot(style=`background: rgb(${product.rgb_color || '200,200,200'})`)
                                 | #{product.product_name}
 
                 //- Search mode toggle
@@ -544,12 +546,17 @@ html(lang='en')
 
                 //- CUSTOMER FIRST MODE
                 #modeCustomer
-                    .mb-3
-                        label.form-label(for='customerSelect') Customer *
-                        select#customerSelect.form-control
-                            option(value='') Select Customer
-                            each credit in credits
-                                option(value=credit.creditlist_id) #{credit.Company_Name}
+                    .mb-3#customerSearchGroup
+                        label.form-label(for='customerSearch') Customer *
+                        .vehicle-search-wrap
+                            input#customerSearch.form-control(
+                                type='text'
+                                placeholder='Type to search customer...'
+                                autocomplete='off'
+                            )
+                            #customerDropdown.vehicle-dropdown(style='display:none')
+                        input#customerSelect(type='hidden' value='')
+                        #customerSelectedTag.vehicle-selected-tag(style='display:none')
 
                     .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
                         label.form-label Vehicle
@@ -667,14 +674,16 @@ html(lang='en')
                     if entries && entries.length > 0
                         each entry in entries
                             .entry-card(data-id=entry.tcredit_id)
-                                span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                                span.entry-dot(style=`background: rgb(${entry.rgb_color || '200,200,200'})`)
                                 .entry-info
                                     .entry-customer= entry.Company_Name
                                     .entry-meta
-                                        | #{entry.product_name}
+                                        span(style=`color: rgb(${entry.rgb_color || '200,200,200'})`)= entry.product_name
                                         if entry.vehicle_number
                                             |  · #{entry.vehicle_number}
                                         |  · #{entry.qty} L
+                                        if entry.credit_bill_date_fmt
+                                            |  · #{entry.credit_bill_date_fmt}
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
                                 if allowBillPhoto
@@ -696,9 +705,20 @@ html(lang='en')
 
     script.
         const pageData = !{pageData};
-        const currentSystemDate = new Date().toISOString().slice(0, 10);
+
+        // Local (phone-TZ) Y-M-D — NOT .toISOString().slice(0,10), which reads
+        // the UTC calendar date and rolls back a day for any early-morning IST
+        // time (closing_date is stored at shift-date midnight, so it always was).
+        function toDateStr(d) {
+            const yr = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const dy = String(d.getDate()).padStart(2, '0');
+            return `${yr}-${mo}-${dy}`;
+        }
+
+        const currentSystemDate = toDateStr(new Date());
         const activeClosingDate = pageData.activeClosing && pageData.activeClosing.closing_date
-            ? new Date(pageData.activeClosing.closing_date).toISOString().slice(0, 10)
+            ? toDateStr(new Date(pageData.activeClosing.closing_date))
             : currentSystemDate;
 
         const creditBillDateInput = document.getElementById('creditBillDateInput');
@@ -1220,6 +1240,14 @@ html(lang='en')
             }
         }
 
+        // Everything below only has DOM to attach to when there's an active
+        // shift (the "New Entry" form isn't rendered on the no-shift page) —
+        // guarded as one block instead of null-checking every element/listener
+        // individually. showToast/addDays/applyCreditBillDateConstraints stay
+        // outside this guard: they're called from the always-rendered bill-
+        // photo-modal code above and need to be defined regardless.
+        if (pageData.activeClosing) {
+
         // Product button selection
         document.querySelectorAll('.product-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -1324,6 +1352,9 @@ html(lang='en')
             document.getElementById('modeVehicle').style.display = '';
             // Reset customer-first fields only
             customerSelect.value = '';
+            customerSearch.value = '';
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
             fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
@@ -1479,6 +1510,77 @@ html(lang='en')
         const vehicleSelectedTag = document.getElementById('vehicleSelected');
 
         let loadedVehicles = []; // all vehicles for selected customer
+
+        // Customer search — mirrors the vehicle smart-search UI below.
+        // customerSelect is now a hidden input (was a <select>); this drives it
+        // and dispatches 'change' so the existing listener just below (loads
+        // vehicles for the picked customer) fires unchanged.
+        const customerSearch      = document.getElementById('customerSearch');
+        const customerDropdown    = document.getElementById('customerDropdown');
+        const customerSearchGroup = document.getElementById('customerSearchGroup');
+        const customerSelectedTag = document.getElementById('customerSelectedTag');
+        const allCredits = pageData.credits || [];
+
+        customerSearch.addEventListener('focus', function() {
+            showCustomerDropdown(this.value.trim());
+        });
+
+        customerSearch.addEventListener('input', function() {
+            if (customerSelect.value) clearCustomerSelection();
+            showCustomerDropdown(this.value.trim());
+        });
+
+        function showCustomerDropdown(term) {
+            const lowerTerm = term.toLowerCase();
+            const matches = term
+                ? allCredits.filter(c => c.Company_Name.toLowerCase().includes(lowerTerm))
+                : allCredits;
+
+            if (matches.length === 0) {
+                customerDropdown.innerHTML = '<div class="no-results">No matching customers</div>';
+            } else {
+                customerDropdown.innerHTML = matches.map(c => `
+                    <div class="vehicle-option" data-id="${c.creditlist_id}" data-name="${c.Company_Name}">
+                        ${c.Company_Name}
+                    </div>
+                `).join('');
+            }
+            customerDropdown.style.display = 'block';
+        }
+
+        customerDropdown.addEventListener('click', function(e) {
+            const opt = e.target.closest('.vehicle-option');
+            if (!opt) return;
+            selectCustomer(opt.dataset.id, opt.dataset.name);
+        });
+
+        customerSelectedTag.addEventListener('click', function(e) {
+            if (e.target.closest('.clear-vehicle')) {
+                clearCustomerSelection();
+                customerSearch.focus();
+                setTimeout(() => showCustomerDropdown(''), 50);
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!customerSearchGroup.contains(e.target)) customerDropdown.style.display = 'none';
+        });
+
+        function selectCustomer(creditlistId, companyName) {
+            customerSelect.value = creditlistId;
+            customerSelect.dispatchEvent(new Event('change'));
+            customerSearch.value = '';
+            customerDropdown.style.display = 'none';
+            customerSelectedTag.innerHTML = `${companyName} <button class="clear-vehicle" type="button">✕</button>`;
+            customerSelectedTag.style.display = 'inline-flex';
+        }
+
+        function clearCustomerSelection() {
+            customerSelect.value = '';
+            customerSelect.dispatchEvent(new Event('change'));
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
+        }
 
         customerSelect.addEventListener('change', function() {
             const creditlistId = this.value;
@@ -1757,11 +1859,11 @@ html(lang='en')
 
             list.innerHTML = entries.map(e => `
                 <div class="entry-card" data-id="${e.tcredit_id}">
-                    <span class="entry-dot" style="background:${e.rgb_color || '#6c757d'}"></span>
+                    <span class="entry-dot" style="background: rgb(${e.rgb_color || '200,200,200'})"></span>
                     <div class="entry-info">
                         <div class="entry-customer">${e.Company_Name}</div>
                         <div class="entry-meta">
-                            ${e.product_name}${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L<span class="entry-shift"> · Shift #${e.closing_id}</span>
+                            <span style="color: rgb(${e.rgb_color || '200,200,200'})">${e.product_name}</span>${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L${e.credit_bill_date_fmt ? ' · ' + e.credit_bill_date_fmt : ''}<span class="entry-shift"> · Shift #${e.closing_id}</span>
                         </div>
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
@@ -1788,6 +1890,9 @@ html(lang='en')
             document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
             // Reset customer mode
             customerSelect.value = '';
+            customerSearch.value = '';
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
             fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
@@ -1805,9 +1910,12 @@ html(lang='en')
             clearPendingPhoto();
         }
 
+        } // end if (pageData.activeClosing)
+
         // Toast
         function showToast(message, type) {
             const toast = document.getElementById('toastMsg');
+            if (!toast) return; // not rendered on the no-active-shift page
             toast.textContent = message;
             toast.style.background = type === 'success' ? '#198754' : '#dc3545';
             toast.style.color = 'white';
@@ -1818,7 +1926,7 @@ html(lang='en')
         function addDays(dateStr, days) {
             const dt = new Date(dateStr + 'T00:00:00');
             dt.setDate(dt.getDate() + days);
-            return dt.toISOString().slice(0, 10);
+            return toDateStr(dt);
         }
 
         function applyCreditBillDateConstraints() {

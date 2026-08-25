@@ -121,11 +121,14 @@ module.exports = {
                 return res.status(400).json({ success: false, message: "No active shift found. Cannot save entry." });
             }
 
-            const closingDateStr = new Date(activeClosing.closing_date).toISOString().slice(0, 10);
-            const selectedDateStr = new Date(credit_bill_date).toISOString().slice(0, 10);
+            const closingDateStr = toDateStr(new Date(activeClosing.closing_date));
+            // credit_bill_date comes from an <input type="date">, already a plain
+            // YYYY-MM-DD string — take it as-is rather than round-tripping through
+            // Date/toISOString, which would misread it against the server's TZ.
+            const selectedDateStr = String(credit_bill_date).slice(0, 10);
             const previousDateStr = addDays(closingDateStr, -1);
             const nextDateStr = addDays(closingDateStr, 1);
-            const systemDateStr = new Date().toISOString().slice(0, 10);
+            const systemDateStr = toDateStr(new Date());
 
             if (![previousDateStr, closingDateStr, nextDateStr].includes(selectedDateStr)) {
                 return res.status(400).json({ success: false, message: "Credit bill date must be closing date, previous day, or next day." });
@@ -334,8 +337,18 @@ module.exports = {
 
 };
 
+// Local (server-TZ) Y-M-D — NOT .toISOString().slice(0,10), which reads the
+// UTC calendar date and rolls back a day for any IST time before 05:30
+// (closing_date is stored at shift-date midnight, so it always was).
+function toDateStr(d) {
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+}
+
 function addDays(dateStr, days) {
     const date = new Date(dateStr + "T00:00:00");
     date.setDate(date.getDate() + days);
-    return date.toISOString().slice(0, 10);
+    return toDateStr(date);
 }
