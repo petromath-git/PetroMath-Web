@@ -544,12 +544,17 @@ html(lang='en')
 
                 //- CUSTOMER FIRST MODE
                 #modeCustomer
-                    .mb-3
-                        label.form-label(for='customerSelect') Customer *
-                        select#customerSelect.form-control
-                            option(value='') Select Customer
-                            each credit in credits
-                                option(value=credit.creditlist_id) #{credit.Company_Name}
+                    .mb-3#customerSearchGroup
+                        label.form-label(for='customerSearch') Customer *
+                        .vehicle-search-wrap
+                            input#customerSearch.form-control(
+                                type='text'
+                                placeholder='Type to search customer...'
+                                autocomplete='off'
+                            )
+                            #customerDropdown.vehicle-dropdown(style='display:none')
+                        input#customerSelect(type='hidden' value='')
+                        #customerSelectedTag.vehicle-selected-tag(style='display:none')
 
                     .mb-3#vehicleGroup(style='opacity:0.4;pointer-events:none')
                         label.form-label Vehicle
@@ -1220,6 +1225,14 @@ html(lang='en')
             }
         }
 
+        // Everything below only has DOM to attach to when there's an active
+        // shift (the "New Entry" form isn't rendered on the no-shift page) —
+        // guarded as one block instead of null-checking every element/listener
+        // individually. showToast/addDays/applyCreditBillDateConstraints stay
+        // outside this guard: they're called from the always-rendered bill-
+        // photo-modal code above and need to be defined regardless.
+        if (pageData.activeClosing) {
+
         // Product button selection
         document.querySelectorAll('.product-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -1324,6 +1337,9 @@ html(lang='en')
             document.getElementById('modeVehicle').style.display = '';
             // Reset customer-first fields only
             customerSelect.value = '';
+            customerSearch.value = '';
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
             fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
@@ -1479,6 +1495,77 @@ html(lang='en')
         const vehicleSelectedTag = document.getElementById('vehicleSelected');
 
         let loadedVehicles = []; // all vehicles for selected customer
+
+        // Customer search — mirrors the vehicle smart-search UI below.
+        // customerSelect is now a hidden input (was a <select>); this drives it
+        // and dispatches 'change' so the existing listener just below (loads
+        // vehicles for the picked customer) fires unchanged.
+        const customerSearch      = document.getElementById('customerSearch');
+        const customerDropdown    = document.getElementById('customerDropdown');
+        const customerSearchGroup = document.getElementById('customerSearchGroup');
+        const customerSelectedTag = document.getElementById('customerSelectedTag');
+        const allCredits = pageData.credits || [];
+
+        customerSearch.addEventListener('focus', function() {
+            showCustomerDropdown(this.value.trim());
+        });
+
+        customerSearch.addEventListener('input', function() {
+            if (customerSelect.value) clearCustomerSelection();
+            showCustomerDropdown(this.value.trim());
+        });
+
+        function showCustomerDropdown(term) {
+            const lowerTerm = term.toLowerCase();
+            const matches = term
+                ? allCredits.filter(c => c.Company_Name.toLowerCase().includes(lowerTerm))
+                : allCredits;
+
+            if (matches.length === 0) {
+                customerDropdown.innerHTML = '<div class="no-results">No matching customers</div>';
+            } else {
+                customerDropdown.innerHTML = matches.map(c => `
+                    <div class="vehicle-option" data-id="${c.creditlist_id}" data-name="${c.Company_Name}">
+                        ${c.Company_Name}
+                    </div>
+                `).join('');
+            }
+            customerDropdown.style.display = 'block';
+        }
+
+        customerDropdown.addEventListener('click', function(e) {
+            const opt = e.target.closest('.vehicle-option');
+            if (!opt) return;
+            selectCustomer(opt.dataset.id, opt.dataset.name);
+        });
+
+        customerSelectedTag.addEventListener('click', function(e) {
+            if (e.target.closest('.clear-vehicle')) {
+                clearCustomerSelection();
+                customerSearch.focus();
+                setTimeout(() => showCustomerDropdown(''), 50);
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!customerSearchGroup.contains(e.target)) customerDropdown.style.display = 'none';
+        });
+
+        function selectCustomer(creditlistId, companyName) {
+            customerSelect.value = creditlistId;
+            customerSelect.dispatchEvent(new Event('change'));
+            customerSearch.value = '';
+            customerDropdown.style.display = 'none';
+            customerSelectedTag.innerHTML = `${companyName} <button class="clear-vehicle" type="button">✕</button>`;
+            customerSelectedTag.style.display = 'inline-flex';
+        }
+
+        function clearCustomerSelection() {
+            customerSelect.value = '';
+            customerSelect.dispatchEvent(new Event('change'));
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
+        }
 
         customerSelect.addEventListener('change', function() {
             const creditlistId = this.value;
@@ -1788,6 +1875,9 @@ html(lang='en')
             document.querySelectorAll('.product-btn').forEach(b => b.classList.remove('selected'));
             // Reset customer mode
             customerSelect.value = '';
+            customerSearch.value = '';
+            customerSelectedTag.style.display = 'none';
+            customerSelectedTag.innerHTML = '';
             fullResetVehicle();
             vehicleGroup.style.opacity = '0.4';
             vehicleGroup.style.pointerEvents = 'none';
@@ -1805,9 +1895,12 @@ html(lang='en')
             clearPendingPhoto();
         }
 
+        } // end if (pageData.activeClosing)
+
         // Toast
         function showToast(message, type) {
             const toast = document.getElementById('toastMsg');
+            if (!toast) return; // not rendered on the no-active-shift page
             toast.textContent = message;
             toast.style.background = type === 'success' ? '#198754' : '#dc3545';
             toast.style.color = 'white';
