@@ -493,14 +493,16 @@ html(lang='en')
                     .section-title Today's Entries
                     each entry in entries
                         .entry-card(data-id=entry.tcredit_id)
-                            span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                            span.entry-dot(style=`background: rgb(${entry.rgb_color || '200,200,200'})`)
                             .entry-info
                                 .entry-customer= entry.Company_Name
                                 .entry-meta
-                                    | #{entry.product_name}
+                                    span(style=`color: rgb(${entry.rgb_color || '200,200,200'})`)= entry.product_name
                                     if entry.vehicle_number
                                         |  · #{entry.vehicle_number}
                                     |  · #{entry.qty} L
+                                    if entry.credit_bill_date_fmt
+                                        |  · #{entry.credit_bill_date_fmt}
                                     span.entry-shift  · Shift ##{entry.closing_id}
                             .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
                             if allowBillPhoto
@@ -530,10 +532,10 @@ html(lang='en')
                                 type='button'
                                 data-product-id=product.product_id
                                 data-product-name=product.product_name
-                                data-color=product.rgb_color || '#6c757d'
+                                data-color=product.rgb_color || '200,200,200'
                                 data-price=product.price || 0
                             )
-                                span.product-dot(style=`background:${product.rgb_color || '#6c757d'}`)
+                                span.product-dot(style=`background: rgb(${product.rgb_color || '200,200,200'})`)
                                 | #{product.product_name}
 
                 //- Search mode toggle
@@ -672,14 +674,16 @@ html(lang='en')
                     if entries && entries.length > 0
                         each entry in entries
                             .entry-card(data-id=entry.tcredit_id)
-                                span.entry-dot(style=`background:${entry.rgb_color || '#6c757d'}`)
+                                span.entry-dot(style=`background: rgb(${entry.rgb_color || '200,200,200'})`)
                                 .entry-info
                                     .entry-customer= entry.Company_Name
                                     .entry-meta
-                                        | #{entry.product_name}
+                                        span(style=`color: rgb(${entry.rgb_color || '200,200,200'})`)= entry.product_name
                                         if entry.vehicle_number
                                             |  · #{entry.vehicle_number}
                                         |  · #{entry.qty} L
+                                        if entry.credit_bill_date_fmt
+                                            |  · #{entry.credit_bill_date_fmt}
                                         span.entry-shift  · Shift ##{entry.closing_id}
                                 .entry-amount ₹#{parseFloat(entry.amount).toLocaleString('en-IN')}
                                 if allowBillPhoto
@@ -701,9 +705,20 @@ html(lang='en')
 
     script.
         const pageData = !{pageData};
-        const currentSystemDate = new Date().toISOString().slice(0, 10);
+
+        // Local (phone-TZ) Y-M-D — NOT .toISOString().slice(0,10), which reads
+        // the UTC calendar date and rolls back a day for any early-morning IST
+        // time (closing_date is stored at shift-date midnight, so it always was).
+        function toDateStr(d) {
+            const yr = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const dy = String(d.getDate()).padStart(2, '0');
+            return `${yr}-${mo}-${dy}`;
+        }
+
+        const currentSystemDate = toDateStr(new Date());
         const activeClosingDate = pageData.activeClosing && pageData.activeClosing.closing_date
-            ? new Date(pageData.activeClosing.closing_date).toISOString().slice(0, 10)
+            ? toDateStr(new Date(pageData.activeClosing.closing_date))
             : currentSystemDate;
 
         const creditBillDateInput = document.getElementById('creditBillDateInput');
@@ -1844,11 +1859,11 @@ html(lang='en')
 
             list.innerHTML = entries.map(e => `
                 <div class="entry-card" data-id="${e.tcredit_id}">
-                    <span class="entry-dot" style="background:${e.rgb_color || '#6c757d'}"></span>
+                    <span class="entry-dot" style="background: rgb(${e.rgb_color || '200,200,200'})"></span>
                     <div class="entry-info">
                         <div class="entry-customer">${e.Company_Name}</div>
                         <div class="entry-meta">
-                            ${e.product_name}${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L<span class="entry-shift"> · Shift #${e.closing_id}</span>
+                            <span style="color: rgb(${e.rgb_color || '200,200,200'})">${e.product_name}</span>${e.vehicle_number ? ' · ' + e.vehicle_number : ''} · ${parseFloat(e.qty).toFixed(3)} L${e.credit_bill_date_fmt ? ' · ' + e.credit_bill_date_fmt : ''}<span class="entry-shift"> · Shift #${e.closing_id}</span>
                         </div>
                         ${e.bill_no || e.notes ? `<div class="entry-meta">${e.bill_no ? 'Bill: ' + e.bill_no : ''}${e.bill_no && e.notes ? ' · ' : ''}${e.notes ? e.notes : ''}</div>` : ''}
                     </div>
@@ -1911,7 +1926,7 @@ html(lang='en')
         function addDays(dateStr, days) {
             const dt = new Date(dateStr + 'T00:00:00');
             dt.setDate(dt.getDate() + days);
-            return dt.toISOString().slice(0, 10);
+            return toDateStr(dt);
         }
 
         function applyCreditBillDateConstraints() {
