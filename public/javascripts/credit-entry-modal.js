@@ -121,18 +121,40 @@ function saveCreditRowModal() {
     var rowNo = creditModalState.rowNo;
     if (rowNo === null || rowNo === undefined) return;
 
-    var amtEl = creditFieldEl(rowNo, 'amt');
+    var dateEl = creditFieldEl(rowNo, 'bill-date');
+    var productEl = creditFieldEl(rowNo, 'product');
     var creditPartyEl = creditFieldEl(rowNo, 'creditparty');
+    var qtyEl = creditFieldEl(rowNo, 'qty');
+    var amtEl = creditFieldEl(rowNo, 'amt');
+    var qty = qtyEl && qtyEl.value ? parseFloat(qtyEl.value) : 0;
     var amt = amtEl && amtEl.value ? currenciesAsFloat(amtEl.value) : 0;
+    var hasAnyData = qty > 0 || amt > 0 || (creditPartyEl && creditPartyEl.value);
 
-    if (amt > 0 && creditPartyEl && !creditPartyEl.value) {
-        alert('Please select a Company before saving this credit sale.');
+    if (creditModalState.isNew && !hasAnyData) {
+        // Nothing entered at all - closing without data discards the row, no warning needed.
+        $('#creditEntryModal').modal('hide');
         return;
     }
 
-    if (creditModalState.isNew && amt <= 0) {
-        // Nothing meaningful entered - closing without data discards the row.
-        $('#creditEntryModal').modal('hide');
+    // Something was entered (or this is an existing row being edited) - enforce required fields.
+    if (!dateEl || !dateEl.value) {
+        alert('Please enter a Bill Date before saving this credit sale.');
+        return;
+    }
+    if (!productEl || !productEl.value) {
+        alert('Please select a Product before saving this credit sale.');
+        return;
+    }
+    if (!creditPartyEl || !creditPartyEl.value) {
+        alert('Please select a Company before saving this credit sale.');
+        return;
+    }
+    if (!(qty > 0)) {
+        alert('Please enter a Quantity greater than zero before saving this credit sale.');
+        return;
+    }
+    if (!(amt > 0)) {
+        alert('Please enter a Sale Amount greater than zero before saving this credit sale.');
         return;
     }
 
@@ -194,19 +216,22 @@ function refreshCreditSummaryRow(rowNo) {
     summaryTr.classList.toggle('d-md-none', !isUsed);
 
     if (!isUsed) {
-        ['date', 'product', 'billno', 'company', 'vehicle', 'amt'].forEach(function (field) {
+        ['date', 'product', 'billno', 'company', 'vehicle', 'qty', 'amt'].forEach(function (field) {
             setCreditSummaryText('credit-summary-' + field + '-' + rowNo, '');
         });
         return;
     }
 
     var dateEl = creditFieldEl(rowNo, 'bill-date');
-    setCreditSummaryText('credit-summary-date-' + rowNo, dateEl ? dateEl.value : '');
+    setCreditSummaryText('credit-summary-date-' + rowNo, dateEl && dateEl.value ? formatDateDDMonYYYY(dateEl.value) : '');
     setCreditSummaryText('credit-summary-product-' + rowNo, selectedCreditOptionText(creditFieldEl(rowNo, 'product')));
     var billNoEl = creditFieldEl(rowNo, 'billno');
     setCreditSummaryText('credit-summary-billno-' + rowNo, billNoEl ? billNoEl.value : '');
     setCreditSummaryText('credit-summary-company-' + rowNo, selectedCreditOptionText(creditFieldEl(rowNo, 'creditparty')));
     setCreditSummaryText('credit-summary-vehicle-' + rowNo, selectedCreditOptionText(document.getElementById('credit-vehicle-' + rowNo)));
+    var qtyEl = creditFieldEl(rowNo, 'qty');
+    var qtyVal = qtyEl && qtyEl.value ? parseFloat(qtyEl.value) : 0;
+    setCreditSummaryText('credit-summary-qty-' + rowNo, (qtyVal || 0).toFixed(3));
     var amtEl = creditFieldEl(rowNo, 'amt');
     var amtVal = amtEl && amtEl.value ? currenciesAsFloat(amtEl.value) : 0;
     setCreditSummaryText('credit-summary-amt-' + rowNo, formatCurrencies(amtVal || 0, toFixedValue));

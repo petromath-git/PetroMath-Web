@@ -327,16 +327,18 @@ block content
                         }
 
                         /* Column width tuning for the compact summary list */
-                        #credit-table .col-date      { width: 12%; }
-                        #credit-table .col-product   { width: 14%; }
-                        #credit-table .col-bill      { width: 10%; }
-                        #credit-table .col-company   { width: 22%; }
-                        #credit-table .col-vehicle   { width: 18%; }
-                        #credit-table .col-sale      { width: 12%; }
+                        #credit-table .col-date      { width: 11%; }
+                        #credit-table .col-product   { width: 12%; }
+                        #credit-table .col-bill      { width: 8%; }
+                        #credit-table .col-company   { width: 19%; }
+                        #credit-table .col-vehicle   { width: 16%; }
+                        #credit-table .col-qty       { width: 10%; }
+                        #credit-table .col-sale      { width: 12%; text-align: right; }
                         #credit-table .col-actions   { width: 12%; text-align: center; }
 
                         #credit-table tbody tr.credit-summary-row td {
                             vertical-align: middle;
+                            text-align: center;
                         }
                         #credit-table .credit-summary-cell span:empty::before {
                             content: '\2014'; /* em dash placeholder */
@@ -361,6 +363,7 @@ block content
                                                 th.col-bill(scope="col") Bill #
                                                 th.col-company(scope="col") Company
                                                 th.col-vehicle(scope="col") Vehicle Number
+                                                th.col-qty(scope="col") Qty
                                                 th.col-sale(scope="col") Sale
                                                 th.col-actions(scope="col") Actions
                                             - var rowCnt = 0
