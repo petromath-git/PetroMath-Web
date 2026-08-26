@@ -75,6 +75,25 @@ function initVehicleSelect2ForModal(rowNo) {
     });
 }
 
+// Same lazy-init reasoning as the vehicle dropdown above, applied to the credit
+// party dropdown so Company is also type-to-search rather than a long scrolling list.
+function initCreditPartySelect2ForModal(rowNo) {
+    var select = document.getElementById('credit-creditparty-' + rowNo);
+    if (!select || typeof $ === 'undefined') return;
+    var $select = $(select);
+    if ($select.hasClass('select2-hidden-accessible')) {
+        $select.select2('destroy');
+    }
+    $select.select2({
+        placeholder: 'Search company...',
+        allowClear: true,
+        width: '100%',
+        minimumInputLength: 0,
+        theme: 'default',
+        dropdownParent: $('#creditEntryModal')
+    });
+}
+
 function findNextAvailableCreditRow() {
     var table = document.getElementById('credit-table');
     if (!table) return null;
@@ -115,6 +134,7 @@ function openCreditRowModal(rowNo, isNew) {
     moveCreditVehicleWrapToSlot(rowNo);
     moveCreditOffMeterToSlot(rowNo);
     initVehicleSelect2ForModal(rowNo);
+    initCreditPartySelect2ForModal(rowNo);
 }
 
 function saveCreditRowModal() {

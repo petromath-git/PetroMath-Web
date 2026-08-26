@@ -380,7 +380,7 @@ mixin addCredits(creditRowNo, rowData)
                     if val.card_flag !== 'Y'
                         - allCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
             - allCreditParties.sort((a, b) => a.creditorName.localeCompare(b.creditorName));
-            select.form-control(name=prefix + 'creditparty-' + creditRowNo id=prefix + 'creditparty-' + creditRowNo, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
+            select.form-control.select2-creditparty(name=prefix + 'creditparty-' + creditRowNo id=prefix + 'creditparty-' + creditRowNo, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
                 option(value='') Select Credit Party
                 each party in allCreditParties
                     option(value=`${party.creditorId}` selected= rowData.creditListId === party.creditorId)= party.creditorName
@@ -397,7 +397,7 @@ mixin addCredits(creditRowNo, rowData)
                     button.btn.btn-primary.btn-sm.flex-shrink-0(id=prefix + 'add-vehicle-btn-' + creditRowNo type='button' title='Add new vehicle' style=(rowData.creditListId ? '' : 'display:none') onclick='openAddVehicleModal(\'' + prefix + '\', ' + creditRowNo + ')')
                         | +
         td
-            input.form-control(type='number' name=prefix + 'odometer-' + creditRowNo id=prefix + 'odometer-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.odometerReading step=0.01 placeholder='Odometer Reading')
+            input.form-control(type='number' name=prefix + 'odometer-' + creditRowNo id=prefix + 'odometer-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.odometerReading step=0.01)
         td
             input.form-control(type='number' name=prefix + 'price-' + creditRowNo id=prefix + 'price-' + creditRowNo min=0 oninput='validity.valid||(value="")' value=rowData.price onchange='calculateCashOrCreditSale(\'' + prefix + '\', ' + creditRowNo + ')' step=0.01 readonly)
         td
