@@ -229,20 +229,39 @@ canReopenCashflow: async (cashflowId, locationCode) => {
 
 // Reopen cashflow (update status to DRAFT)
 reopenCashflow: async (cashflowId, locationCode, userId) => {
-    const result = await db.sequelize.query(
-        `UPDATE t_cashflow_closing 
-        SET closing_status = 'DRAFT',
-            updated_by = :userId,
-            updation_date = NOW()
-        WHERE cashflow_id = :cashflowId
-        AND location_code = :locationCode
-        AND closing_status = 'CLOSED'`,
-        {
-            replacements: { cashflowId, locationCode, userId },
-            type: Sequelize.QueryTypes.UPDATE
-        }
-    );
-    
-    return result[1]; // returns number of rows affected
+    return db.sequelize.transaction(async (t) => {
+        const result = await db.sequelize.query(
+            `UPDATE t_cashflow_closing
+            SET closing_status = 'DRAFT',
+                updated_by = :userId,
+                updation_date = NOW()
+            WHERE cashflow_id = :cashflowId
+            AND location_code = :locationCode
+            AND closing_status = 'CLOSED'`,
+            {
+                replacements: { cashflowId, locationCode, userId },
+                type: Sequelize.QueryTypes.UPDATE,
+                transaction: t
+            }
+        );
+
+        // The after_cashflow_close trigger stamps t_receipts.cashflow_date on close
+        // for every receipt this cashflow claimed (source_table/source_id on
+        // t_cashflow_transaction still identifies them, since the next
+        // generate_cashflow call - which deletes these calc_flag='Y' rows - hasn't
+        // run yet). generate_cashflow's cursor only picks up cashflow_date IS NULL
+        // rows, so without this reset, reopening and regenerating permanently loses
+        // those credit receipts instead of re-claiming them.
+        await db.sequelize.query(
+            `UPDATE t_receipts tr
+             JOIN t_cashflow_transaction tct
+               ON tct.source_table = 't_receipts' AND tct.source_id = tr.treceipt_id
+             SET tr.cashflow_date = NULL
+             WHERE tct.cashflow_id = :cashflowId`,
+            { replacements: { cashflowId }, transaction: t }
+        );
+
+        return result[1]; // returns number of rows affected
+    });
 },
 };
