@@ -346,6 +346,8 @@ mixin addCredits(creditRowNo, rowData)
             span(id=prefix + 'summary-company-' + creditRowNo)
         td.credit-summary-cell
             span(id=prefix + 'summary-vehicle-' + creditRowNo)
+        td.credit-summary-cell
+            span(id=prefix + 'summary-qty-' + creditRowNo)
         td.credit-summary-cell.text-right
             span(id=prefix + 'summary-amt-' + creditRowNo)
         td.credit-summary-actions.text-center
@@ -418,7 +420,13 @@ mixin addCredits(creditRowNo, rowData)
 //- credit-entry-modal.js while the row is being edited, and relocated back on close.
 mixin creditEntryModal(allowOffMeterSale)
     style.
+        /* Quick Add Vehicle can open on top of this modal (see openAddVehicleModal
+           in app-scripts.js). Bootstrap doesn't stack nested modals by default -
+           both would sit at the same z-index (1050), and without this, the second
+           modal's own backdrop (bumped to 1052 below) ends up painted ABOVE its
+           dialog, silently swallowing every click/tap on it. */
         .modal-backdrop + .modal-backdrop { z-index: 1052; }
+        #quickAddVehicleModal { z-index: 1060; }
         #creditEntryModal .form-group label {
             font-size: 0.8rem;
             font-weight: 600;
@@ -457,9 +465,6 @@ mixin creditEntryModal(allowOffMeterSale)
                             div#creditModalSlot-vehiclewrap
                     .row
                         .col-md-3.form-group
-                            label Odometer
-                            div#creditModalSlot-odometer
-                        .col-md-3.form-group
                             label Price
                             div#creditModalSlot-price
                         .col-md-3.form-group
@@ -468,10 +473,13 @@ mixin creditEntryModal(allowOffMeterSale)
                         .col-md-3.form-group
                             label Quantity
                             div#creditModalSlot-qty
-                    .row
-                        .col-md-4.form-group
+                        .col-md-3.form-group
                             label Sale Amount
                             div#creditModalSlot-amt
+                    .row
+                        .col-md-4.form-group
+                            label Odometer
+                            div#creditModalSlot-odometer
                         if allowOffMeterSale
                             .col-md-3.form-group#creditModalOffMeterGroup
                                 label Off Meter
