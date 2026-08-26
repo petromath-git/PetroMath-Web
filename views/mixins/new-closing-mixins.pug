@@ -380,7 +380,7 @@ mixin addCredits(creditRowNo, rowData)
                     if val.card_flag !== 'Y'
                         - allCreditParties.push({creditorId: val.creditorId, creditorName: val.creditorName});
             - allCreditParties.sort((a, b) => a.creditorName.localeCompare(b.creditorName));
-            select.form-control.select2-creditparty(name=prefix + 'creditparty-' + creditRowNo id=prefix + 'creditparty-' + creditRowNo, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
+            select.form-control(name=prefix + 'creditparty-' + creditRowNo id=prefix + 'creditparty-' + creditRowNo, onChange='updateCreditAndLoadVehicles(this, \'' + prefix + '\', ' + creditRowNo + ')')
                 option(value='') Select Credit Party
                 each party in allCreditParties
                     option(value=`${party.creditorId}` selected= rowData.creditListId === party.creditorId)= party.creditorName
