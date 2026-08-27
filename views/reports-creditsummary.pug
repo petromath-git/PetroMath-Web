@@ -2,10 +2,26 @@ extends layout
 
 block content
     
-    form(method='POST' action='/reports-creditsummary')  
+    form(method='POST' action='/reports-creditsummary')
 
         script.
-            
+            function exportCreditSummaryExcel() {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports-creditsummary/excel';
+
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'toClosingDate';
+                input.value = document.getElementById('toclosingDate').value;
+                form.appendChild(input);
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+
+
             // Javascript that gets table data
             var creditstmtFromServer = !{JSON.stringify(creditsummary)} 
 
@@ -104,8 +120,12 @@ block content
                 td Date:
                 td
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp; 
+                td &nbsp;
                 include report-print-download.pug
+                if enableCreditExcelDownload
+                    td
+                        button.btn.btn-success.mr-2(type='button', onClick='exportCreditSummaryExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
+                            i.bi.bi-file-earmark-spreadsheet
     div &nbsp;
     div
         div.row &nbsp;
