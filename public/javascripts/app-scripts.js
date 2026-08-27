@@ -2990,6 +2990,14 @@ function showAddedCreditReceiptsRow() {
     applyCreditBillDateConstraints();
 }
 
+// Wrapper that calls the generic showAddedRow for the Collections table, then
+// re-applies the shared shift-scoped date constraints (receipt-date shares the
+// credit-bill-date class with the Credit tab's bill-date field).
+function showAddedCreditReceiptsRow() {
+    showAddedRow('credit-receipts', calculateCreditReceiptsTotal);
+    applyCreditBillDateConstraints();
+}
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
         applyCreditBillDateConstraints();

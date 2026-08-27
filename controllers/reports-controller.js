@@ -561,6 +561,146 @@ module.exports = {
           res.status(500).send('An error occurred while generating the Excel file.');
         }
     },
+    exportCreditSummaryExcel: async(req, res) => {
+        try {
+          const ExcelJS = require('exceljs');
+
+          let locationCode = req.user.location_code;
+          let toDate = dateFormat(new Date(), "yyyy-mm-dd");
+
+          if(req.body.toClosingDate) {
+            toDate = req.body.toClosingDate;
+          }
+
+          const enableCreditExcelDownload = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD',
+            'N'
+          );
+
+          if (enableCreditExcelDownload !== 'Y') {
+            return res.status(403).send('Excel download is disabled for this location.');
+          }
+
+          const defaultCreditDays = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'DEFAULT_CREDIT_DAYS',
+            '30'
+          );
+
+          const data = await ReportDao.getDayBalance(locationCode, toDate);
+
+          const rows = [];
+          let serialNumber = 1;
+
+          data.forEach((creditSummaryData) => {
+            if (creditSummaryData.ClosingData < -10 || creditSummaryData.ClosingData > 10) {
+              const daysOverdue = creditSummaryData.days_since_payment !== null ?
+                  creditSummaryData.days_since_payment - parseInt(defaultCreditDays) : 0;
+              const isOverdue = daysOverdue > 0;
+
+              rows.push({
+                'S.no': serialNumber++,
+                'Credit Customer': creditSummaryData.company_name,
+                'Balance': Number(creditSummaryData.ClosingData || 0),
+                'Last Receipt Date': creditSummaryData.last_payment_date ?
+                    moment(creditSummaryData.last_payment_date).format('DD/MM/YYYY') : '-',
+                'Last Receipt Amount': creditSummaryData.last_payment_amount ?
+                    parseFloat(creditSummaryData.last_payment_amount) : '',
+                'Days Since Receipt': creditSummaryData.days_since_payment !== null ?
+                    creditSummaryData.days_since_payment : '',
+                _isOverdue: isOverdue
+              });
+            }
+          });
+
+          const workbook = new ExcelJS.Workbook();
+          const sheet = workbook.addWorksheet('Credit Summary');
+          const columns = [
+            { header: 'S.no', key: 'S.no', width: 8 },
+            { header: 'Credit Customer', key: 'Credit Customer', width: 30 },
+            { header: 'Balance', key: 'Balance', width: 16 },
+            { header: 'Last Receipt Date', key: 'Last Receipt Date', width: 18 },
+            { header: 'Last Receipt Amount', key: 'Last Receipt Amount', width: 18 },
+            { header: 'Days Since Receipt', key: 'Days Since Receipt', width: 18 }
+          ];
+          const lastColumnName = String.fromCharCode(64 + columns.length);
+          let currentRow = 1;
+
+          sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+          sheet.getCell(`A${currentRow}`).value = 'CREDIT SUMMARY REPORT';
+          sheet.getCell(`A${currentRow}`).font = { bold: true, size: 14 };
+          sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+          currentRow++;
+
+          sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+          sheet.getCell(`A${currentRow}`).value = `As on: ${moment(toDate).format('DD/MM/YYYY')}`;
+          sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+          currentRow += 2;
+
+          const headerRow = sheet.getRow(currentRow);
+          headerRow.values = columns.map(col => col.header);
+          headerRow.font = { bold: true };
+          headerRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFD3D3D3' }
+            };
+          });
+          currentRow++;
+
+          rows.forEach((entry) => {
+            const dataRow = sheet.getRow(currentRow);
+            columns.forEach((col, index) => {
+              dataRow.getCell(index + 1).value = entry[col.key] ?? '';
+            });
+
+            columns.forEach((col, index) => {
+              if (['Balance', 'Last Receipt Amount', 'Days Since Receipt'].includes(col.key)) {
+                dataRow.getCell(index + 1).numFmt = '#,##,##0.00';
+              }
+            });
+
+            dataRow.eachCell((cell) => {
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+              };
+              if (entry._isOverdue) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFFFCCCC' }
+                };
+              }
+            });
+            currentRow++;
+          });
+
+          columns.forEach((col, index) => {
+            sheet.getColumn(index + 1).width = col.width;
+          });
+
+          const buffer = await workbook.xlsx.writeBuffer();
+          const filename = `CreditSummary_${locationCode}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.send(buffer);
+        } catch (error) {
+          console.error('Error generating Credit Summary Excel export:', error);
+          res.status(500).send('An error occurred while generating the Excel file.');
+        }
+    },
     getApiCreditReport: async(req, res) => {
                 console.log(req);
 
@@ -809,24 +949,32 @@ getCreditSummaryReport: async(req, res) => {
 
    const formattedtoDate = moment(toDate).format('DD/MM/YYYY');
 
-   if(caller=='notpdf') {          
+   const enableCreditExcelDownload = (await locationConfig.getLocationConfigValue(
+       locationCode,
+       'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD',
+       'N'
+   )) === 'Y';
+
+   if(caller=='notpdf') {
        res.render('reports-creditsummary', {
-           title: 'Credit Summary Reports', 
+           title: 'Credit Summary Reports',
            user: req.user,
            toClosingDate: toDate,
-           formattedtoDate: formattedtoDate, 
+           formattedtoDate: formattedtoDate,
            creditsummary: Creditsummarylist,
-           creditTermsDays: defaultCreditDays  // Pass to template
+           creditTermsDays: defaultCreditDays,  // Pass to template
+           enableCreditExcelDownload: enableCreditExcelDownload
        });
    } else {
        return new Promise((resolve, reject) => {
          res.render('reports-creditsummary', {
-             title: 'Credit Summary Reports', 
+             title: 'Credit Summary Reports',
              user: req.user,
              toClosingDate: toDate,
-             formattedtoDate: formattedtoDate, 
+             formattedtoDate: formattedtoDate,
              creditsummary: Creditsummarylist,
-             creditTermsDays: defaultCreditDays
+             creditTermsDays: defaultCreditDays,
+             enableCreditExcelDownload: enableCreditExcelDownload
          }, (err, html) => {
            if (err) {
              console.error('getCreditSummaryReport: Error in res.render:', err);

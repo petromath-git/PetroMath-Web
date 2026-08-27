@@ -1105,6 +1105,10 @@ app.post('/reports-creditsummary', isLoginEnsured, function (req, res, next) {
     reportsController.getCreditSummaryReport(req, res, next);
 });
 
+app.post('/reports-creditsummary/excel', isLoginEnsured, function (req, res, next) {
+    reportsController.exportCreditSummaryExcel(req, res, next);
+});
+
 app.get('/reports-cashflow', isLoginEnsured, function (req, res, next) {
     req.body.cfclosingDate = new Date(Date.now());
     req.body.caller = 'notpdf';
