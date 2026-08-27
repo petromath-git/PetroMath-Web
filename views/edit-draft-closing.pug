@@ -380,20 +380,31 @@ block content
                             white-space: nowrap; /* keeps headers on one line */
                         }
 
-                        /* Column width tuning */
+                        /* Column width tuning for the compact summary list */
+                        #credit-table .col-date      { width: 11%; }
                         #credit-table .col-product   { width: 12%; }
-                        #credit-table .col-bill      { width: 7%; }
-                        #credit-table .col-company   { width: 14%; }
-                        #credit-table .col-vehicle   { width: 10%; }
-                        #credit-table .col-odo       { width: 8%; }
-                        #credit-table .col-date      { width: 9%; }
-                        #credit-table .col-price     { width: 7%; }
-                        #credit-table .col-discount  { width: 6%; }  /* small field */
-                        #credit-table .col-qty       { width: 6%; }
-                        #credit-table .col-sale      { width: 10%; } /* extra space for sale */
-                        #credit-table .col-notes     { width: 10%; }
-                        #credit-table .col-off-meter { width: 5%; text-align: center; }
-                        #credit-table .col-delete    { width: 3%; text-align: center; }
+                        #credit-table .col-bill      { width: 8%; }
+                        #credit-table .col-company   { width: 19%; }
+                        #credit-table .col-vehicle   { width: 16%; }
+                        #credit-table .col-qty       { width: 10%; }
+                        #credit-table .col-sale      { width: 12%; text-align: right; }
+                        #credit-table .col-actions   { width: 12%; text-align: center; }
+
+                        #credit-table tbody tr.credit-summary-row td {
+                            vertical-align: middle;
+                            text-align: center;
+                        }
+                        #credit-table .credit-summary-cell span:empty::before {
+                            content: '\2014'; /* em dash placeholder */
+                            color: #999;
+                        }
+                        #credit-table .credit-summary-actions {
+                            text-align: center;
+                            white-space: nowrap;
+                        }
+                        #credit-table .credit-summary-actions .btn {
+                            line-height: 1;
+                        }
                     div
                         div.col-16
                             div.table-responsive
@@ -406,32 +417,25 @@ block content
                                                 th.col-bill(scope="col") Bill #
                                                 th.col-company(scope="col") Company
                                                 th.col-vehicle(scope="col") Vehicle Number
-                                                th.col-odo(scope="col") Odometer
-                                                th.col-price(scope="col") Price
-                                                th.col-discount(scope="col") Price Discount
-                                                th.col-qty(scope="col") Quantity
+                                                th.col-qty(scope="col") Qty
                                                 th.col-sale(scope="col") Sale
-                                                th.col-notes(scope="col") Notes
-                                                if allowOffMeterSale
-                                                    th.col-off-meter(scope="col") Off Meter
-                                                if(!freezedRecord)
-                                                    th.col-delete(scope="col")
+                                                th.col-actions(scope="col") Actions
                                             - var rowCnt = 0
                                             while rowCnt < maxCreditsRowCnt
                                                 +addCredits(rowCnt, t_credits[rowCnt++])
 
                                             tr
                                                 td(colspan=5)
-                                                td Total
-                                                td
-                                                    input.form-control#credit-total(type='text' name='credit-total' readonly value='0')
+                                                td.text-right
+                                                    strong Total:&nbsp;
+                                                    input.form-control.d-inline-block(style='width:120px' type='text' name='credit-total' id='credit-total' readonly value='0')
                                                 td
 
                     div.row
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedCreditRow()") Add credits
+                            button.btn.btn-info(type="button", onClick="handleAddCreditRowClick()") Add credits
 
                     div.row
                         div.col &nbsp;
@@ -830,6 +834,8 @@ block content
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
         window.allowSecondaryPump = !{allowSecondaryPump};
+    // Credit sale Add/Edit modal (shared by the compact credit sales list)
+    +creditEntryModal(allowOffMeterSale)
     // Quick Add Vehicle Modal
     .modal.fade#quickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='quickAddVehicleModalLabel' aria-hidden='true')
         .modal-dialog(role='document')
@@ -850,4 +856,5 @@ block content
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
+    script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
 

@@ -2974,13 +2974,11 @@ function showAddedDigitalSalesRow(prefix) {
     }
 }
 
-// Create a wrapper function that calls showAddedRow and then initializes vehicle select2
+// Wrapper that calls the generic showAddedRow for the credit sales table.
+// Vehicle select2 initialization now happens lazily inside the Add/Edit modal
+// (see credit-entry-modal.js) since the row stays off-screen until it's opened there.
 function showAddedCreditRow() {
-    // First call the existing showAddedRow function
     showAddedRow('credit', calculateCreditTotal);
-    
-    // Then initialize Select2 for any new vehicle dropdowns
-    initializeNewVehicleSelects();
     applyCreditBillDateConstraints();
 }
 
@@ -2998,29 +2996,6 @@ if (document.readyState === 'loading') {
     });
 } else {
     applyCreditBillDateConstraints();
-}
-
-// Function to initialize Select2 for newly added rows
-function initializeNewVehicleSelects() {
-    const prefix = 'credit-';
-    const userRowsCnt = document.getElementById(prefix + 'table').rows.length;
-    
-    for (let i = 0; i < userRowsCnt; i++) {
-        const vehicleSelectId = prefix + 'vehicle-' + i;
-        const vehicleSelect = document.getElementById(vehicleSelectId);
-        
-        if (vehicleSelect && !$(vehicleSelect).hasClass('select2-hidden-accessible')) {
-            $(vehicleSelect).select2({
-                placeholder: 'Search vehicle number...',
-                allowClear: true,
-                width: '100%',
-                minimumInputLength: 0,
-                theme: 'default'
-            });
-            
-            // REMOVED: Vehicle-first auto-population event handler
-        }
-    }
 }
 
 // Optional: Validate that selected vehicle belongs to selected credit party
