@@ -186,6 +186,20 @@ mixin summaryCreditReceiptsData(receiptRowNo)
         td
             span(id='val-' + prefix + 'amt-' + receiptRowNo)
 
+//- Employee Advance tab: Summary on employee advance data
+mixin summaryEmployeeAdvanceData(advanceRowNo)
+    - var prefix = 'employee-advance-';
+    - var trClass = 'd-md-none';
+    tr(class=trClass id='vis-' + prefix + 'table-row-' + advanceRowNo)
+        td
+            span(id='val-' + prefix + 'txn-date-' + advanceRowNo)
+        td
+            span(id='valText-' + prefix + 'type-' + advanceRowNo)
+        td
+            span(id='valText-' + prefix + 'employee-' + advanceRowNo)
+        td
+            span(id='val-' + prefix + 'amt-' + advanceRowNo)
+
 //- Add new page: Summary on expenses data
 mixin showExpensesData(rowNo, val)
     - var trClass = 'd-md-none';

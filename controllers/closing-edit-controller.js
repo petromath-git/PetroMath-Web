@@ -122,6 +122,12 @@ module.exports = {
                 'N' // default - disabled
             );
 
+            const allowEmployeeAdvanceInClosing = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING',
+                'N' // default - disabled
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -144,7 +150,9 @@ module.exports = {
                 txnController.shiftProductsPromise(closingId),
                 BowserDao.getActiveBowsersByLocation(locationCode),
                 BowserDao.getIntercompanyByClosingId(closingId),
-                txnController.txnCreditReceiptsPromise(closingId)])
+                txnController.txnCreditReceiptsPromise(closingId),
+                homeController.employeeDataPromise(locationCode),
+                txnController.txnEmployeeAdvancePromise(closingId)])
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -159,6 +167,7 @@ module.exports = {
                         allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
                         allowOffMeterSale: allowOffMeterSale === 'Y',
                         allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y',
+                        allowEmployeeAdvanceInClosing: allowEmployeeAdvanceInClosing === 'Y',
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
@@ -180,7 +189,9 @@ module.exports = {
                         shiftProducts: values[18].value || [],
                         bowserValues: values[19].value || [],
                         t_intercompany: values[20].value || [],
-                        creditReceiptsData: values[21].value || []
+                        creditReceiptsData: values[21].value || [],
+                        employeeValues: values[22].value || [],
+                        employeeAdvanceData: values[23].value || []
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());

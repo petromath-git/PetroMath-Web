@@ -40,6 +40,9 @@ module.exports = {
     txnWriteCreditReceiptsPromise: (receiptsArr) => {
     return txnWriteCreditReceiptsPromise(receiptsArr);
     },
+    txnWriteEmployeeAdvancePromise: (advancesArr) => {
+    return txnWriteEmployeeAdvancePromise(advancesArr);
+    },
 }
 
 
@@ -195,6 +198,19 @@ const txnWriteCreditReceiptsPromise = (receiptsArr) => {
                 resolve(data);
             }).catch((err) => {
             console.error("Error while saving credit receipts " + err.toString());
+            resolve({error: err.toString()});
+        });
+    });
+}
+
+// Add new flow: Add employee advances (Employee Advance tab) data
+const txnWriteEmployeeAdvancePromise = (advancesArr) => {
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.saveEmployeeAdvances(advancesArr)
+            .then(data => {
+                resolve(data);
+            }).catch((err) => {
+            console.error("Error while saving employee advances " + err.toString());
             resolve({error: err.toString()});
         });
     });

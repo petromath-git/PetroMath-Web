@@ -10,6 +10,7 @@ const TxnDenoms = db.txn_denom;
 const TxnAttendance = db.txn_attendance;
 const TxnDigitalSales = db.txn_digital_sales;
 const CashReceipts = db.credit_receipts;
+const EmployeeLedger = db.employee_ledger;
 const locationConfigDao = require('./location-config-dao');
 
 module.exports = {
@@ -173,6 +174,61 @@ saveReadings: (data) => {
     }
     const receiptTxn = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
     return receiptTxn;
+    },
+    saveEmployeeAdvances: async (data) => {
+    const newRows = data.filter(r => !r.ledger_id);
+    const updateRows = data.filter(r => r.ledger_id);
+
+    // An entry already claimed by a cashflow/day close must not be edited from the
+    // closing screen - the t_cashflow_transaction row already generated from it would
+    // silently desync from a changed amount/type. Mirrors the saveCreditReceipts guard.
+    if (updateRows.length > 0) {
+        const existing = await EmployeeLedger.findAll({
+            attributes: ['ledger_id', 'cashflow_date', 'pending_cashflow_id'],
+            where: { ledger_id: updateRows.map(r => r.ledger_id) }
+        });
+        const claimed = existing.some(r => r.cashflow_date !== null || r.pending_cashflow_id !== null);
+        if (claimed) {
+            throw new Error('One or more entries are already part of a cashflow/day close and cannot be edited from the closing screen.');
+        }
+    }
+
+    // ADVANCE/PAYMENT are cash out (debit); ADVANCE_RECOVERY is cash in (credit) -
+    // same isCredit convention as dao/employee-dao.js:addLedgerEntry.
+    data.forEach(r => {
+        const isCredit = r.txn_type === 'ADVANCE_RECOVERY';
+        r.credit_amount = isCredit ? parseFloat(r.amount) : 0;
+        r.debit_amount = isCredit ? 0 : parseFloat(r.amount);
+        delete r.amount;
+    });
+
+    const locationCode = newRows.length > 0 ? newRows[0].location_code : undefined;
+
+    if (locationCode) {
+        const cashflowEnabledRaw = await locationConfigDao.getSetting(locationCode, 'CASHFLOW_ENABLED');
+        const cashflowEnabled = String(cashflowEnabledRaw).toLowerCase() === 'true';
+        if (!cashflowEnabled) {
+            newRows.forEach(r => { r.cashflow_date = new Date(); });
+        }
+    }
+
+    const ledgerTxn = EmployeeLedger.bulkCreate(data, {
+        returning: true,
+        updateOnDuplicate: ["employee_id", "txn_date", "txn_type",
+            "credit_amount", "debit_amount", "description"]
+    });
+    return ledgerTxn;
+    },
+    deleteEmployeeAdvanceById: async (ledgerId) => {
+    const entry = await EmployeeLedger.findOne({
+        attributes: ['ledger_id', 'cashflow_date', 'pending_cashflow_id'],
+        where: { ledger_id: ledgerId }
+    });
+    if (entry && (entry.cashflow_date !== null || entry.pending_cashflow_id !== null)) {
+        throw new Error('This entry is already part of a cashflow/day close and cannot be deleted from the closing screen.');
+    }
+    const ledgerTxn = EmployeeLedger.destroy({ where: { ledger_id: ledgerId } });
+    return ledgerTxn;
     },
     saveExpenses: async (data) => {
     const newExpenses = data.filter(e => !e.texpense_id);  // ✅ Will be empty array for UPDATE calls
@@ -461,6 +517,58 @@ reopenShift: async (closingId, locationCode, userId) => {
         if (claimedReceipts.length > 0) {
             await db.sequelize.query(
                 `UPDATE t_receipts SET pending_cashflow_id = NULL
+                 WHERE closing_id = :closingId
+                   AND pending_cashflow_id IS NOT NULL
+                   AND cashflow_date IS NULL`,
+                { replacements: { closingId }, transaction: t }
+            );
+        }
+
+        // Same release, mirrored for t_employee_ledger (Employee Advance tab entries) -
+        // generate_cashflow's salary cursors have no shift-status awareness either
+        // (see add-shift-status-gate-to-employee-ledger-cashflow.sql), so an advance
+        // provisionally claimed while its shift was CLOSED must be released the same
+        // way once the shift goes back to DRAFT.
+        const claimedAdvances = await db.sequelize.query(
+            `SELECT el.ledger_id, el.pending_cashflow_id, el.debit_amount, el.credit_amount,
+                    CASE WHEN el.txn_type = 'ADVANCE_RECOVERY'
+                         THEN CONCAT(emp.name, ' - Recovery')
+                         ELSE CONCAT(emp.name, ' (', el.txn_type, ')')
+                    END AS description
+             FROM t_employee_ledger el
+             JOIN m_employee emp ON emp.employee_id = el.employee_id
+             WHERE el.closing_id = :closingId
+               AND el.pending_cashflow_id IS NOT NULL
+               AND el.cashflow_date IS NULL`,
+            { replacements: { closingId }, type: db.Sequelize.QueryTypes.SELECT, transaction: t }
+        );
+
+        for (const r of claimedAdvances) {
+            await db.sequelize.query(
+                `DELETE FROM t_cashflow_transaction
+                 WHERE cashflow_id = :cashflowId AND source_table = 't_employee_ledger' AND source_id = :ledgerId
+                 LIMIT 1`,
+                { replacements: { cashflowId: r.pending_cashflow_id, ledgerId: r.ledger_id }, transaction: t }
+            );
+            await db.sequelize.query(
+                `DELETE FROM t_cashflow_transaction
+                 WHERE cashflow_id = :cashflowId AND type IN ('Salary Payout', 'Salary Recovery')
+                   AND description = :description AND amount = :amount
+                 LIMIT 1`,
+                {
+                    replacements: {
+                        cashflowId: r.pending_cashflow_id,
+                        description: r.description,
+                        amount: r.debit_amount > 0 ? r.debit_amount : r.credit_amount
+                    },
+                    transaction: t
+                }
+            );
+        }
+
+        if (claimedAdvances.length > 0) {
+            await db.sequelize.query(
+                `UPDATE t_employee_ledger SET pending_cashflow_id = NULL
                  WHERE closing_id = :closingId
                    AND pending_cashflow_id IS NOT NULL
                    AND cashflow_date IS NULL`,

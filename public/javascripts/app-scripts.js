@@ -852,6 +852,9 @@ function populateSummary(obj) {
                 } else if (getValueFromLabelId.includes('credit-receipts-receipt-date-')) {
                     const dateElement = document.getElementById(getValueFromLabelId);
                     labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
+                } else if (getValueFromLabelId.includes('employee-advance-txn-date-')) {
+                    const dateElement = document.getElementById(getValueFromLabelId);
+                    labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
                 } else {
                     labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
                 }
@@ -1596,6 +1599,90 @@ function formCreditReceipts(receiptId, receiptTag, receiptObjRowNum, user) {
         'notes': document.getElementById(receiptTag + 'notes-' + receiptObjRowNum).value,
         'created_by': user.User_Name,
         'updated_by': user.User_Name
+    };
+}
+
+// Employee Advance tab - add advances/payments/recoveries to DB via ajax
+function saveEmployeeAdvance() {
+    return new Promise((resolve, reject) => {
+        const advanceTag = 'employee-advance-';
+        const advanceRow = advanceTag + 'table-row-';
+        const tabToActivate = 'expenses_tab';
+        const currentTabId = 'new_employee_advance';
+        const advanceObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + advanceRow + ']:not([type="hidden"])');
+        let newAdvances = [], updateAdvances = [], newHiddenFieldsArr = [];
+        const user = JSON.parse(document.getElementById("user").value);
+        let hasValidationError = false;
+
+        advanceObj.forEach((advanceRowObj) => {
+            if (!advanceRowObj.className.includes('d-md-none')) {
+                const advanceObjRowNum = advanceRowObj.id.replace(advanceRow, '');
+                const employeeField = document.getElementById(advanceTag + 'employee-' + advanceObjRowNum);
+                const amountField = document.getElementById(advanceTag + 'amt-' + advanceObjRowNum);
+                const dateField = document.getElementById(advanceTag + 'txn-date-' + advanceObjRowNum);
+                const hiddenField = document.getElementById(advanceTag + advanceObjRowNum + '_hiddenId');
+
+                const hasEmployee = employeeField.value;
+                const hasAmount = parseFloat(amountField.value) > 0;
+                const hasDate = dateField.value;
+                const isExistingRecord = hiddenField.value && parseInt(hiddenField.value) > 0;
+
+                if (hasEmployee || hasAmount || hasDate || isExistingRecord) {
+
+                    if (!hasEmployee) {
+                        alert('Please select an Employee for all Employee Advance entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasAmount) {
+                        alert('Please enter an amount greater than 0 for all Employee Advance entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (!hasDate) {
+                        alert('Please provide a date for all Employee Advance entries');
+                        hasValidationError = true;
+                        return;
+                    }
+
+                    if (isExistingRecord) {
+                        updateAdvances.push(formEmployeeAdvance(hiddenField.value, advanceTag, advanceObjRowNum, user));
+                    } else {
+                        newHiddenFieldsArr.push(advanceTag + advanceObjRowNum);
+                        newAdvances.push(formEmployeeAdvance(undefined, advanceTag, advanceObjRowNum, user));
+                    }
+                }
+            }
+        });
+
+        if (hasValidationError) {
+            resolve(false);
+            return;
+        }
+        postAjaxNew('new-employee-advance', newAdvances, updateAdvances, tabToActivate, currentTabId, newHiddenFieldsArr, 'ledger_id')
+            .then((data) => {
+                resolve(data);
+            });
+
+        if (newAdvances.length === 0 && updateAdvances.length === 0) {
+            resolve(true);      // tab click handled in trackMenu()
+        }
+    });
+}
+
+function formEmployeeAdvance(ledgerId, advanceTag, advanceObjRowNum, user) {
+    return {
+        'ledger_id': ledgerId,
+        'closing_id': document.getElementById('closing_hiddenId').value,
+        'location_code': user.location_code,
+        'employee_id': document.getElementById(advanceTag + 'employee-' + advanceObjRowNum).value,
+        'txn_type': document.getElementById(advanceTag + 'type-' + advanceObjRowNum).value,
+        'amount': document.getElementById(advanceTag + 'amt-' + advanceObjRowNum).value,
+        'txn_date': document.getElementById(advanceTag + 'txn-date-' + advanceObjRowNum).value,
+        'description': document.getElementById(advanceTag + 'notes-' + advanceObjRowNum).value,
+        'created_by': user.User_Name
     };
 }
 
@@ -2988,6 +3075,10 @@ function showAddedCreditRow() {
 function showAddedCreditReceiptsRow() {
     showAddedRow('credit-receipts', calculateCreditReceiptsTotal);
     applyCreditBillDateConstraints();
+}
+
+function showAddedEmployeeAdvanceRow() {
+    showAddedRow('employee-advance', calculateEmployeeAdvanceTotal);
 }
 
 // Wrapper that calls the generic showAddedRow for the Collections table, then
