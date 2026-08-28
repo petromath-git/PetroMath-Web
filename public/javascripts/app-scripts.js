@@ -636,11 +636,57 @@ function calculateCashOrCreditSale(prefix, rowNo) {
     calculateTotal(prefix);
 }
 
+// Credit sales tab: free-text search across a bill's summary row (product, company,
+// vehicle, qty, amount) plus its notes field, so managers/owners can reconcile printed
+// bills against DSM-entered credit sales without scrolling through every row.
+// Terms separated by "+" are OR'd together, e.g. "12+HS" matches a row containing
+// either "12" or "HS" (not necessarily both).
+function searchCreditRows() {
+    const searchInput = document.getElementById('creditSearchInput');
+    if (!searchInput) return;
+
+    // Strip comma thousands-separators so "4000" matches a displayed "4,000" (and vice versa).
+    const searchTerms = searchInput.value.toLowerCase().replace(/,/g, '').split('+')
+        .map(function (term) { return term.trim(); })
+        .filter(function (term) { return term.length > 0; });
+    const summaryRows = document.querySelectorAll('#credit-table tr.credit-summary-row');
+
+    summaryRows.forEach(function (row) {
+        // Rows with no data entered yet stay hidden regardless of the search term.
+        if (row.classList.contains('d-md-none')) return;
+
+        if (searchTerms.length === 0) {
+            row.style.display = '';
+            return;
+        }
+
+        const rowNo = row.getAttribute('data-credit-row');
+        const notesEl = document.getElementById('credit-notes-' + rowNo);
+        const searchableFields = [
+            document.getElementById('credit-summary-product-' + rowNo),
+            document.getElementById('credit-summary-company-' + rowNo),
+            document.getElementById('credit-summary-vehicle-' + rowNo),
+            document.getElementById('credit-summary-qty-' + rowNo),
+            document.getElementById('credit-summary-amt-' + rowNo)
+        ];
+        const haystack = searchableFields
+            .map(function (el) { return el ? el.textContent : ''; })
+            .concat(notesEl ? notesEl.value : '')
+            .join(' ')
+            .toLowerCase()
+            .replace(/,/g, '');
+
+        const isMatch = searchTerms.some(function (term) { return haystack.indexOf(term) > -1; });
+        row.style.display = isMatch ? '' : 'none';
+    });
+}
+
 // Add new/edit page: Calculate total cash/credit/testing sale
 function calculateTotal(tableNamePrefix) {
     if (document.getElementById(tableNamePrefix + 'table')) {
         const rowsCnt = document.getElementById(tableNamePrefix + 'table').rows.length;
         let totalSales = 0;
+        let rowCount = 0;
         for (let i = 0; i < rowsCnt; i++) {
             const tableRowObj = document.getElementById(tableNamePrefix + 'table-row-' + i);
             if (tableRowObj && !(tableRowObj.className === 'd-md-none')) {
@@ -648,9 +694,29 @@ function calculateTotal(tableNamePrefix) {
                 if (amtObject && amtObject.value) {
                     totalSales += currenciesAsFloat(amtObject.value);
                 }
+                rowCount++;
             }
         }
-        document.getElementById(tableNamePrefix + 'total').value = formatCurrencies(totalSales, toFixedValue);
+        const formattedTotal = formatCurrencies(totalSales, toFixedValue);
+        setTotalDisplay(document.getElementById(tableNamePrefix + 'total'), formattedTotal);
+
+        // Optional top-of-table mirrors (only the Credit Sales tab has these).
+        setTotalDisplay(document.getElementById(tableNamePrefix + 'total-top'), formattedTotal);
+        const billCountEl = document.getElementById(tableNamePrefix + 'bill-count');
+        if (billCountEl) billCountEl.textContent = rowCount;
+        const billCountTopEl = document.getElementById(tableNamePrefix + 'bill-count-top');
+        if (billCountTopEl) billCountTopEl.textContent = rowCount;
+    }
+}
+
+// Total display can be either a readonly input (most tabs) or plain bold text
+// (Credit tab's top/bottom summary) - set whichever the element actually is.
+function setTotalDisplay(el, formattedTotal) {
+    if (!el) return;
+    if (el.tagName === 'INPUT') {
+        el.value = formattedTotal;
+    } else {
+        el.textContent = formattedTotal;
     }
 }
 
