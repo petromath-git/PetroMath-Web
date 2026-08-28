@@ -312,6 +312,17 @@ module.exports.deleteLedgerEntry = async (req, res) => {
             }
         }
 
+        // Entries made from the shift-closing Employee Advance tab carry closing_id -
+        // same rule as the admin Credit Receipts page for shift-tab receipts
+        // (credit-receipt-controller.js:151-152, 297): any row tied to a shift is
+        // locked from this screen entirely, DRAFT or CLOSED, not just once CLOSED.
+        // It belongs to that shift's workflow (edit/delete via the closing tab, or
+        // reopen the shift) - editing it here too would race against whoever's
+        // actively working the closing screen with no visibility into that state.
+        if (entry.closing_id) {
+            return res.status(400).json({ success: false, message: 'This entry was recorded from a shift closing and cannot be deleted here. Delete it from the shift-closing screen instead, or reopen the shift first.' });
+        }
+
         const allowedDays = parseInt(
             await getLocationConfigValue(req.user.location_code, 'EMPLOYEE_LEDGER_DELETE_DAYS', '1')
         );

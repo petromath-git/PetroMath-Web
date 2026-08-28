@@ -17,6 +17,7 @@ module.exports = function(sequelize, DataTypes) {
         reference_id:         DataTypes.INTEGER,
         salary_period:        DataTypes.STRING(10),  // YYYY-MM or YYYY-WNN — informational only
         bank_id:              DataTypes.INTEGER,      // set for BANK_PAYMENT entries
+        closing_id:           DataTypes.INTEGER,      // FK to t_closing; NULL for admin-entered rows
         cashflow_date:        DataTypes.DATEONLY,     // system-stamped on cashflow close
         pending_cashflow_id:  DataTypes.INTEGER,      // claimed by generate_cashflow
         created_by:           DataTypes.STRING(45),

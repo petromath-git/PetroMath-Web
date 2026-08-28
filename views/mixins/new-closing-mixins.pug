@@ -305,6 +305,42 @@ mixin addCreditReceipts(receiptRowNo, rowData)
                 button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-credit-receipt", calculateCreditReceiptsTotal)')
                     span(aria-hidden="true") &times;
 
+//- Employee Advance tab: Dom elements to record an ADVANCE/PAYMENT (cash out) or
+//- ADVANCE_RECOVERY (cash in) against an employee during shift closing. Structurally
+//- mirrors addCreditReceipts - plain row, no modal.
+mixin addEmployeeAdvance(advanceRowNo, rowData)
+    - var prefix = 'employee-advance-';
+    - var trId = prefix + 'table-row-'+advanceRowNo;
+    - var trClass = 'd-md-none';
+    if(!rowData)
+        - rowData = {amount:0, txnDate: '', txnType: 'ADVANCE', employeeId: null, description: ''};
+    if(rowData.ledgerId && parseInt(rowData.ledgerId) > 0)
+        - trClass = ''
+    tr(class=trClass id=trId)
+        input(type='hidden' id=prefix + advanceRowNo + '_hiddenId' value=rowData.ledgerId)
+        td
+            select.form-control(name=prefix + 'type-' + advanceRowNo id=prefix + 'type-' + advanceRowNo required)
+                if config.employeeAdvanceTxnTypes
+                    each txnType in config.employeeAdvanceTxnTypes
+                        option(value=txnType.id selected= rowData.txnType === txnType.id)= txnType.label
+        td
+            select.form-control(name=prefix + 'employee-' + advanceRowNo id=prefix + 'employee-' + advanceRowNo required)
+                option(value='') Select Employee
+                if employeeValues
+                    each emp in employeeValues
+                        option(value=`${emp.employee_id}` selected= parseInt(rowData.employeeId) === emp.employee_id)= emp.name
+        td
+            input.form-control(type='number' name=prefix + 'amount-' + advanceRowNo id=prefix + 'amt-' + advanceRowNo min=0.01 step=0.01 required value=rowData.amount onchange='calculateEmployeeAdvanceTotal()' oninput='validity.valid||(value="")')
+        td
+            - var defaultTxnDate = rowData.txnDate || (typeof closingData !== 'undefined' ? closingData.closingDate : currentDate)
+            input.form-control(type='date' name=prefix + 'txn-date-' + advanceRowNo id=prefix + 'txn-date-' + advanceRowNo required value=defaultTxnDate)
+        td
+            textarea.form-control(name=prefix + 'notes-' + advanceRowNo id=prefix + 'notes-' + advanceRowNo style="height:36px")= rowData.description
+        if(!freezedRecord)
+            td
+                button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-employee-advance", calculateEmployeeAdvanceTotal)')
+                    span(aria-hidden="true") &times;
+
 //- Add new page: used by addCredits & addCashSales - a separate fn will populate product rates
 mixin optionsForProductRates(cashOrCreditSalePrefix)
     if productValues

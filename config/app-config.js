@@ -33,6 +33,7 @@ const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 const MAX_CREDITS_ROW_CNT = 300;
 const MAX_DIGITAL_ROW_CNT = 20;
 const MAX_CREDIT_RECEIPTS_ROW_CNT = 20;
+const MAX_EMPLOYEE_ADVANCE_ROW_CNT = 20;
 const MAX_CASH_SALES_ROW_CNT = 25;
 const MAX_EXPENSES_ROW_CNT = 25;
 const MAX_CASHFLOWS_ROW_CNT = 30;
@@ -64,7 +65,7 @@ const CASH_FLOW_DENOMINATION_VALUES = [
 
 const MAX_ALLOWED_DRAFTS_PER_LOCATION = 10;
 const MAX_ALLOWED_DRAFTS_DAYS_PER_LOCATION = 5;
-const RECEIPT_TYPES = [ 
+const RECEIPT_TYPES = [
   { id: 'cash', label: 'Cash', allow_manual_entry: true },
   { id: 'cheque', label: 'Cheque', allow_manual_entry: false },
   { id: 'online_txn', label: 'RTGS/NEFT', allow_manual_entry: false },
@@ -72,6 +73,15 @@ const RECEIPT_TYPES = [
   { id: 'fleet_card', label: 'Fleet Card', allow_manual_entry: true },
   { id: 'others', label: 'others', allow_manual_entry: true },
   { id: 'digital', label: 'Digital', allow_manual_entry: true }
+];
+// Employee Advance tab: only the cash-affecting entry types generate_cashflow's
+// salary cursors sweep (ADVANCE/PAYMENT = debit/cash-out, ADVANCE_RECOVERY =
+// credit/cash-in). BANK_PAYMENT/SALARY_CREDIT/DEDUCTION/ADJUSTMENT_CR/DR stay
+// admin-only (entered via /employees/:id, not from shift closing).
+const EMPLOYEE_ADVANCE_TXN_TYPES = [
+  { id: 'ADVANCE', label: 'Advance' },
+  { id: 'PAYMENT', label: 'Payment' },
+  { id: 'ADVANCE_RECOVERY', label: 'Recovery' }
 ];
 
 module.exports = {
@@ -214,6 +224,8 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,
       maxDigitalSalesRowCnt:MAX_DIGITAL_ROW_CNT,
       maxCreditReceiptsRowCnt: MAX_CREDIT_RECEIPTS_ROW_CNT,
+      maxEmployeeAdvanceRowCnt: MAX_EMPLOYEE_ADVANCE_ROW_CNT,
+      employeeAdvanceTxnTypes: EMPLOYEE_ADVANCE_TXN_TYPES,
       maxCashSalesRowCnt: MAX_CASH_SALES_ROW_CNT,
       maxExpensesRowCnt: MAX_EXPENSES_ROW_CNT,
       maxCashFlowRowsCnt: MAX_CASHFLOWS_ROW_CNT,
