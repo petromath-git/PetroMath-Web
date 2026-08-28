@@ -242,10 +242,13 @@ function setCreditSummaryText(id, text) {
     if (el) el.textContent = text || '';
 }
 
+// Used to populate the read-only summary row - a placeholder option (empty value,
+// e.g. "Select Vehicle"/"Select Credit Party") should read as blank there, not show
+// the placeholder label. The dropdown itself (in the modal) is untouched.
 function selectedCreditOptionText(select) {
     if (!select || select.selectedIndex < 0) return '';
     var opt = select.options[select.selectedIndex];
-    return opt ? opt.text : '';
+    return opt && opt.value ? opt.text : '';
 }
 
 function initCreditSummaryRows() {

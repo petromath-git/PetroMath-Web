@@ -412,6 +412,21 @@ block content
                         #credit-table .credit-summary-actions .btn {
                             line-height: 1;
                         }
+                    div.row.mb-2.align-items-end
+                        div.col-md-6.col-12
+                            label.form-label(for='creditSearchInput') Search bills:
+                            input#creditSearchInput.form-control(
+                                type='text'
+                                placeholder='Search by product, company, vehicle number, qty, amount or notes...'
+                                oninput='searchCreditRows()'
+                            )
+                        div.col-md-6.col-12.d-flex.align-items-center.justify-content-md-end.mt-2.mt-md-0
+                            div.mr-4
+                                span.text-muted Bills:&nbsp;
+                                strong#credit-bill-count-top 0
+                            div
+                                span.text-muted Total:&nbsp;
+                                strong#credit-total-top 0
                     div
                         div.col-16
                             div.table-responsive
@@ -430,13 +445,14 @@ block content
                                             - var rowCnt = 0
                                             while rowCnt < maxCreditsRowCnt
                                                 +addCredits(rowCnt, t_credits[rowCnt++])
-
-                                            tr
-                                                td(colspan=5)
-                                                td.text-right
-                                                    strong Total:&nbsp;
-                                                    input.form-control.d-inline-block(style='width:120px' type='text' name='credit-total' id='credit-total' readonly value='0')
-                                                td
+                    div.row.mt-2
+                        div.col-12.d-flex.align-items-center.justify-content-end
+                            div.mr-4
+                                span.text-muted Bills:&nbsp;
+                                strong#credit-bill-count 0
+                            div
+                                span.text-muted Total:&nbsp;
+                                strong#credit-total 0
 
                     div.row
                         div.col &nbsp;
