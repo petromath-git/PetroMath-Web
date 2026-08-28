@@ -1219,6 +1219,14 @@ app.delete('/remove-credit-receipt', isLoginEnsured, function (req, res, next) {
     HomeController.deleteTxnCreditReceipt(req, res, next);  // response returned inside controller
 });
 
+app.post('/new-employee-advance', isLoginEnsured, function (req, res, next) {
+    HomeController.saveEmployeeAdvanceData(req, res, next);  // response returned inside controller
+});
+
+app.delete('/remove-employee-advance', isLoginEnsured, function (req, res, next) {
+    HomeController.deleteTxnEmployeeAdvance(req, res, next);  // response returned inside controller
+});
+
 app.post('/new-expenses', isLoginEnsured, function (req, res, next) {
     HomeController.saveExpensesData(req, res, next);
 });

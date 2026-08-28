@@ -9,6 +9,7 @@ block content
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
     - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
     - var maxCreditReceiptsRowCnt = config.maxCreditReceiptsRowCnt;
+    - var maxEmployeeAdvanceRowCnt = config.maxEmployeeAdvanceRowCnt;
     - var currency = config.currency;
     - var denominationValues = config.denominationValues;
     - var denominationValuesJson = config.denominationValuesJson;
@@ -37,6 +38,9 @@ block content
                 if allowCreditReceiptsInClosing
                     li.nav-item.col-md
                         a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts" onclick=`calculateCreditReceiptsAndTrackMenu(this)`) Collections
+                if allowEmployeeAdvanceInClosing
+                    li.nav-item.col-md
+                        a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance" onclick=`calculateEmployeeAdvanceAndTrackMenu(this)`) Employee Advance
                 li.nav-item.col-md
                     a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`trackMenu(this)`) Expenses
                 if bowserValues && bowserValues.length > 0
@@ -493,6 +497,45 @@ block content
                             div.col
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
 
+                if allowEmployeeAdvanceInClosing
+                    div.tab-pane.fade#new_employee_advance
+                        div
+                            div.col-16
+                                div.table-responsive
+                                    table.table#employee-advance-table
+                                        tbody.w-100
+                                            thead(class="thead-light")
+                                                tr
+                                                    th(scope="col") Type
+                                                    th(scope="col") Employee
+                                                    th(scope="col") Amount
+                                                    th(scope="col") Date
+                                                    th(scope="col") Notes
+                                                    th(scope="col")
+
+                                                - var rowCnt = 0
+                                                while rowCnt < maxEmployeeAdvanceRowCnt
+                                                    +addEmployeeAdvance(rowCnt++)
+                                            tr
+                                                td(colspan=2)
+                                                td Total
+                                                td
+                                                    input.form-control#employee-advance-total(type='text' name='employee-advance-total' readonly value='0')
+                                                td
+                                                td
+
+                        div.row
+                            div.col &nbsp;
+                        div.row
+                            div.col(align="center")
+                                button.btn.btn-info(type="button", onClick="showAddedEmployeeAdvanceRow()") Add Advance
+
+                        div.row
+                            div.col &nbsp;
+                        div.row(align="center")
+                            div.col
+                                button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+
                 // ----------------------- New expenses & denominations details ----------------------------
                 div.tab-pane.container.fade#new_expenses
                     div.row
@@ -725,6 +768,31 @@ block content
                                                         td
                                                             span
                                                                 b#val-credit-receipts-total= 0
+                                if allowEmployeeAdvanceInClosing
+                                    div.row
+                                        // Summary: Employee advances
+                                        div.col-6#v-employee-advance
+                                            h6.sub-header Employee Advance
+                                            div.table-responsive#vis-employee-advance-table
+                                                table.table.table-sm
+                                                    thead.thead-light
+                                                        tr
+                                                            th(scope="col") Date
+                                                            th(scope="col") Type
+                                                            th(scope="col") Employee
+                                                            th(scope="col") Amount
+                                                    - var rowCnt = 0
+                                                    - var maxEmployeeAdvanceRowCnt = config.maxEmployeeAdvanceRowCnt
+                                                    while rowCnt < maxEmployeeAdvanceRowCnt
+                                                        +summaryEmployeeAdvanceData(rowCnt++)
+                                                    tr
+                                                        td(colspan=2)
+                                                        td
+                                                            span
+                                                                b Total
+                                                        td
+                                                            span
+                                                                b#val-employee-advance-total= 0
                                 div.row
                                     if show2TSalesTab
                                         // 2T loose details

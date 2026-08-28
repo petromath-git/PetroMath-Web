@@ -91,6 +91,9 @@ module.exports = {
     txnDeleteCreditReceiptPromise: (receiptId) => {
     return txnDeleteCreditReceiptPromise(receiptId);
     },
+    txnDeleteEmployeeAdvancePromise: (ledgerId) => {
+    return txnDeleteEmployeeAdvancePromise(ledgerId);
+    },
 }
 
 // Add new flow: Delete one reading data
@@ -222,6 +225,23 @@ const txnDeleteCreditReceiptPromise = (receiptId) => {
                 }
             }).catch((err) => {
             console.error("Error while deleting credit receipt " + err.toString());
+            resolve({error: err.toString()});
+        });
+    });
+}
+
+// Add new flow: Delete one employee advance (Employee Advance tab) data
+const txnDeleteEmployeeAdvancePromise = (ledgerId) => {
+    return new Promise((resolve, reject) => {
+        TxnWriteDao.deleteEmployeeAdvanceById(ledgerId)
+            .then(status => {
+                if (status > 0) {
+                    resolve({message: 'Data deletion success.'});
+                } else {
+                    resolve({error: 'Data deletion failed.'});
+                }
+            }).catch((err) => {
+            console.error("Error while deleting employee advance " + err.toString());
             resolve({error: err.toString()});
         });
     });

@@ -31,6 +31,9 @@ module.exports = {
     txnCreditReceiptsPromise: (closingId) => {
     return txnCreditReceiptsPromise(closingId);
     },
+    txnEmployeeAdvancePromise: (closingId) => {
+    return txnEmployeeAdvancePromise(closingId);
+    },
     txnDenominationPromise: (closingId) => {
         return txnDenominationPromise(closingId);
     },
@@ -326,6 +329,31 @@ const txnCreditReceiptsPromise = (closingId) => {
                         });
                     });
                     resolve(creditReceiptsData);
+                } else {
+                    resolve([]);
+                }
+            });
+    });
+}
+
+// Show closing records flow: Getting txn employee advances (Employee Advance tab) data based on closing id
+const txnEmployeeAdvancePromise = (closingId) => {
+    return new Promise((resolve, reject) => {
+        return TxnReadDao.getEmployeeAdvancesByClosingId(closingId)
+            .then(data => {
+                if (data && data.length > 0) {
+                    let employeeAdvanceData = [];
+                    data.forEach((entry) => {
+                        employeeAdvanceData.push({
+                            ledgerId: entry.ledger_id,
+                            employeeId: entry.employee_id,
+                            txnType: entry.txn_type,
+                            amount: entry.txn_type === 'ADVANCE_RECOVERY' ? entry.credit_amount : entry.debit_amount,
+                            txnDate: entry.txn_date,
+                            description: entry.description
+                        });
+                    });
+                    resolve(employeeAdvanceData);
                 } else {
                     resolve([]);
                 }

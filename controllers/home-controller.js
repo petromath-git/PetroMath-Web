@@ -16,6 +16,7 @@ const saveController = require("./closing-save-controller");
 const deleteController = require("./closing-delete-controller");
 const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
+const EmployeeDao = require("../dao/employee-dao");
 const db = require("../db/db-connection");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
 const serviceTier = require('../utils/service-tier');
@@ -88,6 +89,12 @@ module.exports = {
     'N' // default - disabled
     );
 
+    const allowEmployeeAdvanceInClosing = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING',
+    'N' // default - disabled
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -100,6 +107,7 @@ module.exports = {
                     personAttendanceDataPromise(locationCode),
                     vehicleDataPromise(locationCode),
                     BowserDao.getActiveBowsersByLocation(locationCode),
+                    employeeDataPromise(locationCode),
                 ])
                     .then((values) => {
                         res.render('new-closing', {
@@ -127,7 +135,9 @@ module.exports = {
                             show2TSalesTab: show2TSalesTab === 'Y',
                             allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
                             allowOffMeterSale: allowOffMeterSale === 'Y',
-                            allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y'
+                            allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y',
+                            allowEmployeeAdvanceInClosing: allowEmployeeAdvanceInClosing === 'Y',
+                            employeeValues: values[10].value || []
                   //          digitalCompanyValues: values[8].value,
                         });
                     }).catch((err) => {
@@ -285,6 +295,19 @@ module.exports = {
     }
 },
 
+    saveEmployeeAdvanceData: (req, res, next) => {
+    const advancesData = req.body;
+    if (advancesData) {
+        saveController.txnWriteEmployeeAdvancePromise(advancesData).then((result) => {
+            if (!result.error) {
+                res.status(200).send({message: 'Saved employee advance data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    }
+},
+
 
 
     saveExpensesData: (req, res, next) => {
@@ -411,6 +434,23 @@ deleteTxnCreditReceipt: ((req, res, next) => {
     }
 }),
 
+deleteTxnEmployeeAdvance: ((req, res, next) => {
+    const ledgerId = req.query.id;
+    if (ledgerId) {
+        deleteController.txnDeleteEmployeeAdvancePromise(ledgerId).then((result) => {
+            if (!result.error) {
+                res.status(200).send({
+                    message: result.message
+                });
+            } else {
+                res.status(500).send({error: result.error});
+            }
+        });
+    } else {
+        res.status(302).send();
+    }
+}),
+
     deleteTxnExpense: ((req, res, next) => {
         const expenseId = req.query.id;
         if (expenseId) {
@@ -467,6 +507,10 @@ deleteTxnCreditReceipt: ((req, res, next) => {
 
     personAttendanceDataPromise: (locationCode) => {
         return personAttendanceDataPromise(locationCode);
+    },
+
+    employeeDataPromise: (locationCode) => {
+        return employeeDataPromise(locationCode);
     }
 };
 
@@ -901,6 +945,20 @@ const personAttendanceDataPromise = (locationCode) => {
                     allUsers.push({personName: person.Person_Name, personId: person.Person_id});
                 });
                 resolve({allUsers: allUsers});
+            });
+    });
+}
+
+// Employee Advance tab: active employees for the location (payroll master, distinct
+// from the person/cashier list used by Attendance).
+const employeeDataPromise = (locationCode) => {
+    return new Promise((resolve, reject) => {
+        EmployeeDao.findAll(locationCode)
+            .then(data => {
+                resolve(data || []);
+            }).catch((err) => {
+                console.error("Error while getting employee data " + err.toString());
+                resolve([]);
             });
     });
 }

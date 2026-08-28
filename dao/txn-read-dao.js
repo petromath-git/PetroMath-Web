@@ -15,6 +15,7 @@ const TxnAttendance = db.txn_attendance;
 const TxnDeadlineViews = db.txn_deadline_views;
 const TxnDigitalSales = db.txn_digital_sales;
 const CashReceipts = db.credit_receipts;
+const EmployeeLedger = db.employee_ledger;
 const Sequelize = require("sequelize");
 const { Op } = require("sequelize");
 const config = require("../config/app-config");
@@ -525,6 +526,13 @@ getMostRecentClosingDate: async (locationCode) => {
         // to avoid it) - must list attributes explicitly here too.
         attributes: ['treceipt_id', 'receipt_type', 'creditlist_id', 'digital_creditlist_id',
             'amount', 'receipt_date', 'notes', 'closing_id'],
+        where: {'closing_id': closingId}
+    });
+    },
+    getEmployeeAdvancesByClosingId: (closingId) => {
+    return EmployeeLedger.findAll({
+        attributes: ['ledger_id', 'employee_id', 'txn_type', 'credit_amount', 'debit_amount',
+            'txn_date', 'description', 'closing_id'],
         where: {'closing_id': closingId}
     });
     }
