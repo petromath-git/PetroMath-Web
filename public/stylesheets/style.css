@@ -12,26 +12,26 @@ a {
 }
 
 ::placeholder {
-  color:brown !important;
+  color: #6c757d !important;
   font-style: italic;
   font-size: 12px;
-  
+
 }
 
 ::-webkit-input-placeholder { /* Edge */
-  color: red !important;
+  color: #6c757d !important;
   font-style: italic;
   font-size: 12px;
 }
 
 ::-moz-placeholder {
-  color:red !important;
+  color: #6c757d !important;
   font-style: italic;
   font-size: 12px;
 }
 
 ::-ms-placeholder {
-  color:red !important;
+  color: #6c757d !important;
   font-style: italic;
   font-size: 12px;
 }

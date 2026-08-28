@@ -639,19 +639,23 @@ function calculateCashOrCreditSale(prefix, rowNo) {
 // Credit sales tab: free-text search across a bill's summary row (product, company,
 // vehicle, qty, amount) plus its notes field, so managers/owners can reconcile printed
 // bills against DSM-entered credit sales without scrolling through every row.
+// Terms separated by "+" are OR'd together, e.g. "12+HS" matches a row containing
+// either "12" or "HS" (not necessarily both).
 function searchCreditRows() {
     const searchInput = document.getElementById('creditSearchInput');
     if (!searchInput) return;
 
     // Strip comma thousands-separators so "4000" matches a displayed "4,000" (and vice versa).
-    const searchValue = searchInput.value.toLowerCase().trim().replace(/,/g, '');
+    const searchTerms = searchInput.value.toLowerCase().replace(/,/g, '').split('+')
+        .map(function (term) { return term.trim(); })
+        .filter(function (term) { return term.length > 0; });
     const summaryRows = document.querySelectorAll('#credit-table tr.credit-summary-row');
 
     summaryRows.forEach(function (row) {
         // Rows with no data entered yet stay hidden regardless of the search term.
         if (row.classList.contains('d-md-none')) return;
 
-        if (!searchValue) {
+        if (searchTerms.length === 0) {
             row.style.display = '';
             return;
         }
@@ -672,7 +676,8 @@ function searchCreditRows() {
             .toLowerCase()
             .replace(/,/g, '');
 
-        row.style.display = haystack.indexOf(searchValue) > -1 ? '' : 'none';
+        const isMatch = searchTerms.some(function (term) { return haystack.indexOf(term) > -1; });
+        row.style.display = isMatch ? '' : 'none';
     });
 }
 
