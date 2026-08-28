@@ -8,6 +8,7 @@ module.exports = function (sequelize, DataTypes) {
       treceipt_id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
+        autoIncrement: true,
       },
       receipt_no: DataTypes.INTEGER,
       creditlist_id: DataTypes.INTEGER,
