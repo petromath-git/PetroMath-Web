@@ -46,6 +46,7 @@ getBanksForReconciliation: async (locationCode) => {
                 DATE_FORMAT(bt.trans_date, '%d-%m-%Y') as trans_date,
                 bt.trans_date as sort_date,
                 bt.remarks,
+                bt.user_remark,
                 bt.ledger_name,
                 bt.debit_amount,
                 bt.credit_amount,
