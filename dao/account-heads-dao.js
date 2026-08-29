@@ -102,59 +102,10 @@ module.exports = {
                 updation_date = NOW()
             WHERE account_head_id = :account_head_id
         `;
-        const result = await db.sequelize.query(query, {
+        return await db.sequelize.query(query, {
             replacements: data,
             type: QueryTypes.UPDATE
         });
-
-        if (existing && existing.account_head_name !== data.account_head_name) {
-            // m_ledger_rules.ledger_name (Static rows) is copied from the
-            // account head dropdown at rule-creation time (see
-            // AccountHeadsController.createRule) — external_id is a live FK
-            // to account_head_id, so it's safe to update this one in place.
-            // It drives what name gets stamped onto NEW t_bank_transaction
-            // rows going forward (via m_bank_allowed_ledgers_v).
-            await db.sequelize.query(`
-                UPDATE m_ledger_rules
-                SET ledger_name = :newName, updated_by = :updated_by, updation_date = NOW()
-                WHERE source_type = 'Static' AND external_id = :account_head_id
-            `, {
-                replacements: {
-                    newName: data.account_head_name,
-                    updated_by: data.updated_by,
-                    account_head_id: data.account_head_id
-                },
-                type: QueryTypes.UPDATE
-            });
-
-            // gl_static_ledger_map.ledger_name is NOT joined live to this
-            // table — it's the exact-text match key against
-            // t_bank_transaction.ledger_name, a frozen stamp copied onto each
-            // transaction at classification time. Existing transactions still
-            // carry the OLD name and must keep matching it, so renaming the
-            // row in place would orphan them. Instead carry the existing
-            // review (treatment/gl_ledger_id/skip_reason) forward onto a new
-            // row for the new name, leaving the old row for historical rows
-            // (see AccountHeadsDao.createAccountHead for the same pattern on
-            // creation).
-            await db.sequelize.query(`
-                INSERT IGNORE INTO gl_static_ledger_map
-                    (location_code, ledger_name, treatment, gl_ledger_id, skip_reason, created_by, updated_by)
-                SELECT location_code, :newName, treatment, gl_ledger_id, skip_reason, :updated_by, :updated_by
-                FROM gl_static_ledger_map
-                WHERE location_code = :location_code AND ledger_name = :oldName
-            `, {
-                replacements: {
-                    newName: data.account_head_name,
-                    oldName: existing.account_head_name,
-                    location_code: existing.location_code,
-                    updated_by: data.updated_by
-                },
-                type: QueryTypes.INSERT
-            });
-        }
-
-        return result;
     },
 
     deactivateAccountHead: async (id, user) => {
