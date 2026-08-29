@@ -738,7 +738,9 @@ block content
             .then(data => {
                 if (data.success) {
                     const lockedSources = ['Credit', 'Supplier'];
+                    const updatedIds = new Set((data.updated_ids || []).map(String));
                     checked.forEach(cb => {
+                        if (!updatedIds.has(String(cb.dataset.tBankId))) return;
                         const row = cb.closest('tr');
                         const cell = row.querySelector('.ledger-cell');
                         if (!cell) return;
@@ -758,7 +760,11 @@ block content
                         cb.closest('td').innerHTML = '';
                     });
                     clearBulkSelection();
-                    alert(data.updated + ' transactions reclassified.');
+                    let msg = data.updated + ' transaction' + (data.updated === 1 ? '' : 's') + ' reclassified.';
+                    if (data.skipped && data.skipped.length) {
+                        msg += ' ' + data.skipped.length + ' skipped (already linked to a Credit/Supplier ledger).';
+                    }
+                    alert(msg);
                 } else {
                     alert('Error: ' + data.error);
                     applyBtn.disabled = false;

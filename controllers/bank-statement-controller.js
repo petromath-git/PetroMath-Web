@@ -278,17 +278,24 @@ module.exports = {
                 return res.status(400).json({ error: 'ledger_name and bank_id are required' });
             }
 
-            // Fetch all transactions and check none are locked
+            // Fetch all transactions, skipping any already locked to a Credit/Supplier ledger
             const txns = [];
+            const skipped = [];
             for (const tBankId of t_bank_ids) {
                 const txn = await BankStatementDao.getTransactionById(tBankId);
                 if (!txn) continue;
                 if (['Credit', 'Supplier'].includes(txn.external_source)) {
-                    return res.status(400).json({
-                        error: `Transaction ${tBankId} is already linked to a ${txn.external_source} ledger and cannot be reclassified.`
-                    });
+                    skipped.push({ t_bank_id: txn.t_bank_id, external_source: txn.external_source });
+                    continue;
                 }
                 txns.push(txn);
+            }
+
+            if (txns.length === 0) {
+                return res.status(400).json({
+                    error: 'None of the selected transactions could be reclassified — they are already linked to a Credit/Supplier ledger.',
+                    skipped
+                });
             }
 
             const ledgerDetails = await BankStatementDao.getLedgerDetails(bank_id, ledger_name, locationCode);
@@ -316,7 +323,13 @@ module.exports = {
                     .catch(err => console.error('learnFromSuggestion error (bulk reclassify):', err));
             }
 
-            res.status(200).json({ success: true, updated: bulkUpdates.length, source_type: newSource });
+            res.status(200).json({
+                success: true,
+                updated: bulkUpdates.length,
+                updated_ids: bulkUpdates.map(u => String(u.t_bank_id)),
+                skipped,
+                source_type: newSource
+            });
         } catch (error) {
             console.error('Error bulk reclassifying transactions:', error);
             res.status(500).json({ error: 'Failed to bulk reclassify transactions.' });
