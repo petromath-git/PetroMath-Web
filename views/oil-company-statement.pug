@@ -157,6 +157,7 @@ block content
                         tr
                             if allowOilReclassify === 'true'
                                 th(style='width:30px')
+                                    input#selectAllUnclassified(type='checkbox' title='Select all unclassified' onchange='toggleSelectAll(this)')
                             th Transaction Date
                             if accountList && accountList.length > 1
                                 th Account
@@ -630,6 +631,12 @@ block content
         // ── Bulk reclassify ─────────────────────────────────────────────────
         let _bulkLedgerBankId = null;
 
+        window.toggleSelectAll = function(master) {
+            const visible = getVisibleBulkCheckboxes();
+            visible.forEach(cb => cb.checked = master.checked);
+            updateBulkBar();
+        }
+
         window.updateBulkBar = function() {
             const checked = getCheckedBulkCheckboxes();
             const bar = document.getElementById('bulkBar');
@@ -665,6 +672,13 @@ block content
             }
         }
 
+        function getVisibleBulkCheckboxes() {
+            return Array.from(document.querySelectorAll('.bulk-checkbox')).filter(cb => {
+                const row = cb.closest('tr');
+                return row && row.style.display !== 'none';
+            });
+        }
+
         function getCheckedBulkCheckboxes() {
             return Array.from(document.querySelectorAll('.bulk-checkbox:checked'));
         }
@@ -697,6 +711,8 @@ block content
 
         window.clearBulkSelection = function() {
             document.querySelectorAll('.bulk-checkbox').forEach(cb => cb.checked = false);
+            const master = document.getElementById('selectAllUnclassified');
+            if (master) master.checked = false;
             updateBulkBar();
         }
 
