@@ -31,6 +31,14 @@ block content
                 text-overflow: ellipsis;
                 max-width: 250px;
             }
+            .ledger-col {
+                max-width: 110px;
+                font-size: 0.85em;
+                color: #495057;
+            }
+            #system-table .remarks-col {
+                max-width: 150px;
+            }
             .card-header.bg-primary-pastel {
                 background: linear-gradient(135deg, #b3d9ff 0%, #cce5ff 100%) !important;
                 color: #004085 !important;
@@ -821,7 +829,11 @@ block content
                                                 option(value=`${val.bank_id}`, selected=bank_id == val.bank_id ? true : undefined)= `${val.bank_name} - ${val.account_nickname}`
                                 .col-md-2
                                     label.form-label Search:
-                                    input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
+                                    input#searchInput.form-control(
+                                        type='text',
+                                        placeholder='Search...',
+                                        title='Searches remarks, ledger, amount, date and user remark',
+                                        oninput='liveSearch()')
                                 .col-md-1
                                     label.form-label &nbsp;
                                     button.btn.btn-primary.w-100(type='submit' onclick='rememberReconTab()')
@@ -913,26 +925,25 @@ block content
                                                 tr
                                                     th Date
                                                     th Remarks
-                                                    th.text-end Credit
-                                                    th.text-end Debit
+                                                    th Ledger
+                                                    th.text-end Amount
                                                     th.text-center Receipts
                                             tbody
                                                 each txn in systemTransactions
-                                                    tr(class=txn.isUnmatched ? 'unmatched-row' : '' 
+                                                    tr(class=txn.isUnmatched ? 'unmatched-row' : ''
                                                        style='cursor: pointer;'
                                                        onclick=`showImpactAnalysis(${txn.t_bank_id})`)
-                                                        td= txn.trans_date
-                                                        td.truncate-text(title=txn.remarks)= txn.remarks || '-'
-                                                        td.text-end
+                                                        td.text-nowrap= txn.trans_date
+                                                        td.truncate-text.remarks-col(title=txn.remarks)
+                                                            = txn.remarks || '-'
+                                                            if txn.user_remark
+                                                                span.d-none= txn.user_remark
+                                                        td.truncate-text.ledger-col(title=txn.ledger_name)= txn.ledger_name || '-'
+                                                        td.text-end.text-nowrap
                                                             if txn.credit_amount > 0
-                                                                = txn.credit_amount.toFixed(2)
+                                                                span.text-success +#{txn.credit_amount.toFixed(2)}
                                                             else
-                                                                | -
-                                                        td.text-end
-                                                            if txn.debit_amount > 0
-                                                                = txn.debit_amount.toFixed(2)
-                                                            else
-                                                                | -
+                                                                span.text-danger -#{txn.debit_amount.toFixed(2)}
                                                         td.text-center
                                                             if txn.receipt_count > 0
                                                                 span.badge.bg-info= txn.receipt_count
