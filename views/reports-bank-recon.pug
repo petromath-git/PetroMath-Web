@@ -102,21 +102,29 @@ block content
                 document.getElementById('toclosingDate').value = formatLocalDate(toDate);
             }
 
+        // Terms separated by "+" are OR'd together, e.g. "hdfc+500" matches a row
+        // containing either "hdfc" or "500" (not necessarily both) - same convention
+        // as the Credit Sales tab search.
         function liveSearch() {
             const searchInput = document.getElementById('searchInput');
-            const filter = searchInput.value.toUpperCase();
-            
-            const systemRows = document.querySelectorAll('#system-table tbody tr');
-            systemRows.forEach(row => {
-                const txtValue = row.textContent || row.innerText;
-                row.style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
-            });
-            
-            const bankRows = document.querySelectorAll('#bank-table tbody tr');
-            bankRows.forEach(row => {
-                const txtValue = row.textContent || row.innerText;
-                row.style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
-            });
+            const searchTerms = searchInput.value.toLowerCase().replace(/,/g, '').split('+')
+                .map(term => term.trim())
+                .filter(term => term.length > 0);
+
+            const filterRows = (rows) => {
+                rows.forEach(row => {
+                    if (searchTerms.length === 0) {
+                        row.style.display = '';
+                        return;
+                    }
+                    const txtValue = (row.textContent || row.innerText).toLowerCase().replace(/,/g, '');
+                    const isMatch = searchTerms.some(term => txtValue.indexOf(term) > -1);
+                    row.style.display = isMatch ? '' : 'none';
+                });
+            };
+
+            filterRows(document.querySelectorAll('#system-table tbody tr'));
+            filterRows(document.querySelectorAll('#bank-table tbody tr'));
         }
         
         function showAllTransactions() {
@@ -821,7 +829,11 @@ block content
                                                 option(value=`${val.bank_id}`, selected=bank_id == val.bank_id ? true : undefined)= `${val.bank_name} - ${val.account_nickname}`
                                 .col-md-2
                                     label.form-label Search:
-                                    input#searchInput.form-control(type='text', placeholder='Search...', oninput='liveSearch()')
+                                    input#searchInput.form-control(
+                                        type='text',
+                                        placeholder='Search... (use + for OR)',
+                                        title='Searches remarks, amount and date. Separate multiple terms with + to OR them, e.g. hdfc+500',
+                                        oninput='liveSearch()')
                                 .col-md-1
                                     label.form-label &nbsp;
                                     button.btn.btn-primary.w-100(type='submit' onclick='rememberReconTab()')
@@ -954,24 +966,18 @@ block content
                                                 tr
                                                     th Date
                                                     th Description
-                                                    th.text-end Credit
-                                                    th.text-end Debit
+                                                    th.text-end Amount
                                                     th.text-center Action
                                             tbody
                                                 each txn in bankTransactions
                                                     tr(class=txn.isUnmatched ? 'unmatched-row' : '')
-                                                        td= txn.txn_date
+                                                        td.text-nowrap= txn.txn_date
                                                         td.truncate-text(title=txn.description)= txn.description || '-'
-                                                        td.text-end
+                                                        td.text-end.text-nowrap
                                                             if txn.credit_amount > 0
-                                                                = txn.credit_amount.toFixed(2)
+                                                                span.text-success +#{txn.credit_amount.toFixed(2)}
                                                             else
-                                                                | -
-                                                        td.text-end
-                                                            if txn.debit_amount > 0
-                                                                = txn.debit_amount.toFixed(2)
-                                                            else
-                                                                | -
+                                                                span.text-danger -#{txn.debit_amount.toFixed(2)}
                                                         td.text-center
                                                             if txn.isUnmatched
                                                                 button.btn.btn-sm.btn-success(
@@ -982,7 +988,7 @@ block content
                                                                     i.bi.bi-plus-circle
                                                 if bankTransactions.length === 0
                                                     tr
-                                                        td.text-center.text-muted(colspan='5') No transactions found
+                                                        td.text-center.text-muted(colspan='4') No transactions found
                 else
                     .alert.alert-info.text-center.mt-5(role='alert')
                         i.bi.bi-info-circle.me-2
