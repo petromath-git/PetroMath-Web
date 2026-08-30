@@ -107,7 +107,7 @@ const CashflowDetailedReportsController = {
             sheet.getCell('A3').value =
                 `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
 
-            const headers = ['Date', 'Description', 'Type', 'Category', 'Amount'];
+            const headers = ['Date', 'Type', 'Category', 'Description', 'Debit', 'Credit'];
             const headerRow = sheet.getRow(5);
             headers.forEach((h, i) => {
                 const cell = headerRow.getCell(i + 1);
@@ -121,26 +121,33 @@ const CashflowDetailedReportsController = {
                 cell.alignment = { horizontal: 'center' };
             });
 
-            let totalInflow = 0;
-            let totalOutflow = 0;
+            let totalDebit = 0;
+            let totalCredit = 0;
 
             cashflowDetailedData.forEach((row, idx) => {
                 const r = sheet.getRow(6 + idx);
                 r.getCell(1).value = row.transaction_date;
-                r.getCell(2).value = row.description;
-                r.getCell(3).value = row.type;
-                r.getCell(4).value = row.category;
+                r.getCell(2).value = row.type;
+                r.getCell(3).value = row.category;
+                r.getCell(4).value = row.description;
 
                 const amount = parseFloat(row.amount);
-                r.getCell(5).value = amount;
-                r.getCell(5).numFmt = '#,##0.00';
-                r.getCell(5).alignment = { horizontal: 'right' };
+                const isDebit = row.flow_type === 'DEBIT';
+                r.getCell(5).value = isDebit ? amount : null;
+                r.getCell(6).value = !isDebit ? amount : null;
 
-                if (row.type === 'Inflow' || row.type === 'Credit') {
-                    totalInflow += amount;
+                if (isDebit) {
+                    totalDebit += amount;
                 } else {
-                    totalOutflow += amount;
+                    totalCredit += amount;
                 }
+
+                [5, 6].forEach(c => {
+                    if (r.getCell(c).value !== null) {
+                        r.getCell(c).numFmt = '#,##0.00';
+                        r.getCell(c).alignment = { horizontal: 'right' };
+                    }
+                });
 
                 r.eachCell(cell => {
                     cell.border = {
@@ -153,16 +160,20 @@ const CashflowDetailedReportsController = {
             const summaryRow = sheet.getRow(7 + cashflowDetailedData.length);
             summaryRow.getCell(4).value = 'Net Cashflow';
             summaryRow.getCell(4).font = { bold: true };
-            summaryRow.getCell(5).value = totalInflow - totalOutflow;
-            summaryRow.getCell(5).numFmt = '#,##0.00';
-            summaryRow.getCell(5).font = { bold: true };
-            summaryRow.getCell(5).alignment = { horizontal: 'right' };
+            summaryRow.getCell(5).value = totalDebit;
+            summaryRow.getCell(6).value = totalCredit;
+            [5, 6].forEach(c => {
+                summaryRow.getCell(c).numFmt = '#,##0.00';
+                summaryRow.getCell(c).font = { bold: true };
+                summaryRow.getCell(c).alignment = { horizontal: 'right' };
+            });
 
             sheet.getColumn(1).width = 14;
-            sheet.getColumn(2).width = 40;
-            sheet.getColumn(3).width = 12;
-            sheet.getColumn(4).width = 22;
+            sheet.getColumn(2).width = 12;
+            sheet.getColumn(3).width = 22;
+            sheet.getColumn(4).width = 40;
             sheet.getColumn(5).width = 16;
+            sheet.getColumn(6).width = 16;
 
             const buffer = await workbook.xlsx.writeBuffer();
             const filename = `CashflowDetailed_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;

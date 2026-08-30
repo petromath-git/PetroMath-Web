@@ -65,16 +65,13 @@ block content
                     const row = rows[i];
                     if (row.style.display !== 'none') {
                         visibleRows++;
-                        const amountCell = row.cells[4]; // Amount column
-                        const typeCell = row.cells[2]; // Type column
-                        if (amountCell && typeCell) {
-                            const amount = parseFloat(amountCell.textContent.replace(/[₹,]/g, '')) || 0;
-                            const type = typeCell.textContent.trim();
-                            if (type === 'Inflow' || type === 'Credit') {
-                                totalInflow += amount;
-                            } else {
-                                totalOutflow += amount;
-                            }
+                        const debitCell = row.cells[4]; // Debit column
+                        const creditCell = row.cells[5]; // Credit column
+                        if (debitCell && creditCell) {
+                            const debit = parseFloat(debitCell.textContent.replace(/[₹,]/g, '')) || 0;
+                            const credit = parseFloat(creditCell.textContent.replace(/[₹,]/g, '')) || 0;
+                            totalOutflow += debit;
+                            totalInflow += credit;
                         }
                     }
                 }
@@ -183,23 +180,28 @@ block content
                         thead.thead-dark
                             tr(style=caller !== 'pdf' ? "position: sticky; top: 0; z-index: 10; background-color: #343a40;" : "background-color: #343a40;")
                                 th.text-center Date
-                                th.text-center Description
                                 th.text-center Type
                                 th.text-center Category
-                                th.text-center.text-right Amount (₹)                                
+                                th.text-center Description
+                                th.text-center.text-right Debit (₹)
+                                th.text-center.text-right Credit (₹)
                         tbody
                             each transaction in cashflowDetailedData
                                 tr
                                     td.text-center= transaction.transaction_date
-                                    td= transaction.description
                                     td.text-center
                                         if transaction.type === 'Inflow' || transaction.type === 'Credit'
                                             span.badge.badge-success= transaction.type
                                         else
                                             span.badge.badge-danger= transaction.type
                                     td= transaction.category
-                                    td.text-right.font-weight-bold(class=transaction.type === 'Inflow' || transaction.type === 'Credit' ? 'text-success' : 'text-danger')
-                                        | ₹#{transaction.amount.toLocaleString('en-IN')}                                    
+                                    td= transaction.description
+                                    td.text-right.font-weight-bold.text-danger
+                                        if transaction.flow_type === 'DEBIT'
+                                            | ₹#{transaction.amount.toLocaleString('en-IN')}
+                                    td.text-right.font-weight-bold.text-success
+                                        if transaction.flow_type === 'CREDIT'
+                                            | ₹#{transaction.amount.toLocaleString('en-IN')}
     else
         .card.shadow.mb-4
             .card-body.text-center
