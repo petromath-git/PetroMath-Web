@@ -27,4 +27,9 @@ router.post('/pdf', isLoginEnsured, function (req, res, next) {
     cashflowDetailedController.getCashflowDetailedReport(req, res, next);
 });
 
+// Route for Excel export
+router.post('/excel', isLoginEnsured, function (req, res, next) {
+    cashflowDetailedController.exportCashflowDetailedExcel(req, res, next);
+});
+
 module.exports = router;
