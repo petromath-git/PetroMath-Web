@@ -99,6 +99,30 @@ block content
                 }
             });
 
+            function exportExcel() {
+                var fromDate = document.getElementById('fromclosingDate').value;
+                var toDate = document.getElementById('toclosingDate').value;
+
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports-cashflow-detailed/excel';
+
+                var addField = function(name, value) {
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                };
+
+                addField('fromClosingDate', fromDate);
+                addField('toClosingDate', toDate);
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+
     // Only show sticky header and filters for non-PDF renders
     if caller !== 'pdf'
         // Sticky Header Container
@@ -135,9 +159,12 @@ block content
                                     button.btn.btn-success.mr-2(type='button' onClick='generatePDF(window.location.href,"N")')
                                         i.bi.bi-cloud-download.mr-1
                                         | Download
-                                    button.btn.btn-info(type='button' onClick='generatePDF(window.location.href,"Y")')
+                                    button.btn.btn-info.mr-2(type='button' onClick='generatePDF(window.location.href,"Y")')
                                         i.bi.bi-printer.mr-1
                                         | Print
+                                    button.btn.btn-outline-success(type='button' onClick='exportExcel()')
+                                        i.bi.bi-file-earmark-excel.mr-1
+                                        | Excel
 
     // Main Report Table - shown for both PDF and screen
     if cashflowDetailedData && cashflowDetailedData.length > 0
