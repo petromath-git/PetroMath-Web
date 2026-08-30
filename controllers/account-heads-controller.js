@@ -77,8 +77,12 @@ module.exports = {
             const data = {
                 location_code:        req.user.location_code,
                 account_head_name:    req.body.account_head_name.trim().toUpperCase(),
-                account_head_type:    req.body.account_head_type,
-                allowed_entry_type:   req.body.allowed_entry_type,
+                // Head Type / Entry Type are no longer surfaced in the UI (unused
+                // elsewhere in the app — see gl_static_ledger_map for actual GL
+                // posting resolution) — default to the same values the DB column
+                // defaults to.
+                account_head_type:    'OTHER',
+                allowed_entry_type:   'BOTH',
                 notes_required_flag:  req.body.notes_required_flag || 'N',
                 active_flag:          'Y',
                 effective_start_date: req.body.effective_start_date || new Date().toISOString().split('T')[0],
@@ -101,8 +105,6 @@ module.exports = {
             const data = {
                 account_head_id:      req.body.account_head_id,
                 account_head_name:    req.body.account_head_name.trim().toUpperCase(),
-                account_head_type:    req.body.account_head_type,
-                allowed_entry_type:   req.body.allowed_entry_type,
                 notes_required_flag:  req.body.notes_required_flag || 'N',
                 active_flag:          req.body.active_flag          || 'Y',
                 effective_start_date: req.body.effective_start_date,
