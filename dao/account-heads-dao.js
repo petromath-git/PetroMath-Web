@@ -27,7 +27,7 @@ module.exports = {
         `;
 
         if (!includeInactive) query += " AND ah.active_flag = 'Y'";
-        query += " ORDER BY ah.account_head_type, ah.account_head_name";
+        query += " ORDER BY ah.account_head_name";
 
         return await db.sequelize.query(query, {
             replacements: { locationCode },
@@ -92,8 +92,6 @@ module.exports = {
             UPDATE m_account_heads
             SET
                 account_head_name = :account_head_name,
-                account_head_type = :account_head_type,
-                allowed_entry_type = :allowed_entry_type,
                 notes_required_flag = :notes_required_flag,
                 active_flag = :active_flag,
                 effective_start_date = :effective_start_date,
