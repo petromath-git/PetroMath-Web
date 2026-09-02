@@ -1444,7 +1444,12 @@ function applyCreditBillDateConstraints() {
         inputEl.min = prev;
         inputEl.max = allowNext ? next : closing;
 
-        if (!inputEl.value || inputEl.value < inputEl.min || inputEl.value > inputEl.max) {
+        // Only default a blank field - never overwrite a value already on the input.
+        // That value may have been loaded from a saved row (possibly entered before
+        // this min/max window applied to it, e.g. a shift closed several days late),
+        // and clobbering it here would silently show the wrong date and, if the row
+        // is later re-saved, corrupt the actually-stored credit_bill_date to match.
+        if (!inputEl.value) {
             inputEl.value = closing;
         }
     });
