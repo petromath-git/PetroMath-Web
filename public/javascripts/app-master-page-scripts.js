@@ -326,7 +326,13 @@ function saveCashFlowDenoms() {
     return new Promise((resolve, reject) => {
         const denomTag = 'denom-';
         const currentTabId = denomTag + 'table';
-        let denomObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + denomTag + ']:not([type="hidden"])');
+        const denomTableObj = document.getElementById(currentTabId);
+        if (!denomTableObj) {
+            // Denominations section hidden via location config - nothing to save.
+            resolve(true);
+            return;
+        }
+        let denomObj = denomTableObj.querySelectorAll('[id^=' + denomTag + ']:not([type="hidden"])');
         let newDenoms = [], updateDenoms = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
         denomObj.forEach((denom) => {

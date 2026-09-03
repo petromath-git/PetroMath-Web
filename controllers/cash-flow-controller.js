@@ -4,6 +4,7 @@ const cashflowDao = require("../dao/cashflow-closing-dao");
 const TxnReadDao = require("../dao/txn-read-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
+const locationConfig = require("../utils/location-config");
 
 module.exports = {
     getCashFlowHome: (req, res, next) => {
@@ -311,16 +312,19 @@ function collectCreditAndDebits(result) {
 
 
 function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
+    const locationCode = req.user.location_code;
     Promise.allSettled([
         cashflowDetails,
-        cashflowDao.findCashflowTxnById(req.user.location_code, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[0])),
-        cashflowDao.findCashflowTxnById(req.user.location_code, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[1])),
+        cashflowDao.findCashflowTxnById(locationCode, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[0])),
+        cashflowDao.findCashflowTxnById(locationCode, req.query.id, config.cashSaleTypeCodes.get(config.cashSaleTypes[1])),
         cashFlowTxnDenominationPromise(req.query.id),
-        getClosingDataForCashflow(req.query.id, req.user.location_code) // Add this new promise
+        getClosingDataForCashflow(req.query.id, locationCode), // Add this new promise
+        locationConfig.getLocationConfigValue(locationCode, 'SHOW_CASHFLOW_DENOMINATIONS', 'Y'),
+        locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
-        
+
         res.render('cash-flow', {
             title: "CashFlow : " + dateFormat(values[0].value.cashflow_date, 'dd-mmm-yyyy'),
             user: req.user,
@@ -332,7 +336,9 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             cashFlowDebits: debitData.data,
             creditOptions: creditData.options,
             debitOptions: debitData.options,
-            shiftClosings: values[4].value || [] // Add the closing data
+            shiftClosings: values[4].value || [], // Add the closing data
+            showCashFlowDenominations: values[5].value === 'Y',
+            maxCashFlowRows: Number(values[6].value)
         });
     });
 }

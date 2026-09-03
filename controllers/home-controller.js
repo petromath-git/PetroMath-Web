@@ -256,9 +256,14 @@ module.exports = {
         }
     },
 
-    saveCreditSalesData: (req, res, next) => {
+    saveCreditSalesData: async (req, res, next) => {
         const salesData = req.body;
         if (salesData) {
+            const validationError = await validateCreditBillDates(salesData);
+            if (validationError) {
+                res.status(500).send({error: validationError});
+                return;
+            }
             saveController.txnWriteCreditSalesPromise(salesData).then((result) => {
                 if (!result.error) {
                     res.status(200).send({message: 'Saved credit sales data successfully.', rowsData: result});
@@ -1054,6 +1059,55 @@ const getClosingData = (locationCode, closingQueryFromDate, closingQueryToDate) 
     });
 };
 
+
+// Credit bill date must be the closing date, the day before, or (once the system
+// date has reached it) the day after - same rule enforced server-side for DSM entries
+// (see controllers/dsm-entry-controller.js). Only checked for brand-new rows: an
+// existing row (tcredit_id already set) may have been saved before this validation
+// existed, and editing e.g. its amount shouldn't be blocked by a date that was never
+// checked at the time.
+function toDateStr(d) {
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+}
+
+function addDays(dateStr, days) {
+    const date = new Date(dateStr + "T00:00:00");
+    date.setDate(date.getDate() + days);
+    return toDateStr(date);
+}
+
+async function validateCreditBillDates(salesData) {
+    const newRows = salesData.filter(row => !row.tcredit_id && row.closing_id);
+    if (newRows.length === 0) return null;
+
+    const closingIds = [...new Set(newRows.map(row => parseInt(row.closing_id)))];
+    const closings = await db.txn_closing.findAll({
+        where: {closing_id: closingIds},
+        attributes: ['closing_id', 'closing_date']
+    });
+    const closingDateById = new Map(closings.map(c => [c.closing_id, toDateStr(new Date(c.closing_date))]));
+    const systemDateStr = toDateStr(new Date());
+
+    for (const row of newRows) {
+        const closingDateStr = closingDateById.get(parseInt(row.closing_id));
+        if (!closingDateStr || !row.credit_bill_date) continue;
+
+        const selectedDateStr = String(row.credit_bill_date).slice(0, 10);
+        const prevDateStr = addDays(closingDateStr, -1);
+        const nextDateStr = addDays(closingDateStr, 1);
+
+        if (![prevDateStr, closingDateStr, nextDateStr].includes(selectedDateStr)) {
+            return "Credit bill date must be closing date, previous day, or next day.";
+        }
+        if (selectedDateStr === nextDateStr && systemDateStr < nextDateStr) {
+            return "Next-day credit bill date is allowed only when system date has reached that day.";
+        }
+    }
+    return null;
+}
 
 // Add API endpoint for dynamic vehicle loading
 module.exports.getVehiclesByCreditId = (req, res, next) => {
