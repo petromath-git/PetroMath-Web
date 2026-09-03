@@ -707,6 +707,20 @@ function calculateTotal(tableNamePrefix) {
         const billCountTopEl = document.getElementById(tableNamePrefix + 'bill-count-top');
         if (billCountTopEl) billCountTopEl.textContent = rowCount;
     }
+    if (tableNamePrefix === 'cashflow-debit-' || tableNamePrefix === 'cashflow-credit-') {
+        updateCashFlowDifferenceTotal();
+    }
+}
+
+// Cash flow page: show InFlow total minus OutFlow total.
+function updateCashFlowDifferenceTotal() {
+    const diffEl = document.getElementById('cashflow-difference-total');
+    if (!diffEl) return;
+    const creditTotalEl = document.getElementById('cashflow-credit-total');
+    const debitTotalEl = document.getElementById('cashflow-debit-total');
+    const creditTotal = creditTotalEl && creditTotalEl.value ? currenciesAsFloat(creditTotalEl.value) : 0;
+    const debitTotal = debitTotalEl && debitTotalEl.value ? currenciesAsFloat(debitTotalEl.value) : 0;
+    diffEl.textContent = formatCurrencies(creditTotal - debitTotal, toFixedValue);
 }
 
 // Total display can be either a readonly input (most tabs) or plain bold text
@@ -770,7 +784,7 @@ function showAddedRow(prefix, funToRecalculateTotal) {
         funToRecalculateTotal();
     }
     if (!isEnabled) {
-        window.alert("Maximum decant lines reached. Contact your administrator to increase the limit.")
+        window.alert("Maximum number of rows reached. Contact your administrator to increase the limit.")
     }
 }
 
