@@ -98,10 +98,10 @@ block content
                         a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
                     if allowCreditReceiptsInClosing
                         li.nav-item.col-md
-                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts") Collections
+                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts" onclick=`calculateCreditReceiptsAndTrackMenu(this)`) Collections
                     if allowEmployeeAdvanceInClosing
                         li.nav-item.col-md
-                            a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance") Employee Advance
+                            a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance" onclick=`calculateEmployeeAdvanceAndTrackMenu(this)`) Employee Advance
                     li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses") Expenses
                     if bowserValues && bowserValues.length > 0
