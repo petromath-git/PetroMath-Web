@@ -8,6 +8,21 @@ block content
         // Remove the .alert { display: none !important; } rule that was hiding messages
         nav { display: none !important; }
         footer { display: none !important; }
+        .password-field-wrapper { position: relative; }
+        .password-field-wrapper #pw { padding-right: 2.75rem; }
+        .password-toggle-btn {
+            position: absolute;
+            top: 50%;
+            right: 0.5rem;
+            transform: translateY(-50%);
+            border: 0;
+            background: none;
+            padding: 0.25rem;
+            line-height: 1;
+            color: #6c757d;
+        }
+        .password-toggle-btn i { font-size: 0.9rem; }
+        .password-toggle-btn:hover { color: #495057; }
     
     div.login-container
         div.container-fluid.h-100.d-flex.align-items-center.justify-content-center
@@ -47,9 +62,9 @@ block content
                                 
                                 div.form-group.mb-4
                                     label.form-label.text-muted.fw-bold Password:
-                                    div.input-group
+                                    div.password-field-wrapper
                                         input#pw.form-control.form-control-lg(type='password', name='password', placeholder='Enter password', required)
-                                        button#togglePw.btn.btn-outline-secondary(type='button', tabindex='-1', aria-label='Show password')
+                                        button#togglePw.password-toggle-btn(type='button', tabindex='-1', aria-label='Show password')
                                             i#togglePwIcon.bi.bi-eye
                                 
                                 button.btn.btn-success.btn-lg.w-100.login-btn(type='submit') 
