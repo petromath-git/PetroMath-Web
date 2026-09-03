@@ -85,6 +85,14 @@ module.exports = function(sequelize, DataTypes) {
         manual_recon_date: {
             type: DataTypes.DATE,
             allowNull: true
+        },
+        source_table: {
+            type: DataTypes.STRING(30),
+            allowNull: true
+        },
+        source_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         }
     }, {
         timestamps: false,

@@ -252,8 +252,87 @@ module.exports = {
         }
     },
 
+    // Find the active adjustment auto-created from a specific cashflow transaction
+    // (source_table/source_id tie-back — see syncFromCashflowTxn below)
+    findActiveByCashflowTxnId: async (transactionId) => {
+        try {
+            return await Adjustments.findOne({
+                where: {
+                    source_table: 't_cashflow_transaction',
+                    source_id: transactionId,
+                    status: 'ACTIVE'
+                }
+            });
+        } catch (error) {
+            console.error('Error finding adjustment by cashflow txn id:', error);
+            throw error;
+        }
+    },
+
+    // Delete an auto-created adjustment row (hard delete - these aren't user-entered,
+    // so there's no audit value in keeping a REVERSED copy around)
+    deleteAdjustment: async (adjustmentId) => {
+        try {
+            return await Adjustments.destroy({ where: { adjustment_id: adjustmentId } });
+        } catch (error) {
+            console.error('Error deleting adjustment:', error);
+            throw error;
+        }
+    },
+
+    // Create/update/remove the digital-vendor debit adjustment linked to one
+    // cashflow Outflow row (t_cashflow_transaction), keeping it in sync as the
+    // cashier edits amount/vendor/removes the row. Throws if the linked
+    // adjustment has already been bank-reconciled, so a reconciled entry is
+    // never silently changed out from under the reconciliation.
+    syncFromCashflowTxn: async ({ transactionId, locationCode, adjustmentDate, digitalVendorId, vendorName, amount, username }) => {
+        const existing = await module.exports.findActiveByCashflowTxnId(transactionId);
+        const isReconciled = existing && (existing.manual_recon_flag || existing.recon_match_id);
+        const wantsAdjustment = digitalVendorId && amount > 0;
+
+        if (isReconciled) {
+            throw new Error(`Cannot update: the linked adjustment (#${existing.adjustment_id}) has already been bank-reconciled. Remove the reconciliation first.`);
+        }
+
+        if (!wantsAdjustment) {
+            if (existing) {
+                await module.exports.deleteAdjustment(existing.adjustment_id);
+            }
+            return null;
+        }
+
+        const description = `Auto: Cash paid against ${vendorName} collection (CashFlow Txn #${transactionId})`;
+
+        if (existing) {
+            await Adjustments.update({
+                external_id: digitalVendorId,
+                debit_amount: amount,
+                description,
+                updated_by: username,
+                updation_date: new Date()
+            }, { where: { adjustment_id: existing.adjustment_id } });
+            return existing.adjustment_id;
+        }
+
+        const created = await Adjustments.create({
+            adjustment_date: adjustmentDate,
+            location_code: locationCode,
+            description,
+            external_id: digitalVendorId,
+            external_source: 'DIGITAL_VENDOR',
+            debit_amount: amount,
+            adjustment_type: '208',
+            status: 'ACTIVE',
+            source_table: 't_cashflow_transaction',
+            source_id: transactionId,
+            created_by: username,
+            updated_by: username
+        });
+        return created.adjustment_id;
+    },
+
     // Check if adjustment can be modified/deleted (business rules)
-    
+
      canModifyAdjustment: async (adjustmentId) => {
         try {
             const adjustment = await Adjustments.findByPk(adjustmentId);

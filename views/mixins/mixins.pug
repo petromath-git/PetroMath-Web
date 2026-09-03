@@ -252,15 +252,21 @@ mixin addCashFlowEntry(val, flow, prefix, rowCnt)
         tr(id=trRowId)
             input(type='hidden' id=prefix + rowCnt + '_hiddenId' value=val.txn_id)
             td
-                select.form-control(name=prefix + 'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required)
+                select.form-control(name=prefix + 'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required onchange="onCashflowTypeChange('" + prefix + "', " + rowCnt + ")")
                     if debitOptions && flow === debitLabel
                         each option in debitOptions
-                            option(value=`${option.id}` selected=(option.name === val.type))= option.name
+                            option(value=`${option.id}` data-requires-vendor=option.requiresDigitalVendor selected=(option.name === val.type))= option.name
                     if creditOptions && flow === creditLabel
                         each option in creditOptions
-                            option(value=option.id selected=(option.name === val.type))= option.name
+                            option(value=option.id data-requires-vendor=option.requiresDigitalVendor selected=(option.name === val.type))= option.name
             td
                 input.form-control(name=prefix+'remarks-'+ rowCnt, id=prefix+'remarks-'+ rowCnt, value=val.description)
+                if flow === debitLabel
+                    select.form-control.mt-1.digital-vendor-select(name=prefix+'vendor-'+ rowCnt, id=prefix+'vendor-'+ rowCnt, style="display:none")
+                        option(value="") -- Select Digital Vendor --
+                        if digitalVendorList
+                            each vendor in digitalVendorList
+                                option(value=`${vendor.creditlist_id}` selected=(val.digitalVendorId && String(val.digitalVendorId) === String(vendor.creditlist_id)))= vendor.Company_Name
             td
                 input.form-control(name=prefix+'amt-'+ rowCnt, id=prefix+'amt-'+ rowCnt, required, value=val.amount type="number" step=0.01 onchange="calculateTotal('" +prefix +"')")
                 div.invalid-feedback Amount is required.
@@ -279,15 +285,21 @@ mixin newCashFlowEntry(flow, prefix, rowCnt)
     tr(class='d-md-none' id=trRowId)
         input(type='hidden' id=prefix + rowCnt + '_hiddenId')
         td
-            select.form-control(name=prefix+'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required)
+            select.form-control(name=prefix+'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required onchange="onCashflowTypeChange('" + prefix + "', " + rowCnt + ")")
                 if debitOptions && flow === debitLabel
                     each val in debitOptions
-                        option(value=`${val.id}`)= val.name
+                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor)= val.name
                 if creditOptions && flow === creditLabel
                     each val in creditOptions
-                        option(value=`${val.id}`)= val.name
+                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor)= val.name
         td
             input.form-control(name=prefix+'remarks-'+ rowCnt, id=prefix+'remarks-'+ rowCnt)
+            if flow === debitLabel
+                select.form-control.mt-1.digital-vendor-select(name=prefix+'vendor-'+ rowCnt, id=prefix+'vendor-'+ rowCnt, style="display:none")
+                    option(value="") -- Select Digital Vendor --
+                    if digitalVendorList
+                        each vendor in digitalVendorList
+                            option(value=`${vendor.creditlist_id}`)= vendor.Company_Name
         td
             input.form-control(name=prefix+'amt-'+ rowCnt, id=prefix+'amt-'+ rowCnt, required type="number" step=0.01 onchange="calculateTotal('" +prefix +"')")
             div.invalid-feedback Amount is required.
