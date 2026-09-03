@@ -120,6 +120,18 @@ module.exports = {
 
         return { options, transactions };
     },
+    // Which of the given Account Heads require a digital-vendor picker
+    // (m_account_heads.requires_digital_vendor_link='Y') — used to reject a
+    // save server-side if the cashier's vendor selection got bypassed client-side.
+    getAccountHeadsRequiringVendorLink: async (accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return [];
+        const rows = await db.sequelize.query(`
+            SELECT account_head_id
+            FROM m_account_heads
+            WHERE account_head_id IN (:accountHeadIds) AND requires_digital_vendor_link = 'Y'
+        `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return rows.map(r => r.account_head_id);
+    },
     triggerGenerateCashflow : (cashflowId) => {
         const cashflowTxn = db.sequelize.query('CALL generate_cashflow(' + cashflowId + ');', null, { raw: true });
         return cashflowTxn;

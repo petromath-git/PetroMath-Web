@@ -133,6 +133,10 @@ module.exports = {
     saveCashflowTxnData: async (req, res, next) => {
         const txnData = req.body;
         if (txnData && txnData.length > 0) {
+            const validationError = await validateDigitalVendorRows(txnData, req.user.location_code);
+            if (validationError) {
+                return res.status(400).send({error: validationError});
+            }
             const result = await txnCashflowSavePromise(txnData);
             if (!result.error) {
                 try {
@@ -400,6 +404,28 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
             {error: "Error while triggering procedure."});
     });
+}
+
+// Server-side backstop for the client-side "required" toggle on the digital-vendor
+// picker: rejects the whole save (before anything is persisted) if any row uses an
+// Account Head that requires a vendor but has none selected. Guards against the
+// client-side validation being bypassed (JS disabled, direct API call, etc.).
+async function validateDigitalVendorRows(txnData, locationCode) {
+    const allowFlag = await locationConfig.getLocationConfigValue(locationCode, 'ALLOW_CASHFLOW_DIGITAL_VENDOR_ADJUSTMENT', 'N');
+    if (allowFlag !== 'Y') return null;
+
+    const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
+    const requiredIds = new Set(await cashflowDao.getAccountHeadsRequiringVendorLink(accountHeadIds));
+    if (requiredIds.size === 0) return null;
+
+    for (const row of txnData) {
+        const headId = parseInt(row.account_head_id, 10);
+        const amount = parseFloat(row.amount) || 0;
+        if (requiredIds.has(headId) && amount > 0 && !row.digital_vendor_id) {
+            return `"${row.type}" requires selecting a digital vendor.`;
+        }
+    }
+    return null;
 }
 
 // After a batch of cashflow Outflow rows is saved, sync the matching
