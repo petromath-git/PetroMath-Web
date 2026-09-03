@@ -306,6 +306,9 @@ function calculateAllInOnePlace() {
         calculateAll2TProducts() ||
         calculateCashSaleTotal() ||
         calculateCreditTotal() ||
+        calculateDigitalSalesTotal() ||
+        calculateCreditReceiptsTotal() ||
+        calculateEmployeeAdvanceTotal() ||
         calculateExpensesAndDenoms()) {
             resolve(true);
         } else {
