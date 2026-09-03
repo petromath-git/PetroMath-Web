@@ -3,7 +3,6 @@ include mixins/mixins
 include mixins/new-closing-mixins
 
 block content
-    - const maxCashFlowRows = config.maxCashFlowRowsCnt;
     - const creditPrefix = 'cashflow-credit-';
     - const debitPrefix = 'cashflow-debit-';
     - var denominationValuesJson = config.cashFlowDenominationValuesJson;
@@ -110,21 +109,28 @@ block content
                     div
                         a.btn.btn-primary(id='credit-add-new' onclick='showAddedRow(\'cashflow-credit\')')
                             span.oi.oi-plus
-    div &nbsp;
-    div.row(class=divClass)
-        div.col-4
-        div.col-4
+    div.row
+        div.col-12
             div.card
-                div.card-header.text-white.bg-dark Denominations
-                div.card-body
-                    div.table-responsive
-                        table.table#denom-table
-                            tbody
-                                +addDenomRows(cashFlowDenoms)
-                                tr
-                                    td.text-right Total
-                                    td
-                                        input.form-control#denominations_total(type='text' name='denominations_total' readonly value='0')
+                div.card-body.text-right
+                    strong Difference (InFlow &minus; OutFlow):&nbsp;
+                    strong#cashflow-difference-total 0.00
+    div &nbsp;
+    if showCashFlowDenominations
+        div.row(class=divClass)
+            div.col-4
+            div.col-4
+                div.card
+                    div.card-header.text-white.bg-dark Denominations
+                    div.card-body
+                        div.table-responsive
+                            table.table#denom-table
+                                tbody
+                                    +addDenomRows(cashFlowDenoms)
+                                    tr
+                                        td.text-right Total
+                                        td
+                                            input.form-control#denominations_total(type='text' name='denominations_total' readonly value='0')
 
     div.row
         div &nbsp;
@@ -135,4 +141,10 @@ block content
             span &nbsp;
             span
                 button.btn.btn-dark(id='cashflow-close' disabled=true onClick='finishClosing(\'cashflowId\',\'close-cashflow\',\'cashflowhome\')') CLOSE &raquo;
+
+    script.
+        document.addEventListener('DOMContentLoaded', function() {
+            calculateCashflowDebitTotal();
+            calculateCashflowCreditTotal();
+        });
 
