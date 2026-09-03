@@ -328,8 +328,10 @@ function onCashflowTypeChange(prefix, rowNum) {
     }
     const requiresVendor = typeObj.options[typeObj.selectedIndex].dataset.requiresVendor === 'Y';
     vendorObj.style.display = requiresVendor ? '' : 'none';
+    vendorObj.required = requiresVendor;
     if (!requiresVendor) {
         vendorObj.value = '';
+        vendorObj.className = 'form-control mt-1 digital-vendor-select';
     }
 }
 
