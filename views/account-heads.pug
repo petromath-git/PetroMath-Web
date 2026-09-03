@@ -57,8 +57,6 @@ block content
                                 tr
                                     th #
                                     th Account Head Name
-                                    th Head Type
-                                    th Entry Type
                                     th Notes Req
                                     th Active
                                     th Effective From
@@ -76,9 +74,6 @@ block content
                                             = head.account_head_name
                                             if head.is_system_type === 'Y'
                                                 i.bi.bi-lock-fill.text-muted.ml-1(title="System-generated — used by cashflow auto-generation, name/deactivation locked")
-                                        td.searchable= head.account_head_type
-                                        td
-                                            span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
                                         td= head.notes_required_flag === 'Y' ? 'Yes' : 'No'
                                         td= head.active_flag
                                         td= head.effective_start_date ? new Date(head.effective_start_date).toLocaleDateString('en-GB') : '-'
@@ -96,8 +91,6 @@ block content
                                                     type="button",
                                                     data-id=head.account_head_id,
                                                     data-name=head.account_head_name,
-                                                    data-head-type=head.account_head_type,
-                                                    data-entry-type=head.allowed_entry_type,
                                                     data-notes=head.notes_required_flag,
                                                     data-active=head.active_flag,
                                                     data-system=head.is_system_type,
@@ -127,8 +120,6 @@ block content
                                             type="button",
                                             data-id=head.account_head_id,
                                             data-name=head.account_head_name,
-                                            data-head-type=head.account_head_type,
-                                            data-entry-type=head.allowed_entry_type,
                                             data-notes=head.notes_required_flag,
                                             data-active=head.active_flag,
                                             data-system=head.is_system_type,
@@ -143,12 +134,6 @@ block content
                                             button.btn.btn-danger.btn-sm(type="button", onclick=`confirmDeactivate(${head.account_head_id})`)
                                                 i.bi.bi-trash
                             .card-body.p-2
-                                p.mb-1
-                                    b Head Type:&nbsp;
-                                    = head.account_head_type
-                                p.mb-1
-                                    b Entry Type:&nbsp;
-                                    span.badge(class=head.allowed_entry_type === 'CREDIT' ? 'badge-success' : (head.allowed_entry_type === 'DEBIT' ? 'badge-danger' : 'badge-secondary'))= head.allowed_entry_type
                                 p.mb-1
                                     b Active:&nbsp;
                                     = head.active_flag
@@ -326,21 +311,6 @@ block content
                             label Account Head Name *
                             input.form-control(type="text", name="account_head_name", required, style="text-transform:uppercase;", autocomplete="off")
                         .form-group
-                            label Head Type *
-                            select.form-control(name="account_head_type", required)
-                                option(value="") Select...
-                                option(value="EXPENSE") EXPENSE
-                                option(value="INCOME") INCOME
-                                option(value="ADJUSTMENT") ADJUSTMENT
-                                option(value="OTHER") OTHER
-                        .form-group
-                            label Entry Type *
-                            select.form-control(name="allowed_entry_type", required)
-                                option(value="") Select...
-                                option(value="DEBIT") DEBIT
-                                option(value="CREDIT") CREDIT
-                                option(value="BOTH") BOTH
-                        .form-group
                             label Notes Required
                             select.form-control(name="notes_required_flag")
                                 option(value="N") No
@@ -365,19 +335,6 @@ block content
                         .form-group
                             label Account Head Name *
                             input.form-control(type="text", name="account_head_name", id="edit_account_head_name", required, style="text-transform:uppercase;", autocomplete="off")
-                        .form-group
-                            label Head Type *
-                            select.form-control(name="account_head_type", id="edit_account_head_type", required)
-                                option(value="EXPENSE") EXPENSE
-                                option(value="INCOME") INCOME
-                                option(value="ADJUSTMENT") ADJUSTMENT
-                                option(value="OTHER") OTHER
-                        .form-group
-                            label Entry Type *
-                            select.form-control(name="allowed_entry_type", id="edit_allowed_entry_type", required)
-                                option(value="DEBIT") DEBIT
-                                option(value="CREDIT") CREDIT
-                                option(value="BOTH") BOTH
                         .form-group
                             label Notes Required
                             select.form-control(name="notes_required_flag", id="edit_notes_required_flag")
@@ -845,8 +802,6 @@ block content
                 const d = btn.dataset;
                 document.getElementById('edit_account_head_id').value      = d.id;
                 document.getElementById('edit_account_head_name').value    = d.name;
-                document.getElementById('edit_account_head_type').value    = d.headType;
-                document.getElementById('edit_allowed_entry_type').value   = d.entryType;
                 document.getElementById('edit_notes_required_flag').value  = d.notes;
                 document.getElementById('edit_active_flag').value          = d.active;
                 document.getElementById('edit_effective_start_date').value = d.start;
