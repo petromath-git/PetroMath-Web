@@ -776,6 +776,13 @@ function showAddedRow(prefix, funToRecalculateTotal) {
                 let obj = document.getElementById(prefix + '-product-' + i);
                 creditOrSaleUpdateProductTypePrices(obj, i, prefix + '-')
             }
+            if (prefix === 'cashflow-debit' || prefix === 'cashflow-credit') {
+                // Row was previously deleted then re-added: its Transaction type
+                // got reset to the default option, but the digital-vendor picker's
+                // visibility/required state was left as-is (defaultInputValues only
+                // resets values, not that). Resync it to the now-default type.
+                onCashflowTypeChange(prefix + '-', i);
+            }
             isEnabled = true;
             break;
         }
