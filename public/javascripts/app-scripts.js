@@ -942,6 +942,19 @@ function populateSummary(obj) {
                 } else if (getValueFromLabelId.includes('employee-advance-txn-date-')) {
                     const dateElement = document.getElementById(getValueFromLabelId);
                     labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
+                } else if (getValueFromLabelId.includes('employee-advance-amt-')) {
+                    const amtElement = document.getElementById(getValueFromLabelId);
+                    const amtValue = amtElement ? amtElement.value : '';
+                    labels[j].classList.remove('text-success', 'text-danger');
+                    if (amtValue) {
+                        const rowNum = getValueFromLabelId.replace('employee-advance-amt-', '');
+                        const typeElement = document.getElementById('employee-advance-type-' + rowNum);
+                        const isRecovery = typeElement && typeElement.value === 'ADVANCE_RECOVERY';
+                        labels[j].textContent = (isRecovery ? '+' : '-') + amtValue;
+                        labels[j].classList.add(isRecovery ? 'text-success' : 'text-danger');
+                    } else {
+                        labels[j].textContent = '';
+                    }
                 } else {
                     const sourceEl = document.getElementById(getValueFromLabelId);
                     if (!sourceEl) {
