@@ -692,7 +692,16 @@ function calculateTotal(tableNamePrefix) {
             if (tableRowObj && !(tableRowObj.className === 'd-md-none')) {
                 const amtObject = document.getElementById(tableNamePrefix + 'amt-' + i);
                 if (amtObject && amtObject.value) {
-                    totalSales += currenciesAsFloat(amtObject.value);
+                    let amt = currenciesAsFloat(amtObject.value);
+                    // Employee Advance total is net cash impact: Recovery is cash in,
+                    // Advance/Payment is cash out.
+                    if (tableNamePrefix === 'employee-advance-') {
+                        const typeObject = document.getElementById(tableNamePrefix + 'type-' + i);
+                        if (!(typeObject && typeObject.value === 'ADVANCE_RECOVERY')) {
+                            amt = -amt;
+                        }
+                    }
+                    totalSales += amt;
                 }
                 rowCount++;
             }
