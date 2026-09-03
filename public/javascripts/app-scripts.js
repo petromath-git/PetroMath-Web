@@ -943,7 +943,14 @@ function populateSummary(obj) {
                     const dateElement = document.getElementById(getValueFromLabelId);
                     labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
                 } else {
-                    labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+                    const sourceEl = document.getElementById(getValueFromLabelId);
+                    if (!sourceEl) {
+                        labels[j].textContent = "";
+                    } else if (sourceEl.tagName === 'INPUT' || sourceEl.tagName === 'SELECT' || sourceEl.tagName === 'TEXTAREA') {
+                        labels[j].textContent = sourceEl.value;
+                    } else {
+                        labels[j].textContent = sourceEl.textContent;
+                    }
                 }
 
                 // Removed the hardcoded pump_amount calculation section
