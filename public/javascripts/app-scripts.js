@@ -2325,7 +2325,7 @@ function promiseTimeout(time) {
 };
 
 function formatCurrencies(data, minFixedValue) {
-    return data.toLocaleString('en', { minimumFractionDigits: minFixedValue });
+    return data.toLocaleString('en-IN', { minimumFractionDigits: minFixedValue });
 }
 
 function currenciesAsFloat(data) {
