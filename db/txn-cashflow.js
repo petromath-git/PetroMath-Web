@@ -26,6 +26,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.INTEGER,
             allowNull: true
         },
+        digital_vendor_id: {
+            field: 'digital_vendor_id',
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
         amount: {
             field: 'amount',
             type: DataTypes.DECIMAL

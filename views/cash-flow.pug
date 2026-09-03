@@ -72,13 +72,13 @@ block content
                     table.table(id= debitPrefix + "table")
                         tbody.thead-light
                             +addCashFlowHeader()
-                            - var rowCnt = 0
+                            - var debitRowCnt = 0
                             if cashFlowDebits && cashFlowDebits.length > 0
                                 each val, index in cashFlowDebits
-                                    +addCashFlowEntry(val, config.cashSaleTypes[1], debitPrefix, rowCnt++)
+                                    +addCashFlowEntry(val, config.cashSaleTypes[1], debitPrefix, debitRowCnt++)
 
-                            while rowCnt < maxCashFlowRows
-                                +newCashFlowEntry(config.cashSaleTypes[1], debitPrefix, rowCnt++)
+                            while debitRowCnt < maxCashFlowRows
+                                +newCashFlowEntry(config.cashSaleTypes[1], debitPrefix, debitRowCnt++)
                             tr
                                 td &nbsp;
                                 td(style="text-align:right") Total
@@ -142,9 +142,11 @@ block content
             span
                 button.btn.btn-dark(id='cashflow-close' disabled=true onClick='finishClosing(\'cashflowId\',\'close-cashflow\',\'cashflowhome\')') CLOSE &raquo;
 
+    input(type='hidden' id='cashflow-debit-rowcnt_hiddenValue' value=debitRowCnt)
     script.
         document.addEventListener('DOMContentLoaded', function() {
             calculateCashflowDebitTotal();
             calculateCashflowCreditTotal();
+            initCashflowVendorPickers('cashflow-debit-', parseInt(document.getElementById('cashflow-debit-rowcnt_hiddenValue').value, 10));
         });
 

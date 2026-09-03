@@ -2,6 +2,7 @@ const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const cashflowDao = require("../dao/cashflow-closing-dao");
 const TxnReadDao = require("../dao/txn-read-dao");
+const adjustmentsDao = require("../dao/adjustments-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 const locationConfig = require("../utils/location-config");
@@ -129,16 +130,20 @@ module.exports = {
     cashFlowTxnDenominationPromise: (closingId) => {
         return cashFlowTxnDenominationPromise(closingId);
     },
-    saveCashflowTxnData: (req, res, next) => {
+    saveCashflowTxnData: async (req, res, next) => {
         const txnData = req.body;
-        if (txnData) {
-            txnCashflowSavePromise(txnData).then((result) => {
-                if (!result.error) {
-                    res.status(200).send({message: 'Saved cash flow transaction data successfully.', rowsData: result});
-                } else {
-                    res.status(500).send({error: result.error});
+        if (txnData && txnData.length > 0) {
+            const result = await txnCashflowSavePromise(txnData);
+            if (!result.error) {
+                try {
+                    await syncDigitalVendorAdjustments(txnData, result, req.user.location_code);
+                } catch (syncErr) {
+                    return res.status(500).send({error: syncErr.message});
                 }
-            });
+                res.status(200).send({message: 'Saved cash flow transaction data successfully.', rowsData: result});
+            } else {
+                res.status(500).send({error: result.error});
+            }
         }
     },
     saveCashflowDenomsData: (req, res, next) => {
@@ -155,14 +160,27 @@ module.exports = {
     },
     deleteCashFlow: (req, res, next) => {
         if(req.query.id) {
-            cashflowDao.delete(req.query.id)
-                .then(data => {
-                    if (data == 1) {
-                        res.status(200).send({message: 'Cash flow successfully deleted.'});
-                    } else {
-                        res.status(500).send({error: 'Cash flow deletion failed or not available to delete.'});
-                    }
+            const transactionId = req.query.id;
+            adjustmentsDao.findActiveByCashflowTxnId(transactionId).then(linkedAdjustment => {
+                const isReconciled = linkedAdjustment && (linkedAdjustment.manual_recon_flag || linkedAdjustment.recon_match_id);
+                if (isReconciled) {
+                    return res.status(400).send({error: `Cannot delete: the linked adjustment (#${linkedAdjustment.adjustment_id}) has already been bank-reconciled. Remove the reconciliation first.`});
+                }
+                const cleanup = linkedAdjustment ? adjustmentsDao.deleteAdjustment(linkedAdjustment.adjustment_id) : Promise.resolve();
+                cleanup.then(() => {
+                    cashflowDao.delete(transactionId)
+                        .then(data => {
+                            if (data == 1) {
+                                res.status(200).send({message: 'Cash flow successfully deleted.'});
+                            } else {
+                                res.status(500).send({error: 'Cash flow deletion failed or not available to delete.'});
+                            }
+                        });
                 });
+            }).catch(err => {
+                console.error('Error checking linked adjustment before cashflow txn delete:', err);
+                res.status(500).send({error: 'Error while deleting the record.'});
+            });
         } else {
             res.status(500).send({error: 'Cash flow deletion failed or not available to delete.'});
         }
@@ -305,7 +323,8 @@ function collectCreditAndDebits(result) {
         description: t.description,
         amount: t.amount,
         type: t.type,
-        calcFlag: t.calcFlag
+        calcFlag: t.calcFlag,
+        digitalVendorId: t.digitalVendorId
     }));
     return { data: creditOrDebits, options: result.options || [] };
 }
@@ -320,7 +339,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
         cashFlowTxnDenominationPromise(req.query.id),
         getClosingDataForCashflow(req.query.id, locationCode), // Add this new promise
         locationConfig.getLocationConfigValue(locationCode, 'SHOW_CASHFLOW_DENOMINATIONS', 'Y'),
-        locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt)
+        locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt),
+        adjustmentsDao.getDigitalVendors(locationCode)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
@@ -338,7 +358,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             debitOptions: debitData.options,
             shiftClosings: values[4].value || [], // Add the closing data
             showCashFlowDenominations: values[5].value === 'Y',
-            maxCashFlowRows: Number(values[6].value)
+            maxCashFlowRows: Number(values[6].value),
+            digitalVendorList: values[7].value || []
         });
     });
 }
@@ -379,6 +400,48 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
             {error: "Error while triggering procedure."});
     });
+}
+
+// After a batch of cashflow Outflow rows is saved, sync the matching
+// digital-vendor debit adjustment for any row that carries a digital_vendor_id
+// (or previously did and had it cleared). No-op unless the location has
+// ALLOW_CASHFLOW_DIGITAL_VENDOR_ADJUSTMENT='Y'.
+async function syncDigitalVendorAdjustments(txnData, savedRows, locationCode) {
+    const allowFlag = await locationConfig.getLocationConfigValue(locationCode, 'ALLOW_CASHFLOW_DIGITAL_VENDOR_ADJUSTMENT', 'N');
+    if (allowFlag !== 'Y') return;
+
+    const cashflowId = txnData[0] && txnData[0].cashflowId;
+    if (!cashflowId) return;
+
+    const [cashflow, digitalVendors] = await Promise.all([
+        cashflowDao.findCashflow(locationCode, cashflowId),
+        adjustmentsDao.getDigitalVendors(locationCode)
+    ]);
+    if (!cashflow) return;
+
+    const vendorMap = new Map(digitalVendors.map(v => [String(v.creditlist_id), v.Company_Name]));
+    const rows = Array.isArray(savedRows) ? savedRows : [savedRows];
+
+    for (let i = 0; i < txnData.length; i++) {
+        const inputRow = txnData[i];
+        const savedRow = rows[i];
+        const transactionId = (savedRow && savedRow.transaction_id) || inputRow.transaction_id;
+        if (!transactionId) continue;
+
+        const digitalVendorId = inputRow.digital_vendor_id ? parseInt(inputRow.digital_vendor_id, 10) : null;
+        const amount = parseFloat(inputRow.amount) || 0;
+        const vendorName = digitalVendorId ? (vendorMap.get(String(digitalVendorId)) || 'Digital Vendor') : null;
+
+        await adjustmentsDao.syncFromCashflowTxn({
+            transactionId,
+            locationCode,
+            adjustmentDate: cashflow.cashflow_date,
+            digitalVendorId,
+            vendorName,
+            amount,
+            username: inputRow.updated_by || inputRow.created_by
+        });
+    }
 }
 
 const txnCashflowSavePromise = (txnsArr) => {

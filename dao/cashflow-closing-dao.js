@@ -92,7 +92,8 @@ module.exports = {
         const entryType = type === 'IN' ? 'CREDIT' : 'DEBIT';
 
         const options = await db.sequelize.query(`
-            SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name
+            SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name,
+                   ah.requires_digital_vendor_link AS requiresDigitalVendor
             FROM m_account_heads ah
             INNER JOIN m_ledger_rules mlr
                 ON  mlr.location_code = ah.location_code
@@ -105,7 +106,8 @@ module.exports = {
         `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
 
         const transactions = await db.sequelize.query(`
-            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag
+            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag,
+                   tct.digital_vendor_id AS digitalVendorId
             FROM t_cashflow_transaction tct
             LEFT JOIN m_ledger_rules mlr
                 ON  mlr.location_code = :location
@@ -124,7 +126,7 @@ module.exports = {
     },
     saveCashflowTxns: (data) => {
         const txns = CashFlowTxn.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["description", "type", "account_head_id", "amount", "updated_by", "updation_date"]});
+            updateOnDuplicate: ["description", "type", "account_head_id", "digital_vendor_id", "amount", "updated_by", "updation_date"]});
         return txns;
     },
     delete: (id) => {
