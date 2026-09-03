@@ -47,7 +47,10 @@ block content
                                 
                                 div.form-group.mb-4
                                     label.form-label.text-muted.fw-bold Password:
-                                    input#pw.form-control.form-control-lg(type='password', name='password', placeholder='Enter password', required)
+                                    div.input-group
+                                        input#pw.form-control.form-control-lg(type='password', name='password', placeholder='Enter password', required)
+                                        button#togglePw.btn.btn-outline-secondary(type='button', tabindex='-1', aria-label='Show password')
+                                            i#togglePwIcon.bi.bi-eye
                                 
                                 button.btn.btn-success.btn-lg.w-100.login-btn(type='submit') 
                                     i.bi.bi-box-arrow-in-right.me-2
@@ -56,3 +59,14 @@ block content
                     // Footer
                     div.text-center.mt-4
                         small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.
+
+    script.
+        document.getElementById('togglePw').addEventListener('click', function () {
+            var pw = document.getElementById('pw');
+            var icon = document.getElementById('togglePwIcon');
+            var isHidden = pw.type === 'password';
+            pw.type = isHidden ? 'text' : 'password';
+            icon.classList.toggle('bi-eye', !isHidden);
+            icon.classList.toggle('bi-eye-slash', isHidden);
+            this.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+        });
