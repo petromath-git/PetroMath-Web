@@ -164,11 +164,11 @@ mixin summaryDigitalSalesData(digitalSaleRowNo)
     - var trClass = 'd-md-none';
     tr(class=trClass id='vis-' + prefix + 'table-row-' + digitalSaleRowNo)
         td
+            span(id='val-' + prefix + 'transaction-date-' + digitalSaleRowNo)
+        td
             span(id='valText-' + prefix + 'vendor-' + digitalSaleRowNo)
         td
             span(id='val-' + prefix + 'amt-' + digitalSaleRowNo)  // Changed from 'amount' to 'amt'
-        td
-            span(id='val-' + prefix + 'transaction-date-' + digitalSaleRowNo)
         td
             span(id='val-' + prefix + 'notes-' + digitalSaleRowNo)
 
