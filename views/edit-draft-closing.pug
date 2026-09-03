@@ -475,9 +475,9 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
+                                                th(scope="col") Transaction Date
                                                 th(scope="col") Vendor
                                                 th(scope="col") Amount
-                                                th(scope="col") Transaction Date
                                                 th(scope="col") Notes
                                                 if(!freezedRecord)
                                                     th(scope="col")
@@ -775,16 +775,16 @@ block content
                                                 table.table.table-sm
                                                     thead.thead-light
                                                         tr
+                                                            th(scope="col") Transaction Date
                                                             th(scope="col") Vendor
                                                             th(scope="col") Amount
-                                                            th(scope="col") Transaction Date
                                                             th(scope="col") Notes
                                                         - var rowCnt = 0
                                                         - var maxDigitalSalesRowCnt = 10
                                                         while rowCnt < maxDigitalSalesRowCnt
                                                             +summaryDigitalSalesData(rowCnt++)
                                                         tr
-                                                            td(colspan=1)
+                                                            td(colspan=2)
                                                             td
                                                                 span
                                                                     b Total
