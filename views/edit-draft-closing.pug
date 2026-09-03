@@ -98,10 +98,10 @@ block content
                         a.nav-link#digital_sales_tab(data-toggle="tab" href="#new_digital_sales" onclick=`calculateDigitalSalesAndTrackMenu(this)`) Digital Sales
                     if allowCreditReceiptsInClosing
                         li.nav-item.col-md
-                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts") Collections
+                            a.nav-link#credit_receipts_tab(data-toggle="tab" href="#new_credit_receipts" onclick=`calculateCreditReceiptsAndTrackMenu(this)`) Collections
                     if allowEmployeeAdvanceInClosing
                         li.nav-item.col-md
-                            a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance") Employee Advance
+                            a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance" onclick=`calculateEmployeeAdvanceAndTrackMenu(this)`) Employee Advance
                     li.nav-item.col-md
                         a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses") Expenses
                     if bowserValues && bowserValues.length > 0
@@ -475,9 +475,9 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
+                                                th(scope="col") Transaction Date
                                                 th(scope="col") Vendor
                                                 th(scope="col") Amount
-                                                th(scope="col") Transaction Date
                                                 th(scope="col") Notes
                                                 if(!freezedRecord)
                                                     th(scope="col")
@@ -775,16 +775,16 @@ block content
                                                 table.table.table-sm
                                                     thead.thead-light
                                                         tr
+                                                            th(scope="col") Transaction Date
                                                             th(scope="col") Vendor
                                                             th(scope="col") Amount
-                                                            th(scope="col") Transaction Date
                                                             th(scope="col") Notes
                                                         - var rowCnt = 0
                                                         - var maxDigitalSalesRowCnt = 10
                                                         while rowCnt < maxDigitalSalesRowCnt
                                                             +summaryDigitalSalesData(rowCnt++)
                                                         tr
-                                                            td(colspan=1)
+                                                            td(colspan=2)
                                                             td
                                                                 span
                                                                     b Total
@@ -839,7 +839,7 @@ block content
                                         div.row
                                             // Summary: Employee advances
                                             div.col-6#v-employee-advance
-                                                h6.sub-header Employee Advance
+                                                h6.sub-header Employee Advance / Recovery
                                                 div.table-responsive#vis-employee-advance-table
                                                     table.table.table-sm
                                                         thead.thead-light

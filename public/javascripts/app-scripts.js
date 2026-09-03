@@ -692,7 +692,16 @@ function calculateTotal(tableNamePrefix) {
             if (tableRowObj && !(tableRowObj.className === 'd-md-none')) {
                 const amtObject = document.getElementById(tableNamePrefix + 'amt-' + i);
                 if (amtObject && amtObject.value) {
-                    totalSales += currenciesAsFloat(amtObject.value);
+                    let amt = currenciesAsFloat(amtObject.value);
+                    // Employee Advance total is net cash impact: Recovery is cash in,
+                    // Advance/Payment is cash out.
+                    if (tableNamePrefix === 'employee-advance-') {
+                        const typeObject = document.getElementById(tableNamePrefix + 'type-' + i);
+                        if (!(typeObject && typeObject.value === 'ADVANCE_RECOVERY')) {
+                            amt = -amt;
+                        }
+                    }
+                    totalSales += amt;
                 }
                 rowCount++;
             }
@@ -942,8 +951,28 @@ function populateSummary(obj) {
                 } else if (getValueFromLabelId.includes('employee-advance-txn-date-')) {
                     const dateElement = document.getElementById(getValueFromLabelId);
                     labels[j].textContent = formatDateDDMonYYYY(dateElement ? dateElement.value : '');
+                } else if (getValueFromLabelId.includes('employee-advance-amt-')) {
+                    const amtElement = document.getElementById(getValueFromLabelId);
+                    const amtValue = amtElement ? amtElement.value : '';
+                    labels[j].classList.remove('text-success', 'text-danger');
+                    if (amtValue) {
+                        const rowNum = getValueFromLabelId.replace('employee-advance-amt-', '');
+                        const typeElement = document.getElementById('employee-advance-type-' + rowNum);
+                        const isRecovery = typeElement && typeElement.value === 'ADVANCE_RECOVERY';
+                        labels[j].textContent = (isRecovery ? '+' : '-') + amtValue;
+                        labels[j].classList.add(isRecovery ? 'text-success' : 'text-danger');
+                    } else {
+                        labels[j].textContent = '';
+                    }
                 } else {
-                    labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
+                    const sourceEl = document.getElementById(getValueFromLabelId);
+                    if (!sourceEl) {
+                        labels[j].textContent = "";
+                    } else if (sourceEl.tagName === 'INPUT' || sourceEl.tagName === 'SELECT' || sourceEl.tagName === 'TEXTAREA') {
+                        labels[j].textContent = sourceEl.value;
+                    } else {
+                        labels[j].textContent = sourceEl.textContent;
+                    }
                 }
 
                 // Removed the hardcoded pump_amount calculation section

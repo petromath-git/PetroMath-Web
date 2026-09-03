@@ -416,9 +416,9 @@ block content
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
+                                                th(scope="col") Transaction Date
                                                 th(scope="col") Vendor
                                                 th(scope="col") Amount
-                                                th(scope="col") Transaction Date
                                                 th(scope="col") Notes
                                                 th(scope="col")
 
@@ -694,16 +694,16 @@ block content
                                             table.table.table-sm
                                                 thead.thead-light
                                                     tr
+                                                        th(scope="col") Transaction Date
                                                         th(scope="col") Vendor
                                                         th(scope="col") Amount
-                                                        th(scope="col") Transaction Date
                                                         th(scope="col") Notes
                                                     - var rowCnt = 0
                                                     - var maxDigitalSalesRowCnt = 10
                                                     while rowCnt < maxDigitalSalesRowCnt
                                                         +summaryDigitalSalesData(rowCnt++)
                                                     tr
-                                                        td(colspan=1)
+                                                        td(colspan=2)
                                                         td
                                                             span
                                                                 b Total
@@ -758,7 +758,7 @@ block content
                                     div.row
                                         // Summary: Employee advances
                                         div.col-6#v-employee-advance
-                                            h6.sub-header Employee Advance
+                                            h6.sub-header Employee Advance / Recovery
                                             div.table-responsive#vis-employee-advance-table
                                                 table.table.table-sm
                                                     thead.thead-light
