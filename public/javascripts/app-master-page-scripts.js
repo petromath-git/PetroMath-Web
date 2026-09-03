@@ -301,17 +301,46 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
 
 function formCashFlowTxn(txnId, prefix, rowNum, user) {
     const typeObj = document.getElementById(prefix + 'transaction-' + rowNum);
+    const vendorObj = document.getElementById(prefix + 'vendor-' + rowNum);
+    const digitalVendorId = (vendorObj && vendorObj.style.display !== 'none' && vendorObj.value) ? vendorObj.value : null;
     return {
         'transaction_id': txnId,
         'cashflowId': document.getElementById('cashflowId_hiddenId').value,
         'description': document.getElementById(prefix + 'remarks-' + rowNum).value,
         'type': typeObj.options[typeObj.selectedIndex].text,
         'account_head_id': typeObj.value,
+        'digital_vendor_id': digitalVendorId,
         'amount': document.getElementById(prefix + 'amt-' + rowNum).value,
         'calcFlag': 'N',
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
+}
+
+// Shows/hides the digital-vendor picker for a cashflow Outflow row based on
+// whether the currently selected Transaction type requires it
+// (data-requires-vendor="Y", set from m_account_heads.requires_digital_vendor_link).
+function onCashflowTypeChange(prefix, rowNum) {
+    const typeObj = document.getElementById(prefix + 'transaction-' + rowNum);
+    const vendorObj = document.getElementById(prefix + 'vendor-' + rowNum);
+    if (!typeObj || !vendorObj) {
+        return;
+    }
+    const requiresVendor = typeObj.options[typeObj.selectedIndex].dataset.requiresVendor === 'Y';
+    vendorObj.style.display = requiresVendor ? '' : 'none';
+    vendorObj.required = requiresVendor;
+    if (!requiresVendor) {
+        vendorObj.value = '';
+        vendorObj.className = 'form-control mt-1 digital-vendor-select';
+    }
+}
+
+// Runs onCashflowTypeChange for every editable cashflow Outflow row already on
+// the page, so persisted rows show/hide the vendor picker correctly on load.
+function initCashflowVendorPickers(prefix, rowCount) {
+    for (let rowNum = 0; rowNum < rowCount; rowNum++) {
+        onCashflowTypeChange(prefix, rowNum);
+    }
 }
 
 function calculateCashflowDebitTotal() {

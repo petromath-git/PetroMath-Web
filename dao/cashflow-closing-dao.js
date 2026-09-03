@@ -92,7 +92,8 @@ module.exports = {
         const entryType = type === 'IN' ? 'CREDIT' : 'DEBIT';
 
         const options = await db.sequelize.query(`
-            SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name
+            SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name,
+                   ah.requires_digital_vendor_link AS requiresDigitalVendor
             FROM m_account_heads ah
             INNER JOIN m_ledger_rules mlr
                 ON  mlr.location_code = ah.location_code
@@ -105,7 +106,8 @@ module.exports = {
         `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
 
         const transactions = await db.sequelize.query(`
-            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag
+            SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag,
+                   tct.digital_vendor_id AS digitalVendorId
             FROM t_cashflow_transaction tct
             LEFT JOIN m_ledger_rules mlr
                 ON  mlr.location_code = :location
@@ -118,13 +120,25 @@ module.exports = {
 
         return { options, transactions };
     },
+    // Which of the given Account Heads require a digital-vendor picker
+    // (m_account_heads.requires_digital_vendor_link='Y') — used to reject a
+    // save server-side if the cashier's vendor selection got bypassed client-side.
+    getAccountHeadsRequiringVendorLink: async (accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return [];
+        const rows = await db.sequelize.query(`
+            SELECT account_head_id
+            FROM m_account_heads
+            WHERE account_head_id IN (:accountHeadIds) AND requires_digital_vendor_link = 'Y'
+        `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return rows.map(r => r.account_head_id);
+    },
     triggerGenerateCashflow : (cashflowId) => {
         const cashflowTxn = db.sequelize.query('CALL generate_cashflow(' + cashflowId + ');', null, { raw: true });
         return cashflowTxn;
     },
     saveCashflowTxns: (data) => {
         const txns = CashFlowTxn.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["description", "type", "account_head_id", "amount", "updated_by", "updation_date"]});
+            updateOnDuplicate: ["description", "type", "account_head_id", "digital_vendor_id", "amount", "updated_by", "updation_date"]});
         return txns;
     },
     delete: (id) => {
