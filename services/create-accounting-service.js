@@ -11,12 +11,17 @@
 //   BOWSER_DIGITAL_SALE (source_id = digital_id)       — Vendor DR / Sales CR
 //   LUBES_INVOICE       (source_id = lubes_hdr_id)     — Purchase DR + Input CGST/SGST DR / Supplier CR
 //   TANK_INVOICE        (source_id = t_tank_invoice.id)— Purchase DR + Charges DR / Supplier CR
-//   CASHFLOW_TXN        (source_id = transaction_id)   — calc_flag='N' cashflow-close lines only.
-//                                                         Direction comes from entry_type on the row itself;
-//                                                         ledger resolution goes through the linked Account
-//                                                         Head's name -> resolveStaticLedger (shared with
-//                                                         BANK_TXN's Static labels). Never blocks processing;
-//                                                         unmapped labels fall back to "Unclassified Cashflow".
+//   CASHFLOW_TXN        (source_id = transaction_id)   — all cashflow-close lines, system-generated
+//                                                         (calc_flag='Y') and manually typed (calc_flag='N')
+//                                                         alike; calc_flag is a data-source signal only,
+//                                                         not a GL gate. Direction comes from entry_type on
+//                                                         the row itself; ledger resolution goes through the
+//                                                         linked Account Head's name -> resolveStaticLedger
+//                                                         (shared with BANK_TXN's Static labels), so each
+//                                                         cashflow type's POST/SKIP treatment is reviewed
+//                                                         per-type in gl_static_ledger_map. Never blocks
+//                                                         processing; unmapped labels fall back to
+//                                                         "Unclassified Cashflow".
 //   ADJUSTMENT          (source_id = adjustment_id)    — customer/vendor/bank corrections + opening
 //                                                         balances (adjustment_type=201 → "Opening Balance
 //                                                         Equity", off the P&L; other types resolve by
@@ -377,7 +382,6 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
         JOIN gl_financial_years fy ON fy.location_code = tcc.location_code
             AND tcc.cashflow_date BETWEEN fy.start_date AND fy.end_date
         WHERE tcc.location_code = :locationCode
-          AND tct.calc_flag = 'N'
           AND tcc.cashflow_date BETWEEN :fromDate AND :toDate
           AND NOT EXISTS (
               SELECT 1 FROM gl_accounting_events e
@@ -1205,8 +1209,11 @@ async function processTankInvoiceEvent(event, processedBy) {
 }
 
 // ─── CASHFLOW_TXN Handler ─────────────────────────────────────────────────────
-// Only calc_flag='N' rows reach this handler (calc_flag='Y' rows never raise an
-// event — see trg_cashflow_txn_gl_insert). Direction comes straight off
+// Runs for every cashflow-close line, calc_flag='Y' (system-generated rollups
+// like Collection/Balance B/F/2T Oil) and calc_flag='N' (manually typed) alike
+// — calc_flag is a data-source signal only, not a GL gate; whether a given
+// cashflow type actually posts is decided per-type below via resolveStaticLedger,
+// same mechanism as BANK_TXN. Direction comes straight off
 // t_cashflow_transaction.entry_type (resolved before processing time by the
 // account-head trigger, or by the entry UI once that ships). Ledger resolution
 // goes through the Account Head's name -> resolveStaticLedger -> gl_static_ledger_map,
@@ -1227,12 +1234,6 @@ async function processCashflowTxnEvent(event, processedBy) {
 
     if (!rows.length) throw new Error(`Cashflow transaction not found: transaction_id=${transactionId}`);
     const row = rows[0];
-
-    // Defensive — trigger already filters this, but calc_flag can flip on a later UPDATE
-    if (row.calc_flag !== 'N') {
-        await markEventProcessed(event.event_id, null, processedBy);
-        return { voucherCount: 0 };
-    }
 
     const amount = parseFloat(row.amount || 0);
     if (amount <= 0) {
