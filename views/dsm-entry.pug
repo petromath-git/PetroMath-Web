@@ -482,6 +482,28 @@ html(lang='en')
         input#billPhotoUploadInput(type='file' accept='image/*' style='display:none')
         input#billPhotoCameraInput(type='file' accept='image/*' capture='environment' style='display:none')
 
+    //- Quick-add-vehicle modal (customer-first mode only) — gated by
+    //- ALLOW_DSM_QUICK_ADD_VEHICLE location config.
+    if allowQuickAddVehicle
+        #dsmQuickAddVehicleModal.modal.fade(tabindex='-1' role='dialog' aria-hidden='true')
+            .modal-dialog(role='document')
+                .modal-content
+                    .modal-header
+                        h6.modal-title#dsmQuickAddVehicleModalLabel Add New Vehicle
+                        button.close(type='button' data-dismiss='modal' aria-label='Close')
+                            span(aria-hidden='true') &times;
+                    .modal-body
+                        .form-group
+                            label Vehicle Number *
+                            input.form-control.text-uppercase#dsmQuickVehicleNumber(type='text' maxlength='20' placeholder='e.g., TN01AB1234' autocomplete='off')
+                            small.form-text.text-danger.d-none#dsmQuickVehicleDupMsg Vehicle already exists for this customer
+                        .form-group
+                            label Vehicle Type
+                            input.form-control.text-uppercase#dsmQuickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                    .modal-footer
+                        button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                        button.btn.btn-success#dsmQuickAddVehicleSaveBtn(type='button' onclick='quickSaveDsmVehicle()') Add Vehicle
+
     if !activeClosing
         .dsm-container
             .no-shift-card
@@ -569,6 +591,9 @@ html(lang='en')
                                 )
                                 button#btnScanPlate.btn-scan(type='button' title='Scan number plate')
                                     i.bi.bi-camera
+                                if allowQuickAddVehicle
+                                    button#btnDsmQuickAddVehicle.btn-scan(type='button' title='Add new vehicle' onclick='openDsmQuickAddVehicleModal()')
+                                        i.bi.bi-plus-lg
                             #vehicleDropdown.vehicle-dropdown(style='display:none')
                         input#vehicleId(type='hidden' value='')
                         #vehicleSelected.vehicle-selected-tag(style='display:none')
@@ -1594,10 +1619,13 @@ html(lang='en')
 
             // Filter from already-loaded vehicles — no API call needed
             loadedVehicles = allVehiclesLoaded.filter(v => String(v.creditlist_id) === String(creditlistId));
-            if (loadedVehicles.length > 0) {
-                vehicleGroup.style.opacity = '1';
-                vehicleGroup.style.pointerEvents = 'auto';
-            }
+            // Enable as soon as a customer is picked, even with zero vehicles —
+            // that's exactly when quick-add (the "+" button inside this group)
+            // matters most: adding the customer's first vehicle. The search box
+            // itself just won't open a dropdown when loadedVehicles is empty
+            // (see showVehicleDropdown's early return).
+            vehicleGroup.style.opacity = '1';
+            vehicleGroup.style.pointerEvents = 'auto';
             checkFormReady();
         });
 
@@ -1674,6 +1702,108 @@ html(lang='en')
             // Full reset including loaded data — used when customer changes
             loadedVehicles = [];
             resetVehicle();
+        }
+
+        // Quick-add vehicle (customer-first mode only, gated by
+        // ALLOW_DSM_QUICK_ADD_VEHICLE — the button itself only exists in the DOM
+        // when pageData.allowQuickAddVehicle is true, see dsmQuickAddVehicleModal).
+        let dsmQuickAddCreditlistId = null;
+
+        function openDsmQuickAddVehicleModal() {
+            const creditlistId = customerSelect.value;
+            if (!creditlistId) return;
+            dsmQuickAddCreditlistId = creditlistId;
+
+            document.getElementById('dsmQuickVehicleNumber').value = '';
+            document.getElementById('dsmQuickVehicleType').value = '';
+            document.getElementById('dsmQuickVehicleDupMsg').classList.add('d-none');
+            const customer = allCredits.find(c => String(c.creditlist_id) === String(creditlistId));
+            document.getElementById('dsmQuickAddVehicleModalLabel').textContent =
+                'Add New Vehicle' + (customer ? ' for ' + customer.Company_Name : '');
+
+            const saveBtn = document.getElementById('dsmQuickAddVehicleSaveBtn');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Add Vehicle';
+            $('#dsmQuickAddVehicleModal').modal('show');
+        }
+
+        function quickSaveDsmVehicle(force) {
+            if (!dsmQuickAddCreditlistId) return;
+
+            const vehicleNumber = document.getElementById('dsmQuickVehicleNumber').value.trim().toUpperCase();
+            const vehicleType = document.getElementById('dsmQuickVehicleType').value.trim().toUpperCase();
+            if (!vehicleNumber) {
+                document.getElementById('dsmQuickVehicleNumber').focus();
+                return;
+            }
+
+            const saveBtn = document.getElementById('dsmQuickAddVehicleSaveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            document.getElementById('dsmQuickVehicleDupMsg').classList.add('d-none');
+
+            fetch('/dsm-entry/quick-add-vehicle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    creditlist_id: dsmQuickAddCreditlistId,
+                    vehicle_number: vehicleNumber,
+                    vehicle_type: vehicleType,
+                    force: !!force
+                })
+            })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    if (data.warning) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Add Vehicle';
+                        const proceed = confirm(
+                            (data.error || 'A similar vehicle already exists for this customer.') +
+                            `\n\nAre you sure "${vehicleNumber}" is a different vehicle? Click OK to add it anyway.`
+                        );
+                        if (proceed) {
+                            quickSaveDsmVehicle(true);
+                        }
+                        return;
+                    }
+                    if ((data.error || '').includes('already exists')) {
+                        document.getElementById('dsmQuickVehicleDupMsg').classList.remove('d-none');
+                    } else {
+                        alert(data.error || 'Could not add vehicle');
+                    }
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Add Vehicle';
+                    return;
+                }
+
+                const created = {
+                    vehicle_id: data.vehicle.vehicleId,
+                    vehicle_number: data.vehicle.vehicleNumber,
+                    vehicle_type: data.vehicle.vehicleType,
+                    creditlist_id: dsmQuickAddCreditlistId
+                };
+
+                // Keep both in-memory vehicle lists in sync so switching customers
+                // or vehicle-first mode sees the new vehicle without a reload.
+                allVehiclesLoaded.push(created);
+                loadedVehicles.push(created);
+
+                // Select it — mirrors the dropdown-click selection path above.
+                vehicleIdInput.value = created.vehicle_id;
+                vehicleSearch.value = '';
+                vehicleDropdown.style.display = 'none';
+                vehicleSelectedTag.innerHTML = `${created.vehicle_number} <button class="clear-vehicle" type="button">✕</button>`;
+                vehicleSelectedTag.style.display = 'inline-flex';
+                checkFormReady();
+
+                $('#dsmQuickAddVehicleModal').modal('hide');
+            })
+            .catch(() => {
+                alert('Network error while adding vehicle.');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Add Vehicle';
+            });
         }
 
         // Number plate scan via camera + Tesseract OCR

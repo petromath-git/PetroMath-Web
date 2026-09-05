@@ -71,6 +71,16 @@ router.get('/vehicles/:creditlistId',
     }
 );
 
+// POST /dsm-entry/quick-add-vehicle - Quick-add a vehicle for a customer.
+// Gated by ALLOW_DSM_QUICK_ADD_VEHICLE location config (checked in the controller),
+// not by the QUICK_ADD_VEHICLE permission -- DSM_CREDIT_ENTRY is enough here.
+router.post('/quick-add-vehicle',
+    [isLoginEnsured, security.hasPermission('DSM_CREDIT_ENTRY')],
+    (req, res, next) => {
+        dsmEntryController.quickAddVehicle(req, res, next);
+    }
+);
+
 // POST /dsm-entry/:tcreditId/photo - Attach or swap the printed-bill photo for an entry
 router.post('/:tcreditId/photo',
     [isLoginEnsured, security.hasPermission('DSM_CREDIT_ENTRY'), photoUpload.single('photo'), handleMulterError],
