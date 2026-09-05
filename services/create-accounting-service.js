@@ -699,6 +699,27 @@ async function processDayBillEvent(event, processedBy) {
             }
         }
 
+        // Source amounts carry 3-decimal precision (t_day_bill_items), but journal
+        // columns are DECIMAL(15,2) — rounding each of many product/tax lines to
+        // paisa independently can leave the voucher off by a paisa or two even
+        // though the 3-decimal source data is internally consistent. Round every
+        // line first, then absorb the leftover remainder into the last Sales line
+        // so DR always equals CR in what actually gets stored.
+        for (const line of lines) {
+            line.dr_amount = Math.round(line.dr_amount * 100) / 100;
+            line.cr_amount = Math.round(line.cr_amount * 100) / 100;
+        }
+        const roundedCrTotal = lines.slice(1).reduce((s, l) => s + l.cr_amount, 0);
+        const roundingDiff = Math.round((lines[0].dr_amount - roundedCrTotal) * 100) / 100;
+        if (roundingDiff !== 0) {
+            for (let i = lines.length - 1; i >= 1; i--) {
+                if (lines[i].cr_amount > 0) {
+                    lines[i].cr_amount = Math.round((lines[i].cr_amount + roundingDiff) * 100) / 100;
+                    break;
+                }
+            }
+        }
+
         const vid = await createVoucher({
             locationCode: location_code,
             fyId:         fy_id,
