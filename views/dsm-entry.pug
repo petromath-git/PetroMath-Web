@@ -1619,13 +1619,18 @@ html(lang='en')
 
             // Filter from already-loaded vehicles — no API call needed
             loadedVehicles = allVehiclesLoaded.filter(v => String(v.creditlist_id) === String(creditlistId));
-            // Enable as soon as a customer is picked, even with zero vehicles —
-            // that's exactly when quick-add (the "+" button inside this group)
-            // matters most: adding the customer's first vehicle. The search box
-            // itself just won't open a dropdown when loadedVehicles is empty
-            // (see showVehicleDropdown's early return).
-            vehicleGroup.style.opacity = '1';
-            vehicleGroup.style.pointerEvents = 'auto';
+            // Enable when there's something the user can actually do: existing
+            // vehicles to pick from, or quick-add available to add the first one.
+            // Without either, leave it disabled — an enabled-but-empty search box
+            // with no way to add a vehicle just invites typing a plate number that
+            // silently never gets saved.
+            if (loadedVehicles.length > 0 || pageData.allowQuickAddVehicle) {
+                vehicleGroup.style.opacity = '1';
+                vehicleGroup.style.pointerEvents = 'auto';
+            }
+            vehicleSearch.placeholder = loadedVehicles.length > 0
+                ? 'Type to search vehicle...'
+                : (pageData.allowQuickAddVehicle ? 'No vehicles yet — tap + to add' : 'Type to search vehicle...');
             checkFormReady();
         });
 
@@ -1641,7 +1646,16 @@ html(lang='en')
         });
 
         function showVehicleDropdown(term) {
-            if (!loadedVehicles.length) return;
+            if (!loadedVehicles.length) {
+                // Zero vehicles for this customer — typing here can never match
+                // anything. Say so explicitly instead of silently doing nothing,
+                // so it's not mistaken for a way to save a new vehicle number.
+                if (pageData.allowQuickAddVehicle) {
+                    vehicleDropdown.innerHTML = '<div class="no-results">No vehicles yet for this customer — tap + to add one</div>';
+                    vehicleDropdown.style.display = 'block';
+                }
+                return;
+            }
 
             const normalizedTerm = normalizeVehicleNumber(term);
             const matches = normalizedTerm
@@ -1652,7 +1666,12 @@ html(lang='en')
                 : loadedVehicles;
 
             if (matches.length === 0) {
-                vehicleDropdown.innerHTML = '<div class="no-results">No matching vehicles</div>';
+                // Nudge toward "+" right at the point of confusion: the cashier
+                // typed a number, nothing matched, so the natural next question
+                // is "how do I save this then?" — answer it here, not with silence.
+                vehicleDropdown.innerHTML = pageData.allowQuickAddVehicle
+                    ? '<div class="no-results">No matching vehicles — tap + to add it as new</div>'
+                    : '<div class="no-results">No matching vehicles</div>';
             } else {
                 vehicleDropdown.innerHTML = matches.map(v => `
                     <div class="vehicle-option" data-id="${v.vehicle_id}" data-number="${v.vehicle_number}">
@@ -1788,6 +1807,7 @@ html(lang='en')
                 // or vehicle-first mode sees the new vehicle without a reload.
                 allVehiclesLoaded.push(created);
                 loadedVehicles.push(created);
+                vehicleSearch.placeholder = 'Type to search vehicle...';
 
                 // Select it — mirrors the dropdown-click selection path above.
                 vehicleIdInput.value = created.vehicle_id;
