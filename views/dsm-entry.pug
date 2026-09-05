@@ -1619,10 +1619,13 @@ html(lang='en')
 
             // Filter from already-loaded vehicles — no API call needed
             loadedVehicles = allVehiclesLoaded.filter(v => String(v.creditlist_id) === String(creditlistId));
-            if (loadedVehicles.length > 0) {
-                vehicleGroup.style.opacity = '1';
-                vehicleGroup.style.pointerEvents = 'auto';
-            }
+            // Enable as soon as a customer is picked, even with zero vehicles —
+            // that's exactly when quick-add (the "+" button inside this group)
+            // matters most: adding the customer's first vehicle. The search box
+            // itself just won't open a dropdown when loadedVehicles is empty
+            // (see showVehicleDropdown's early return).
+            vehicleGroup.style.opacity = '1';
+            vehicleGroup.style.pointerEvents = 'auto';
             checkFormReady();
         });
 
