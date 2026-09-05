@@ -1,5 +1,6 @@
 const dsmEntryDao = require("../dao/dsm-entry-dao");
 const DocumentStoreDao = require("../dao/document-store-dao");
+const CreditVehiclesDao = require("../dao/credit-vehicles-dao");
 const { getLocationConfigValue } = require("../utils/location-config");
 
 const PHOTO_ENTITY_TYPE = 'CREDIT_BILL';
@@ -25,6 +26,11 @@ module.exports = {
             // independent so it can be switched off per-location without
             // affecting photo capture or OCR if it misbehaves on a device.
             const allowBillAutoCrop = allowBillPhoto && (await getLocationConfigValue(locationCode, 'ALLOW_DSM_BILL_AUTOCROP', 'N')) === 'Y';
+            // Independent gate for the "+" quick-add-vehicle button (customer-first
+            // mode). Not tied to ALLOW_QUICK_ADD_VEHICLE (the shift-closing gate) or
+            // the QUICK_ADD_VEHICLE permission -- location config only, re-checked
+            // server-side in quickAddVehicle below.
+            const allowQuickAddVehicle = (await getLocationConfigValue(locationCode, 'ALLOW_DSM_QUICK_ADD_VEHICLE', 'N')) === 'Y';
 
             // Check for active shift
             const activeClosing = await dsmEntryDao.getActiveClosing(cashierId, locationCode);
@@ -42,6 +48,7 @@ module.exports = {
                     allowBillPhoto,
                     allowBillOcr,
                     allowBillAutoCrop,
+                    allowQuickAddVehicle,
                     pageData: JSON.stringify({
                         activeClosing: null,
                         products: [],
@@ -50,7 +57,8 @@ module.exports = {
                         allVehicles: [],
                         allowBillPhoto,
                         allowBillOcr,
-                        allowBillAutoCrop
+                        allowBillAutoCrop,
+                        allowQuickAddVehicle
                     })
                 });
             }
@@ -70,7 +78,8 @@ module.exports = {
                 allVehicles,
                 allowBillPhoto,
                 allowBillOcr,
-                allowBillAutoCrop
+                allowBillAutoCrop,
+                allowQuickAddVehicle
             };
 
             return res.render("dsm-entry", {
@@ -83,6 +92,7 @@ module.exports = {
                 allowBillPhoto,
                 allowBillOcr,
                 allowBillAutoCrop,
+                allowQuickAddVehicle,
                 pageData: JSON.stringify(pageData)
             });
 
@@ -220,6 +230,81 @@ module.exports = {
         } catch (err) {
             console.error("DSM get all vehicles error:", err);
             return res.status(500).json({ success: false, message: "Server error." });
+        }
+    },
+
+    // POST /dsm-entry/quick-add-vehicle
+    // Quick-add a vehicle for a customer, inline from the DSM entry form.
+    // Gated purely by ALLOW_DSM_QUICK_ADD_VEHICLE location config -- deliberately
+    // NOT behind the QUICK_ADD_VEHICLE permission that POST /vehicles/api/quick-add
+    // requires, so this only needs the DSM_CREDIT_ENTRY permission already on the
+    // route. Mirrors that route's duplicate/fuzzy-match logic via CreditVehiclesDao.
+    quickAddVehicle: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const allowQuickAddVehicle = (await getLocationConfigValue(locationCode, 'ALLOW_DSM_QUICK_ADD_VEHICLE', 'N')) === 'Y';
+            if (!allowQuickAddVehicle) {
+                return res.status(403).json({ success: false, error: "Quick-add vehicle is not enabled for this location." });
+            }
+
+            const { creditlist_id, vehicle_number, vehicle_type, force } = req.body;
+            const cleanNumber = (vehicle_number || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!cleanNumber) {
+                return res.status(400).json({ success: false, error: 'Vehicle number is required' });
+            }
+
+            const existing = await CreditVehiclesDao.findByNumberAndCustomer(cleanNumber, creditlist_id);
+            if (existing) {
+                return res.status(400).json({ success: false, error: `Vehicle ${cleanNumber} already exists for this customer` });
+            }
+
+            if (!force) {
+                const similar = await CreditVehiclesDao.findSimilarForCustomer(cleanNumber, creditlist_id);
+                const similarElsewhere = await CreditVehiclesDao.findSimilarAcrossLocation(cleanNumber, locationCode, creditlist_id);
+
+                if (similar.length > 0 || similarElsewhere.length > 0) {
+                    const messages = [];
+                    if (similar.length > 0) {
+                        messages.push(`This looks similar to an existing vehicle for this customer: ${similar.map(v => v.vehicle_number).join(', ')}`);
+                    }
+                    if (similarElsewhere.length > 0) {
+                        const elsewhereList = similarElsewhere.map(v => `${v.vehicle_number} (${v.company_name})`).join(', ');
+                        messages.push(`This vehicle is already registered under another customer: ${elsewhereList}`);
+                    }
+                    return res.json({
+                        success: false,
+                        warning: true,
+                        similar: [...similar, ...similarElsewhere].map(v => ({ vehicleId: v.vehicle_id, vehicleNumber: v.vehicle_number })),
+                        error: messages.join('\n')
+                    });
+                }
+            }
+
+            const created = await CreditVehiclesDao.create({
+                creditlist_id,
+                vehicle_number: cleanNumber,
+                vehicle_type: (vehicle_type || '').trim().toUpperCase() || null,
+                product_id: null,
+                notes: '',
+                created_by: req.user.Person_id,
+                updated_by: req.user.Person_id,
+                creation_date: new Date(),
+                updation_date: new Date(),
+                effective_start_date: new Date(),
+                effective_end_date: null
+            });
+
+            return res.json({
+                success: true,
+                vehicle: {
+                    vehicleId: created.vehicle_id,
+                    vehicleNumber: cleanNumber,
+                    vehicleType: (vehicle_type || '').trim().toUpperCase() || ''
+                }
+            });
+        } catch (err) {
+            console.error("DSM quick-add vehicle error:", err);
+            return res.status(500).json({ success: false, error: "Error creating vehicle" });
         }
     },
 
