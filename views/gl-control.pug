@@ -1,28 +1,6 @@
 extends layout
 include mixins/mixins
 
-mixin monthYearPicker(prefix)
-    .col-auto(id=prefix + 'MonthYearWrap' style="display:none")
-        label.small.mb-1 Month / Year
-        .d-flex
-            select.form-control.form-control-sm.mr-1(id=prefix + 'Month' style="width:75px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
-                option(value="0") Jan
-                option(value="1") Feb
-                option(value="2") Mar
-                option(value="3") Apr
-                option(value="4") May
-                option(value="5") Jun
-                option(value="6") Jul
-                option(value="7") Aug
-                option(value="8") Sep
-                option(value="9") Oct
-                option(value="10") Nov
-                option(value="11") Dec
-            - var _glCurrentYear = new Date().getFullYear();
-            select.form-control.form-control-sm(id=prefix + 'Year' style="width:85px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
-                each y in [_glCurrentYear - 3, _glCurrentYear - 2, _glCurrentYear - 1, _glCurrentYear, _glCurrentYear + 1]
-                    option(value=y)= y
-
 block content
     .container-fluid.pt-3
 
@@ -39,6 +17,8 @@ block content
                 a.nav-link(id="tab-generate" data-toggle="tab" href="#pane-generate" role="tab") Generate Events
             li.nav-item
                 a.nav-link(id="tab-export" data-toggle="tab" href="#pane-export" role="tab") Tally Export
+            li.nav-item
+                a.nav-link.text-danger(id="tab-delete" data-toggle="tab" href="#pane-delete" role="tab") Delete / Reset
 
         .tab-content
 
@@ -49,11 +29,11 @@ block content
                     .col-auto
                         label.small.mb-1 Period
                         select.form-control.form-control-sm#evPeriod(onchange="glSetPeriod(this)" data-from="evFrom" data-to="evTo" data-monthyear="evMonthYearWrap" data-month="evMonth" data-year="evYear")
+                            option(value="month_year") Month / Year
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
-                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
                     +monthYearPicker('ev')
                     .col-auto
@@ -143,11 +123,11 @@ block content
                     .col-auto
                         label.small.mb-1 Period
                         select.form-control.form-control-sm#caPeriod(onchange="glSetPeriod(this)" data-from="caFrom" data-to="caTo" data-monthyear="caMonthYearWrap" data-month="caMonth" data-year="caYear")
+                            option(value="month_year") Month / Year
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
-                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
                     +monthYearPicker('ca')
                     .col-auto
@@ -185,11 +165,11 @@ block content
                     .col-auto
                         label.small.mb-1 Period
                         select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo" data-monthyear="geMonthYearWrap" data-month="geMonth" data-year="geYear")
+                            option(value="month_year") Month / Year
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
-                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
                     +monthYearPicker('ge')
                     .col-auto
@@ -222,11 +202,11 @@ block content
                     .col-auto
                         label.small.mb-1 Period
                         select.form-control.form-control-sm#exPeriod(onchange="glSetPeriod(this)" data-from="exFrom" data-to="exTo" data-monthyear="exMonthYearWrap" data-month="exMonth" data-year="exYear")
+                            option(value="month_year") Month / Year
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
-                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
                     +monthYearPicker('ex')
                     .col-auto
@@ -254,6 +234,72 @@ block content
                     button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadExportHistory()") Refresh
                 #exHistory
                     .text-muted.small Loading…
+
+            //- ── Delete / Reset ──────────────────────────────────────────────
+            #pane-delete.tab-pane.fade(role="tabpanel")
+
+                .alert.alert-danger.py-2.small
+                    i.bi.bi-exclamation-triangle-fill.mr-1
+                    | This permanently removes rows from gl_accounting_events, gl_journal_headers and gl_journal_lines for location
+                    strong= ' ' + user.location_code + '. '
+                    | There is no undo — export or back up first if you need a record.
+
+                .custom-control.custom-checkbox.mb-4
+                    input.custom-control-input(type="checkbox" id="delIncludeManual")
+                    label.custom-control-label.small(for="delIncludeManual") Also delete manually-created journals (posted from the Manual Journal screen)
+
+                .card.mb-4
+                    .card-header.py-2 Delete by Date Range
+                    .card-body
+                        .row.align-items-end.mb-3
+                            .col-auto
+                                label.small.mb-1 Period
+                                select.form-control.form-control-sm#delPeriod(onchange="glSetPeriod(this)" data-from="delFrom" data-to="delTo" data-monthyear="delMonthYearWrap" data-month="delMonth" data-year="delYear")
+                                    option(value="month_year") Month / Year
+                                    option(value="this_month") This Month
+                                    option(value="last_month") Last Month
+                                    option(value="this_fy") This Financial Year
+                                    option(value="last_fy") Last Financial Year
+                                    option(value="custom" selected) Custom
+                            +monthYearPicker('del')
+                            .col-auto
+                                label.small.mb-1 From Date
+                                input.form-control.form-control-sm(type="date" id="delFrom" value=fromDate)
+                            .col-auto
+                                label.small.mb-1 To Date
+                                input.form-control.form-control-sm(type="date" id="delTo" value=toDate)
+                            .col-auto.align-self-end
+                                button.btn.btn-outline-danger.btn-sm#btnDelPreview Preview
+
+                        #delPreviewResult.mb-3(style="display:none")
+                            .alert.alert-warning.py-2.small.mb-0#delPreviewBody
+
+                        .form-group.row.align-items-center.mb-0#delConfirmWrap(style="display:none")
+                            label.col-auto.small.mb-0 Type DELETE to confirm:
+                            .col-auto
+                                input.form-control.form-control-sm(type="text" id="delConfirmText" style="width:120px")
+                            .col-auto
+                                button.btn.btn-danger.btn-sm#btnDelExecute(disabled) Delete
+
+                .card.border-danger
+                    .card-header.py-2.bg-danger.text-white Full Reset — this location only
+                    .card-body
+                        p.text-muted.small.mb-3
+                            | Deletes ALL accounting events and journal vouchers for location
+                            strong= ' ' + user.location_code
+                            | . Use this to restart the GL engine from a clean slate.
+
+                        button.btn.btn-outline-danger.btn-sm.mb-3#btnWipePreview Preview Full Reset
+
+                        #wipePreviewResult.mb-3(style="display:none")
+                            .alert.alert-warning.py-2.small.mb-0#wipePreviewBody
+
+                        .form-group.row.align-items-center.mb-0#wipeConfirmWrap(style="display:none")
+                            label.col-auto.small.mb-0 Type the location code (#{user.location_code}) to confirm:
+                            .col-auto
+                                input.form-control.form-control-sm(type="text" id="wipeConfirmText" style="width:120px" data-expected=user.location_code)
+                            .col-auto
+                                button.btn.btn-danger.btn-sm#btnWipeExecute(disabled) Wipe Everything
 
     //- ── Source Detail Modal ─────────────────────────────────────────────────
     .modal.fade#sourceDetailModal(tabindex="-1" role="dialog")
@@ -776,6 +822,119 @@ block content
                 }
                 wrap.style.display = '';
                 loadBatchRuns('ge');
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = orig;
+            }
+        });
+
+        // ── Delete / Reset ────────────────────────────────────────────────────
+
+        function delIncludeManual() {
+            return document.getElementById('delIncludeManual').checked ? 1 : 0;
+        }
+
+        document.getElementById('btnDelPreview').addEventListener('click', async function() {
+            const from = document.getElementById('delFrom').value;
+            const to   = document.getElementById('delTo').value;
+            if (!from || !to) { alert('Please select a date range.'); return; }
+            this.disabled = true;
+            try {
+                const qs   = new URLSearchParams({ from_date: from, to_date: to, include_manual: delIncludeManual() });
+                const data = await fetch('/gl/api/delete-accounting/preview?' + qs).then(r => r.json());
+                const wrap = document.getElementById('delPreviewResult');
+                const body = document.getElementById('delPreviewBody');
+                const total = data.headers + data.lines + data.events;
+                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) will be permanently deleted for ${from} → ${to}.`;
+                wrap.style.display = '';
+                document.getElementById('delConfirmWrap').style.display = total > 0 ? '' : 'none';
+                document.getElementById('delConfirmText').value = '';
+                document.getElementById('btnDelExecute').disabled = true;
+            } catch (e) {
+                alert('Error: ' + e.message);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        document.getElementById('delConfirmText').addEventListener('input', function() {
+            document.getElementById('btnDelExecute').disabled = this.value.trim() !== 'DELETE';
+        });
+
+        document.getElementById('btnDelExecute').addEventListener('click', async function() {
+            const from = document.getElementById('delFrom').value;
+            const to   = document.getElementById('delTo').value;
+            if (!confirm('This cannot be undone. Permanently delete GL accounting data for ' + from + ' to ' + to + '?')) return;
+            this.disabled = true;
+            const orig = this.textContent;
+            this.textContent = 'Deleting…';
+            try {
+                const resp = await fetch('/gl/api/delete-accounting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from_date: from, to_date: to, include_manual: delIncludeManual(), confirm: 'DELETE' })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s).`);
+                    document.getElementById('delPreviewResult').style.display = 'none';
+                    document.getElementById('delConfirmWrap').style.display = 'none';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            } finally {
+                this.disabled = false;
+                this.textContent = orig;
+            }
+        });
+
+        document.getElementById('btnWipePreview').addEventListener('click', async function() {
+            this.disabled = true;
+            try {
+                const qs   = new URLSearchParams({ include_manual: delIncludeManual() });
+                const data = await fetch('/gl/api/delete-accounting/preview?' + qs).then(r => r.json());
+                const wrap = document.getElementById('wipePreviewResult');
+                const body = document.getElementById('wipePreviewBody');
+                const total = data.headers + data.lines + data.events;
+                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) exist for this location and will ALL be permanently deleted.`;
+                wrap.style.display = '';
+                document.getElementById('wipeConfirmWrap').style.display = total > 0 ? '' : 'none';
+                document.getElementById('wipeConfirmText').value = '';
+                document.getElementById('btnWipeExecute').disabled = true;
+            } catch (e) {
+                alert('Error: ' + e.message);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        document.getElementById('wipeConfirmText').addEventListener('input', function() {
+            document.getElementById('btnWipeExecute').disabled = this.value.trim() !== this.dataset.expected;
+        });
+
+        document.getElementById('btnWipeExecute').addEventListener('click', async function() {
+            if (!confirm('This cannot be undone. Permanently wipe ALL GL accounting events and journals for this location?')) return;
+            this.disabled = true;
+            const orig = this.textContent;
+            this.textContent = 'Wiping…';
+            try {
+                const resp = await fetch('/gl/api/wipe-accounting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ include_manual: delIncludeManual(), confirm_location: document.getElementById('wipeConfirmText').value.trim() })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s).`);
+                    document.getElementById('wipePreviewResult').style.display = 'none';
+                    document.getElementById('wipeConfirmWrap').style.display = 'none';
+                } else {
+                    alert('Error: ' + data.error);
+                }
             } catch (e) {
                 alert('Network error: ' + e.message);
             } finally {

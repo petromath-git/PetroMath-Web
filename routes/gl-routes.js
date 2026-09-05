@@ -1398,6 +1398,142 @@ router.post('/tally-import/create', [isLoginEnsured, security.isAdmin()], async 
     }
 });
 
+// ── Delete Accounting Data ───────────────────────────────────────────────────
+// Hard-delete tool for the GL engine (it has never run end-to-end on real
+// production data) — removes gl_accounting_events + gl_journal_headers/lines
+// for a date range, or the whole location. FK checks are disabled for the
+// duration because a reversal voucher and the original it reverses
+// (gl_journal_headers.reversal_of_voucher_id) must be removed together, and
+// the NO ACTION constraints on gl_journal_headers/gl_accounting_events don't
+// allow ordering a single statement around that.
+
+async function countDeletableAccounting(locationCode, fromDate, toDate, includeManual) {
+    const params = { locationCode, fromDate: fromDate || null, toDate: toDate || null, includeManual: includeManual ? 1 : 0 };
+
+    const [{ headers }] = await db.sequelize.query(`
+        SELECT COUNT(*) AS headers FROM gl_journal_headers h
+        WHERE h.location_code = :locationCode
+          AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+          AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL')
+    `, { replacements: params, type: db.Sequelize.QueryTypes.SELECT });
+
+    const [{ line_count }] = await db.sequelize.query(`
+        SELECT COUNT(*) AS line_count FROM gl_journal_lines l
+        JOIN gl_journal_headers h ON h.voucher_id = l.voucher_id
+        WHERE h.location_code = :locationCode
+          AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+          AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL')
+    `, { replacements: params, type: db.Sequelize.QueryTypes.SELECT });
+
+    const [{ events }] = await db.sequelize.query(`
+        SELECT COUNT(*) AS events FROM (
+            SELECT e.event_id FROM gl_accounting_events e
+            LEFT JOIN gl_journal_headers h ON h.voucher_id = e.voucher_id
+            WHERE (e.location_code = :locationCode
+                   AND (:fromDate IS NULL OR e.event_date BETWEEN :fromDate AND :toDate))
+               OR (h.voucher_id IS NOT NULL AND h.location_code = :locationCode
+                   AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+                   AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL'))
+        ) x
+    `, { replacements: params, type: db.Sequelize.QueryTypes.SELECT });
+
+    return { headers: parseInt(headers), lines: parseInt(line_count), events: parseInt(events) };
+}
+
+async function deleteAccounting(locationCode, fromDate, toDate, includeManual) {
+    const params = { locationCode, fromDate: fromDate || null, toDate: toDate || null, includeManual: includeManual ? 1 : 0 };
+    const t = await db.sequelize.transaction();
+
+    try {
+        await db.sequelize.query('SET FOREIGN_KEY_CHECKS=0', { transaction: t });
+
+        await db.sequelize.query(`
+            DELETE e FROM gl_accounting_events e
+            LEFT JOIN gl_journal_headers h ON h.voucher_id = e.voucher_id
+            WHERE (e.location_code = :locationCode
+                   AND (:fromDate IS NULL OR e.event_date BETWEEN :fromDate AND :toDate))
+               OR (h.voucher_id IS NOT NULL AND h.location_code = :locationCode
+                   AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+                   AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL'))
+        `, { replacements: params, transaction: t, type: db.Sequelize.QueryTypes.DELETE });
+
+        await db.sequelize.query(`
+            DELETE l FROM gl_journal_lines l
+            JOIN gl_journal_headers h ON h.voucher_id = l.voucher_id
+            WHERE h.location_code = :locationCode
+              AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+              AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL')
+        `, { replacements: params, transaction: t, type: db.Sequelize.QueryTypes.DELETE });
+
+        await db.sequelize.query(`
+            DELETE h FROM gl_journal_headers h
+            WHERE h.location_code = :locationCode
+              AND (:fromDate IS NULL OR h.voucher_date BETWEEN :fromDate AND :toDate)
+              AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL')
+        `, { replacements: params, transaction: t, type: db.Sequelize.QueryTypes.DELETE });
+
+        // Reset before commit — this session's connection returns to the pool
+        // right after, and FOREIGN_KEY_CHECKS is a session variable that
+        // outlives the transaction (SET is not rolled back), so the pooled
+        // connection must not go back with checks left off either way.
+        await db.sequelize.query('SET FOREIGN_KEY_CHECKS=1', { transaction: t });
+        await t.commit();
+    } catch (err) {
+        try { await db.sequelize.query('SET FOREIGN_KEY_CHECKS=1', { transaction: t }); } catch (_) {}
+        await t.rollback();
+        throw err;
+    }
+}
+
+// GET /gl/api/delete-accounting/preview?from_date=&to_date=&include_manual=0|1
+// Omit from_date/to_date for a full-location count (used by the "wipe everything" preview).
+router.get('/api/delete-accounting/preview', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { from_date, to_date, include_manual } = req.query;
+    try {
+        const counts = await countDeletableAccounting(locationCode, from_date || null, to_date || null, include_manual === '1');
+        res.json(counts);
+    } catch (err) {
+        console.error('Delete-accounting preview error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /gl/api/delete-accounting — hard-delete events + journals for a date range
+router.post('/api/delete-accounting', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { from_date, to_date, include_manual, confirm } = req.body;
+
+    if (!from_date || !to_date) return res.status(400).json({ success: false, error: 'from_date and to_date are required' });
+    if (confirm !== 'DELETE') return res.status(400).json({ success: false, error: 'Confirmation text did not match' });
+
+    try {
+        const counts = await countDeletableAccounting(locationCode, from_date, to_date, !!include_manual);
+        await deleteAccounting(locationCode, from_date, to_date, !!include_manual);
+        res.json({ success: true, ...counts });
+    } catch (err) {
+        console.error('Delete-accounting error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /gl/api/wipe-accounting — hard-delete ALL events + journals for this location
+router.post('/api/wipe-accounting', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const { include_manual, confirm_location } = req.body;
+
+    if (confirm_location !== locationCode) return res.status(400).json({ success: false, error: 'Location code did not match' });
+
+    try {
+        const counts = await countDeletableAccounting(locationCode, null, null, !!include_manual);
+        await deleteAccounting(locationCode, null, null, !!include_manual);
+        res.json({ success: true, ...counts });
+    } catch (err) {
+        console.error('Wipe-accounting error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ── GL Control ────────────────────────────────────────────────────────────────
 // GET /gl/control — admin dashboard: events monitor + create accounting + generate events
 
