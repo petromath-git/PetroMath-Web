@@ -513,4 +513,24 @@ mixin addMasterDeadline(rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'deadline-master\', \'' + id + '\')', id = id + '_close')
                 span(aria-hidden="true") &times;
 
+//- GL period pickers — month select runs FY order (Apr..Mar), year select
+//- descends from the current year. Pair with a Period <select> that has a
+//- "month_year" option and data-monthyear/data-month/data-year attributes
+//- pointing at this mixin's ids (see glSetPeriod/glSetMonthYear in
+//- app-report-date.js — month values are 0-based JS Date month indices).
+mixin monthYearPicker(prefix)
+    - var _glNow = new Date();
+    - var _glCurMonth = _glNow.getMonth();
+    - var _glCurYear = _glNow.getFullYear();
+    - var _glMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    .col-auto(id=prefix + 'MonthYearWrap' style="display:none")
+        label.small.mb-1 Month / Year
+        .d-flex
+            select.form-control.form-control-sm.mr-1(id=prefix + 'Month' style="width:75px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
+                each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                    option(value=m selected=(m === _glCurMonth))= _glMonthNames[m]
+            select.form-control.form-control-sm(id=prefix + 'Year' style="width:85px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
+                each y in [_glCurYear, _glCurYear - 1, _glCurYear - 2, _glCurYear - 3, _glCurYear - 4, _glCurYear - 5]
+                    option(value=y selected=(y === _glCurYear))= y
+
 
