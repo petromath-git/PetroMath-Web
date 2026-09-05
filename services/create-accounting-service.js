@@ -442,6 +442,31 @@ async function processEvent(event, processedBy) {
 }
 
 // ─── CREDIT_SALE Handler ──────────────────────────────────────────────────────
+// Source tables (t_cashsales, t_credits, t_day_bill_items) carry 3-decimal
+// precision, but journal columns are DECIMAL(15,2). A value ending on a .xx5
+// boundary (e.g. 26.085) can round inconsistently between lines that are each
+// rounded independently — deriving base = total - cgst - sgst in full JS
+// precision isn't enough on its own once each line is separately truncated to
+// paisa at storage time. Rounds every line first, then absorbs any leftover
+// remainder into the last non-zero CR line so DR always equals what's actually
+// stored. lines[0] must be the single DR line; the rest must be CR-only.
+function balanceLinesForRounding(lines) {
+    for (const line of lines) {
+        line.dr_amount = Math.round(line.dr_amount * 100) / 100;
+        line.cr_amount = Math.round(line.cr_amount * 100) / 100;
+    }
+    const crTotal = lines.slice(1).reduce((s, l) => s + l.cr_amount, 0);
+    const diff = Math.round((lines[0].dr_amount - crTotal) * 100) / 100;
+    if (diff !== 0) {
+        for (let i = lines.length - 1; i >= 1; i--) {
+            if (lines[i].cr_amount > 0) {
+                lines[i].cr_amount = Math.round((lines[i].cr_amount + diff) * 100) / 100;
+                break;
+            }
+        }
+    }
+}
+
 // Customer DR (total) → Sales CR (base) + Output CGST CR + Output SGST CR
 
 async function processCreditSaleEvent(event, processedBy) {
@@ -501,6 +526,8 @@ async function processCreditSaleEvent(event, processedBy) {
         if (!sgstLedgerId) throw new Error(`OUTPUT_SGST ledger not mapped for product ${row.product_name} at ${location_code}`);
         lines.push({ ledger_id: sgstLedgerId, dr_amount: 0, cr_amount: sgstAmount, narration });
     }
+
+    balanceLinesForRounding(lines);
 
     const vid = await createVoucher({
         locationCode: location_code,
@@ -580,6 +607,8 @@ async function processCashSaleEvent(event, processedBy) {
         if (!sgstLedgerId) throw new Error(`OUTPUT_SGST ledger not mapped for product ${row.product_name} at ${location_code}`);
         lines.push({ ledger_id: sgstLedgerId, dr_amount: 0, cr_amount: sgstAmount, narration });
     }
+
+    balanceLinesForRounding(lines);
 
     const vid = await createVoucher({
         locationCode: location_code,
@@ -699,26 +728,7 @@ async function processDayBillEvent(event, processedBy) {
             }
         }
 
-        // Source amounts carry 3-decimal precision (t_day_bill_items), but journal
-        // columns are DECIMAL(15,2) — rounding each of many product/tax lines to
-        // paisa independently can leave the voucher off by a paisa or two even
-        // though the 3-decimal source data is internally consistent. Round every
-        // line first, then absorb the leftover remainder into the last Sales line
-        // so DR always equals CR in what actually gets stored.
-        for (const line of lines) {
-            line.dr_amount = Math.round(line.dr_amount * 100) / 100;
-            line.cr_amount = Math.round(line.cr_amount * 100) / 100;
-        }
-        const roundedCrTotal = lines.slice(1).reduce((s, l) => s + l.cr_amount, 0);
-        const roundingDiff = Math.round((lines[0].dr_amount - roundedCrTotal) * 100) / 100;
-        if (roundingDiff !== 0) {
-            for (let i = lines.length - 1; i >= 1; i--) {
-                if (lines[i].cr_amount > 0) {
-                    lines[i].cr_amount = Math.round((lines[i].cr_amount + roundingDiff) * 100) / 100;
-                    break;
-                }
-            }
-        }
+        balanceLinesForRounding(lines);
 
         const vid = await createVoucher({
             locationCode: location_code,
