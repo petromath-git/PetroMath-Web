@@ -1,6 +1,28 @@
 extends layout
 include mixins/mixins
 
+mixin monthYearPicker(prefix)
+    .col-auto(id=prefix + 'MonthYearWrap' style="display:none")
+        label.small.mb-1 Month / Year
+        .d-flex
+            select.form-control.form-control-sm.mr-1(id=prefix + 'Month' style="width:75px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
+                option(value="0") Jan
+                option(value="1") Feb
+                option(value="2") Mar
+                option(value="3") Apr
+                option(value="4") May
+                option(value="5") Jun
+                option(value="6") Jul
+                option(value="7") Aug
+                option(value="8") Sep
+                option(value="9") Oct
+                option(value="10") Nov
+                option(value="11") Dec
+            - var _glCurrentYear = new Date().getFullYear();
+            select.form-control.form-control-sm(id=prefix + 'Year' style="width:85px" onchange=`glSetMonthYear('${prefix}From','${prefix}To','${prefix}Month','${prefix}Year')`)
+                each y in [_glCurrentYear - 3, _glCurrentYear - 2, _glCurrentYear - 1, _glCurrentYear, _glCurrentYear + 1]
+                    option(value=y)= y
+
 block content
     .container-fluid.pt-3
 
@@ -26,12 +48,14 @@ block content
                 form.row.align-items-end.mb-3#eventsFilterForm
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm#evPeriod(onchange="glSetPeriod(this)" data-from="evFrom" data-to="evTo")
+                        select.form-control.form-control-sm#evPeriod(onchange="glSetPeriod(this)" data-from="evFrom" data-to="evTo" data-monthyear="evMonthYearWrap" data-month="evMonth" data-year="evYear")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
+                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
+                    +monthYearPicker('ev')
                     .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="evFrom" value=fromDate)
@@ -118,12 +142,14 @@ block content
                 .row.align-items-end.mb-3
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm#caPeriod(onchange="glSetPeriod(this)" data-from="caFrom" data-to="caTo")
+                        select.form-control.form-control-sm#caPeriod(onchange="glSetPeriod(this)" data-from="caFrom" data-to="caTo" data-monthyear="caMonthYearWrap" data-month="caMonth" data-year="caYear")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
+                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
+                    +monthYearPicker('ca')
                     .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="caFrom" value=fromDate)
@@ -158,12 +184,14 @@ block content
                 .row.align-items-end.mb-3
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo")
+                        select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo" data-monthyear="geMonthYearWrap" data-month="geMonth" data-year="geYear")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
+                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
+                    +monthYearPicker('ge')
                     .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="geFrom" value=fromDate)
@@ -193,12 +221,14 @@ block content
                 .row.align-items-end.mb-3
                     .col-auto
                         label.small.mb-1 Period
-                        select.form-control.form-control-sm#exPeriod(onchange="glSetPeriod(this)" data-from="exFrom" data-to="exTo")
+                        select.form-control.form-control-sm#exPeriod(onchange="glSetPeriod(this)" data-from="exFrom" data-to="exTo" data-monthyear="exMonthYearWrap" data-month="exMonth" data-year="exYear")
                             option(value="this_month") This Month
                             option(value="last_month") Last Month
                             option(value="this_fy") This Financial Year
                             option(value="last_fy") Last Financial Year
+                            option(value="month_year") Month / Year
                             option(value="custom" selected) Custom
+                    +monthYearPicker('ex')
                     .col-auto
                         label.small.mb-1 From Date
                         input.form-control.form-control-sm(type="date" id="exFrom" value=fromDate)

@@ -180,16 +180,26 @@ function updateInvoiceDateRange() {
 
 // glSetPeriod(sel) — called via onchange="glSetPeriod(this)"
 // The select must have data-from and data-to attributes with the target input IDs.
+// For the "Month/Year" option, it also needs data-monthyear (wrapper element id to
+// show/hide) and data-month/data-year (the two picker select ids) — see glSetMonthYear.
 function glSetPeriod(sel) {
-    const period = sel.value;
-    const fromId = sel.dataset.from;
-    const toId   = sel.dataset.to;
-    const today  = new Date();
+    const period   = sel.value;
+    const fromId   = sel.dataset.from;
+    const toId     = sel.dataset.to;
+    const myWrapId = sel.dataset.monthyear;
+    const monthId  = sel.dataset.month;
+    const yearId   = sel.dataset.year;
+    const today    = new Date();
     const yr = today.getFullYear();
     const mo = today.getMonth();
 
     function iso(d) {
         return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+    }
+
+    if (myWrapId) {
+        const wrap = document.getElementById(myWrapId);
+        if (wrap) wrap.style.display = (period === 'month_year') ? '' : 'none';
     }
 
     let from, to;
@@ -210,12 +220,39 @@ function glSetPeriod(sel) {
             from = new Date(yr - 1, 3, 1);
             to   = new Date(yr, 2, 31);
         }
+    } else if (period === 'month_year') {
+        if (monthId && yearId) {
+            const monthSel = document.getElementById(monthId);
+            const yearSel  = document.getElementById(yearId);
+            if (monthSel && monthSel.value === '') monthSel.value = String(mo);
+            if (yearSel  && yearSel.value  === '') yearSel.value  = String(yr);
+            glSetMonthYear(fromId, toId, monthId, yearId);
+        }
+        return;
     } else {
         return;
     }
 
     if (fromId) document.getElementById(fromId).value = iso(from);
     if (toId)   document.getElementById(toId).value   = iso(to);
+}
+
+// glSetMonthYear(fromId, toId, monthId, yearId) — called via onchange on the
+// Month and Year pickers shown when Period is set to "Month/Year". Sets From/To
+// to the first and last day of the selected month.
+function glSetMonthYear(fromId, toId, monthId, yearId) {
+    const month = parseInt(document.getElementById(monthId).value, 10);
+    const year  = parseInt(document.getElementById(yearId).value, 10);
+    if (isNaN(month) || isNaN(year)) return;
+
+    function iso(d) {
+        return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+    }
+
+    const from = new Date(year, month, 1);
+    const to   = new Date(year, month + 1, 0);
+    document.getElementById(fromId).value = iso(from);
+    document.getElementById(toId).value   = iso(to);
 }
 
 // glSetAsOf(sel) — for single-date views (Trial Balance, Balance Sheet)
