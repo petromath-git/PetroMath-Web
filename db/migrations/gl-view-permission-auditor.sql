@@ -17,14 +17,27 @@
 -- can_reset_role_id is NOT NULL with no default; existing non-
 -- PASSWORD_RESET grants set it to the same value as role_id (see
 -- VIEW_ACCOUNT_HEADS rows for Admin/SuperUser) — following that
--- established convention here. unique_role_permission
--- (role_id, can_reset_role_id, permission_type, location_code) makes
--- INSERT IGNORE safe to re-run.
+-- established convention here.
+-- NOT "INSERT IGNORE" here: unique_role_permission
+-- (role_id, can_reset_role_id, permission_type, location_code) does NOT
+-- actually dedupe a NULL location_code — MySQL unique indexes treat
+-- NULL as distinct from NULL, so INSERT IGNORE would insert a second
+-- row every re-run for a global (location_code IS NULL) grant like this
+-- one. Confirmed the hard way: running this once by hand + once via
+-- this file produced 8 rows instead of 4. Use an explicit NOT EXISTS
+-- guard instead for any global permission grant.
 -- ============================================================
 
-INSERT IGNORE INTO m_role_permissions
+INSERT INTO m_role_permissions
     (role_id, can_reset_role_id, permission_type, location_specific, effective_start_date, effective_end_date, location_code, created_by)
 SELECT r.role_id, r.role_id, 'VIEW_GL_ACCOUNTING', 0, CURDATE(), '2099-12-31', NULL, 'system'
-FROM m_roles r WHERE r.role_name IN ('SuperUser', 'Admin', 'Manager', 'Auditor');
+FROM m_roles r
+WHERE r.role_name IN ('SuperUser', 'Admin', 'Manager', 'Auditor')
+  AND NOT EXISTS (
+      SELECT 1 FROM m_role_permissions rp
+      WHERE rp.role_id = r.role_id
+        AND rp.permission_type = 'VIEW_GL_ACCOUNTING'
+        AND rp.location_code IS NULL
+  );
 
 SELECT 'VIEW_GL_ACCOUNTING granted to SuperUser, Admin, Manager, Auditor (global).' AS status;
