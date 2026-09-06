@@ -128,6 +128,12 @@ module.exports = {
                 'N' // default - disabled
             );
 
+            const maxCreditReceiptsRowCnt = Number(await locationConfig.getLocationConfigValue(
+                locationCode,
+                'MAX_CREDIT_RECEIPTS_ROW_CNT',
+                config.APP_CONFIGS.maxCreditReceiptsRowCnt
+            ));
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -156,7 +162,7 @@ module.exports = {
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
-                        config: config.APP_CONFIGS,
+                        config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                         currentDate: utils.currentDate(),
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                         isOpeningReadonly: openingReadonlyConfig === 'Y',
