@@ -11,7 +11,7 @@ const stockValuationService = require('../services/stock-valuation-service');
 
 // GET /gl/api/ledgers/search?location=&group=&q=
 // Returns [{ledger_id, ledger_name}] — used by Select2 ajax typeahead on product ledger fields
-router.get('/api/ledgers/search', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/ledgers/search', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.query.location || req.user.location_code;
     const group = req.query.group || null;
     const q = req.query.q || null;
@@ -82,7 +82,7 @@ router.post('/api/create-accounting', [isLoginEnsured, security.isAdmin()], asyn
 
 // GET /gl/api/accounting-events?from_date=&to_date=&status=&source_type=&search=
 // Returns event queue for a date range — used by admin dashboard.
-router.get('/api/accounting-events', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/accounting-events', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const { from_date, to_date, status, source_type, search } = req.query;
 
@@ -129,7 +129,7 @@ router.get('/api/accounting-events', [isLoginEnsured, security.isAdmin()], async
 
 const VOUCHER_TYPES = ['SALES', 'PURCHASE', 'PAYMENT', 'RECEIPT', 'JOURNAL', 'CONTRA'];
 
-router.get('/day-book', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/day-book', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today    = new Date().toISOString().substring(0, 10);
     const fromDate = req.query.from_date    || today;
@@ -214,7 +214,7 @@ router.get('/day-book', [isLoginEnsured, security.isAdmin()], async function(req
 // ── Ledger Report ─────────────────────────────────────────────────────────────
 // GET /gl/ledger?ledger_id=&from_date=&to_date=
 
-router.get('/ledger', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today    = new Date().toISOString().substring(0, 10);
     const fromDate = req.query.from_date || today;
@@ -316,7 +316,7 @@ router.get('/ledger', [isLoginEnsured, security.isAdmin()], async function(req, 
 
 const NATURE_ORDER = { ASSETS: 1, LIABILITIES: 2, INCOME: 3, EXPENSES: 4 };
 
-router.get('/trial-balance', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/trial-balance', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today     = new Date().toISOString().substring(0, 10);
     const asOfDate  = req.query.as_of_date || today;
@@ -405,7 +405,7 @@ router.get('/trial-balance', [isLoginEnsured, security.isAdmin()], async functio
 // ── Profit & Loss ─────────────────────────────────────────────────────────────
 // GET /gl/profit-loss?from_date=&to_date=
 
-router.get('/profit-loss', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/profit-loss', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today  = new Date();
     const fyYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
@@ -543,7 +543,7 @@ router.get('/profit-loss', [isLoginEnsured, security.isAdmin()], async function(
 // ── Balance Sheet ─────────────────────────────────────────────────────────────
 // GET /gl/balance-sheet?as_of_date=
 
-router.get('/balance-sheet', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/balance-sheet', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today    = new Date().toISOString().substring(0, 10);
     const asOfDate = req.query.as_of_date || today;
@@ -673,7 +673,7 @@ async function nextVoucherNo(locationCode, fyId, vType) {
 }
 
 // GET /gl/journal — list
-router.get('/journal', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/journal', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today    = new Date().toISOString().substring(0, 10);
     const fromDate = req.query.from_date || today.substring(0, 8) + '01';
@@ -733,7 +733,7 @@ router.get('/journal/new', [isLoginEnsured, security.isAdmin()], function(req, r
 });
 
 // GET /gl/journal/:id — view
-router.get('/journal/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/journal/:id', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const voucherId    = parseInt(req.params.id);
 
@@ -905,7 +905,7 @@ router.post('/api/journal/:id/reverse', [isLoginEnsured, security.isAdmin()], as
 // ── Ledger Groups ─────────────────────────────────────────────────────────────
 // GET /gl/ledger-groups
 
-router.get('/ledger-groups', [isLoginEnsured, security.isAdmin()], function(req, res) {
+router.get('/ledger-groups', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], function(req, res) {
     res.redirect('/gl/ledgers#tab-groups');
 });
 
@@ -973,7 +973,7 @@ router.delete('/api/ledger-groups/:id', [isLoginEnsured, security.isAdmin()], as
 // ── Ledgers ───────────────────────────────────────────────────────────────────
 // GET /gl/ledgers
 
-router.get('/ledgers', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/ledgers', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     try {
         const [ledgers, groups] = await Promise.all([
@@ -1067,7 +1067,7 @@ router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async functi
 // (pick the real GL ledger) or SKIP (with a reason), instead of the engine
 // guessing off an exact-name match.
 
-router.get('/static-ledger-map', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/static-ledger-map', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     try {
         const [rows, ledgers] = await Promise.all([
@@ -1180,7 +1180,7 @@ router.put('/api/static-ledger-map/:id', [isLoginEnsured, security.isAdmin()], a
 // changed after they were posted (see gl_correction_queue). Reprocessing
 // here only touches the specific events listed, not a date range.
 
-router.get('/correction-queue', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/correction-queue', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     try {
         const rows = await db.sequelize.query(`
@@ -1537,7 +1537,7 @@ router.post('/api/wipe-accounting', [isLoginEnsured, security.isAdmin()], async 
 // ── GL Control ────────────────────────────────────────────────────────────────
 // GET /gl/control — admin dashboard: events monitor + create accounting + generate events
 
-router.get('/control', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/control', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const today    = new Date().toISOString().substring(0, 10);
     const fromDate = today.substring(0, 8) + '01';
@@ -1568,7 +1568,7 @@ router.get('/control', [isLoginEnsured, security.isAdmin()], async function(req,
 });
 
 // GET /gl/api/event-summary?from_date=&to_date=
-router.get('/api/event-summary', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/event-summary', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const { from_date, to_date } = req.query;
 
@@ -1704,7 +1704,7 @@ router.post('/api/generate-events', [isLoginEnsured, security.isAdmin()], async 
 });
 
 // GET /gl/api/batch-requests — recent batch requests for this location
-router.get('/api/batch-requests', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/batch-requests', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     try {
         const requests = await glBatchService.getRecentRequests(locationCode, 20);
@@ -1715,7 +1715,7 @@ router.get('/api/batch-requests', [isLoginEnsured, security.isAdmin()], async fu
 });
 
 // GET /gl/api/batch-requests/:id/log — full log for a single request
-router.get('/api/batch-requests/:id/log', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/batch-requests/:id/log', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     const requestId    = parseInt(req.params.id);
     try {
@@ -1731,7 +1731,7 @@ router.get('/api/batch-requests/:id/log', [isLoginEnsured, security.isAdmin()], 
 // GET /gl/api/events/:eventId/source
 // Returns the source transaction details for a given accounting event.
 // All errors are caught and returned as { success: false, error } — never throws.
-router.get('/api/events/:eventId/source', [isLoginEnsured, security.isAdmin()], async (req, res) => {
+router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async (req, res) => {
     const locationCode = req.user.location_code;
     const eventId      = parseInt(req.params.eventId);
     try {
@@ -1944,7 +1944,7 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.isAdmin()], 
 const tallyExportService = require('../services/gl-tally-export-service');
 
 // GET /gl/api/tally-export/preview?from_date=&to_date=&include_exported=0
-router.get('/api/tally-export/preview', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/tally-export/preview', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode    = req.user.location_code;
     const { from_date, to_date, include_exported } = req.query;
     if (!from_date || !to_date) return res.status(400).json({ error: 'from_date and to_date are required' });
@@ -1981,7 +1981,7 @@ router.post('/api/tally-export', [isLoginEnsured, security.isAdmin()], async fun
 });
 
 // GET /gl/api/tally-export/history — recent export batches for this location
-router.get('/api/tally-export/history', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+router.get('/api/tally-export/history', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
     const locationCode = req.user.location_code;
     try {
         const rows = await db.sequelize.query(`
