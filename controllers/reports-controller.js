@@ -204,6 +204,7 @@ module.exports = {
                         const balanceCrDrFormat = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_BALANCE_CRDR_FORMAT', 'N');
                         const showBalanceCol = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_BALANCE', 'Y');
                         const showCustomerInfo = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_CUSTOMER_INFO', 'N');
+                        const tableHeaderLangTamil = (await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_HEADER_LANG', 'EN')) === 'TA';
                         let statementNumber = null;
                         if (showStatementNumber === 'Y' && cid && cid != -1) {
                             try {
@@ -241,6 +242,7 @@ module.exports = {
                         enableCreditExcelDownload: (await locationConfig.getLocationConfigValue(locationCode, 'ENABLE_CREDIT_REPORT_EXCEL_DOWNLOAD', 'N')) === 'Y',
                         customerAddress: showCustomerInfo === 'Y' ? customerAddress : null,
                         customerGstin: showCustomerInfo === 'Y' ? customerGstin : null,
+                        tableHeaderLangTamil: tableHeaderLangTamil,
                       }
 
                     if(caller=='notpdf') {
