@@ -244,22 +244,16 @@ module.exports = {
         console.log(`Content Load took: ${pdfEnd - pageend}ms`);
         console.log(`PDF generation took: ${pdfEnd - pdfStart}ms`);
 
-        // page.setContent's 'domcontentloaded' fires before layout/paint runs, so
-        // lazily-loaded @font-face fonts (like the embedded Tamil font) are still
-        // "unloaded" at this point - page.pdf() rasterizes immediately after and
-        // does not itself wait for them, producing missing-glyph boxes. Force the
-        // load explicitly and wait for it before generating the PDF.
+        // TEMP DIAGNOSTIC (remove once Tamil PDF font issue is confirmed fixed):
+        // logs what Chromium actually thinks happened with the embedded Tamil font.
         try {
-            await page.evaluate(async () => {
-                await Promise.all(Array.from(document.fonts).map(f => f.load().catch(() => {})));
-                await document.fonts.ready;
-            });
+            await page.evaluate(() => document.fonts.ready);
             const fontDiag = await page.evaluate(() => {
                 return Array.from(document.fonts).map(f => `${f.family}|${f.weight}|${f.status}`);
             });
             console.log('TAMIL_FONT_DIAG:', JSON.stringify(fontDiag));
-        } catch (fontLoadErr) {
-            console.log('TAMIL_FONT_LOAD_ERROR:', fontLoadErr.message);
+        } catch (diagErr) {
+            console.log('TAMIL_FONT_DIAG_ERROR:', diagErr.message);
         }
 
         // await page.evaluate(() => {
