@@ -18,6 +18,26 @@ const performance = require('perf_hooks').performance;
 
 const msToSeconds = ms => (ms / 1000).toFixed(2);
 
+// Puppeteer's Chromium runs on the server and has no Tamil-capable system font
+// installed there, so Tamil glyphs render as tofu boxes in the PDF even though
+// the same HTML looks fine in a user's browser (which does have one). Embedding
+// the font as base64 avoids depending on server font installs or resolving a
+// relative URL inside page.setContent (which has no base URL).
+function loadFontBase64(fileName) {
+    try {
+        const fontPath = path.join(process.cwd(), 'public', 'fonts', fileName);
+        if (fs.existsSync(fontPath)) {
+            return fs.readFileSync(fontPath).toString('base64');
+        }
+    } catch (error) {
+        console.error(`Error loading font ${fileName}:`, error);
+    }
+    return null;
+}
+
+const tamilFontRegularBase64 = loadFontBase64('NotoSansTamil-Regular.ttf');
+const tamilFontBoldBase64 = loadFontBase64('NotoSansTamil-Bold.ttf');
+
 function getCompanyLogoBase64(companyName) {
     try {
         const logoFileName = companyName ? `${companyName}.png` : 'default.png';
@@ -121,8 +141,18 @@ module.exports = {
                                    // Apply page break styles to the HTML content
                 const pageBreakStyles = `
                                            <style>
+                                        ${tamilFontRegularBase64 ? `@font-face {
+                                            font-family: "Noto Sans Tamil";
+                                            font-weight: 400;
+                                            src: url(data:font/ttf;base64,${tamilFontRegularBase64}) format('truetype');
+                                        }` : ''}
+                                        ${tamilFontBoldBase64 ? `@font-face {
+                                            font-family: "Noto Sans Tamil";
+                                            font-weight: 700;
+                                            src: url(data:font/ttf;base64,${tamilFontBoldBase64}) format('truetype');
+                                        }` : ''}
                                         body {
-                                            font-family: "Segoe UI", "Arial", "Times New Roman", serif;
+                                            font-family: "Segoe UI", "Arial", "Times New Roman", serif, "Noto Sans Tamil";
                                             font-size: 16px;
                                             margin: 0;
                                             padding: 0;
