@@ -96,13 +96,13 @@ block content
                         table.table.table-bordered.border.table-sm
                             thead(class="thead-light")
                                 tr
-                                    th.text-center Date                        
-                                    th.text-center Particulars                                              
-                                    th.text-center Debit (Rs.)
-                                    th.text-center Credit (Rs.)
+                                    th.text-center= tableHeaderLangTamil ? 'தேதி' : 'Date'
+                                    th.text-center= tableHeaderLangTamil ? 'விவரம்' : 'Particulars'
+                                    th.text-center= tableHeaderLangTamil ? 'பற்று (ரூ.)' : 'Debit (Rs.)'
+                                    th.text-center= tableHeaderLangTamil ? 'வரவு (ரூ.)' : 'Credit (Rs.)'
                                     if showBalance
-                                        th.text-center Balance (Rs.)
-                                    th.text-center Narration
+                                        th.text-center= tableHeaderLangTamil ? 'மீதி (ரூ.)' : 'Balance (Rs.)'
+                                    th.text-center= tableHeaderLangTamil ? 'குறிப்பு' : 'Narration'
                             tbody
                                 if(cidparam != -1)
                                     tr

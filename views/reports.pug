@@ -109,22 +109,22 @@ block content
                         table.table.table-bordered.border.table-sm
                             thead(class="thead-light")
                                 tr
-                                    th.text-center(style="white-space: nowrap") Date
-                                    th.text-center Particulars                      
-                                    th.text-center Product Name
+                                    th.text-center(style="white-space: nowrap")= tableHeaderLangTamil ? 'தேதி' : 'Date'
+                                    th.text-center= tableHeaderLangTamil ? 'விவரம்' : 'Particulars'
+                                    th.text-center= tableHeaderLangTamil ? 'பொருள் பெயர்' : 'Product Name'
                                     if showVehicleColumn
-                                        th.text-center Vehicle Number
+                                        th.text-center= tableHeaderLangTamil ? 'வாகன எண்' : 'Vehicle Number'
                                     if showOdometerColumn
-                                        th.text-center Odometer Reading
-                                    th.text-center Price (Rs.)
+                                        th.text-center= tableHeaderLangTamil ? 'ஒடோமீட்டர் அளவீடு' : 'Odometer Reading'
+                                    th.text-center= tableHeaderLangTamil ? 'விலை (ரூ.)' : 'Price (Rs.)'
                                     if showPriceDiscountColumn
-                                        th.text-center PriceDiscount (Rs.)
-                                    th.text-center Quantity
-                                    th.text-center Debit (Rs.)
-                                    th.text-center Credit (Rs.)
+                                        th.text-center= tableHeaderLangTamil ? 'தள்ளுபடி (ரூ.)' : 'PriceDiscount (Rs.)'
+                                    th.text-center= tableHeaderLangTamil ? 'அளவு' : 'Quantity'
+                                    th.text-center= tableHeaderLangTamil ? 'பற்று (ரூ.)' : 'Debit (Rs.)'
+                                    th.text-center= tableHeaderLangTamil ? 'வரவு (ரூ.)' : 'Credit (Rs.)'
                                     if showBalance
-                                        th.text-center Balance (Rs.)
-                                    th.text-center Narration
+                                        th.text-center= tableHeaderLangTamil ? 'மீதி (ரூ.)' : 'Balance (Rs.)'
+                                    th.text-center= tableHeaderLangTamil ? 'குறிப்பு' : 'Narration'
                             tbody
                                 if(cidparam != -1)
                                     tr
