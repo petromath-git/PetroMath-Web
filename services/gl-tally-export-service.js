@@ -41,7 +41,7 @@ async function preview(locationCode, fromDate, toDate, includeExported) {
 }
 
 // Generates Tally XML, marks vouchers as exported, logs gl_export_batches row.
-async function generateAndExport(locationCode, fromDate, toDate, includeExported, exportedBy) {
+async function generateAndExport(locationCode, fromDate, toDate, includeExported, exportedBy, excludeMasters) {
     const exportedClause = includeExported ? '' : "AND h.is_exported = 'N'";
 
     // 1. All voucher lines in range
@@ -70,21 +70,23 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
 
     if (!rows.length) return { xml: null, voucherCount: 0, ledgerCount: 0 };
 
-    // 2. Unique ledger_ids used in these vouchers
-    const ledgerIds = [...new Set(rows.map(r => r.ledger_id))];
-
-    // 3. Full ledger + group info for those ledgers
-    const ledgerRows = await db.sequelize.query(`
-        SELECT
-            l.ledger_id,
-            COALESCE(l.tally_ledger_name, l.ledger_name) AS tally_ledger_name,
-            l.group_id,
-            COALESCE(g.tally_group_name, g.group_name)   AS tally_group_name,
-            g.parent_group_id
-        FROM gl_ledgers l
-        JOIN gl_ledger_groups g ON g.group_id = l.group_id
-        WHERE l.ledger_id IN (:ledgerIds)
-    `, { replacements: { ledgerIds }, type: db.Sequelize.QueryTypes.SELECT });
+    // 2. Unique ledger_ids used in these vouchers + full ledger/group info,
+    //    only needed when the Masters block will actually be emitted.
+    let ledgerRows = [];
+    if (!excludeMasters) {
+        const ledgerIds = [...new Set(rows.map(r => r.ledger_id))];
+        ledgerRows = await db.sequelize.query(`
+            SELECT
+                l.ledger_id,
+                COALESCE(l.tally_ledger_name, l.ledger_name) AS tally_ledger_name,
+                l.group_id,
+                COALESCE(g.tally_group_name, g.group_name)   AS tally_group_name,
+                g.parent_group_id
+            FROM gl_ledgers l
+            JOIN gl_ledger_groups g ON g.group_id = l.group_id
+            WHERE l.ledger_id IN (:ledgerIds)
+        `, { replacements: { ledgerIds }, type: db.Sequelize.QueryTypes.SELECT });
+    }
 
     // 4. Build voucher map
     const voucherMap = new Map();
@@ -120,27 +122,31 @@ async function generateAndExport(locationCode, fromDate, toDate, includeExported
     out.push(`  </HEADER>`);
     out.push(`  <BODY>`);
 
-    // Block 1: Masters — idempotent upsert in All Masters mode
-    out.push(`    <IMPORTDATA>`);
-    out.push(`      <REQUESTDESC>`);
-    out.push(`        <REPORTNAME>All Masters</REPORTNAME>`);
-    out.push(`      </REQUESTDESC>`);
-    out.push(`      <REQUESTDATA>`);
-
+    // Block 1: Masters — idempotent upsert in All Masters mode.
+    // Skippable via excludeMasters (location-gated) for locations that maintain
+    // ledger masters directly in Tally and only want vouchers imported.
     const emittedLedgerIds = new Set();
-    for (const l of ledgerRows) {
-        if (emittedLedgerIds.has(l.ledger_id)) continue;
-        emittedLedgerIds.add(l.ledger_id);
-        out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
-        out.push(`          <LEDGER NAME="${xmlEscape(l.tally_ledger_name)}" RESERVEDNAME="">`);
-        out.push(`            <NAME>${xmlEscape(l.tally_ledger_name)}</NAME>`);
-        out.push(`            <PARENT>${xmlEscape(l.tally_group_name)}</PARENT>`);
-        out.push(`          </LEDGER>`);
-        out.push(`        </TALLYMESSAGE>`);
-    }
+    if (!excludeMasters) {
+        out.push(`    <IMPORTDATA>`);
+        out.push(`      <REQUESTDESC>`);
+        out.push(`        <REPORTNAME>All Masters</REPORTNAME>`);
+        out.push(`      </REQUESTDESC>`);
+        out.push(`      <REQUESTDATA>`);
 
-    out.push(`      </REQUESTDATA>`);
-    out.push(`    </IMPORTDATA>`);
+        for (const l of ledgerRows) {
+            if (emittedLedgerIds.has(l.ledger_id)) continue;
+            emittedLedgerIds.add(l.ledger_id);
+            out.push(`        <TALLYMESSAGE xmlns:UDF="TallyUDF">`);
+            out.push(`          <LEDGER NAME="${xmlEscape(l.tally_ledger_name)}" RESERVEDNAME="">`);
+            out.push(`            <NAME>${xmlEscape(l.tally_ledger_name)}</NAME>`);
+            out.push(`            <PARENT>${xmlEscape(l.tally_group_name)}</PARENT>`);
+            out.push(`          </LEDGER>`);
+            out.push(`        </TALLYMESSAGE>`);
+        }
+
+        out.push(`      </REQUESTDATA>`);
+        out.push(`    </IMPORTDATA>`);
+    }
 
     // Block 2: Vouchers
     out.push(`    <IMPORTDATA>`);

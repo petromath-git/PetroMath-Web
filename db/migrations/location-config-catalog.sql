@@ -187,6 +187,10 @@ VALUES
  'Decimal amount. When a vendor/product day bill total for the day is below this threshold, it is consolidated into a single-product (dominant product) bill rather than itemized. Default 20000.',
  'system', 'system'),
 
+('ALLOW_TALLY_EXCLUDE_MASTERS', 'Allow excluding ledger masters from Tally export',
+ 'Y/N. When Y, GL Control > Tally Export shows an "Exclude master (ledger) export" checkbox letting the user skip the All Masters (ledger upsert) block and export only the Vouchers block. For locations that maintain ledger masters directly in Tally. Default N (masters always bundled). Checked in gl-routes.js (/gl/control, POST /gl/api/tally-export) and enforced server-side regardless of what the client sends.',
+ 'system', 'system'),
+
 -- Purchases
 ('FUEL_INVOICE_EDIT_DISABLED', 'Disable editing fuel purchase invoices',
  'Y/N. When Y, fuel purchase invoices at this location cannot be edited after creation. Checked in purchases-controller.js.',
