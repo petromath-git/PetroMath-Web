@@ -8,6 +8,7 @@ const db = require('../db/db-connection');
 const createAccountingService = require('../services/create-accounting-service');
 const glBatchService = require('../services/gl-batch-service');
 const stockValuationService = require('../services/stock-valuation-service');
+const { getLocationConfigValue } = require('../utils/location-config');
 
 // GET /gl/api/ledgers/search?location=&group=&q=
 // Returns [{ledger_id, ledger_name}] — used by Select2 ajax typeahead on product ledger fields
@@ -1544,6 +1545,7 @@ router.get('/control', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
     try {
         await glBatchService.recoverStaleRequests(locationCode);
         const recentRequests = await glBatchService.getRecentRequests(locationCode, 10);
+        const allowTallyExcludeMasters = (await getLocationConfigValue(locationCode, 'ALLOW_TALLY_EXCLUDE_MASTERS', 'N')) === 'Y';
         res.render('gl-control', {
             title:    'GL Control',
             user:     req.user,
@@ -1551,6 +1553,7 @@ router.get('/control', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
             fromDate,
             toDate:   today,
             recentRequests,
+            allowTallyExcludeMasters,
             messages: req.flash()
         });
     } catch (err) {
@@ -1562,6 +1565,7 @@ router.get('/control', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
             fromDate,
             toDate:   today,
             recentRequests: [],
+            allowTallyExcludeMasters: false,
             messages: req.flash()
         });
     }
@@ -1958,16 +1962,19 @@ router.get('/api/tally-export/preview', [isLoginEnsured, security.hasPermission(
 });
 
 // POST /gl/api/tally-export
-// Body: { from_date, to_date, include_exported }
+// Body: { from_date, to_date, include_exported, exclude_masters }
+// exclude_masters only takes effect when ALLOW_TALLY_EXCLUDE_MASTERS is Y for this location.
 // Returns XML file as download; marks vouchers as is_exported='Y'.
 router.post('/api/tally-export', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode   = req.user.location_code;
     const exportedBy     = req.user.username || String(req.user.Person_id);
-    const { from_date, to_date, include_exported } = req.body;
+    const { from_date, to_date, include_exported, exclude_masters } = req.body;
     if (!from_date || !to_date) return res.status(400).json({ error: 'from_date and to_date are required' });
     try {
+        const allowExcludeMasters = (await getLocationConfigValue(locationCode, 'ALLOW_TALLY_EXCLUDE_MASTERS', 'N')) === 'Y';
+        const excludeMasters      = allowExcludeMasters && !!exclude_masters;
         const result = await tallyExportService.generateAndExport(
-            locationCode, from_date, to_date, !!include_exported, exportedBy
+            locationCode, from_date, to_date, !!include_exported, exportedBy, excludeMasters
         );
         if (!result.xml) return res.status(400).json({ error: 'No vouchers found for this date range.' });
 
