@@ -221,6 +221,11 @@ block content
                         .custom-control.custom-switch
                             input.custom-control-input(type="checkbox" id="chkReexport")
                             label.custom-control-label.small(for="chkReexport") Include already exported
+                    if allowTallyExcludeMasters
+                        .col-auto.align-self-end
+                            .custom-control.custom-switch
+                                input.custom-control-input(type="checkbox" id="chkExcludeMasters")
+                                label.custom-control-label.small(for="chkExcludeMasters") Exclude master (ledger) export
 
                 #exPreviewResult.mb-3(style="display:none")
                     .alert.py-2.small.mb-0#exPreviewBody
@@ -646,6 +651,8 @@ block content
             const to   = document.getElementById('exTo').value;
             if (!from || !to) { alert('Please select a date range.'); return; }
             const includeExported = document.getElementById('chkReexport').checked;
+            const excludeMastersEl = document.getElementById('chkExcludeMasters');
+            const excludeMasters = !!excludeMastersEl && excludeMastersEl.checked;
             this.disabled = true;
             this.textContent = 'Checking…';
             try {
@@ -667,7 +674,7 @@ block content
                     body.className = 'alert alert-info py-2 small mb-0';
                     body.innerHTML = '<strong>' + data.voucher_count + '</strong> voucher(s) across <strong>' + data.ledger_count + '</strong> unique ledger(s) — ready to export.';
                     document.getElementById('btnExExport').disabled = false;
-                    exPreviewData = { from, to, includeExported };
+                    exPreviewData = { from, to, includeExported, excludeMasters };
                 }
                 wrap.style.display = '';
             } catch (e) {
@@ -680,7 +687,7 @@ block content
 
         document.getElementById('btnExExport').addEventListener('click', async function() {
             if (!exPreviewData) return;
-            const { from, to, includeExported } = exPreviewData;
+            const { from, to, includeExported, excludeMasters } = exPreviewData;
             this.disabled = true;
             const orig = this.innerHTML;
             this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span>Generating…';
@@ -688,7 +695,7 @@ block content
                 const resp = await fetch('/gl/api/tally-export', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ from_date: from, to_date: to, include_exported: includeExported })
+                    body: JSON.stringify({ from_date: from, to_date: to, include_exported: includeExported, exclude_masters: excludeMasters })
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(function() { return {}; });
