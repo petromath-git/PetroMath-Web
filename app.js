@@ -212,6 +212,13 @@ const app = express();
 app.set('trust proxy', 1);
 security.secureApp(app);
 
+// Security response headers. CSP is left off for now — the app relies on
+// inline <script> blocks throughout its views, and the default helmet CSP
+// would break them; tightening CSP needs to happen alongside fixing that
+// inline-script pattern, not here.
+const helmet = require('helmet');
+app.use(helmet({ contentSecurityPolicy: false }));
+
 
 const compression = require('compression');
 app.use(compression());
@@ -305,9 +312,14 @@ const addDebugLogging = async (req, res, next) => {
 
 app.use(flash());
 
+// NODE_ENV is only ever explicitly set to 'development' (local dev, per .env);
+// beta and prod run with it unset. So treat "not development" as the
+// deployed-server case rather than gating on an unset 'production' value.
+const isLocalDev = process.env.NODE_ENV === 'development';
+
 if (!process.env.SESSION_SECRET) {
-    if (process.env.NODE_ENV === 'production') {
-        throw new Error('SESSION_SECRET environment variable is not set. Refusing to start in production without it.');
+    if (!isLocalDev) {
+        throw new Error('SESSION_SECRET environment variable is not set. Refusing to start without it.');
     }
     console.warn('WARNING: SESSION_SECRET not set — using an insecure development-only fallback. Set SESSION_SECRET in .env.');
 }
@@ -316,7 +328,16 @@ const sessionSecret = process.env.SESSION_SECRET || 'dev-only-insecure-secret';
 app.use(require('cookie-parser')(sessionSecret));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(bodyParser.json({ limit: '10mb' }));
-app.use(require('express-session')({ secret: sessionSecret, resave: false, saveUninitialized: false }));
+app.use(require('express-session')({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: !isLocalDev
+    }
+}));
 app.use(passport.initialize());
 app.use(passport.session());
 
