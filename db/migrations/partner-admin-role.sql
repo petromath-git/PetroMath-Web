@@ -47,7 +47,10 @@ FROM m_role_permissions src
 JOIN m_roles su ON su.role_id = src.role_id AND su.role_name = 'SuperUser'
 JOIN m_roles pa ON pa.role_name = 'PartnerAdmin'
 WHERE CURDATE() BETWEEN src.effective_start_date AND src.effective_end_date
-  AND src.permission_type NOT IN ('MANAGE_PLATFORM_BILLING', 'ASSIGN_USER_LOCATIONS', 'VIEW_USAGE_DASHBOARD', 'EXPORT_USAGE_DATA')
+  -- CREATE_LOCATION_MASTER must stay excluded even on a re-run: once step 4 (below)
+  -- grants it to SuperUser, a second run of this script would otherwise see it as
+  -- just another current SuperUser permission and copy it here too.
+  AND src.permission_type NOT IN ('MANAGE_PLATFORM_BILLING', 'ASSIGN_USER_LOCATIONS', 'VIEW_USAGE_DASHBOARD', 'EXPORT_USAGE_DATA', 'CREATE_LOCATION_MASTER')
   AND NOT EXISTS (
       SELECT 1 FROM m_role_permissions existing
       WHERE existing.role_id = pa.role_id
