@@ -174,7 +174,7 @@ block content
                         placeholder="Search by setting name, value, location...",
                         autocomplete="off"
                     )
-            if isSuperUser
+            if canFilterLocations
                 .col-12.col-md-4.mt-2.mt-md-0
                     select.form-control#locationFilter
                         option(value="ALL") All Locations
@@ -364,7 +364,7 @@ block content
                                     span.text-danger  *
                                 select.form-control#addLocationCode(required)
                                     option(value='*') Global (All Locations)
-                                    if isSuperUser
+                                    if canFilterLocations
                                         each location in locations
                                             option(value=location.location_code)= location.location_name
                                     else
@@ -557,7 +557,7 @@ block content
         const historyConfigsData = !{historyConfigsData};
         const locationsData = !{locationsData};
         const settingCatalogData = !{settingCatalogData};
-        const isSuperUser = !{isSuperUser};
+        const canFilterLocations = !{canFilterLocations};
         let descriptionSaveSucceeded = false;
 
         // Page initialization

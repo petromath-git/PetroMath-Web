@@ -30,14 +30,19 @@ module.exports = {
     },
 
     // Find active locations only (start_date <= today AND effective_end_date > today)
-    findActiveLocations: async function () {
+    // locationCodes: optional array to restrict results to (e.g. a PartnerAdmin's assigned locations)
+    findActiveLocations: async function (locationCodes = null) {
         try {
             const currentDate = new Date();
+            const where = {
+                start_date: { [Op.lte]: currentDate },
+                effective_end_date: { [Op.gt]: currentDate }
+            };
+            if (Array.isArray(locationCodes)) {
+                where.location_code = { [Op.in]: locationCodes };
+            }
             const locations = await Location.findAll({
-                where: {
-                    start_date: { [Op.lte]: currentDate },
-                    effective_end_date: { [Op.gt]: currentDate }
-                },
+                where,
                 order: [['location_name', 'ASC']]
             });
             return locations;

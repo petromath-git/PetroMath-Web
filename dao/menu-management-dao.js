@@ -232,18 +232,21 @@ deleteGlobalAccess: async (accessId, updatedBy) => {
     );
 },
 
+// locationCode may be a single code (Admin/Manager/etc., pinned) or an array
+// of codes (PartnerAdmin, scoped to their assigned locations).
 getAllOverrides: async (locationCode) => {
+    const codes = Array.isArray(locationCode) ? locationCode : [locationCode];
     const query = `
         SELECT o.access_id, o.role, o.location_code, o.menu_code, o.allowed,
                COALESCE(mi.menu_name, o.menu_code) AS menu_name
         FROM m_menu_access_override o
         LEFT JOIN m_menu_items mi ON o.menu_code = mi.menu_code
-        WHERE o.location_code = ?
+        WHERE o.location_code IN (?)
           AND o.effective_start_date <= CURDATE()
           AND (o.effective_end_date IS NULL OR o.effective_end_date >= CURDATE())
-        ORDER BY o.role, menu_name
+        ORDER BY o.location_code, o.role, menu_name
     `;
-    return await db.sequelize.query(query, { replacements: [locationCode], type: QueryTypes.SELECT });
+    return await db.sequelize.query(query, { replacements: [codes], type: QueryTypes.SELECT });
 },
 
 getAllOverridesAll: async () => {
@@ -257,6 +260,10 @@ getAllOverridesAll: async () => {
         ORDER BY o.location_code, o.role, menu_name
     `;
     return await db.sequelize.query(query, { type: QueryTypes.SELECT });
+},
+
+getOverrideById: async (accessId) => {
+    return await db.menu_access_override.findByPk(accessId, { raw: true });
 },
 
 deleteOverride: async (accessId, updatedBy) => {

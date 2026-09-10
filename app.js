@@ -16,7 +16,8 @@ const fs = require('fs');
 const utils = require("./utils/app-utils");
 const { getPDF } = require('./utils/app-pdf-generator');
 const { getBrowser } = require('./utils/browserHelper');
-const MenuAccessDao = require('./dao/menu-access-dao'); 
+const MenuAccessDao = require('./dao/menu-access-dao');
+const personLocationDao = require('./dao/person-location-dao');
 const bcrypt = require('bcrypt');
 const { routeLogger } = require('./utils/route-logger');
 
@@ -71,8 +72,13 @@ passport.use(new LocalStrategy(
                                 const allowedMenus = menus.map(m => m.menu_code);
                                 const menuDetails = menus;
 
+                                // Locations this person is explicitly assigned to (m_person_location),
+                                // beyond their single home location_code above.
+                                const personLocations = await personLocationDao.getPersonLocations(data.Person_id);
+                                const assignedLocations = personLocations.map(pl => pl.location_code);
+
                                 // Construct enriched UserData
-                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails, locationStatus.service_tier);                               
+                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails, locationStatus.service_tier, assignedLocations);
 
                                 return done(null, userInfo);
                             } else {
