@@ -329,7 +329,14 @@ app.use(require('express-session')({
     cookie: {
         httpOnly: true,
         sameSite: 'lax',
-        secure: !isLocalDev
+        // Left off for now: express-session only sends Set-Cookie when it can
+        // confirm the request was HTTPS (via req.secure / X-Forwarded-Proto),
+        // and beta's nginx doesn't forward that header on its :443 block
+        // (unlike prod, which inherits it for free from Cloudflare) — so
+        // secure:true silently broke every login on beta (2026-09-10).
+        // Re-enable once nginx is confirmed to forward X-Forwarded-Proto
+        // correctly on both beta and prod.
+        secure: false
     }
 }));
 app.use(passport.initialize());
