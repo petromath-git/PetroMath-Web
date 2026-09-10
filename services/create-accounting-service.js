@@ -838,10 +838,12 @@ async function processBankTxnEvent(event, processedBy) {
         if (!bankLedgerId) throw new Error(`BANK GL ledger not found for bank '${txn.bank_name}' (bank_id:${txn.bank_id})`);
     }
 
-    // For real bank: credit_amount → bank is DR; debit_amount → bank is CR
-    // For oil company SOA: credit_amount → bank (Sundry Creditor) is CR; debit_amount → bank (SC) is DR
+    // credit_amount → bank ledger is DR; debit_amount → bank ledger is CR.
+    // Same rule for a real bank passbook and an oil-company SOA: a Credit line
+    // reduces what's owed to the counterparty (SOA) / increases our balance
+    // (passbook) — either way it debits our ledger for that account.
     // The "bankSide" determines where the bank ledger goes in the journal lines.
-    const bankIsDr = isOilCo ? debitAmt > 0 : creditAmt > 0;
+    const bankIsDr = creditAmt > 0;
 
     const narration = txn.remarks
         ? txn.remarks
