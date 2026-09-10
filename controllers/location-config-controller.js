@@ -2,6 +2,7 @@
 
 const LocationConfigDao = require('../dao/location-config-dao');
 const LocationDao = require('../dao/location-dao');
+const security = require('../utils/app-security');
 const dateFormat = require('dateformat');
 
 function safeDate(d, fmt) {
@@ -25,29 +26,40 @@ module.exports = {
     /**
      * GET /location-config
      * Main page - shows all active configs with filter options
-     * SuperUser: Can see all locations + global
-     * Other roles: Can only see their own location + global
+     * SuperUser: can see all locations + global
+     * PartnerAdmin: can see their assigned locations + global
+     * Other roles: can only see their own location + global
      */
     getLocationConfigPage: async (req, res, next) => {
         try {
-            const userRole = req.user.Role;
             const userLocation = req.user.location_code;
             const locationFilter = req.query.location || 'ALL';
-            
-            // Determine actual filter based on user role
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null = unrestricted, else array
+            const canFilterLocations = accessibleLocations === null || accessibleLocations.length > 1;
+
+            // Determine actual filter based on the user's accessible locations
             let actualFilter;
-            if (userRole === 'SuperUser') {
-                // SuperUser can filter by any location or see all
+            if (locationFilter === '*') {
+                actualFilter = '*'; // global-only is always visible, regardless of role
+            } else if (accessibleLocations === null) {
+                // Unrestricted: filter by any location or see all
                 actualFilter = locationFilter === 'ALL' ? null : locationFilter;
+            } else if (accessibleLocations.length > 1) {
+                // Assigned to a set of locations: honor the requested filter only if it's one of theirs
+                actualFilter = (locationFilter === 'ALL' || !accessibleLocations.includes(locationFilter))
+                    ? accessibleLocations
+                    : locationFilter;
             } else {
-                // Non-SuperUser can only see their own location + global
+                // Pinned to their single home location
                 actualFilter = userLocation;
             }
-            
-            // Get all active locations for the filter dropdown (SuperUser only)
-            const locations = userRole === 'SuperUser' ? 
-                await LocationDao.findActiveLocations() : 
-                [{ location_code: userLocation, location_name: req.user.location_name || userLocation }];
+
+            // Get all active locations for the filter dropdown
+            const locations = accessibleLocations === null
+                ? await LocationDao.findActiveLocations()
+                : accessibleLocations.length > 1
+                    ? await LocationDao.findActiveLocations(accessibleLocations)
+                    : [{ location_code: userLocation, location_name: req.user.location_name || userLocation }];
             
             // Get active configs based on filter
             const activeConfigs = await LocationConfigDao.getAllConfigs(actualFilter);
@@ -99,7 +111,7 @@ module.exports = {
                 settingCatalog: settingCatalog,
                 currentFilter: locationFilter,
                 currentDate: new Date().toISOString().split('T')[0],
-                isSuperUser: userRole === 'SuperUser',
+                canFilterLocations: canFilterLocations,
                 messages: req.flash()
             };
 
@@ -125,8 +137,6 @@ module.exports = {
         try {
             const { location_code, setting_name, setting_value, effective_start_date } = req.body;
             const username = req.user.username;
-            const userRole = req.user.Role;
-            const userLocation = req.user.location_code;
 
             // Validation
             if (!location_code || !setting_name || !setting_value) {
@@ -141,11 +151,11 @@ module.exports = {
             const cleanSettingName = setting_name.trim().toUpperCase();
             const cleanSettingValue = setting_value.trim();
 
-            // Security check: Non-SuperUser can only create for their own location or global
-            if (userRole !== 'SuperUser' && cleanLocationCode !== userLocation && cleanLocationCode !== '*') {
+            // Security check: can only create for an accessible location or global
+            if (cleanLocationCode !== '*' && !security.canAccessLocation(req.user, cleanLocationCode)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only create configurations for your own location or global settings'
+                    error: 'You can only create configurations for your assigned location(s) or global settings'
                 });
             }
 
@@ -193,8 +203,6 @@ module.exports = {
             const configId = req.params.configId;
             const { setting_value } = req.body;
             const username = req.user.username;
-            const userRole = req.user.Role;
-            const userLocation = req.user.location_code;
 
             // Validation
             if (!setting_value) {
@@ -206,7 +214,7 @@ module.exports = {
 
             // Get existing config to check location
             const existingConfig = await LocationConfigDao.getConfigById(configId);
-            
+
             if (!existingConfig) {
                 return res.status(404).json({
                     success: false,
@@ -214,13 +222,11 @@ module.exports = {
                 });
             }
 
-            // Security check: Non-SuperUser can only update their own location or global
-            if (userRole !== 'SuperUser' && 
-                existingConfig.location_code !== userLocation && 
-                existingConfig.location_code !== '*') {
+            // Security check: can only update an accessible location's config or global
+            if (existingConfig.location_code !== '*' && !security.canAccessLocation(req.user, existingConfig.location_code)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only update configurations for your own location or global settings'
+                    error: 'You can only update configurations for your assigned location(s) or global settings'
                 });
             }
 
@@ -270,18 +276,28 @@ module.exports = {
      */
     getConfigsAPI: async (req, res, next) => {
         try {
-            const locationFilter = req.query.location || 'ALL';
+            const requestedFilter = req.query.location || 'ALL';
             const configType = req.query.type || 'active'; // active or history
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null = unrestricted, else array
+
+            // Resolve the requested filter against what this user is actually allowed to see —
+            // a restricted user can't bypass their scope by passing ?location=ALL or another location's code.
+            let effectiveFilter;
+            if (requestedFilter === '*') {
+                effectiveFilter = '*'; // global-only is always visible, regardless of role
+            } else if (accessibleLocations === null) {
+                effectiveFilter = requestedFilter === 'ALL' ? null : requestedFilter;
+            } else if (requestedFilter === 'ALL' || !accessibleLocations.includes(requestedFilter)) {
+                effectiveFilter = accessibleLocations;
+            } else {
+                effectiveFilter = requestedFilter;
+            }
 
             let configs;
             if (configType === 'history') {
-                configs = await LocationConfigDao.getHistoryConfigs(
-                    locationFilter === 'ALL' ? null : locationFilter
-                );
+                configs = await LocationConfigDao.getHistoryConfigs(effectiveFilter);
             } else {
-                configs = await LocationConfigDao.getAllConfigs(
-                    locationFilter === 'ALL' ? null : locationFilter
-                );
+                configs = await LocationConfigDao.getAllConfigs(effectiveFilter);
             }
 
             // Format dates

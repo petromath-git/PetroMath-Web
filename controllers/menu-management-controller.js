@@ -1,16 +1,34 @@
 // controllers/menu-management-controller.js
 const menuManagementDao = require('../dao/menu-management-dao');
+const security = require('../utils/app-security');
+
+// Menu items behind these URL prefixes are platform-level (billing, dev tooling,
+// usage stats, assigning other users to locations) — a location-scoped role like
+// PartnerAdmin must not be able to grant/toggle visibility into them, even though
+// the underlying routes are separately permission-gated regardless of menu visibility.
+const PLATFORM_ONLY_URL_PREFIXES = [
+    '/platform-billing', '/usage-dashboard', '/dev-tracker',
+    '/system-health', '/person-locations', '/dev-db-refresh'
+];
+
+function isPlatformOnlyMenuItem(item) {
+    const url = item.url_path || '';
+    return PLATFORM_ONLY_URL_PREFIXES.some(prefix => url.startsWith(prefix));
+}
 
 const menuManagementController = {
-    
+
     // Render the main menu management page
+    // The 4 global tabs (Menu Items, Menu Groups, Global Access, Cache) affect
+    // every location and role in the system — SuperUser only. Location Overrides
+    // is scoped per-location and also available to PartnerAdmin.
     renderPage: async (req, res, next) => {
         try {
             res.render('menu-management', {
                 title: 'Menu Management',
                 user: req.user,
                 location: req.user.location_code,
-                isSuperUser: req.user.Role === 'SuperUser'
+                showGlobalMenuTabs: req.user.Role === 'SuperUser'
             });
         } catch (error) {
             console.error('Error rendering menu management page:', error);
@@ -311,18 +329,37 @@ const menuManagementController = {
         }
     },
 
-    // GET: Raw override rules — all locations for SuperUser, own location otherwise
+    // GET: Raw override rules — all locations for SuperUser, assigned locations for
+    // PartnerAdmin, own location otherwise. Roles/menu items are also trimmed for
+    // non-SuperUser callers: they can't touch SuperUser's menu access or platform-only
+    // menu items (billing, dev tooling, usage stats, user-location assignment).
     getOverrides: async (req, res, next) => {
         try {
             const isSuperUser = req.user.Role === 'SuperUser';
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null | array
+            const canPickLocation = Array.isArray(accessibleLocations) && accessibleLocations.length > 1;
+
             const [roles, menuItems, access] = await Promise.all([
                 menuManagementDao.getAllRoles(),
                 menuManagementDao.getAllMenuItems(),
                 isSuperUser
                     ? menuManagementDao.getAllOverridesAll()
-                    : menuManagementDao.getAllOverrides(req.user.location_code)
+                    : menuManagementDao.getAllOverrides(canPickLocation ? accessibleLocations : req.user.location_code)
             ]);
-            res.json({ success: true, roles, menuItems, access, location: req.user.location_code, isSuperUser });
+
+            const visibleRoles = isSuperUser ? roles : roles.filter(r => r.role_name !== 'SuperUser');
+            const visibleMenuItems = isSuperUser ? menuItems : menuItems.filter(m => !isPlatformOnlyMenuItem(m));
+
+            res.json({
+                success: true,
+                roles: visibleRoles,
+                menuItems: visibleMenuItems,
+                access,
+                location: req.user.location_code,
+                isSuperUser,
+                canPickLocation,
+                accessibleLocations: canPickLocation ? accessibleLocations : null
+            });
         } catch (error) {
             console.error('Error fetching overrides:', error);
             res.status(500).json({ success: false, error: error.message });
@@ -334,7 +371,33 @@ const menuManagementController = {
         try {
             const { role, menu_code, allowed, location_code } = req.body;
             const isSuperUser = req.user.Role === 'SuperUser';
-            const targetLocation = (isSuperUser && location_code) ? location_code : req.user.location_code;
+
+            if (!isSuperUser && role === 'SuperUser') {
+                return res.status(403).json({ success: false, error: 'You cannot set menu access for the SuperUser role.' });
+            }
+
+            let targetLocation;
+            if (isSuperUser) {
+                targetLocation = location_code || req.user.location_code;
+            } else {
+                const accessibleLocations = security.getAccessibleLocations(req.user); // array (never null here)
+                if (location_code) {
+                    if (!accessibleLocations.includes(location_code)) {
+                        return res.status(403).json({ success: false, error: 'You can only set menu access for your assigned location(s).' });
+                    }
+                    targetLocation = location_code;
+                } else if (accessibleLocations.length === 1) {
+                    targetLocation = accessibleLocations[0];
+                } else {
+                    return res.status(400).json({ success: false, error: 'A location is required.' });
+                }
+            }
+
+            const menuItem = (await menuManagementDao.getAllMenuItems()).find(m => m.menu_code === menu_code);
+            if (!isSuperUser && menuItem && isPlatformOnlyMenuItem(menuItem)) {
+                return res.status(403).json({ success: false, error: 'You cannot set menu access for this menu item.' });
+            }
+
             await menuManagementDao.updateOverrideMenuAccess(
                 role, targetLocation, menu_code, allowed, req.user.User_Name
             );
@@ -348,6 +411,17 @@ const menuManagementController = {
     // DELETE: Soft-delete a location override
     deleteOverride: async (req, res, next) => {
         try {
+            const isSuperUser = req.user.Role === 'SuperUser';
+            if (!isSuperUser) {
+                const existing = await menuManagementDao.getOverrideById(req.params.id);
+                if (!existing) {
+                    return res.status(404).json({ success: false, error: 'Override not found' });
+                }
+                if (!security.canAccessLocation(req.user, existing.location_code)) {
+                    return res.status(403).json({ success: false, error: 'You can only remove overrides for your assigned location(s).' });
+                }
+            }
+
             await menuManagementDao.deleteOverride(req.params.id, req.user.User_Name);
             res.json({ success: true, message: 'Override removed' });
         } catch (error) {
