@@ -29,6 +29,19 @@ module.exports = {
     // 🔹 Quick admin check for internal use
     isAdminChk: (user) => config.APP_CONFIGS.adminRoles.includes(user.Role),
 
+    // 🔹 Which locations can this session see/act on? null = unrestricted (all locations).
+    getAccessibleLocations: (user) => {
+        if (user.Role === 'SuperUser') return null;
+        if (user.Role === 'PartnerAdmin') return user.assignedLocations || [];
+        return [user.location_code];
+    },
+
+    // 🔹 Convenience check for a single target location
+    canAccessLocation: (user, locationCode) => {
+        const accessible = module.exports.getAccessibleLocations(user);
+        return accessible === null || accessible.includes(locationCode);
+    },
+
     // 🔹 Block customers from restricted routes
     isNotCustomer: () => {
         return (req, res, next) => {

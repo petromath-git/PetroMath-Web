@@ -165,6 +165,7 @@ mixin addNewUser(rowCnt, userRole)
         td(scope="row")
             select.form-control(name='m_user_role_' + rowCnt, id='m_user_role_' + rowCnt, required)
                 if userRole === 'SuperUser'
+                    option PartnerAdmin
                     option Admin
                     option Manager
                     option Cashier

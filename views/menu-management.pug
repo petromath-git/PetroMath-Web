@@ -13,7 +13,7 @@ block content
       .card-body
 
         ul.nav.nav-tabs.mb-3#menu-tabs(role="tablist")
-          if isSuperUser
+          if showGlobalMenuTabs
             li.nav-item
               a.nav-link.active#tab-menu-items(data-toggle="tab" href="#pane-menu-items" role="tab")
                 i.bi.bi-list-ul.mr-1
@@ -27,10 +27,10 @@ block content
                 i.bi.bi-shield-check.mr-1
                 | Global Access
           li.nav-item
-            a.nav-link(class=isSuperUser ? '' : 'active' data-toggle="tab" href="#pane-overrides" role="tab")#tab-overrides
+            a.nav-link(class=showGlobalMenuTabs ? '' : 'active' data-toggle="tab" href="#pane-overrides" role="tab")#tab-overrides
               i.bi.bi-shield-exclamation.mr-1
               | Location Overrides
-          if isSuperUser
+          if showGlobalMenuTabs
             li.nav-item
               a.nav-link#tab-cache(data-toggle="tab" href="#pane-cache" role="tab")
                 i.bi.bi-hdd-stack.mr-1
@@ -39,7 +39,7 @@ block content
         .tab-content
 
           //- ===== TAB 1: MENU ITEMS (SuperUser only) =====
-          if isSuperUser
+          if showGlobalMenuTabs
             .tab-pane.fade.show.active#pane-menu-items(role="tabpanel")
               .d-flex.justify-content-between.align-items-center.mb-3
                 h6.mb-0.font-weight-bold Menu Items
@@ -66,7 +66,7 @@ block content
                       td.text-center.text-muted(colspan="5") Loading...
 
           //- ===== TAB 2: MENU GROUPS (SuperUser only) =====
-          if isSuperUser
+          if showGlobalMenuTabs
             .tab-pane.fade#pane-menu-groups(role="tabpanel")
               .d-flex.justify-content-between.align-items-center.mb-3
                 h6.mb-0.font-weight-bold Menu Groups
@@ -87,7 +87,7 @@ block content
                       td.text-center.text-muted(colspan="5") Loading...
 
           //- ===== TAB 3: GLOBAL ACCESS (SuperUser only) =====
-          if isSuperUser
+          if showGlobalMenuTabs
             .tab-pane.fade#pane-global-access(role="tabpanel")
               .d-flex.justify-content-between.align-items-center.mb-3
                 div
@@ -115,7 +115,7 @@ block content
                       td.text-center.text-muted(colspan="4") Loading...
 
           //- ===== TAB 4: LOCATION OVERRIDES =====
-          .tab-pane.fade(class=isSuperUser ? '' : 'show active' role="tabpanel")#pane-overrides
+          .tab-pane.fade(class=showGlobalMenuTabs ? '' : 'show active' role="tabpanel")#pane-overrides
             .d-flex.justify-content-between.align-items-center.mb-3
               div
                 h6.mb-0.font-weight-bold Location Overrides
@@ -150,7 +150,7 @@ block content
                     td.text-center.text-muted(colspan="5") Loading...
 
           //- ===== TAB 5: CACHE (SuperUser only) =====
-          if isSuperUser
+          if showGlobalMenuTabs
             .tab-pane.fade#pane-cache(role="tabpanel")
               h6.mb-3.font-weight-bold Cache Status
               .row
@@ -291,6 +291,10 @@ block content
               label Location Code *
               input.form-control.form-control-sm#ov-location(type="text" maxlength="50" placeholder="e.g. MUE")
               small.form-text.text-muted Leave blank to use your own location
+            .form-group.d-none#ov-location-select-group
+              label Location *
+              select.custom-select.custom-select-sm#ov-location-select
+                option(value="") Select location
             .form-group
               .d-flex.justify-content-between.align-items-center.mb-1
                 label.mb-0 Roles *
@@ -322,5 +326,5 @@ block content
   script.
     const userLocationCode = '#{user.location_code}';
     const userName = '#{user.User_Name}';
-    const pageIsSuperUser = !{JSON.stringify(isSuperUser)};
+    const pageIsSuperUser = !{JSON.stringify(showGlobalMenuTabs)};
   script(src=`/javascripts/menu-management.js?v=${CACHE_BUST}`)

@@ -120,7 +120,10 @@ module.exports = {
             };
 
             // Apply location filter if provided
-            if (locationFilter) {
+            if (Array.isArray(locationFilter)) {
+                // A set of accessible locations (e.g. a PartnerAdmin's assigned locations) + global
+                whereClause.location_code = { [Op.in]: [...locationFilter, '*'] };
+            } else if (locationFilter) {
                 if (locationFilter === '*') {
                     // Only global configs
                     whereClause.location_code = '*';
@@ -131,7 +134,7 @@ module.exports = {
                     whereClause.location_code = { [Op.in]: [locationFilter, '*'] };
                 }
             }
-            
+
             const configs = await LocationConfig.findAll({
                 where: whereClause,
                 order: [
@@ -159,14 +162,16 @@ module.exports = {
             };
 
             // Apply location filter if provided
-            if (locationFilter) {
+            if (Array.isArray(locationFilter)) {
+                whereClause.location_code = { [Op.in]: [...locationFilter, '*'] };
+            } else if (locationFilter) {
                 if (locationFilter === '*') {
                     whereClause.location_code = '*';
                 } else if (locationFilter !== 'ALL') {
                     whereClause.location_code = { [Op.in]: [locationFilter, '*'] };
                 }
             }
-            
+
             const configs = await LocationConfig.findAll({
                 where: whereClause,
                 order: [
