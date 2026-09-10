@@ -298,10 +298,19 @@ const addDebugLogging = async (req, res, next) => {
 };
 
 app.use(flash());
-app.use(require('cookie-parser')('keyboard cat'));
+
+if (!process.env.SESSION_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('SESSION_SECRET environment variable is not set. Refusing to start in production without it.');
+    }
+    console.warn('WARNING: SESSION_SECRET not set — using an insecure development-only fallback. Set SESSION_SECRET in .env.');
+}
+const sessionSecret = process.env.SESSION_SECRET || 'dev-only-insecure-secret';
+
+app.use(require('cookie-parser')(sessionSecret));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(bodyParser.json({ limit: '10mb' }));
-app.use(require('express-session')({ secret: 'keyboard cat', resave: false, saveUninitialized: false }));
+app.use(require('express-session')({ secret: sessionSecret, resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
 
