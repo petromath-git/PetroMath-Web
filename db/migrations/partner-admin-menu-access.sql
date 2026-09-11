@@ -1,15 +1,15 @@
 -- ============================================================
--- PartnerAdmin menu access (nav visibility) seeding
+-- PowerUser menu access (nav visibility) seeding
 --
--- partner-admin-role.sql granted PartnerAdmin the feature permissions
+-- partner-admin-role.sql granted PowerUser the feature permissions
 -- (m_role_permissions) but never touched m_menu_access_global — the
 -- separate table that controls which nav items actually render.
 -- m_menu_access_v (and hence user_menu_cache) only includes roles that
 -- appear in m_menu_access_global/m_menu_access_override at all, so
--- PartnerAdmin had zero cache rows and an empty sidebar.
+-- PowerUser had zero cache rows and an empty sidebar.
 --
--- Copies SuperUser's global menu access to PartnerAdmin, excluding the
--- same platform-only nav items PartnerAdmin is excluded from everywhere
+-- Copies SuperUser's global menu access to PowerUser, excluding the
+-- same platform-only nav items PowerUser is excluded from everywhere
 -- else (billing, dev tooling, usage stats, assigning user locations).
 --
 -- Run once on each environment. Safe to re-run: guarded with NOT EXISTS.
@@ -18,7 +18,7 @@
 
 INSERT INTO m_menu_access_global (role, menu_code, allowed, effective_start_date, effective_end_date, created_by)
 SELECT
-    'PartnerAdmin',
+    'PowerUser',
     src.menu_code,
     src.allowed,
     CURDATE(),
@@ -35,7 +35,7 @@ WHERE src.role = 'SuperUser'
   )
   AND NOT EXISTS (
       SELECT 1 FROM m_menu_access_global existing
-      WHERE existing.role = 'PartnerAdmin'
+      WHERE existing.role = 'PowerUser'
         AND existing.menu_code = src.menu_code
   );
 

@@ -30,7 +30,7 @@ module.exports = {
     },
 
     // Find active locations only (start_date <= today AND effective_end_date > today)
-    // locationCodes: optional array to restrict results to (e.g. a PartnerAdmin's assigned locations)
+    // locationCodes: optional array to restrict results to (e.g. a PowerUser's assigned locations)
     findActiveLocations: async function (locationCodes = null) {
         try {
             const currentDate = new Date();

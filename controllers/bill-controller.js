@@ -3327,7 +3327,7 @@ module.exports.getBillPDFApi = async (req, res, next) => {
  */
 async function canAccessShift(userRole, userId, closingId, locationCode) {
     // Admins and Managers can access all shifts
-    const adminRoles = ['Admin', 'SuperUser', 'Manager', 'PartnerAdmin'];
+    const adminRoles = ['Admin', 'SuperUser', 'Manager', 'PowerUser'];
     if (adminRoles.includes(userRole)) {
         return true;
     }

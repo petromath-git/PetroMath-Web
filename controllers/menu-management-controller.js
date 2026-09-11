@@ -4,7 +4,7 @@ const security = require('../utils/app-security');
 
 // Menu items behind these URL prefixes are platform-level (billing, dev tooling,
 // usage stats, assigning other users to locations) — a location-scoped role like
-// PartnerAdmin must not be able to grant/toggle visibility into them, even though
+// PowerUser must not be able to grant/toggle visibility into them, even though
 // the underlying routes are separately permission-gated regardless of menu visibility.
 const PLATFORM_ONLY_URL_PREFIXES = [
     '/platform-billing', '/usage-dashboard', '/dev-tracker',
@@ -21,7 +21,7 @@ const menuManagementController = {
     // Render the main menu management page
     // The 4 global tabs (Menu Items, Menu Groups, Global Access, Cache) affect
     // every location and role in the system — SuperUser only. Location Overrides
-    // is scoped per-location and also available to PartnerAdmin.
+    // is scoped per-location and also available to PowerUser.
     renderPage: async (req, res, next) => {
         try {
             res.render('menu-management', {
@@ -330,7 +330,7 @@ const menuManagementController = {
     },
 
     // GET: Raw override rules — all locations for SuperUser, assigned locations for
-    // PartnerAdmin, own location otherwise. Roles/menu items are also trimmed for
+    // PowerUser, own location otherwise. Roles/menu items are also trimmed for
     // non-SuperUser callers: they can't touch SuperUser's menu access or platform-only
     // menu items (billing, dev tooling, usage stats, user-location assignment).
     getOverrides: async (req, res, next) => {

@@ -121,7 +121,7 @@ module.exports = {
 
             // Apply location filter if provided
             if (Array.isArray(locationFilter)) {
-                // A set of accessible locations (e.g. a PartnerAdmin's assigned locations) + global
+                // A set of accessible locations (e.g. a PowerUser's assigned locations) + global
                 whereClause.location_code = { [Op.in]: [...locationFilter, '*'] };
             } else if (locationFilter) {
                 if (locationFilter === '*') {

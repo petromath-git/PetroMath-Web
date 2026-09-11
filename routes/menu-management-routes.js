@@ -13,7 +13,7 @@ router.get('/', [isLoginEnsured, security.hasPermission('MANAGE_MENU_SYSTEM')],
 
 // The routes below (menu items/groups, the legacy menu-access matrix, global
 // access, cache) affect every location and role in the system, not just the
-// caller's own — SuperUser only, even though PartnerAdmin also holds
+// caller's own — SuperUser only, even though PowerUser also holds
 // MANAGE_MENU_SYSTEM (for the Location Overrides endpoints further down).
 
 // API: Get all menu items

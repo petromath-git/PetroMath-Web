@@ -32,7 +32,7 @@ module.exports = {
     // 🔹 Which locations can this session see/act on? null = unrestricted (all locations).
     getAccessibleLocations: (user) => {
         if (user.Role === 'SuperUser') return null;
-        if (user.Role === 'PartnerAdmin') return user.assignedLocations || [];
+        if (user.Role === 'PowerUser') return user.assignedLocations || [];
         return [user.location_code];
     },
 

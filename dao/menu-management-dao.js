@@ -233,7 +233,7 @@ deleteGlobalAccess: async (accessId, updatedBy) => {
 },
 
 // locationCode may be a single code (Admin/Manager/etc., pinned) or an array
-// of codes (PartnerAdmin, scoped to their assigned locations).
+// of codes (PowerUser, scoped to their assigned locations).
 getAllOverrides: async (locationCode) => {
     const codes = Array.isArray(locationCode) ? locationCode : [locationCode];
     const query = `

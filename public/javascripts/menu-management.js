@@ -4,8 +4,8 @@ $(document).ready(function () {
     let menuGroups = [];
     let allRoles   = [];
     let isSuperUser = false;
-    let canPickLocation = false;   // true for a PartnerAdmin with more than one assigned location
-    let accessibleLocations = [];  // that PartnerAdmin's assigned location codes
+    let canPickLocation = false;   // true for a PowerUser with more than one assigned location
+    let accessibleLocations = [];  // that PowerUser's assigned location codes
     let editingMenuItem  = null;
     let editingMenuGroup = null;
 
