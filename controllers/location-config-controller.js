@@ -27,7 +27,7 @@ module.exports = {
      * GET /location-config
      * Main page - shows all active configs with filter options
      * SuperUser: can see all locations + global
-     * PartnerAdmin: can see their assigned locations + global
+     * PowerUser: can see their assigned locations + global
      * Other roles: can only see their own location + global
      */
     getLocationConfigPage: async (req, res, next) => {

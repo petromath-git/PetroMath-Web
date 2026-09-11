@@ -10,7 +10,7 @@ var UserData = function UserData(user, isAdmin, allowedMenus, menuDetails, servi
     this.menuDetails = menuDetails || [];
     this.service_tier = service_tier || 'standard';
     // Locations explicitly assigned via m_person_location, beyond location_code above.
-    // Only meaningful for roles that operate across more than one location (e.g. PartnerAdmin).
+    // Only meaningful for roles that operate across more than one location (e.g. PowerUser).
     this.assignedLocations = assignedLocations || [];
 };
 
