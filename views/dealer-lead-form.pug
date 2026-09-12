@@ -154,10 +154,6 @@ html(lang='en')
             #errorMsg
 
             .mb-3
-                label.form-label Your Name (staff collecting this) *
-                input#generatedBy.form-control(type='text' placeholder='Your name' maxlength='100')
-
-            .mb-3
                 label.form-label Bunk Name *
                 input#bunkName.form-control(type='text' placeholder='e.g. Sri Balaji Filling Station' maxlength='150')
 
@@ -200,6 +196,10 @@ html(lang='en')
             .mb-3
                 label.form-label Notes
                 textarea#notes.form-control(rows='2' placeholder='Anything else you\'d like to share (optional)' maxlength='500')
+
+            .mb-3
+                label.form-label Your Name (staff collecting this)
+                input#generatedBy.form-control(type='text' placeholder='Optional' maxlength='100')
 
             p.required-note * Required
 
@@ -247,7 +247,7 @@ html(lang='en')
         btnSubmit.addEventListener('click', async function() {
             errorMsg.style.display = 'none';
 
-            if (!generatedBy.value.trim() || !bunkName.value.trim() || !place.value.trim() || !district.value.trim() ||
+            if (!bunkName.value.trim() || !place.value.trim() || !district.value.trim() ||
                 !phoneNumber.value.trim() || !oilCompany.value || !contactRole.value) {
                 showError('Please fill in all required fields.');
                 return;
