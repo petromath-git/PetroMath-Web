@@ -524,6 +524,7 @@ app.use('/campaign', campaignPublicRoutes);
 app.use('/gst', gstRoutes);
 app.use('/transaction-upload', transactionUploadRoutes);
 app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
+app.use('/dealer-leads', require('./routes/dealer-lead-routes'));
 app.use('/day-bill', dayBillRoutes);
 app.use('/platform-billing', platformBillingRoutes);
 app.use('/distributors', distributorRoutes);
