@@ -23,7 +23,7 @@ module.exports = {
             const generatedBy = (req.body.generated_by || '').trim();
             const notes = (req.body.notes || '').trim();
 
-            if (!bunkName || !place || !district || !phoneNumber || !oilCompany || !contactRole || !generatedBy) {
+            if (!bunkName || !place || !district || !phoneNumber || !oilCompany || !contactRole) {
                 return res.status(400).json({ success: false, message: 'Please fill in all required fields.' });
             }
             if (!/^\d{10}$/.test(phoneNumber)) {
