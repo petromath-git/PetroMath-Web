@@ -1,0 +1,295 @@
+doctype html
+html(lang='en')
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+    title PetroMath · Dealer Convention
+    link(rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css')
+    link(rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css')
+  body
+    style.
+        body {
+            background: #f0f2f5;
+        }
+
+        .lead-header {
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: white;
+            padding: 28px 20px 22px;
+            text-align: center;
+        }
+
+        .lead-header h4 {
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .lead-header p {
+            margin: 6px 0 0;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .lead-container {
+            padding: 16px;
+            max-width: 480px;
+            margin: -14px auto 0;
+        }
+
+        .form-card {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .form-control, .form-select, select.form-control {
+            font-size: 16px;
+            height: 50px;
+            border-radius: 10px;
+            border: 1.5px solid #dee2e6;
+        }
+
+        textarea.form-control {
+            height: auto;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
+            outline: none;
+        }
+
+        .role-toggle {
+            display: flex;
+            gap: 8px;
+        }
+
+        .role-pill {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1.5px solid #dee2e6;
+            background: white;
+            color: #6c757d;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .role-pill.active {
+            background: #1a73e8;
+            border-color: #1a73e8;
+            color: white;
+        }
+
+        .btn-save {
+            width: 100%;
+            height: 52px;
+            font-size: 17px;
+            font-weight: 700;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            border: none;
+            color: white;
+        }
+
+        .btn-save:disabled {
+            opacity: 0.6;
+        }
+
+        #successCard {
+            display: none;
+            background: white;
+            border-radius: 14px;
+            padding: 40px 24px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        #successCard .icon {
+            font-size: 52px;
+            color: #198754;
+            margin-bottom: 12px;
+        }
+
+        #errorMsg {
+            display: none;
+            background: #f8d7da;
+            color: #842029;
+            font-size: 13px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+        }
+
+        .required-note {
+            font-size: 12px;
+            color: #adb5bd;
+            margin-top: -8px;
+            margin-bottom: 14px;
+        }
+
+    .lead-header
+        h4 PetroMath
+        p Tell us about your fuel station — we'll reach out with details.
+
+    .lead-container
+        #successCard
+            .icon
+                i.bi.bi-check-circle-fill
+            h5.fw-bold Thank you!
+            p.text-muted.mb-0 We've noted your details and will get in touch soon.
+
+        #formCard.form-card
+            #errorMsg
+
+            .mb-3
+                label.form-label Your Name (staff collecting this) *
+                input#generatedBy.form-control(type='text' placeholder='Your name' maxlength='100')
+
+            .mb-3
+                label.form-label Bunk Name *
+                input#bunkName.form-control(type='text' placeholder='e.g. Sri Balaji Filling Station' maxlength='150')
+
+            .mb-3
+                label.form-label Place *
+                input#place.form-control(type='text' placeholder='Town / Village' maxlength='100')
+
+            .mb-3
+                label.form-label District *
+                input#district.form-control(type='text' placeholder='District' maxlength='100')
+
+            .mb-3
+                label.form-label Phone Number *
+                input#phoneNumber.form-control(type='tel' inputmode='numeric' placeholder='10-digit mobile number' maxlength='10')
+
+            .mb-3
+                label.form-label Oil Company *
+                select#oilCompany.form-control
+                    option(value='') Select oil company
+                    option(value='IOCL') IOCL
+                    option(value='BPCL') BPCL
+                    option(value='HPCL') HPCL
+                    option(value='Shell') Shell
+                    option(value='Nayara Energy') Nayara Energy
+                    option(value='Reliance') Reliance
+                    option(value='Other') Other
+
+            .mb-3
+                label.form-label You are the *
+                .role-toggle
+                    button.role-pill(type='button' data-role='OWNER') Owner
+                    button.role-pill(type='button' data-role='MANAGER') Manager
+                    button.role-pill(type='button' data-role='OTHER') Other
+                input#contactRole(type='hidden' value='')
+
+            .mb-3
+                label.form-label Contact Person Name
+                input#contactPersonName.form-control(type='text' placeholder='Optional' maxlength='100')
+
+            .mb-3
+                label.form-label Notes
+                textarea#notes.form-control(rows='2' placeholder='Anything else you\'d like to share (optional)' maxlength='500')
+
+            p.required-note * Required
+
+            button#btnSubmit.btn.btn-save(type='button') Submit
+
+    script.
+        const generatedBy = document.getElementById('generatedBy');
+        const bunkName = document.getElementById('bunkName');
+        const place = document.getElementById('place');
+        const district = document.getElementById('district');
+        const phoneNumber = document.getElementById('phoneNumber');
+        const oilCompany = document.getElementById('oilCompany');
+        const contactRole = document.getElementById('contactRole');
+        const contactPersonName = document.getElementById('contactPersonName');
+        const notes = document.getElementById('notes');
+        const errorMsg = document.getElementById('errorMsg');
+        const btnSubmit = document.getElementById('btnSubmit');
+        const formCard = document.getElementById('formCard');
+        const successCard = document.getElementById('successCard');
+
+        document.querySelectorAll('.role-pill').forEach(function(pill) {
+            pill.addEventListener('click', function() {
+                document.querySelectorAll('.role-pill').forEach(function(p) { p.classList.remove('active'); });
+                this.classList.add('active');
+                contactRole.value = this.dataset.role;
+            });
+        });
+
+        phoneNumber.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').slice(0, 10);
+        });
+
+        // Remember the staff member's name across submissions at the same
+        // booth/device so they don't retype it for every dealer.
+        try {
+            const savedName = localStorage.getItem('dealerLeadGeneratedBy');
+            if (savedName) generatedBy.value = savedName;
+        } catch (e) { /* localStorage unavailable — not fatal */ }
+
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+        }
+
+        btnSubmit.addEventListener('click', async function() {
+            errorMsg.style.display = 'none';
+
+            if (!generatedBy.value.trim() || !bunkName.value.trim() || !place.value.trim() || !district.value.trim() ||
+                !phoneNumber.value.trim() || !oilCompany.value || !contactRole.value) {
+                showError('Please fill in all required fields.');
+                return;
+            }
+            if (!/^\d{10}$/.test(phoneNumber.value.trim())) {
+                showError('Please enter a valid 10-digit phone number.');
+                return;
+            }
+
+            btnSubmit.disabled = true;
+            btnSubmit.textContent = 'Submitting...';
+
+            try {
+                const resp = await fetch(window.location.pathname, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bunk_name: bunkName.value.trim(),
+                        place: place.value.trim(),
+                        district: district.value.trim(),
+                        phone_number: phoneNumber.value.trim(),
+                        oil_company: oilCompany.value,
+                        contact_role: contactRole.value,
+                        contact_person_name: contactPersonName.value.trim(),
+                        generated_by: generatedBy.value.trim(),
+                        notes: notes.value.trim()
+                    })
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    try { localStorage.setItem('dealerLeadGeneratedBy', generatedBy.value.trim()); } catch (e) { /* not fatal */ }
+                    formCard.style.display = 'none';
+                    successCard.style.display = 'block';
+                } else {
+                    showError(data.message || 'Something went wrong. Please try again.');
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = 'Submit';
+                }
+            } catch (e) {
+                showError('Network error. Please try again.');
+                btnSubmit.disabled = false;
+                btnSubmit.textContent = 'Submit';
+            }
+        });
