@@ -38,6 +38,11 @@ module.exports = {
         );
         const cashflowDsrStrict = String(cashflowDsrStrictRaw).toLowerCase() === 'true';
 
+        const showCashflowDenominationsRaw = await locationConfig.getLocationConfigValue(
+            locationCode, 'SHOW_CASHFLOW_DENOMINATIONS', 'Y'
+        );
+        const showCashflowDenominations = showCashflowDenominationsRaw === 'Y';
+
 
       
        
@@ -616,11 +621,14 @@ module.exports = {
 
         let resultList = [];  // This will hold both the cashflowresult and TotalDenomAmount
 
-        resultList.push({
-          'Cashflow Balance': cashflowresult.toFixed(2),
-          'Denomination Total': totaldenomamount.toFixed(2),
-          'Excess/Shortage': (totaldenomamount-cashflowresult).toFixed(2)
-        });
+        let denomResultRow = {
+          'Cashflow Balance': cashflowresult.toFixed(2)
+        };
+        if (showCashflowDenominations) {
+          denomResultRow['Denomination Total'] = totaldenomamount.toFixed(2);
+          denomResultRow['Excess/Shortage'] = (totaldenomamount-cashflowresult).toFixed(2);
+        }
+        resultList.push(denomResultRow);
 
         
 
