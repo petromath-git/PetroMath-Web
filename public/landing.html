@@ -65,6 +65,9 @@
   .btn-ghost:hover { border-color: #fff; }
   .btn-dark { background: var(--navy); color: #fff; }
   .btn-dark:hover { background: var(--navy-2); transform: translateY(-1px); }
+  .btn-sm { padding: 8px 14px; font-size: 0.82rem; }
+
+  .nav-actions { display: flex; align-items: center; gap: 10px; }
 
   /* ---------- Hero ---------- */
   .hero {
@@ -296,6 +299,11 @@
     .testimonials { grid-template-columns: 1fr; }
     .footer-grid { grid-template-columns: 1fr; }
     .cta { padding: 44px 26px; margin: 0 16px; }
+    .nav-inner { padding: 12px 16px; }
+    header.nav .brand span { display: none; }
+    .nav-actions { gap: 8px; }
+    .btn-sm { padding: 7px 10px; font-size: 0.76rem; }
+    .nav-actions .btn-primary { padding: 9px 16px; font-size: 0.85rem; }
   }
 </style>
 </head>
@@ -313,7 +321,10 @@
       <a href="#showcase">Built for pumps</a>
       <a href="#contact">Contact</a>
     </nav>
-    <a class="btn btn-primary" href="/login">Sign in</a>
+    <div class="nav-actions">
+      <a class="btn btn-ghost btn-sm" href="/dealer-leads">Contact Form</a>
+      <a class="btn btn-primary" href="/login">Sign in</a>
+    </div>
   </div>
 </header>
 
