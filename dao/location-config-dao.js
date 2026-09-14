@@ -263,6 +263,39 @@ module.exports = {
         }
     },
 
+    // Create or update the value-validation rule (value_type/lookup_type/min/max) for a setting_name.
+    // Separate from upsertCatalogEntry (descriptions) since this defines what's a VALID value --
+    // SuperUser-only, gated at the route level.
+    upsertCatalogValueRule: async (settingName, { valueType, lookupType, minValue, maxValue }, updatedBy = 'system') => {
+        try {
+            const existing = await LocationConfigCatalog.findByPk(settingName);
+            const fields = {
+                value_type: valueType,
+                lookup_type: valueType === 'LOOKUP' ? lookupType : null,
+                min_value: valueType === 'NUMBER' ? minValue : null,
+                max_value: valueType === 'NUMBER' ? maxValue : null,
+                updated_by: updatedBy,
+                updation_date: new Date()
+            };
+
+            if (existing) {
+                await LocationConfigCatalog.update(fields, { where: { setting_name: settingName } });
+            } else {
+                await LocationConfigCatalog.create({
+                    setting_name: settingName,
+                    ...fields,
+                    created_by: updatedBy,
+                    creation_date: new Date()
+                });
+            }
+
+            return await LocationConfigCatalog.findByPk(settingName, { raw: true });
+        } catch (error) {
+            console.error('Error in upsertCatalogValueRule:', error);
+            throw error;
+        }
+    },
+
     // Check if duplicate setting exists for location (among active configs)
     checkDuplicateSetting: async (locationCode, settingName, excludeConfigId = null) => {
         try {

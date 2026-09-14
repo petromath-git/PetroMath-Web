@@ -2,6 +2,7 @@
 
 const LocationConfigDao = require('../dao/location-config-dao');
 const LocationDao = require('../dao/location-dao');
+const LookupDao = require('../dao/lookup-dao');
 const security = require('../utils/app-security');
 const dateFormat = require('dateformat');
 
@@ -9,6 +10,42 @@ function safeDate(d, fmt) {
     if (!d) return 'N/A';
     const parsed = new Date(d);
     return isNaN(parsed.getTime()) ? 'N/A' : dateFormat(parsed, fmt);
+}
+
+// Validate a candidate setting_value against its catalog rule (if any).
+// No catalog entry, or value_type TEXT, means unrestricted (today's behavior).
+// Applies to every role, including SuperUser.
+async function validateSettingValue(catalogEntry, value) {
+    if (!catalogEntry || catalogEntry.value_type === 'TEXT') {
+        return { valid: true };
+    }
+
+    if (catalogEntry.value_type === 'LOOKUP') {
+        const values = await LookupDao.getLookupByType(catalogEntry.lookup_type);
+        const allowed = values.map(v => v.description);
+        if (!allowed.includes(value)) {
+            return { valid: false, error: `Value must be one of: ${allowed.join(', ')}` };
+        }
+        return { valid: true };
+    }
+
+    if (catalogEntry.value_type === 'NUMBER') {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return { valid: false, error: 'Value must be a number' };
+        }
+        const min = catalogEntry.min_value !== null ? Number(catalogEntry.min_value) : null;
+        const max = catalogEntry.max_value !== null ? Number(catalogEntry.max_value) : null;
+        if (min !== null && num < min) {
+            return { valid: false, error: `Value must be at least ${min}` };
+        }
+        if (max !== null && num > max) {
+            return { valid: false, error: `Value must be at most ${max}` };
+        }
+        return { valid: true };
+    }
+
+    return { valid: true };
 }
 
 /**
@@ -70,13 +107,32 @@ module.exports = {
             // Get all unique setting names for autocomplete
             const settingNames = await LocationConfigDao.getAllSettingNames();
 
-            // Get description catalog (one row per setting_name) for the manage-descriptions UI
+            // Get description + value-rule catalog (one row per setting_name)
             const catalogMap = await LocationConfigDao.getCatalogMap();
             const settingCatalog = settingNames.map(name => ({
                 setting_name: name,
                 short_description: catalogMap[name]?.short_description || '',
-                detailed_description: catalogMap[name]?.detailed_description || ''
+                detailed_description: catalogMap[name]?.detailed_description || '',
+                value_type: catalogMap[name]?.value_type || 'TEXT',
+                lookup_type: catalogMap[name]?.lookup_type || null,
+                min_value: catalogMap[name]?.min_value ?? null,
+                max_value: catalogMap[name]?.max_value ?? null
             }));
+
+            // Lookup values for every lookup_type actually referenced, so the add/edit
+            // modal can render a dropdown client-side without an extra round-trip.
+            const lookupTypesUsed = [...new Set(settingCatalog.filter(s => s.value_type === 'LOOKUP' && s.lookup_type).map(s => s.lookup_type))];
+            const lookupValuesByType = {};
+            for (const lt of lookupTypesUsed) {
+                const values = await LookupDao.getLookupByType(lt);
+                lookupValuesByType[lt] = values.map(v => v.description);
+            }
+
+            // SuperUser only: every known lookup_type, for the value-rule editor's dropdown
+            const isSuperUser = req.user.Role === 'SuperUser';
+            const allLookupTypes = isSuperUser
+                ? (await LookupDao.getAllLookupTypes('SuperUser', userLocation)).map(t => t.lookup_type)
+                : [];
 
             // Format dates for display
             const formattedActiveConfigs = activeConfigs.map(config => ({
@@ -104,14 +160,18 @@ module.exports = {
                 locationsData: JSON.stringify(locations),
                 settingNamesData: JSON.stringify(settingNames),
                 settingCatalogData: JSON.stringify(settingCatalog),
+                lookupValuesByTypeData: JSON.stringify(lookupValuesByType),
+                allLookupTypesData: JSON.stringify(allLookupTypes),
                 activeConfigs: formattedActiveConfigs,
                 historyConfigs: formattedHistoryConfigs,
                 locations: locations,
                 settingNames: settingNames,
                 settingCatalog: settingCatalog,
+                allLookupTypes: allLookupTypes,
                 currentFilter: locationFilter,
                 currentDate: new Date().toISOString().split('T')[0],
                 canFilterLocations: canFilterLocations,
+                isSuperUser: isSuperUser,
                 messages: req.flash()
             };
 
@@ -157,6 +217,25 @@ module.exports = {
                     success: false,
                     error: 'You can only create configurations for your assigned location(s) or global settings'
                 });
+            }
+
+            // Non-SuperUser can only use an existing setting_name, not invent a new one —
+            // new config keys only ever come from a code change, never through this UI.
+            if (req.user.Role !== 'SuperUser') {
+                const existingNames = await LocationConfigDao.getAllSettingNames();
+                if (!existingNames.includes(cleanSettingName)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: `"${cleanSettingName}" is not a recognized setting name`
+                    });
+                }
+            }
+
+            // setting_value must match the setting's declared value type, for everyone including SuperUser
+            const catalogMap = await LocationConfigDao.getCatalogMap();
+            const valueCheck = await validateSettingValue(catalogMap[cleanSettingName], cleanSettingValue);
+            if (!valueCheck.valid) {
+                return res.status(400).json({ success: false, error: valueCheck.error });
             }
 
             // Create config
@@ -231,6 +310,13 @@ module.exports = {
             }
 
             const cleanSettingValue = setting_value.trim();
+
+            // setting_value must match the setting's declared value type, for everyone including SuperUser
+            const catalogMap = await LocationConfigDao.getCatalogMap();
+            const valueCheck = await validateSettingValue(catalogMap[existingConfig.setting_name], cleanSettingValue);
+            if (!valueCheck.valid) {
+                return res.status(400).json({ success: false, error: valueCheck.error });
+            }
 
             // Update config (this will end-date old and create new)
             const updatedConfig = await LocationConfigDao.updateConfig(
@@ -398,6 +484,38 @@ module.exports = {
                 success: false,
                 error: 'Failed to save description: ' + error.message
             });
+        }
+    },
+
+    /**
+     * PUT /location-config/catalog/:settingName/value-rule
+     * SuperUser only: define what counts as a valid value for a setting_name
+     * (TEXT/LOOKUP/NUMBER + lookup_type or min/max).
+     */
+    updateCatalogValueRule: async (req, res, next) => {
+        try {
+            const settingName = req.params.settingName.trim().toUpperCase();
+            const { value_type, lookup_type, min_value, max_value } = req.body;
+            const username = req.user.username;
+
+            if (!['TEXT', 'LOOKUP', 'NUMBER'].includes(value_type)) {
+                return res.status(400).json({ success: false, error: 'value_type must be TEXT, LOOKUP, or NUMBER' });
+            }
+            if (value_type === 'LOOKUP' && !lookup_type) {
+                return res.status(400).json({ success: false, error: 'lookup_type is required when value_type is LOOKUP' });
+            }
+
+            const updated = await LocationConfigDao.upsertCatalogValueRule(settingName, {
+                valueType: value_type,
+                lookupType: lookup_type || null,
+                minValue: min_value === '' || min_value == null ? null : Number(min_value),
+                maxValue: max_value === '' || max_value == null ? null : Number(max_value)
+            }, username);
+
+            res.json({ success: true, message: 'Value rule saved successfully', data: updated });
+        } catch (error) {
+            console.error('Error updating catalog value rule:', error);
+            res.status(500).json({ success: false, error: 'Failed to save value rule: ' + error.message });
         }
     },
 
