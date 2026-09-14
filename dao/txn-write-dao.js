@@ -425,6 +425,17 @@ saveReadings: (data) => {
 
     
 
+// Location-less lookup, for callers (e.g. PowerUser) who need to discover a
+// shift's actual location before checking whether they can access it.
+getClosingLocationById: async (closingId) => {
+    const closing = await TxnClosing.findOne({
+        attributes: ['closing_id', 'location_code'],
+        where: { closing_id: closingId },
+        raw: true
+    });
+    return closing;
+},
+
 // Check if shift can be reopened (no cashflow_id linked)
 // Check if shift can be reopened (cashflow_id is null OR linked cashflow is DRAFT)
 canReopenShift: async (closingId, locationCode) => {
