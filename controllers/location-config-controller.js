@@ -211,11 +211,19 @@ module.exports = {
             const cleanSettingName = setting_name.trim().toUpperCase();
             const cleanSettingValue = setting_value.trim();
 
-            // Security check: can only create for an accessible location or global
-            if (cleanLocationCode !== '*' && !security.canAccessLocation(req.user, cleanLocationCode)) {
+            // Security check: global affects every location system-wide -- SuperUser only.
+            // Everyone else can only create for a location they're actually accessible to.
+            if (cleanLocationCode === '*') {
+                if (req.user.Role !== 'SuperUser') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Only SuperUser can create global configurations'
+                    });
+                }
+            } else if (!security.canAccessLocation(req.user, cleanLocationCode)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only create configurations for your assigned location(s) or global settings'
+                    error: 'You can only create configurations for your assigned location(s)'
                 });
             }
 
@@ -301,11 +309,19 @@ module.exports = {
                 });
             }
 
-            // Security check: can only update an accessible location's config or global
-            if (existingConfig.location_code !== '*' && !security.canAccessLocation(req.user, existingConfig.location_code)) {
+            // Security check: global affects every location system-wide -- SuperUser only.
+            // Everyone else can only update a location they're actually accessible to.
+            if (existingConfig.location_code === '*') {
+                if (req.user.Role !== 'SuperUser') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Only SuperUser can update global configurations'
+                    });
+                }
+            } else if (!security.canAccessLocation(req.user, existingConfig.location_code)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only update configurations for your assigned location(s) or global settings'
+                    error: 'You can only update configurations for your assigned location(s)'
                 });
             }
 
