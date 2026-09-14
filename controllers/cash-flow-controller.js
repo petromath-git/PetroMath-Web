@@ -6,6 +6,7 @@ const adjustmentsDao = require("../dao/adjustments-dao");
 const config = require("../config/app-config").APP_CONFIGS;
 const appCache = require("../utils/app-cache");
 const locationConfig = require("../utils/location-config");
+const security = require("../utils/app-security");
 
 module.exports = {
     getCashFlowHome: (req, res, next) => {
@@ -245,29 +246,39 @@ module.exports = {
 
 reopenCashflow: async (req, res, next) => {
     const cashflowId = req.query.id;
-    const locationCode = req.user.location_code;
     const username = req.user.User_Name;
     const userId = req.user.Person_id;
 
     try {
-        // Check if user has permission (SuperUser or GOBI-INC)
+        // Check if user has permission (SuperUser, GOBI-INC, or PowerUser for their own locations)
         const isSuperUser = req.user.Role === 'SuperUser';
         const isGobiInc = username === 'GOBI-INC';
+        const isPowerUser = req.user.Role === 'PowerUser';
 
-        if (!isSuperUser && !isGobiInc) {
+        if (!isSuperUser && !isGobiInc && !isPowerUser) {
             return res.status(403).json({
                 error: 'You do not have access to reopen cashflows.'
             });
         }
 
-        // Validate cashflow belongs to user's location
-        const cashflow = await cashflowDao.findCashflow(locationCode, cashflowId);
-        
+        // Validate cashflow belongs to a location this user can access. PowerUser may
+        // have multiple assigned locations, so look it up by ID first rather than
+        // assuming req.user.location_code (their single home location) is the right one.
+        let cashflow;
+        if (isPowerUser && !isSuperUser) {
+            const found = await cashflowDao.findCashflowById(cashflowId);
+            cashflow = (found && security.canAccessLocation(req.user, found.location_code)) ? found : null;
+        } else {
+            cashflow = await cashflowDao.findCashflow(req.user.location_code, cashflowId);
+        }
+
         if (!cashflow) {
-            return res.status(403).json({ 
-                error: 'Unauthorized: You cannot reopen cashflow records from other locations' 
+            return res.status(403).json({
+                error: 'Unauthorized: You cannot reopen cashflow records from other locations'
             });
         }
+
+        const locationCode = cashflow.location_code;
 
         // Check if cashflow can be reopened
         const canReopen = await cashflowDao.canReopenCashflow(cashflowId, locationCode);

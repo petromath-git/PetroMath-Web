@@ -2,6 +2,7 @@
 const BowserDao      = require('../dao/bowser-dao');
 const utils          = require('../utils/app-utils');
 const locationConfig = require('../utils/location-config');
+const security       = require('../utils/app-security');
 const moment         = require('moment');
 
 function buildTransactions(fills, deliveries) {
@@ -380,6 +381,12 @@ module.exports = {
             if (!hasPermission && userRole === 'Admin') {
                 const allow = await locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N');
                 hasPermission = allow === 'Y';
+            }
+            if (!hasPermission && userRole === 'PowerUser') {
+                // Unlike Admin, no config-flag gate needed -- PowerUser gets the same
+                // blanket reopen authority SuperUser has, just scoped to their assigned locations.
+                const closing = await BowserDao.getBowserClosingById(req.params.id);
+                hasPermission = !!closing && security.canAccessLocation(req.user, closing.location_code);
             }
             if (!hasPermission) {
                 return res.status(403).json({ success: false, error: 'You do not have permission to reopen bowser closings.' });

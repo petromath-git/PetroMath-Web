@@ -22,7 +22,10 @@ router.get('/', [isLoginEnsured, security.hasPermission('MANAGE_LOCATION_MASTER'
 // ============================================================================
 
 // POST /location-master - Create new location
-router.post('/', [isLoginEnsured, security.hasPermission('MANAGE_LOCATION_MASTER')], 
+// SuperUser only -- creating a brand-new location is explicitly excluded from
+// PowerUser, even though PowerUser otherwise holds MANAGE_LOCATION_MASTER
+// (for list/edit/deactivate of its own assigned locations).
+router.post('/', [isLoginEnsured, security.hasPermission('MANAGE_LOCATION_MASTER'), security.isSuperUser()],
     function (req, res, next) {
         locationController.createLocation(req, res, next);
     }

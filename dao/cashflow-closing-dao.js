@@ -9,10 +9,17 @@ const { Sequelize, Op } = require("sequelize");
 module.exports = {
     findCashflow: (locationCode, cashflowId) => {
         return CashFlowClosing.findOne({
-            where: { 
+            where: {
                 cashflow_id: cashflowId,
-                location_code: locationCode 
+                location_code: locationCode
             }
+        });
+    },
+    // Location-less lookup, for callers (e.g. PowerUser) who need to discover
+    // a cashflow's actual location before checking whether they can access it.
+    findCashflowById: (cashflowId) => {
+        return CashFlowClosing.findOne({
+            where: { cashflow_id: cashflowId }
         });
     },
     findCashflowClosings: (locationCode, fromDate, toDate) => {

@@ -272,18 +272,18 @@ module.exports = {
 
 reopenShift: async (req, res, next) => {
     const closingId = req.query.id;
-    const locationCode = req.user.location_code;
     const userRole = req.user.Role;
     const userId = req.user.Person_id;
 
     try {
         // Check if user has permission
         let hasPermission = false;
+        let locationCode = req.user.location_code;
 
         // SuperUser always has access
         if (userRole === 'SuperUser') {
             hasPermission = true;
-        } 
+        }
         // Admin role - check location config
         else if (userRole === 'Admin') {
             const locationConfig = require('../utils/location-config');
@@ -292,9 +292,20 @@ reopenShift: async (req, res, next) => {
                 'ALLOW_SHIFT_REOPEN',
                 'N' // default value if not configured
             );
-            
+
             if (allowShiftReopen === 'Y') {
                 hasPermission = true;
+            }
+        }
+        // PowerUser: same blanket reopen authority as SuperUser (no config-flag
+        // gate), just scoped to their assigned locations. May have multiple
+        // assigned locations, so look the shift up by ID rather than assuming
+        // req.user.location_code (their single home location) is the right one.
+        else if (userRole === 'PowerUser') {
+            const closing = await TxnWriteDao.getClosingLocationById(closingId);
+            if (closing && security.canAccessLocation(req.user, closing.location_code)) {
+                hasPermission = true;
+                locationCode = closing.location_code;
             }
         }
 
