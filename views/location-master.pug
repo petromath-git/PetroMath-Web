@@ -15,10 +15,11 @@ block content
                     h4.mb-0.text-primary.text-center.text-md-left Location Master
                 .col-auto.order-1.order-md-2.ml-auto
                     .btn-group
-                        button.btn.btn-success.btn-sm#addLocationBtn(type="button", data-toggle="modal", data-target="#addLocationModal")
-                            i.bi.bi-plus-circle.me-1
-                            span.d-none.d-sm-inline Add Location
-                            span.d-inline.d-sm-none Add
+                        if isSuperUser
+                            button.btn.btn-success.btn-sm#addLocationBtn(type="button", data-toggle="modal", data-target="#addLocationModal")
+                                i.bi.bi-plus-circle.me-1
+                                span.d-none.d-sm-inline Add Location
+                                span.d-inline.d-sm-none Add
                         button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
                             i.bi.bi-arrow-clockwise.me-1
                             span.d-none.d-sm-inline Refresh
