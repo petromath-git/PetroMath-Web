@@ -1,11 +1,13 @@
 const locationDao = require('../dao/location-dao');
 const lookupDao = require('../dao/lookup-dao');
+const security = require('../utils/app-security');
 const moment = require('moment');
 
 module.exports = {
     /**
      * GET /location-master
-     * Display the location master page with all locations
+     * Display the location master page. SuperUser: every location.
+     * PowerUser: only their assigned locations.
      */
     getLocationMasterPage: async (req, res, next) => {
         try {
@@ -17,20 +19,26 @@ module.exports = {
 
             // Add active status to each location
             const currentDate = new Date();
-            const locationsWithStatus = locations.map(loc => {
+            let locationsWithStatus = locations.map(loc => {
                 const locationData = loc.toJSON ? loc.toJSON() : loc;
                 return {
                     ...locationData,
-                    is_active: new Date(locationData.start_date) <= currentDate && 
+                    is_active: new Date(locationData.start_date) <= currentDate &&
                             new Date(locationData.effective_end_date) > currentDate
                 };
             });
+
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null = unrestricted, else array
+            if (accessibleLocations !== null) {
+                locationsWithStatus = locationsWithStatus.filter(loc => accessibleLocations.includes(loc.location_code));
+            }
 
             res.render('location-master', {
                 title: 'Location Master',
                 user: req.user,
                 locations: locationsWithStatus,
                 oilCompanies: oilCompanies,
+                isSuperUser: req.user.Role === 'SuperUser',
                 messages: req.flash()
             });
         } catch (error) {
@@ -99,6 +107,11 @@ module.exports = {
         const locationId = req.params.id;
         const { location_name, company_name, gst_number, oil_co_dealer_code, phone, start_date } = req.body;
 
+        const existing = await locationDao.findById(locationId);
+        if (!existing || !security.canAccessLocation(req.user, existing.location_code)) {
+            return res.json({ success: false, error: 'You can only update your assigned location(s)' });
+        }
+
         // Validate phone number (10 digits)
         if (!phone || !/^\d{10}$/.test(phone)) {
             return res.json({ success: false, error: 'Phone number must be exactly 10 digits' });
@@ -130,9 +143,14 @@ module.exports = {
     deactivateLocation: async (req, res, next) => {
     try {
         const locationId = req.params.id;
-        
+
+        const existing = await locationDao.findById(locationId);
+        if (!existing || !security.canAccessLocation(req.user, existing.location_code)) {
+            return res.json({ success: false, error: 'You can only deactivate your assigned location(s)' });
+        }
+
         await locationDao.deactivate(
-            locationId, 
+            locationId,
             req.user.Person_id.toString()
         );
 
@@ -143,21 +161,6 @@ module.exports = {
     }
 },
 
-reactivateLocation: async (req, res, next) => {
-    try {
-        const locationId = req.params.id;
-        
-        await locationDao.reactivate(
-            locationId, 
-            req.user.Person_id.toString()
-        );
-
-        res.json({ success: true, message: 'Location reactivated successfully' });
-    } catch (error) {
-        console.error('Error reactivating location:', error);
-        res.json({ success: false, error: error.message });
-    }
-},
     /**
      * PUT /location-master/:id/reactivate
      * Reactivate a location
@@ -165,9 +168,15 @@ reactivateLocation: async (req, res, next) => {
     reactivateLocation: async (req, res, next) => {
         try {
             const locationId = req.params.id;
-            
+
+            const existing = await locationDao.findById(locationId);
+            if (!existing || !security.canAccessLocation(req.user, existing.location_code)) {
+                req.flash('error', 'You can only reactivate your assigned location(s)');
+                return res.redirect('/location-master');
+            }
+
             await locationDao.reactivate(
-                locationId, 
+                locationId,
                 req.user.Person_id.toString()
             );
 
