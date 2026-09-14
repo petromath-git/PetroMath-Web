@@ -2,17 +2,18 @@
 # Pulls the latest DB backup from S3 and restores it over the local MySQL DB.
 # Destructive: drops and recreates the target database. See ops/dr-restore-runbook.md.
 #
-# Usage: ./restore-latest-db-backup.sh [daily|hourly] [/path/to/.env]
+# Usage: ./restore-latest-db-backup.sh [daily|hourly] [/path/to/.env] [pm2-app-name]
 
 set -euo pipefail
 
 TIER="${1:-daily}"
 ENV_FILE="${2:-$HOME/petroMath/.env}"
+PM2_APP="${3:-petromath}"
 S3_BUCKET="mysql-backups-petromath"
 WORK_DIR="/home/ubuntu/restore"
 
 if [[ "$TIER" != "daily" && "$TIER" != "hourly" ]]; then
-  echo "Usage: $0 [daily|hourly] [/path/to/.env]" >&2
+  echo "Usage: $0 [daily|hourly] [/path/to/.env] [pm2-app-name]" >&2
   exit 1
 fi
 
@@ -55,7 +56,7 @@ echo "[1/5] Downloading backup..."
 aws s3 cp "s3://$S3_BUCKET/mysql-backups/$TIER/$LATEST_KEY" "$LOCAL_FILE" --profile s3-backup-writer
 
 echo "[2/5] Stopping app..."
-pm2 stop petromath || true
+pm2 stop "$PM2_APP" || true
 
 echo "[3/5] Dropping and recreating database..."
 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" \
@@ -65,7 +66,7 @@ echo "[4/5] Importing backup (this can take a few minutes)..."
 gunzip -c "$LOCAL_FILE" | mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME"
 
 echo "[5/5] Restarting app..."
-pm2 start petromath
+pm2 start "$PM2_APP"
 
 rm -f "$LOCAL_FILE"
 
