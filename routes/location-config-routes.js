@@ -41,6 +41,14 @@ router.put('/catalog/:settingName',
     locationConfigController.updateCatalogDescription
 );
 
+// PUT /location-config/catalog/:settingName/value-rule - Define what counts as a valid
+// value for a setting (TEXT/LOOKUP/NUMBER). SuperUser only -- letting anyone else define
+// this would let them loosen their own guardrails.
+router.put('/catalog/:settingName/value-rule',
+    [isLoginEnsured, security.hasPermission('MANAGE_LOCATION_CONFIG'), security.isSuperUser()],
+    locationConfigController.updateCatalogValueRule
+);
+
 // ============================================================================
 // API ROUTES (AJAX/JSON)
 // ============================================================================
