@@ -33,10 +33,15 @@ WHERE NOT EXISTS (SELECT 1 FROM m_roles WHERE role_name = 'PowerUser');
 -- have silently dropped these rows without it.
 -- The NOT EXISTS guard uses <=> (NULL-safe equals) on location_code
 -- because a plain unique index does not dedupe NULL location_code rows.
+-- can_reset_role_id: for PASSWORD_RESET rows this is meaningful target-role data
+-- (which role can be reset), not a NOT-NULL filler -- must be preserved from the
+-- source row, not overwritten with pa.role_id like every other permission_type.
+-- SuperUser is excluded as a target (PowerUser must not reset SuperUser's own
+-- password), matching PowerUser being excluded from touching SuperUser elsewhere.
 INSERT INTO m_role_permissions (role_id, can_reset_role_id, permission_type, location_specific, location_code, effective_start_date, effective_end_date, created_by)
 SELECT
     pa.role_id,
-    pa.role_id,
+    CASE WHEN src.permission_type = 'PASSWORD_RESET' THEN src.can_reset_role_id ELSE pa.role_id END,
     src.permission_type,
     src.location_specific,
     src.location_code,
@@ -51,11 +56,27 @@ WHERE CURDATE() BETWEEN src.effective_start_date AND src.effective_end_date
   -- grants it to SuperUser, a second run of this script would otherwise see it as
   -- just another current SuperUser permission and copy it here too.
   AND src.permission_type NOT IN ('MANAGE_PLATFORM_BILLING', 'ASSIGN_USER_LOCATIONS', 'VIEW_USAGE_DASHBOARD', 'EXPORT_USAGE_DATA', 'CREATE_LOCATION_MASTER')
+  AND NOT (src.permission_type = 'PASSWORD_RESET' AND src.can_reset_role_id = su.role_id)
   AND NOT EXISTS (
       SELECT 1 FROM m_role_permissions existing
       WHERE existing.role_id = pa.role_id
         AND existing.permission_type = src.permission_type
         AND existing.location_code <=> src.location_code
+        AND (src.permission_type <> 'PASSWORD_RESET' OR existing.can_reset_role_id = src.can_reset_role_id)
+  );
+
+-- SuperUser was never granted PASSWORD_RESET for the newly-created PowerUser role
+-- (it didn't exist when SuperUser's original PASSWORD_RESET rows were set up).
+INSERT INTO m_role_permissions (role_id, can_reset_role_id, permission_type, location_specific, location_code, effective_start_date, effective_end_date, created_by)
+SELECT su.role_id, pa.role_id, 'PASSWORD_RESET', 0, NULL, CURDATE(), '9999-12-31', 'partner-admin-role-migration'
+FROM m_roles su
+JOIN m_roles pa ON pa.role_name = 'PowerUser'
+WHERE su.role_name = 'SuperUser'
+  AND NOT EXISTS (
+      SELECT 1 FROM m_role_permissions existing
+      WHERE existing.role_id = su.role_id
+        AND existing.permission_type = 'PASSWORD_RESET'
+        AND existing.can_reset_role_id = pa.role_id
   );
 
 -- 3. New permission: migrating an onboarding record into a live location.
