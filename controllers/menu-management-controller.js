@@ -18,6 +18,11 @@ function isAssignableByCaller(role, menuItem) {
     return callerTier(role) <= (menuItem.restriction_level ?? 3);
 }
 
+// Roles a non-SuperUser caller (i.e. PowerUser) cannot set menu access for --
+// SuperUser is too privileged to touch, and Cashier/Driver/Helper/Customer are
+// low-level operational/portal roles whose menu access is not PowerUser's to change.
+const NON_SUPERUSER_EXCLUDED_TARGET_ROLES = ['SuperUser', 'Cashier', 'Driver', 'Helper', 'Customer'];
+
 const menuManagementController = {
 
     // Render the main menu management page
@@ -333,8 +338,9 @@ const menuManagementController = {
 
     // GET: Raw override rules — all locations for SuperUser, assigned locations for
     // PowerUser, own location otherwise. Roles/menu items are also trimmed for
-    // non-SuperUser callers: they can't touch SuperUser's menu access or platform-only
-    // menu items (billing, dev tooling, usage stats, user-location assignment).
+    // non-SuperUser callers: they can't touch SuperUser's or Cashier/Driver/Helper/
+    // Customer's menu access, or platform-only menu items (billing, dev tooling,
+    // usage stats, user-location assignment).
     getOverrides: async (req, res, next) => {
         try {
             const isSuperUser = req.user.Role === 'SuperUser';
@@ -349,7 +355,7 @@ const menuManagementController = {
                     : menuManagementDao.getAllOverrides(canPickLocation ? accessibleLocations : req.user.location_code)
             ]);
 
-            const visibleRoles = isSuperUser ? roles : roles.filter(r => r.role_name !== 'SuperUser');
+            const visibleRoles = isSuperUser ? roles : roles.filter(r => !NON_SUPERUSER_EXCLUDED_TARGET_ROLES.includes(r.role_name));
             const visibleMenuItems = menuItems.filter(m => isAssignableByCaller(req.user.Role, m));
 
             res.json({
@@ -374,8 +380,8 @@ const menuManagementController = {
             const { role, menu_code, allowed, location_code } = req.body;
             const isSuperUser = req.user.Role === 'SuperUser';
 
-            if (!isSuperUser && role === 'SuperUser') {
-                return res.status(403).json({ success: false, error: 'You cannot set menu access for the SuperUser role.' });
+            if (!isSuperUser && NON_SUPERUSER_EXCLUDED_TARGET_ROLES.includes(role)) {
+                return res.status(403).json({ success: false, error: `You cannot set menu access for the ${role} role.` });
             }
 
             let targetLocation;
