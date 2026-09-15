@@ -328,6 +328,9 @@ const sessionSecret = process.env.SESSION_SECRET || 'dev-only-insecure-secret';
 app.use(require('cookie-parser')(sessionSecret));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(bodyParser.json({ limit: '10mb' }));
+const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours of inactivity logs the user out
+const SESSION_ROLL_INTERVAL_MS = 30 * 60 * 1000; // only re-extend expiry this often, not on every request
+
 app.use(require('express-session')({
     secret: sessionSecret,
     resave: false,
@@ -342,11 +345,26 @@ app.use(require('express-session')({
         // secure:true silently broke every login on beta (2026-09-10).
         // Re-enable once nginx is confirmed to forward X-Forwarded-Proto
         // correctly on both beta and prod.
-        secure: false
+        secure: false,
+        maxAge: SESSION_MAX_AGE_MS
     }
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Rolling session: extend the expiry on activity so a live user isn't logged out
+// mid-shift, but only touch/re-save the session at most once per 30 min instead of
+// on every single request.
+app.use((req, res, next) => {
+    if (req.session && req.isAuthenticated && req.isAuthenticated()) {
+        const now = Date.now();
+        if (!req.session.lastRolled || now - req.session.lastRolled > SESSION_ROLL_INTERVAL_MS) {
+            req.session.lastRolled = now;
+            req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+        }
+    }
+    next();
+});
 
 
 
