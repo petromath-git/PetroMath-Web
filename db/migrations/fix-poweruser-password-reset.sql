@@ -20,7 +20,10 @@
 --
 -- SuperUser itself is intentionally excluded as a target for PowerUser
 -- (consistent with PowerUser being excluded from touching SuperUser
--- everywhere else in this rollout).
+-- everywhere else in this rollout). PowerUser is also intentionally
+-- excluded as a target for PowerUser -- decided 2026-09-15 to leave
+-- PowerUser password resets as SuperUser-only for now, rather than let
+-- one PowerUser reset another's password.
 --
 -- Run once. Safe to re-run: delete-then-reinsert + NOT EXISTS guard.
 -- ============================================================
@@ -35,11 +38,11 @@ WHERE r.role_name = 'PowerUser'
   AND rp.created_by = 'partner-admin-role-migration';
 
 -- Re-grant PowerUser the correct PASSWORD_RESET targets, mirroring
--- SuperUser's own targets minus SuperUser itself.
+-- SuperUser's own targets minus SuperUser and PowerUser itself.
 INSERT INTO m_role_permissions (role_id, can_reset_role_id, permission_type, location_specific, location_code, effective_start_date, effective_end_date, created_by)
 SELECT pa.role_id, target.role_id, 'PASSWORD_RESET', 0, NULL, CURDATE(), '9999-12-31', 'fix-poweruser-password-reset'
 FROM m_roles pa
-JOIN m_roles target ON target.role_name IN ('Admin', 'Cashier', 'Customer', 'Driver', 'Helper', 'Manager', 'PowerUser')
+JOIN m_roles target ON target.role_name IN ('Admin', 'Cashier', 'Customer', 'Driver', 'Helper', 'Manager')
 WHERE pa.role_name = 'PowerUser'
   AND NOT EXISTS (
       SELECT 1 FROM m_role_permissions existing
