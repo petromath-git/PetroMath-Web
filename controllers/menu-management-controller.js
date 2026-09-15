@@ -2,18 +2,20 @@
 const menuManagementDao = require('../dao/menu-management-dao');
 const security = require('../utils/app-security');
 
-// Menu items behind these URL prefixes are platform-level (billing, dev tooling,
-// usage stats, assigning other users to locations) — a location-scoped role like
-// PowerUser must not be able to grant/toggle visibility into them, even though
-// the underlying routes are separately permission-gated regardless of menu visibility.
-const PLATFORM_ONLY_URL_PREFIXES = [
-    '/platform-billing', '/usage-dashboard', '/dev-tracker',
-    '/system-health', '/person-locations', '/dev-db-refresh'
-];
+// m_menu_items.restriction_level = the minimum privilege tier required to
+// grant/toggle that item to a role+location. 1 = SuperUser only. 3 = SuperUser
+// + PowerUser (and, in future, Admin, if Admin ever gets menu-management access
+// for its own location). A caller can assign an item when their own tier number
+// is <= the item's restriction_level (lower tier number = more privileged).
+// Replaces an earlier URL-prefix blacklist, which couldn't catch parent/group
+// header items (url_path is NULL) and was missing several sensitive items
+// entirely -- see db/migrations/menu-item-restriction-level.sql.
+function callerTier(role) {
+    return role === 'SuperUser' ? 1 : 3;
+}
 
-function isPlatformOnlyMenuItem(item) {
-    const url = item.url_path || '';
-    return PLATFORM_ONLY_URL_PREFIXES.some(prefix => url.startsWith(prefix));
+function isAssignableByCaller(role, menuItem) {
+    return callerTier(role) <= (menuItem.restriction_level ?? 3);
 }
 
 const menuManagementController = {
@@ -348,7 +350,7 @@ const menuManagementController = {
             ]);
 
             const visibleRoles = isSuperUser ? roles : roles.filter(r => r.role_name !== 'SuperUser');
-            const visibleMenuItems = isSuperUser ? menuItems : menuItems.filter(m => !isPlatformOnlyMenuItem(m));
+            const visibleMenuItems = menuItems.filter(m => isAssignableByCaller(req.user.Role, m));
 
             res.json({
                 success: true,
@@ -394,7 +396,7 @@ const menuManagementController = {
             }
 
             const menuItem = (await menuManagementDao.getAllMenuItems()).find(m => m.menu_code === menu_code);
-            if (!isSuperUser && menuItem && isPlatformOnlyMenuItem(menuItem)) {
+            if (menuItem && !isAssignableByCaller(req.user.Role, menuItem)) {
                 return res.status(403).json({ success: false, error: 'You cannot set menu access for this menu item.' });
             }
 

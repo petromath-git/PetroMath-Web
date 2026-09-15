@@ -71,7 +71,7 @@ $(document).ready(function () {
                 tbody.append(`
                     <tr>
                       <td><code>${escHtml(item.menu_code)}</code></td>
-                      <td>${indent}${escHtml(item.menu_name)}</td>
+                      <td>${indent}${escHtml(item.menu_name)}${Number(item.restriction_level) === 1 ? ' <span class="badge badge-warning" title="SuperUser only">SU only</span>' : ''}</td>
                       <td><small class="text-muted">${escHtml(item.url_path || '—')}</small></td>
                       <td class="text-center">${item.sequence}</td>
                       <td class="text-center text-nowrap">
@@ -105,9 +105,11 @@ $(document).ready(function () {
             $('#fi-group-code').val(item.group_code || '');
             $('#fi-parent-code').val(item.parent_code || '');
             $('#fi-sequence').val(item.sequence);
+            $('#fi-restriction-level').val(String(item.restriction_level ?? 3));
         } else {
             $('#modal-menu-item-title').text('Add Menu Item');
             $('#fi-menu-code').prop('readonly', false);
+            $('#fi-restriction-level').val('3');
         }
         $('#modal-menu-item').modal('show');
     }
@@ -129,7 +131,8 @@ $(document).ready(function () {
             url_path:    $('#fi-url-path').val() || null,
             group_code:  groupCode || null,
             parent_code: $('#fi-parent-code').val() || null,
-            sequence:    sequence || 1
+            sequence:    sequence || 1,
+            restriction_level: parseInt($('#fi-restriction-level').val()) || 3
         };
 
         const url    = editingMenuItem ? `/menu-management/api/menu-items/${editingMenuItem.menu_id}` : '/menu-management/api/menu-items';
