@@ -4,6 +4,8 @@ $(document).ready(function () {
     let menuGroups = [];
     let allRoles   = [];
     let isSuperUser = false;
+    let canPickLocation = false;   // true for a PowerUser with more than one assigned location
+    let accessibleLocations = [];  // that PowerUser's assigned location codes
     let editingMenuItem  = null;
     let editingMenuGroup = null;
 
@@ -69,7 +71,7 @@ $(document).ready(function () {
                 tbody.append(`
                     <tr>
                       <td><code>${escHtml(item.menu_code)}</code></td>
-                      <td>${indent}${escHtml(item.menu_name)}</td>
+                      <td>${indent}${escHtml(item.menu_name)}${Number(item.restriction_level) === 1 ? ' <span class="badge badge-warning" title="SuperUser only">SU only</span>' : ''}</td>
                       <td><small class="text-muted">${escHtml(item.url_path || '—')}</small></td>
                       <td class="text-center">${item.sequence}</td>
                       <td class="text-center text-nowrap">
@@ -103,9 +105,11 @@ $(document).ready(function () {
             $('#fi-group-code').val(item.group_code || '');
             $('#fi-parent-code').val(item.parent_code || '');
             $('#fi-sequence').val(item.sequence);
+            $('#fi-restriction-level').val(String(item.restriction_level ?? 3));
         } else {
             $('#modal-menu-item-title').text('Add Menu Item');
             $('#fi-menu-code').prop('readonly', false);
+            $('#fi-restriction-level').val('3');
         }
         $('#modal-menu-item').modal('show');
     }
@@ -127,7 +131,8 @@ $(document).ready(function () {
             url_path:    $('#fi-url-path').val() || null,
             group_code:  groupCode || null,
             parent_code: $('#fi-parent-code').val() || null,
-            sequence:    sequence || 1
+            sequence:    sequence || 1,
+            restriction_level: parseInt($('#fi-restriction-level').val()) || 3
         };
 
         const url    = editingMenuItem ? `/menu-management/api/menu-items/${editingMenuItem.menu_id}` : '/menu-management/api/menu-items';
@@ -285,10 +290,13 @@ $(document).ready(function () {
         $.get('/menu-management/api/overrides').done(function (r) {
             if (!r.success) { tableError('#tbody-overrides', 5, r.error); return; }
             allRoles = r.roles;
+            menuItems = r.menuItems || menuItems; // needed for the "Add Override" modal's menu dropdown
             isSuperUser = r.isSuperUser;
+            canPickLocation = !!r.canPickLocation;
+            accessibleLocations = r.accessibleLocations || [];
             allOverrideRows = r.access;
-            if (r.isSuperUser) {
-                $('#override-location-label').text('All Locations');
+            if (r.isSuperUser || canPickLocation) {
+                $('#override-location-label').text(canPickLocation ? 'Your Assigned Locations' : 'All Locations');
                 $('#th-override-location').removeClass('d-none');
                 buildLocationFilter(r.access);
                 $('#override-filter-row').removeClass('d-none');
@@ -312,7 +320,7 @@ $(document).ready(function () {
             (r.menu_code     || '').toLowerCase().includes(q) ||
             (r.location_code || '').toLowerCase().includes(q)
         );
-        renderOverridesTable(filtered, isSuperUser);
+        renderOverridesTable(filtered, isSuperUser || canPickLocation);
     }
 
     $('#search-overrides').on('input', filterOverrides);
@@ -383,6 +391,14 @@ $(document).ready(function () {
         if (type === 'override') {
             $('#ov-location').val('');
             isSuperUser ? $('#ov-location-group').removeClass('d-none') : $('#ov-location-group').addClass('d-none');
+
+            if (canPickLocation) {
+                const sel = $('#ov-location-select').empty().append('<option value="">Select location</option>');
+                accessibleLocations.forEach(loc => sel.append(`<option value="${escAttr(loc)}">${escHtml(loc)}</option>`));
+                $('#ov-location-select-group').removeClass('d-none');
+            } else {
+                $('#ov-location-select-group').addClass('d-none');
+            }
         }
 
         $(`#modal-${type === 'global' ? 'global-access' : 'override'}`).modal('show');
@@ -398,11 +414,18 @@ $(document).ready(function () {
 
         const url = type === 'global' ? '/menu-management/api/global-access' : '/menu-management/api/overrides';
 
+        if (type === 'override' && canPickLocation && !$('#ov-location-select').val()) {
+            showError('Please select a location.');
+            return;
+        }
+
         const calls = checkedRoles.map(role => {
             const payload = { role, menu_code: menuCode, allowed };
             if (type === 'override' && isSuperUser) {
                 const loc = $('#ov-location').val().trim();
                 if (loc) payload.location_code = loc;
+            } else if (type === 'override' && canPickLocation) {
+                payload.location_code = $('#ov-location-select').val();
             }
             return $.ajax({ url, method: 'POST', data: JSON.stringify(payload), contentType: 'application/json' });
         });

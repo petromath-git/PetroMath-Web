@@ -2,12 +2,50 @@
 
 const LocationConfigDao = require('../dao/location-config-dao');
 const LocationDao = require('../dao/location-dao');
+const LookupDao = require('../dao/lookup-dao');
+const security = require('../utils/app-security');
 const dateFormat = require('dateformat');
 
 function safeDate(d, fmt) {
     if (!d) return 'N/A';
     const parsed = new Date(d);
     return isNaN(parsed.getTime()) ? 'N/A' : dateFormat(parsed, fmt);
+}
+
+// Validate a candidate setting_value against its catalog rule (if any).
+// No catalog entry, or value_type TEXT, means unrestricted (today's behavior).
+// Applies to every role, including SuperUser.
+async function validateSettingValue(catalogEntry, value) {
+    if (!catalogEntry || catalogEntry.value_type === 'TEXT') {
+        return { valid: true };
+    }
+
+    if (catalogEntry.value_type === 'LOOKUP') {
+        const values = await LookupDao.getLookupByType(catalogEntry.lookup_type);
+        const allowed = values.map(v => v.description);
+        if (!allowed.includes(value)) {
+            return { valid: false, error: `Value must be one of: ${allowed.join(', ')}` };
+        }
+        return { valid: true };
+    }
+
+    if (catalogEntry.value_type === 'NUMBER') {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return { valid: false, error: 'Value must be a number' };
+        }
+        const min = catalogEntry.min_value !== null ? Number(catalogEntry.min_value) : null;
+        const max = catalogEntry.max_value !== null ? Number(catalogEntry.max_value) : null;
+        if (min !== null && num < min) {
+            return { valid: false, error: `Value must be at least ${min}` };
+        }
+        if (max !== null && num > max) {
+            return { valid: false, error: `Value must be at most ${max}` };
+        }
+        return { valid: true };
+    }
+
+    return { valid: true };
 }
 
 /**
@@ -25,29 +63,40 @@ module.exports = {
     /**
      * GET /location-config
      * Main page - shows all active configs with filter options
-     * SuperUser: Can see all locations + global
-     * Other roles: Can only see their own location + global
+     * SuperUser: can see all locations + global
+     * PowerUser: can see their assigned locations + global
+     * Other roles: can only see their own location + global
      */
     getLocationConfigPage: async (req, res, next) => {
         try {
-            const userRole = req.user.Role;
             const userLocation = req.user.location_code;
             const locationFilter = req.query.location || 'ALL';
-            
-            // Determine actual filter based on user role
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null = unrestricted, else array
+            const canFilterLocations = accessibleLocations === null || accessibleLocations.length > 1;
+
+            // Determine actual filter based on the user's accessible locations
             let actualFilter;
-            if (userRole === 'SuperUser') {
-                // SuperUser can filter by any location or see all
+            if (locationFilter === '*') {
+                actualFilter = '*'; // global-only is always visible, regardless of role
+            } else if (accessibleLocations === null) {
+                // Unrestricted: filter by any location or see all
                 actualFilter = locationFilter === 'ALL' ? null : locationFilter;
+            } else if (accessibleLocations.length > 1) {
+                // Assigned to a set of locations: honor the requested filter only if it's one of theirs
+                actualFilter = (locationFilter === 'ALL' || !accessibleLocations.includes(locationFilter))
+                    ? accessibleLocations
+                    : locationFilter;
             } else {
-                // Non-SuperUser can only see their own location + global
+                // Pinned to their single home location
                 actualFilter = userLocation;
             }
-            
-            // Get all active locations for the filter dropdown (SuperUser only)
-            const locations = userRole === 'SuperUser' ? 
-                await LocationDao.findActiveLocations() : 
-                [{ location_code: userLocation, location_name: req.user.location_name || userLocation }];
+
+            // Get all active locations for the filter dropdown
+            const locations = accessibleLocations === null
+                ? await LocationDao.findActiveLocations()
+                : accessibleLocations.length > 1
+                    ? await LocationDao.findActiveLocations(accessibleLocations)
+                    : [{ location_code: userLocation, location_name: req.user.location_name || userLocation }];
             
             // Get active configs based on filter
             const activeConfigs = await LocationConfigDao.getAllConfigs(actualFilter);
@@ -58,13 +107,32 @@ module.exports = {
             // Get all unique setting names for autocomplete
             const settingNames = await LocationConfigDao.getAllSettingNames();
 
-            // Get description catalog (one row per setting_name) for the manage-descriptions UI
+            // Get description + value-rule catalog (one row per setting_name)
             const catalogMap = await LocationConfigDao.getCatalogMap();
             const settingCatalog = settingNames.map(name => ({
                 setting_name: name,
                 short_description: catalogMap[name]?.short_description || '',
-                detailed_description: catalogMap[name]?.detailed_description || ''
+                detailed_description: catalogMap[name]?.detailed_description || '',
+                value_type: catalogMap[name]?.value_type || 'TEXT',
+                lookup_type: catalogMap[name]?.lookup_type || null,
+                min_value: catalogMap[name]?.min_value ?? null,
+                max_value: catalogMap[name]?.max_value ?? null
             }));
+
+            // Lookup values for every lookup_type actually referenced, so the add/edit
+            // modal can render a dropdown client-side without an extra round-trip.
+            const lookupTypesUsed = [...new Set(settingCatalog.filter(s => s.value_type === 'LOOKUP' && s.lookup_type).map(s => s.lookup_type))];
+            const lookupValuesByType = {};
+            for (const lt of lookupTypesUsed) {
+                const values = await LookupDao.getLookupByType(lt);
+                lookupValuesByType[lt] = values.map(v => v.description);
+            }
+
+            // SuperUser only: every known lookup_type, for the value-rule editor's dropdown
+            const isSuperUser = req.user.Role === 'SuperUser';
+            const allLookupTypes = isSuperUser
+                ? (await LookupDao.getAllLookupTypes('SuperUser', userLocation)).map(t => t.lookup_type)
+                : [];
 
             // Format dates for display
             const formattedActiveConfigs = activeConfigs.map(config => ({
@@ -92,14 +160,18 @@ module.exports = {
                 locationsData: JSON.stringify(locations),
                 settingNamesData: JSON.stringify(settingNames),
                 settingCatalogData: JSON.stringify(settingCatalog),
+                lookupValuesByTypeData: JSON.stringify(lookupValuesByType),
+                allLookupTypesData: JSON.stringify(allLookupTypes),
                 activeConfigs: formattedActiveConfigs,
                 historyConfigs: formattedHistoryConfigs,
                 locations: locations,
                 settingNames: settingNames,
                 settingCatalog: settingCatalog,
+                allLookupTypes: allLookupTypes,
                 currentFilter: locationFilter,
                 currentDate: new Date().toISOString().split('T')[0],
-                isSuperUser: userRole === 'SuperUser',
+                canFilterLocations: canFilterLocations,
+                isSuperUser: isSuperUser,
                 messages: req.flash()
             };
 
@@ -125,8 +197,6 @@ module.exports = {
         try {
             const { location_code, setting_name, setting_value, effective_start_date } = req.body;
             const username = req.user.username;
-            const userRole = req.user.Role;
-            const userLocation = req.user.location_code;
 
             // Validation
             if (!location_code || !setting_name || !setting_value) {
@@ -141,12 +211,39 @@ module.exports = {
             const cleanSettingName = setting_name.trim().toUpperCase();
             const cleanSettingValue = setting_value.trim();
 
-            // Security check: Non-SuperUser can only create for their own location or global
-            if (userRole !== 'SuperUser' && cleanLocationCode !== userLocation && cleanLocationCode !== '*') {
+            // Security check: global affects every location system-wide -- SuperUser only.
+            // Everyone else can only create for a location they're actually accessible to.
+            if (cleanLocationCode === '*') {
+                if (req.user.Role !== 'SuperUser') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Only SuperUser can create global configurations'
+                    });
+                }
+            } else if (!security.canAccessLocation(req.user, cleanLocationCode)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only create configurations for your own location or global settings'
+                    error: 'You can only create configurations for your assigned location(s)'
                 });
+            }
+
+            // Non-SuperUser can only use an existing setting_name, not invent a new one —
+            // new config keys only ever come from a code change, never through this UI.
+            if (req.user.Role !== 'SuperUser') {
+                const existingNames = await LocationConfigDao.getAllSettingNames();
+                if (!existingNames.includes(cleanSettingName)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: `"${cleanSettingName}" is not a recognized setting name`
+                    });
+                }
+            }
+
+            // setting_value must match the setting's declared value type, for everyone including SuperUser
+            const catalogMap = await LocationConfigDao.getCatalogMap();
+            const valueCheck = await validateSettingValue(catalogMap[cleanSettingName], cleanSettingValue);
+            if (!valueCheck.valid) {
+                return res.status(400).json({ success: false, error: valueCheck.error });
             }
 
             // Create config
@@ -193,8 +290,6 @@ module.exports = {
             const configId = req.params.configId;
             const { setting_value } = req.body;
             const username = req.user.username;
-            const userRole = req.user.Role;
-            const userLocation = req.user.location_code;
 
             // Validation
             if (!setting_value) {
@@ -206,7 +301,7 @@ module.exports = {
 
             // Get existing config to check location
             const existingConfig = await LocationConfigDao.getConfigById(configId);
-            
+
             if (!existingConfig) {
                 return res.status(404).json({
                     success: false,
@@ -214,17 +309,30 @@ module.exports = {
                 });
             }
 
-            // Security check: Non-SuperUser can only update their own location or global
-            if (userRole !== 'SuperUser' && 
-                existingConfig.location_code !== userLocation && 
-                existingConfig.location_code !== '*') {
+            // Security check: global affects every location system-wide -- SuperUser only.
+            // Everyone else can only update a location they're actually accessible to.
+            if (existingConfig.location_code === '*') {
+                if (req.user.Role !== 'SuperUser') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Only SuperUser can update global configurations'
+                    });
+                }
+            } else if (!security.canAccessLocation(req.user, existingConfig.location_code)) {
                 return res.status(403).json({
                     success: false,
-                    error: 'You can only update configurations for your own location or global settings'
+                    error: 'You can only update configurations for your assigned location(s)'
                 });
             }
 
             const cleanSettingValue = setting_value.trim();
+
+            // setting_value must match the setting's declared value type, for everyone including SuperUser
+            const catalogMap = await LocationConfigDao.getCatalogMap();
+            const valueCheck = await validateSettingValue(catalogMap[existingConfig.setting_name], cleanSettingValue);
+            if (!valueCheck.valid) {
+                return res.status(400).json({ success: false, error: valueCheck.error });
+            }
 
             // Update config (this will end-date old and create new)
             const updatedConfig = await LocationConfigDao.updateConfig(
@@ -270,18 +378,28 @@ module.exports = {
      */
     getConfigsAPI: async (req, res, next) => {
         try {
-            const locationFilter = req.query.location || 'ALL';
+            const requestedFilter = req.query.location || 'ALL';
             const configType = req.query.type || 'active'; // active or history
+            const accessibleLocations = security.getAccessibleLocations(req.user); // null = unrestricted, else array
+
+            // Resolve the requested filter against what this user is actually allowed to see —
+            // a restricted user can't bypass their scope by passing ?location=ALL or another location's code.
+            let effectiveFilter;
+            if (requestedFilter === '*') {
+                effectiveFilter = '*'; // global-only is always visible, regardless of role
+            } else if (accessibleLocations === null) {
+                effectiveFilter = requestedFilter === 'ALL' ? null : requestedFilter;
+            } else if (requestedFilter === 'ALL' || !accessibleLocations.includes(requestedFilter)) {
+                effectiveFilter = accessibleLocations;
+            } else {
+                effectiveFilter = requestedFilter;
+            }
 
             let configs;
             if (configType === 'history') {
-                configs = await LocationConfigDao.getHistoryConfigs(
-                    locationFilter === 'ALL' ? null : locationFilter
-                );
+                configs = await LocationConfigDao.getHistoryConfigs(effectiveFilter);
             } else {
-                configs = await LocationConfigDao.getAllConfigs(
-                    locationFilter === 'ALL' ? null : locationFilter
-                );
+                configs = await LocationConfigDao.getAllConfigs(effectiveFilter);
             }
 
             // Format dates
@@ -382,6 +500,38 @@ module.exports = {
                 success: false,
                 error: 'Failed to save description: ' + error.message
             });
+        }
+    },
+
+    /**
+     * PUT /location-config/catalog/:settingName/value-rule
+     * SuperUser only: define what counts as a valid value for a setting_name
+     * (TEXT/LOOKUP/NUMBER + lookup_type or min/max).
+     */
+    updateCatalogValueRule: async (req, res, next) => {
+        try {
+            const settingName = req.params.settingName.trim().toUpperCase();
+            const { value_type, lookup_type, min_value, max_value } = req.body;
+            const username = req.user.username;
+
+            if (!['TEXT', 'LOOKUP', 'NUMBER'].includes(value_type)) {
+                return res.status(400).json({ success: false, error: 'value_type must be TEXT, LOOKUP, or NUMBER' });
+            }
+            if (value_type === 'LOOKUP' && !lookup_type) {
+                return res.status(400).json({ success: false, error: 'lookup_type is required when value_type is LOOKUP' });
+            }
+
+            const updated = await LocationConfigDao.upsertCatalogValueRule(settingName, {
+                valueType: value_type,
+                lookupType: lookup_type || null,
+                minValue: min_value === '' || min_value == null ? null : Number(min_value),
+                maxValue: max_value === '' || max_value == null ? null : Number(max_value)
+            }, username);
+
+            res.json({ success: true, message: 'Value rule saved successfully', data: updated });
+        } catch (error) {
+            console.error('Error updating catalog value rule:', error);
+            res.status(500).json({ success: false, error: 'Failed to save value rule: ' + error.message });
         }
     },
 

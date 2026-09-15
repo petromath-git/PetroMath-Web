@@ -14,6 +14,23 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.TEXT,
             allowNull: true
         },
+        value_type: {
+            type: DataTypes.ENUM('TEXT', 'LOOKUP', 'NUMBER'),
+            allowNull: false,
+            defaultValue: 'TEXT'
+        },
+        lookup_type: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
+        min_value: {
+            type: DataTypes.DECIMAL(15, 4),
+            allowNull: true
+        },
+        max_value: {
+            type: DataTypes.DECIMAL(15, 4),
+            allowNull: true
+        },
         created_by: {
             type: DataTypes.STRING(45),
             allowNull: true
