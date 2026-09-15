@@ -206,6 +206,13 @@ block content
                 .form-group
                   label Sequence
                   input.form-control.form-control-sm#fi-sequence(type="number" value="1")
+              .col-md-4
+                .form-group
+                  label Restriction Level
+                  select.custom-select.custom-select-sm#fi-restriction-level
+                    option(value="3" selected) 3 - PowerUser and above
+                    option(value="1") 1 - SuperUser only
+                  small.form-text.text-muted Who can grant this item to others via Location Overrides
         .modal-footer
           button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
           button.btn.btn-primary.btn-sm#btn-save-menu-item Save
