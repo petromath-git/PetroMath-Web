@@ -29,6 +29,10 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.INTEGER,
             defaultValue: 1
         },
+        restriction_level: {
+            type: DataTypes.INTEGER,
+            defaultValue: 3
+        },
         group_code: {
             type: DataTypes.STRING(50),
             allowNull: true
