@@ -2,6 +2,15 @@
 
 function debugLog(...args) { if (window.DEBUG_LOGGING) debugLog(...args); }
 
+// Chrome/Edge increment/decrement a focused <input type="number"> on mouse-wheel scroll.
+// Blur it on wheel so users scrolling past a field (e.g. denomination entry) don't
+// silently mutate its value.
+document.addEventListener('wheel', function (e) {
+    if (e.target.tagName === 'INPUT' && e.target.type === 'number' && document.activeElement === e.target) {
+        e.target.blur();
+    }
+}, { passive: true });
+
 var showClassName = 'd-md-block';
 var hideClassName = 'd-md-none';
 var toFixedValue = 2
