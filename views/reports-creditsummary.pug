@@ -23,20 +23,64 @@ block content
 
 
             // Javascript that gets table data
-            var creditstmtFromServer = !{JSON.stringify(creditsummary)} 
+            var creditstmtFromServer = !{JSON.stringify(creditsummary)}
+
+            var sortColumn = null;
+            var sortAscending = true;
+
+            function sortCreditSummary(key) {
+                if (sortColumn === key) {
+                    sortAscending = !sortAscending;
+                } else {
+                    sortColumn = key;
+                    sortAscending = true;
+                }
+
+                creditstmtFromServer.sort(function(a, b) {
+                    var valA = a[key];
+                    var valB = b[key];
+
+                    var numA = parseFloat(valA);
+                    var numB = parseFloat(valB);
+                    var cmp;
+                    if (!isNaN(numA) && !isNaN(numB) && valA !== '' && valB !== '' && valA !== '-' && valB !== '-') {
+                        cmp = numA - numB;
+                    } else {
+                        cmp = String(valA).toLowerCase().localeCompare(String(valB).toLowerCase());
+                    }
+
+                    return sortAscending ? cmp : -cmp;
+                });
+
+                renderCreditSummaryTable();
+            }
+
+            function renderCreditSummaryTable() {
+                document.getElementById('creditsummary-table-container').innerHTML =
+                    renderTable(
+                        creditstmtFromServer,
+                        '',
+                        ['Balance', 'Last Receipt Amount', 'Days Since Receipt'],  // right-aligned
+                        ['S.no', 'Last Receipt Date']  // center-aligned
+                    );
+            }
 
             function renderTable(array, tabletitle, numberColumns = [], centerColumns = [], tableWidthClass = '') {
                 var result = "<div class='card' style='margin-bottom: 10px;'>";
                 result += "<div class='card-header text-center font-weight-bold' >" + tabletitle + "</div>";
                 result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>";
                 result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>";
-                
+
                 // Build headers (exclude internal flags that start with _)
                 if (array.length > 0 && typeof array[0] === 'object') {
                     result += "<thead class='thead-light text-center'><tr>";
                     Object.keys(array[0]).forEach(key => {
                         if (!key.startsWith('_')) {  // Skip internal flags
-                            result += "<th style='border: 1px solid #000;'>" + key + "</th>";
+                            var sortIndicator = '';
+                            if (sortColumn === key) {
+                                sortIndicator = sortAscending ? ' &#9650;' : ' &#9660;';
+                            }
+                            result += "<th style='border: 1px solid #000; cursor: pointer;' onclick=\"sortCreditSummary('" + key + "')\">" + key + sortIndicator + "</th>";
                         }
                     });
                     result += "</tr></thead>";
@@ -106,13 +150,7 @@ block content
             }
 
             document.addEventListener('DOMContentLoaded', function() {
-                document.getElementById('creditsummary-table-container').innerHTML = 
-                    renderTable(
-                        creditstmtFromServer, 
-                        '', 
-                        ['Balance', 'Last Receipt Amount', 'Days Since Receipt'],  // right-aligned
-                        ['S.no', 'Last Receipt Date']  // center-aligned
-                    );
+                renderCreditSummaryTable();
             });
 
         table.center
