@@ -10,17 +10,56 @@ block content
 
         ul.nav.nav-tabs.mb-3#controlTabs(role="tablist")
             li.nav-item
+                a.nav-link(id="tab-generate" data-toggle="tab" href="#pane-generate" role="tab") Generate Events
+            li.nav-item
                 a.nav-link.active(id="tab-events" data-toggle="tab" href="#pane-events" role="tab") Events Monitor
             li.nav-item
                 a.nav-link(id="tab-accounting" data-toggle="tab" href="#pane-accounting" role="tab") Create Accounting
-            li.nav-item
-                a.nav-link(id="tab-generate" data-toggle="tab" href="#pane-generate" role="tab") Generate Events
             li.nav-item
                 a.nav-link(id="tab-export" data-toggle="tab" href="#pane-export" role="tab") Tally Export
             li.nav-item
                 a.nav-link.text-danger(id="tab-delete" data-toggle="tab" href="#pane-delete" role="tab") Delete / Reset
 
         .tab-content
+
+            //- ── Generate Events ─────────────────────────────────────────────
+            #pane-generate.tab-pane.fade(role="tabpanel")
+
+                p.text-muted.small.mb-3
+                    | Scans all source tables for records with no event in the queue and inserts missing events.
+                    | Safe to run multiple times — duplicate events are never created.
+                    br
+                    | Use this when: a trigger failed silently, records were imported directly into the DB,
+                    | or accounting was enabled after transactions already existed.
+
+                .row.align-items-end.mb-3
+                    .col-auto
+                        label.small.mb-1 Period
+                        select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo" data-monthyear="geMonthYearWrap" data-month="geMonth" data-year="geYear")
+                            option(value="month_year") Month / Year
+                            option(value="this_month") This Month
+                            option(value="last_month") Last Month
+                            option(value="this_fy") This Financial Year
+                            option(value="last_fy") Last Financial Year
+                            option(value="custom" selected) Custom
+                    +monthYearPicker('ge')
+                    .col-auto
+                        label.small.mb-1 From Date
+                        input.form-control.form-control-sm(type="date" id="geFrom" value=fromDate)
+                    .col-auto
+                        label.small.mb-1 To Date
+                        input.form-control.form-control-sm(type="date" id="geTo" value=toDate)
+                    .col-auto.align-self-end
+                        button.btn.btn-primary.btn-sm#btnGenerate Generate Missing Events
+
+                #geResult(style="display:none")
+                    .card.card-body.mt-2#geResultBody
+
+                hr.mt-3
+                h6.mt-3.mb-2 Recent Runs
+                    button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadBatchRuns('ge')") Refresh
+                #geBatchRuns
+                    .text-muted.small Loading…
 
             //- ── Events Monitor ──────────────────────────────────────────────
             #pane-events.tab-pane.fade.show.active(role="tabpanel")
@@ -149,47 +188,6 @@ block content
                     button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadBatchRuns('ca')") Refresh
                 #caBatchRuns
                     .text-muted.small Loading…
-
-            //- ── Generate Events ─────────────────────────────────────────────
-            #pane-generate.tab-pane.fade(role="tabpanel")
-
-
-                p.text-muted.small.mb-3
-                    | Scans all source tables for records with no event in the queue and inserts missing events.
-                    | Safe to run multiple times — duplicate events are never created.
-                    br
-                    | Use this when: a trigger failed silently, records were imported directly into the DB,
-                    | or accounting was enabled after transactions already existed.
-
-                .row.align-items-end.mb-3
-                    .col-auto
-                        label.small.mb-1 Period
-                        select.form-control.form-control-sm#gePeriod(onchange="glSetPeriod(this)" data-from="geFrom" data-to="geTo" data-monthyear="geMonthYearWrap" data-month="geMonth" data-year="geYear")
-                            option(value="month_year") Month / Year
-                            option(value="this_month") This Month
-                            option(value="last_month") Last Month
-                            option(value="this_fy") This Financial Year
-                            option(value="last_fy") Last Financial Year
-                            option(value="custom" selected) Custom
-                    +monthYearPicker('ge')
-                    .col-auto
-                        label.small.mb-1 From Date
-                        input.form-control.form-control-sm(type="date" id="geFrom" value=fromDate)
-                    .col-auto
-                        label.small.mb-1 To Date
-                        input.form-control.form-control-sm(type="date" id="geTo" value=toDate)
-                    .col-auto.align-self-end
-                        button.btn.btn-primary.btn-sm#btnGenerate Generate Missing Events
-
-                #geResult(style="display:none")
-                    .card.card-body.mt-2#geResultBody
-
-                hr.mt-3
-                h6.mt-3.mb-2 Recent Runs
-                    button.btn.btn-outline-secondary.btn-sm.ml-2(type="button" onclick="loadBatchRuns('ge')") Refresh
-                #geBatchRuns
-                    .text-muted.small Loading…
-
 
             //- ── Tally Export ────────────────────────────────────────────────
             #pane-export.tab-pane.fade(role="tabpanel")
