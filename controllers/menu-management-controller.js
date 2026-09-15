@@ -357,12 +357,17 @@ const menuManagementController = {
 
             const visibleRoles = isSuperUser ? roles : roles.filter(r => !NON_SUPERUSER_EXCLUDED_TARGET_ROLES.includes(r.role_name));
             const visibleMenuItems = menuItems.filter(m => isAssignableByCaller(req.user.Role, m));
+            const menuItemByCode = new Map(menuItems.map(m => [m.menu_code, m]));
+            const visibleAccess = isSuperUser ? access : access.filter(row =>
+                !NON_SUPERUSER_EXCLUDED_TARGET_ROLES.includes(row.role) &&
+                isAssignableByCaller(req.user.Role, menuItemByCode.get(row.menu_code) || {})
+            );
 
             res.json({
                 success: true,
                 roles: visibleRoles,
                 menuItems: visibleMenuItems,
-                access,
+                access: visibleAccess,
                 location: req.user.location_code,
                 isSuperUser,
                 canPickLocation,
@@ -427,6 +432,13 @@ const menuManagementController = {
                 }
                 if (!security.canAccessLocation(req.user, existing.location_code)) {
                     return res.status(403).json({ success: false, error: 'You can only remove overrides for your assigned location(s).' });
+                }
+                if (NON_SUPERUSER_EXCLUDED_TARGET_ROLES.includes(existing.role)) {
+                    return res.status(403).json({ success: false, error: `You cannot change menu access for the ${existing.role} role.` });
+                }
+                const menuItem = (await menuManagementDao.getAllMenuItems()).find(m => m.menu_code === existing.menu_code);
+                if (menuItem && !isAssignableByCaller(req.user.Role, menuItem)) {
+                    return res.status(403).json({ success: false, error: 'You cannot change menu access for this menu item.' });
                 }
             }
 
