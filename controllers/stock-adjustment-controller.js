@@ -203,7 +203,13 @@ function validateStockAdjustmentData(data) {
         return { isValid: false, message: 'Adjustment type is required' };
     }
 
-    if (!data.qty || parseFloat(data.qty) <= 0) {
+    // OPENING balance may legitimately be 0 (e.g. a product newly added with no
+    // starting stock); IN/OUT movements must still be a positive quantity.
+    const qty = parseFloat(data.qty);
+    if (data.qty === undefined || data.qty === null || data.qty === '' || isNaN(qty) || qty < 0) {
+        return { isValid: false, message: 'Quantity is required and cannot be negative' };
+    }
+    if (data.adjustment_type !== 'OPENING' && qty <= 0) {
         return { isValid: false, message: 'Quantity must be greater than 0' };
     }
 
