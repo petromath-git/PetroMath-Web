@@ -318,6 +318,15 @@ html
       // but any already-expanded ANCESTOR .menu-submenu was sized against
       // the old (collapsed) height of this one — recompute those too, or
       // an expanding nested section clips against its parent's stale cap.
+      //
+      // This can't run synchronously right after setting the child's
+      // max-height: during the 0.3s transition the browser lays out the
+      // child at its CURRENT interpolated (still near-zero) height, not
+      // its target — so an immediate scrollHeight read on the ancestor
+      // captures that stale, too-small size and pins the ancestor's
+      // max-height too low, clipping the child as it finishes opening
+      // (looks like "opens then immediately collapses"). Waiting for the
+      // child's own transitionend guarantees its layout has settled.
       function refreshAncestorMaxHeights(el) {
         let ancestor = el.parentElement ? el.parentElement.closest('.menu-submenu') : null;
         while (ancestor) {
@@ -328,6 +337,16 @@ html
         }
       }
 
+      function onceTransitionEnds(el, fn) {
+        function handler(e) {
+          if (e.target === el && e.propertyName === 'max-height') {
+            el.removeEventListener('transitionend', handler);
+            fn();
+          }
+        }
+        el.addEventListener('transitionend', handler);
+      }
+
       function expandMenuSection(menuCode) {
         const submenu = document.getElementById('submenu-' + menuCode);
         const icon = document.getElementById('icon-' + menuCode);
@@ -335,7 +354,7 @@ html
         if (submenu && icon) {
           submenu.style.maxHeight = submenu.scrollHeight + 'px';
           icon.style.transform = 'rotate(90deg)';
-          refreshAncestorMaxHeights(submenu);
+          onceTransitionEnds(submenu, function() { refreshAncestorMaxHeights(submenu); });
         }
       }
 
@@ -346,7 +365,7 @@ html
         if (submenu && icon) {
           submenu.style.maxHeight = '0px';
           icon.style.transform = 'rotate(0deg)';
-          refreshAncestorMaxHeights(submenu);
+          onceTransitionEnds(submenu, function() { refreshAncestorMaxHeights(submenu); });
         }
       }
 
