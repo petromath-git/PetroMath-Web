@@ -1,0 +1,84 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Accounting Setup Check
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/control") GL Control &rarr;
+
+        if ready && warningCount === 0
+            .alert.alert-success.py-2
+                i.bi.bi-check-circle-fill.mr-1
+                | All setup checks passed for #{user.location_code}. GL accounting is ready to use.
+        else if ready
+            .alert.alert-warning.py-2
+                i.bi.bi-exclamation-triangle-fill.mr-1
+                | #{warningCount} item(s) worth reviewing for #{user.location_code} — none of them block accounting from being used.
+        else
+            .alert.alert-danger.py-2
+                i.bi.bi-exclamation-triangle-fill.mr-1
+                | #{blockerCount} check(s) need attention for #{user.location_code} before accounting can be relied on#{warningCount ? ` (plus ${warningCount} item(s) worth reviewing)` : ''}.
+
+        each c, idx in checks
+            - var hasDetail = (c.items && c.items.some(function(i){ return i.rows.length > 0; })) || (c.rows && c.rows.length > 0);
+            - var isWarning = !c.pass && c.severity === 'warning';
+            - var borderClass = c.pass ? "border-success" : (isWarning ? "border-warning" : "border-danger");
+            - var iconClass = c.pass ? "bi-check-circle-fill text-success" : (isWarning ? "bi-exclamation-triangle-fill text-warning" : "bi-x-circle-fill text-danger");
+            - var detailTextClass = c.pass ? "text-muted" : (isWarning ? "text-warning" : "text-danger");
+            - var badgeClass = c.pass ? "badge-success" : (isWarning ? "badge-warning" : "badge-danger");
+            - var badgeText = c.pass ? "PASS" : (isWarning ? "WARNING" : "ATTENTION");
+            .card.mb-3(class=borderClass)
+                .card-header.py-2.d-flex.justify-content-between.align-items-center.bg-light(class=hasDetail ? "cursor-pointer" : "" data-toggle=hasDetail ? "collapse" : undefined data-target=hasDetail ? "#detail-" + idx : undefined style=hasDetail ? "cursor:pointer" : "")
+                    span
+                        i.bi.mr-2(class=iconClass)
+                        strong= c.label
+                    span.d-flex.align-items-center
+                        span.small.mr-2(class=detailTextClass)= c.detail
+                        span.badge.mr-2(class=badgeClass)= badgeText
+                        if hasDetail
+                            i.bi.bi-chevron-down.small.text-muted
+
+                if hasDetail
+                    div.collapse(id="detail-" + idx)
+                        .card-body.py-2
+
+                            //- Product Ledger Mapping — grouped breakdown by map type
+                            if c.items
+                                - var failingItems = c.items.filter(function(i){ return i.rows.length > 0; })
+                                .table-responsive
+                                    table.table.table-sm.table-bordered.mb-0
+                                        thead.thead-light
+                                            tr
+                                                th Ledger Type
+                                                th(style="width:100px") Missing
+                                                th Products
+                                        tbody
+                                            each i in failingItems
+                                                tr
+                                                    td.small= i.label
+                                                    td.small.text-center= i.rows.length
+                                                    td.small= i.rows.map(function(r){ return r.product_name; }).join(', ')
+
+                            //- Flat list checks (static map / credit / supplier / bank)
+                            if c.rows && c.rows.length
+                                .table-responsive
+                                    table.table.table-sm.table-bordered.mb-0
+                                        thead.thead-light
+                                            tr
+                                                th Name
+                                        tbody
+                                            each r in c.rows
+                                                tr
+                                                    td.small= r.name
+
+    script.
+        document.querySelectorAll('[data-toggle="collapse"]').forEach(function(header) {
+            var targetSel = header.getAttribute('data-target');
+            var target = document.querySelector(targetSel);
+            var chevron = header.querySelector('.bi-chevron-down, .bi-chevron-up');
+            if (!target) return;
+            $(target).on('show.bs.collapse', function() { if (chevron) chevron.className = chevron.className.replace('bi-chevron-down', 'bi-chevron-up'); });
+            $(target).on('hide.bs.collapse', function() { if (chevron) chevron.className = chevron.className.replace('bi-chevron-up', 'bi-chevron-down'); });
+        });

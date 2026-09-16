@@ -1,0 +1,160 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Financial Years
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/control") GL Control &rarr;
+
+        .card.mb-3
+            .card-header.py-2 Add Financial Year
+            .card-body
+                form.row.align-items-end#fyAddForm
+                    .col-auto
+                        label.small.mb-1 Name
+                        input.form-control.form-control-sm(type="text" id="fyName" placeholder="2026-27" style="width:120px")
+                    .col-auto
+                        label.small.mb-1 Start Date
+                        input.form-control.form-control-sm(type="date" id="fyStart")
+                    .col-auto
+                        label.small.mb-1 End Date
+                        input.form-control.form-control-sm(type="date" id="fyEnd")
+                    .col-auto.align-self-end
+                        button.btn.btn-primary.btn-sm(type="button" id="btnAddFy") Add
+                    .col-auto.align-self-end
+                        button.btn.btn-outline-secondary.btn-sm(type="button" id="btnSuggestNext") Suggest Next FY
+                #fyAddResult.mt-2(style="display:none")
+                    .alert.py-2.small.mb-0#fyAddResultBody
+
+        .table-responsive
+            table.table.table-sm.table-bordered.table-hover
+                thead.thead-dark
+                    tr
+                        th Name
+                        th Start
+                        th End
+                        th Current
+                        th Status
+                        th.text-center Vouchers
+                        th.text-center(style="width:280px") Actions
+                tbody
+                    if years.length === 0
+                        tr
+                            td.text-muted.small(colspan="7") No financial years defined for #{user.location_code} yet.
+                    each y in years
+                        tr(data-fy-id=y.fy_id)
+                            td.small= y.fy_name
+                            td.small= y.start_date
+                            td.small= y.end_date
+                            td.small
+                                if y.is_current === 'Y'
+                                    span.badge.badge-success Current
+                            td.small
+                                if y.is_closed === 'Y'
+                                    span.badge.badge-secondary Closed
+                                    if y.closed_at
+                                        div.text-muted(style="font-size:0.7rem")= 'by ' + (y.closed_by||'') + ' on ' + String(y.closed_at).substring(0,10)
+                                else
+                                    span.badge.badge-light.border Open
+                            td.small.text-center= y.voucher_count
+                            td.text-center
+                                if y.is_current !== 'Y'
+                                    button.btn.btn-outline-success.btn-sm.btn-set-current(type="button" title="Set as current FY") Set Current
+                                if y.is_closed === 'Y'
+                                    button.btn.btn-outline-warning.btn-sm.btn-reopen.ml-1(type="button" title="Reopen this FY") Reopen
+                                else
+                                    button.btn.btn-outline-secondary.btn-sm.btn-close-fy.ml-1(type="button" title="Mark this FY closed") Close
+                                if y.voucher_count > 0
+                                    button.btn.btn-outline-danger.btn-sm.ml-1(type="button" disabled title=y.voucher_count + " voucher(s) posted — cannot delete")
+                                        i.bi.bi-trash
+                                else
+                                    button.btn.btn-outline-danger.btn-sm.btn-delete-fy.ml-1(type="button" title="Delete this FY")
+                                        i.bi.bi-trash
+
+    script.
+        function suggestNextDates() {
+            const rows = document.querySelectorAll('tbody tr[data-fy-id]');
+            let latestEnd = null;
+            document.querySelectorAll('tbody tr[data-fy-id] td:nth-child(3)').forEach(function(td) {
+                const d = td.textContent.trim();
+                if (d && (!latestEnd || d > latestEnd)) latestEnd = d;
+            });
+            if (!latestEnd) return;
+            const start = new Date(latestEnd);
+            start.setDate(start.getDate() + 1);
+            const end = new Date(start);
+            end.setFullYear(end.getFullYear() + 1);
+            end.setDate(end.getDate() - 1);
+            const fmt = (d) => d.toISOString().substring(0, 10);
+            document.getElementById('fyStart').value = fmt(start);
+            document.getElementById('fyEnd').value = fmt(end);
+            const y1 = start.getFullYear();
+            document.getElementById('fyName').value = y1 + '-' + String((y1 + 1) % 100).padStart(2, '0');
+        }
+        document.getElementById('btnSuggestNext').addEventListener('click', suggestNextDates);
+
+        function showFyAddResult(cls, msg) {
+            const wrap = document.getElementById('fyAddResult');
+            const body = document.getElementById('fyAddResultBody');
+            body.className = 'alert py-2 small mb-0 ' + cls;
+            body.textContent = msg;
+            wrap.style.display = '';
+        }
+
+        document.getElementById('btnAddFy').addEventListener('click', async function() {
+            const fy_name    = document.getElementById('fyName').value.trim();
+            const start_date = document.getElementById('fyStart').value;
+            const end_date   = document.getElementById('fyEnd').value;
+            if (!fy_name || !start_date || !end_date) {
+                showFyAddResult('alert-warning', 'Please fill in name, start date and end date.');
+                return;
+            }
+            this.disabled = true;
+            try {
+                const resp = await fetch('/gl/api/financial-years', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fy_name, start_date, end_date })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    showFyAddResult('alert-danger', data.error);
+                }
+            } catch (e) {
+                showFyAddResult('alert-danger', 'Network error: ' + e.message);
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        function wireRowAction(selector, urlSuffix, method, confirmMsg) {
+            document.querySelectorAll(selector).forEach(function(btn) {
+                btn.addEventListener('click', async function() {
+                    if (confirmMsg && !confirm(confirmMsg)) return;
+                    const fyId = this.closest('tr').dataset.fyId;
+                    this.disabled = true;
+                    try {
+                        const resp = await fetch('/gl/api/financial-years/' + fyId + urlSuffix, { method: method });
+                        const data = await resp.json();
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            alert('Error: ' + data.error);
+                            this.disabled = false;
+                        }
+                    } catch (e) {
+                        alert('Network error: ' + e.message);
+                        this.disabled = false;
+                    }
+                });
+            });
+        }
+
+        wireRowAction('.btn-set-current', '/set-current', 'POST', null);
+        wireRowAction('.btn-close-fy',    '/close',        'POST', 'Mark this financial year as closed?');
+        wireRowAction('.btn-reopen',      '/reopen',       'POST', null);
+        wireRowAction('.btn-delete-fy',   '',              'DELETE', 'Delete this financial year? This cannot be undone.');

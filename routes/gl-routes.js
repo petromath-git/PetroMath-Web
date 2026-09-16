@@ -1015,6 +1015,395 @@ router.get('/ledgers', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
     }
 });
 
+// ── Setup Check ──────────────────────────────────────────────────────────────
+// GET /gl/setup-check — checklist of everything that must be in place before
+// GL accounting is actually usable for a location: FY, the enable flag,
+// product ledger mapping, static ledger map review, and CREDIT/SUPPLIER/BANK
+// ledger master coverage.
+
+async function buildSetupCheck(locationCode) {
+    const [fyRows, enabledRows, salesMissing, purchaseMissing,
+           outputCgstMissing, outputSgstMissing, inputCgstMissing, inputSgstMissing,
+           staticUnreviewed, creditMissing, supplierMissing, bankMissing, tallyMappedRows] = await Promise.all([
+
+        db.sequelize.query(
+            `SELECT fy_id, fy_name, start_date, end_date, is_current, is_closed
+             FROM gl_financial_years WHERE location_code = :locationCode ORDER BY start_date DESC`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        db.sequelize.query(
+            `SELECT is_gl_accounting_enabled(:locationCode) AS enabled`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // SALES ledger — required for every product sold at this location
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name
+             FROM m_product p
+             WHERE p.location_code = :locationCode
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'SALES')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // PURCHASE ledger — only products actually bought via tank/lubes invoices
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name
+             FROM m_product p
+             WHERE p.location_code = :locationCode AND (p.is_tank_product = 1 OR p.is_lube_product = 1)
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'PURCHASE')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // GST output ledgers — only for products actually taxed
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name, p.cgst_percent
+             FROM m_product p
+             WHERE p.location_code = :locationCode AND p.cgst_percent > 0
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'OUTPUT_CGST')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name, p.sgst_percent
+             FROM m_product p
+             WHERE p.location_code = :locationCode AND p.sgst_percent > 0
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'OUTPUT_SGST')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // GST input ledgers — only for taxed products that are also purchased
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name, p.cgst_percent
+             FROM m_product p
+             WHERE p.location_code = :locationCode AND p.cgst_percent > 0 AND (p.is_tank_product = 1 OR p.is_lube_product = 1)
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'INPUT_CGST')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+        db.sequelize.query(
+            `SELECT p.product_id, p.product_name, p.sgst_percent
+             FROM m_product p
+             WHERE p.location_code = :locationCode AND p.sgst_percent > 0 AND (p.is_tank_product = 1 OR p.is_lube_product = 1)
+             AND NOT EXISTS (SELECT 1 FROM gl_product_ledger_map m
+                 WHERE m.location_code = p.location_code AND m.product_id = p.product_id AND m.map_type = 'INPUT_SGST')
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Static ledger map — rows still awaiting a reviewed POST/SKIP decision
+        db.sequelize.query(
+            `SELECT map_id, ledger_name FROM gl_static_ledger_map
+             WHERE location_code = :locationCode AND treatment IS NULL
+             ORDER BY ledger_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // CREDIT / SUPPLIER / BANK master rows with no linked gl_ledgers row
+        db.sequelize.query(
+            `SELECT cl.creditlist_id, cl.Company_Name AS name
+             FROM m_credit_list cl
+             LEFT JOIN gl_ledgers l ON l.source_type = 'CREDIT' AND l.source_id = cl.creditlist_id AND l.location_code = cl.location_code
+             WHERE cl.location_code = :locationCode AND l.ledger_id IS NULL
+             ORDER BY cl.Company_Name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+        db.sequelize.query(
+            `SELECT s.supplier_id, s.supplier_name AS name
+             FROM m_supplier s
+             LEFT JOIN gl_ledgers l ON l.source_type = 'SUPPLIER' AND l.source_id = s.supplier_id AND l.location_code = s.location_code
+             WHERE s.location_code = :locationCode AND l.ledger_id IS NULL
+             ORDER BY s.supplier_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+        db.sequelize.query(
+            `SELECT b.bank_id, b.bank_name AS name
+             FROM m_bank b
+             LEFT JOIN gl_ledgers l ON l.source_type = 'BANK' AND l.source_id = b.bank_id AND l.location_code = b.location_code
+             WHERE b.location_code = :locationCode AND b.is_oil_company <> 'Y' AND l.ledger_id IS NULL
+             ORDER BY b.bank_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Any ledger with tally_ledger_name set means the Tally Import screen
+        // was used at least once for this location (that's the only place
+        // which writes to that column). Zero rows = the Tally master file has
+        // never been uploaded and matched here.
+        db.sequelize.query(
+            `SELECT COUNT(*) AS c FROM gl_ledgers WHERE location_code = :locationCode AND active_flag = 'Y' AND tally_ledger_name IS NOT NULL`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+    ]);
+
+    const currentFy = fyRows.find(r => r.is_current === 'Y') || null;
+    const glEnabled = !!(enabledRows[0] && enabledRows[0].enabled);
+    const tallyMapped = tallyMappedRows[0] ? tallyMappedRows[0].c : 0;
+
+    const productMappingItems = [
+        { label: 'Sales ledger',          rows: salesMissing },
+        { label: 'Purchase ledger',       rows: purchaseMissing },
+        { label: 'Output CGST ledger',    rows: outputCgstMissing },
+        { label: 'Output SGST ledger',    rows: outputSgstMissing },
+        { label: 'Input CGST ledger',     rows: inputCgstMissing },
+        { label: 'Input SGST ledger',     rows: inputSgstMissing },
+    ];
+    const productMappingMissingCount = productMappingItems.reduce((sum, i) => sum + i.rows.length, 0);
+
+    const checks = [
+        {
+            key: 'fy', label: 'Financial Year',
+            pass: !!currentFy,
+            detail: currentFy
+                ? `Current FY: ${currentFy.fy_name} (${currentFy.start_date} to ${currentFy.end_date})${currentFy.is_closed === 'Y' ? ' — CLOSED' : ''}`
+                : 'No current financial year found for this location.'
+        },
+        {
+            key: 'enabled', label: 'Automatic Accounting', severity: 'warning',
+            pass: glEnabled,
+            // This flag only gates the DB triggers that raise events in real
+            // time as transactions happen (GL_ACCOUNTING_TRIGGER_ENABLED).
+            // Generate Missing Events / Create Accounting in GL Control don't
+            // check it and work either way — so "off" here means new activity
+            // won't auto-queue, not that GL can't be run manually for this location.
+            // Not a blocker: warning severity, not the default (fail = red/ATTENTION).
+            detail: glEnabled
+                ? 'GL_ACCOUNTING_TRIGGER_ENABLED = Y — new transactions automatically queue GL events for this location'
+                : 'Automatic Accounting is disabled for this location — new transactions will NOT auto-queue GL events. Manual Create Accounting / Generate Missing Events in GL Control still work regardless of this setting.'
+        },
+        {
+            key: 'tally_import', label: 'Tally Master Mapping', severity: 'warning',
+            pass: tallyMapped > 0,
+            detail: tallyMapped > 0
+                ? `${tallyMapped} ledger(s) matched via Tally Import for this location.`
+                : 'The Tally master file has never been uploaded and matched for this location (Tally Import). Exports will use PetroMath\'s own ledger names until this is done.'
+        },
+        {
+            key: 'product_map', label: 'Product Ledger Mapping',
+            pass: productMappingMissingCount === 0,
+            detail: productMappingMissingCount === 0 ? 'All required product mappings are present.' : `${productMappingMissingCount} mapping(s) missing across ${productMappingItems.filter(i => i.rows.length).length} category(ies).`,
+            items: productMappingItems
+        },
+        {
+            key: 'static_map', label: 'Static Ledger Map',
+            pass: staticUnreviewed.length === 0,
+            detail: staticUnreviewed.length === 0 ? 'No unreviewed static labels.' : `${staticUnreviewed.length} label(s) awaiting review.`,
+            rows: staticUnreviewed.map(r => ({ name: r.ledger_name }))
+        },
+        {
+            key: 'credit_ledgers', label: 'Credit Party Ledgers',
+            pass: creditMissing.length === 0,
+            detail: creditMissing.length === 0 ? 'Every credit party has a ledger.' : `${creditMissing.length} credit part(y/ies) with no ledger.`,
+            rows: creditMissing
+        },
+        {
+            key: 'supplier_ledgers', label: 'Supplier Ledgers',
+            pass: supplierMissing.length === 0,
+            detail: supplierMissing.length === 0 ? 'Every supplier has a ledger.' : `${supplierMissing.length} supplier(s) with no ledger.`,
+            rows: supplierMissing
+        },
+        {
+            key: 'bank_ledgers', label: 'Bank Account Ledgers',
+            pass: bankMissing.length === 0,
+            detail: bankMissing.length === 0 ? 'Every bank account has a ledger.' : `${bankMissing.length} bank account(s) with no ledger.`,
+            rows: bankMissing
+        },
+    ];
+
+    const blockerCount = checks.filter(c => !c.pass && c.severity !== 'warning').length;
+    const warningCount = checks.filter(c => !c.pass && c.severity === 'warning').length;
+    return { checks, blockerCount, warningCount, ready: blockerCount === 0 };
+}
+
+router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const result = await buildSetupCheck(locationCode);
+        res.render('gl-setup-check', {
+            title:        'Accounting Setup Check',
+            user:         req.user,
+            config:       require('../config/app-config').APP_CONFIGS,
+            checks:       result.checks,
+            ready:        result.ready,
+            blockerCount: result.blockerCount,
+            warningCount: result.warningCount,
+            messages:     req.flash()
+        });
+    } catch (err) {
+        console.error('Setup check error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/control');
+    }
+});
+
+// ── Financial Years ──────────────────────────────────────────────────────────
+// gl_journal_headers.fy_id has a hard FK to gl_financial_years, so a FY with
+// vouchers can't be deleted -- checked here first for a friendly message.
+// is_closed / locked_upto_date are metadata only today: nothing in create-
+// accounting-service.js reads them yet, so closing a FY does not currently
+// block posting into it -- shown here for record-keeping, not enforcement.
+
+router.get('/financial-years', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const years = await db.sequelize.query(`
+            SELECT fy.fy_id, fy.fy_name, fy.start_date, fy.end_date, fy.is_current, fy.is_closed,
+                   fy.locked_upto_date, fy.closed_at, fy.closed_by,
+                   (SELECT COUNT(*) FROM gl_journal_headers h WHERE h.fy_id = fy.fy_id) AS voucher_count
+            FROM gl_financial_years fy
+            WHERE fy.location_code = :locationCode
+            ORDER BY fy.start_date DESC
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+
+        res.render('gl-financial-years', {
+            title:    'Financial Years',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            years,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Financial years error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/control');
+    }
+});
+
+router.post('/api/financial-years', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
+    const { fy_name, start_date, end_date } = req.body;
+
+    if (!fy_name || !start_date || !end_date) {
+        return res.status(400).json({ success: false, error: 'fy_name, start_date and end_date are required' });
+    }
+    if (new Date(end_date) <= new Date(start_date)) {
+        return res.status(400).json({ success: false, error: 'end_date must be after start_date' });
+    }
+
+    try {
+        const dup = await db.sequelize.query(
+            `SELECT fy_id FROM gl_financial_years WHERE location_code = :locationCode AND fy_name = :fy_name LIMIT 1`,
+            { replacements: { locationCode, fy_name }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (dup.length) {
+            return res.status(400).json({ success: false, error: `A financial year named "${fy_name}" already exists for this location` });
+        }
+
+        const overlap = await db.sequelize.query(`
+            SELECT fy_id FROM gl_financial_years
+            WHERE location_code = :locationCode AND start_date <= :end_date AND end_date >= :start_date
+            LIMIT 1
+        `, { replacements: { locationCode, start_date, end_date }, type: db.Sequelize.QueryTypes.SELECT });
+        if (overlap.length) {
+            return res.status(400).json({ success: false, error: 'This date range overlaps an existing financial year' });
+        }
+
+        const [{ c: existingCount }] = await db.sequelize.query(
+            `SELECT COUNT(*) AS c FROM gl_financial_years WHERE location_code = :locationCode`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+
+        const [fyId] = await db.sequelize.query(`
+            INSERT INTO gl_financial_years (location_code, fy_name, start_date, end_date, is_current, created_by, updated_by)
+            VALUES (:locationCode, :fy_name, :start_date, :end_date, :isCurrent, :user, :user)
+        `, {
+            replacements: { locationCode, fy_name, start_date, end_date, isCurrent: existingCount === 0 ? 'Y' : 'N', user },
+            type: db.Sequelize.QueryTypes.INSERT
+        });
+
+        res.json({ success: true, fy_id: fyId });
+    } catch (err) {
+        console.error('Create financial year error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/api/financial-years/:id/set-current', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const fyId = parseInt(req.params.id);
+    const t = await db.sequelize.transaction();
+
+    try {
+        await db.sequelize.query(
+            `UPDATE gl_financial_years SET is_current = 'N' WHERE location_code = :locationCode`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.UPDATE, transaction: t }
+        );
+        const [, meta] = await db.sequelize.query(
+            `UPDATE gl_financial_years SET is_current = 'Y' WHERE fy_id = :fyId AND location_code = :locationCode`,
+            { replacements: { fyId, locationCode }, type: db.Sequelize.QueryTypes.UPDATE, transaction: t }
+        );
+        if (!meta?.affectedRows) {
+            await t.rollback();
+            return res.status(404).json({ success: false, error: 'Financial year not found' });
+        }
+        await t.commit();
+        res.json({ success: true });
+    } catch (err) {
+        await t.rollback();
+        console.error('Set current FY error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/api/financial-years/:id/close', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const fyId = parseInt(req.params.id);
+    const user = req.user.username || String(req.user.Person_id);
+
+    try {
+        const [, meta] = await db.sequelize.query(`
+            UPDATE gl_financial_years
+            SET is_closed = 'Y', closed_at = NOW(), closed_by = :user, updated_by = :user
+            WHERE fy_id = :fyId AND location_code = :locationCode
+        `, { replacements: { fyId, locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
+
+        if (!meta?.affectedRows) return res.status(404).json({ success: false, error: 'Financial year not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Close FY error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/api/financial-years/:id/reopen', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const fyId = parseInt(req.params.id);
+    const user = req.user.username || String(req.user.Person_id);
+
+    try {
+        const [, meta] = await db.sequelize.query(`
+            UPDATE gl_financial_years
+            SET is_closed = 'N', closed_at = NULL, closed_by = NULL, updated_by = :user
+            WHERE fy_id = :fyId AND location_code = :locationCode
+        `, { replacements: { fyId, locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
+
+        if (!meta?.affectedRows) return res.status(404).json({ success: false, error: 'Financial year not found' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Reopen FY error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.delete('/api/financial-years/:id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const fyId = parseInt(req.params.id);
+
+    try {
+        const [{ c: voucherCount }] = await db.sequelize.query(
+            `SELECT COUNT(*) AS c FROM gl_journal_headers WHERE fy_id = :fyId`,
+            { replacements: { fyId }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (voucherCount > 0) {
+            return res.status(400).json({ success: false, error: `Cannot delete — ${voucherCount} voucher(s) already posted in this financial year` });
+        }
+
+        await db.sequelize.query(
+            `DELETE FROM gl_financial_years WHERE fy_id = :fyId AND location_code = :locationCode`,
+            { replacements: { fyId, locationCode }, type: db.Sequelize.QueryTypes.DELETE }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Delete FY error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.post('/api/ledger', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
     const { ledger_name, group_id } = req.body;
