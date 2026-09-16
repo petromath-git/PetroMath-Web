@@ -1348,6 +1348,14 @@ body {
   letter-spacing: 1px;
   color: rgba(255, 255, 255, 0.6);
   font-weight: 600;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+/* Nested sub-menu headers (e.g. Accounting > Setup) get a darker shade
+   than their top-level parent, so an expanded group reads clearly as
+   header > header > item rather than blending into the item rows. */
+.menu-subsection > .menu-section-title {
+  background: rgba(0, 0, 0, 0.28);
 }
 
 .menu-item {
