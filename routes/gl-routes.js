@@ -1024,7 +1024,7 @@ router.get('/ledgers', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
 async function buildSetupCheck(locationCode) {
     const [fyRows, enabledRows, salesMissing, purchaseMissing,
            outputCgstMissing, outputSgstMissing, inputCgstMissing, inputSgstMissing,
-           staticUnreviewed, creditMissing, supplierMissing, bankMissing] = await Promise.all([
+           staticUnreviewed, creditMissing, supplierMissing, bankMissing, tallyMappedRows] = await Promise.all([
 
         db.sequelize.query(
             `SELECT fy_id, fy_name, start_date, end_date, is_current, is_closed
@@ -1120,10 +1120,19 @@ async function buildSetupCheck(locationCode) {
              WHERE b.location_code = :locationCode AND b.is_oil_company <> 'Y' AND l.ledger_id IS NULL
              ORDER BY b.bank_name`,
             { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Any ledger with tally_ledger_name set means the Tally Import screen
+        // was used at least once for this location (that's the only place
+        // which writes to that column). Zero rows = the Tally master file has
+        // never been uploaded and matched here.
+        db.sequelize.query(
+            `SELECT COUNT(*) AS c FROM gl_ledgers WHERE location_code = :locationCode AND active_flag = 'Y' AND tally_ledger_name IS NOT NULL`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
     ]);
 
     const currentFy = fyRows.find(r => r.is_current === 'Y') || null;
     const glEnabled = !!(enabledRows[0] && enabledRows[0].enabled);
+    const tallyMapped = tallyMappedRows[0] ? tallyMappedRows[0].c : 0;
 
     const productMappingItems = [
         { label: 'Sales ledger',          rows: salesMissing },
@@ -1144,16 +1153,24 @@ async function buildSetupCheck(locationCode) {
                 : 'No current financial year found for this location.'
         },
         {
-            key: 'enabled', label: 'Automatic Accounting',
+            key: 'enabled', label: 'Automatic Accounting', severity: 'warning',
             pass: glEnabled,
             // This flag only gates the DB triggers that raise events in real
             // time as transactions happen (GL_ACCOUNTING_TRIGGER_ENABLED).
             // Generate Missing Events / Create Accounting in GL Control don't
             // check it and work either way — so "off" here means new activity
             // won't auto-queue, not that GL can't be run manually for this location.
+            // Not a blocker: warning severity, not the default (fail = red/ATTENTION).
             detail: glEnabled
                 ? 'GL_ACCOUNTING_TRIGGER_ENABLED = Y — new transactions automatically queue GL events for this location'
                 : 'Automatic Accounting is disabled for this location — new transactions will NOT auto-queue GL events. Manual Create Accounting / Generate Missing Events in GL Control still work regardless of this setting.'
+        },
+        {
+            key: 'tally_import', label: 'Tally Master Mapping', severity: 'warning',
+            pass: tallyMapped > 0,
+            detail: tallyMapped > 0
+                ? `${tallyMapped} ledger(s) matched via Tally Import for this location.`
+                : 'The Tally master file has never been uploaded and matched for this location (Tally Import). Exports will use PetroMath\'s own ledger names until this is done.'
         },
         {
             key: 'product_map', label: 'Product Ledger Mapping',
@@ -1187,7 +1204,9 @@ async function buildSetupCheck(locationCode) {
         },
     ];
 
-    return { checks, allPass: checks.every(c => c.pass) };
+    const blockerCount = checks.filter(c => !c.pass && c.severity !== 'warning').length;
+    const warningCount = checks.filter(c => !c.pass && c.severity === 'warning').length;
+    return { checks, blockerCount, warningCount, ready: blockerCount === 0 };
 }
 
 router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
@@ -1195,12 +1214,14 @@ router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
     try {
         const result = await buildSetupCheck(locationCode);
         res.render('gl-setup-check', {
-            title:    'Accounting Setup Check',
-            user:     req.user,
-            config:   require('../config/app-config').APP_CONFIGS,
-            checks:   result.checks,
-            allPass:  result.allPass,
-            messages: req.flash()
+            title:        'Accounting Setup Check',
+            user:         req.user,
+            config:       require('../config/app-config').APP_CONFIGS,
+            checks:       result.checks,
+            ready:        result.ready,
+            blockerCount: result.blockerCount,
+            warningCount: result.warningCount,
+            messages:     req.flash()
         });
     } catch (err) {
         console.error('Setup check error:', err);
