@@ -267,7 +267,7 @@ reopenCashflow: async (req, res, next) => {
         let cashflow;
         if (isPowerUser && !isSuperUser) {
             const found = await cashflowDao.findCashflowById(cashflowId);
-            cashflow = (found && security.canAccessLocation(req.user, found.location_code)) ? found : null;
+            cashflow = (found && security.canAccessLocation(req.user, found.location)) ? found : null;
         } else {
             cashflow = await cashflowDao.findCashflow(req.user.location_code, cashflowId);
         }
@@ -278,7 +278,7 @@ reopenCashflow: async (req, res, next) => {
             });
         }
 
-        const locationCode = cashflow.location_code;
+        const locationCode = cashflow.location;
 
         // Check if cashflow can be reopened
         const canReopen = await cashflowDao.canReopenCashflow(cashflowId, locationCode);
