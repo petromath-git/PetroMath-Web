@@ -1144,9 +1144,16 @@ async function buildSetupCheck(locationCode) {
                 : 'No current financial year found for this location.'
         },
         {
-            key: 'enabled', label: 'GL Accounting Enabled',
+            key: 'enabled', label: 'Automatic Accounting',
             pass: glEnabled,
-            detail: glEnabled ? 'GL_ACCOUNTING_TRIGGER_ENABLED = Y for this location' : 'GL accounting is OFF for this location (m_location_config)'
+            // This flag only gates the DB triggers that raise events in real
+            // time as transactions happen (GL_ACCOUNTING_TRIGGER_ENABLED).
+            // Generate Missing Events / Create Accounting in GL Control don't
+            // check it and work either way — so "off" here means new activity
+            // won't auto-queue, not that GL can't be run manually for this location.
+            detail: glEnabled
+                ? 'GL_ACCOUNTING_TRIGGER_ENABLED = Y — new transactions automatically queue GL events for this location'
+                : 'Automatic Accounting is disabled for this location — new transactions will NOT auto-queue GL events. Manual Create Accounting / Generate Missing Events in GL Control still work regardless of this setting.'
         },
         {
             key: 'product_map', label: 'Product Ledger Mapping',
