@@ -159,6 +159,7 @@ require('./services/platform-billing-scheduler').start();
 const HomeController = require("./controllers/home-controller");
 const ClosingEditController = require("./controllers/closing-edit-controller");
 const ClosingDeleteController = require("./controllers/closing-delete-controller");
+const LocationUsageController = require("./controllers/location-usage-controller");
 const receiptController = require("./controllers/credit-receipt-controller");
 const tankReceiptController = require("./controllers/tank-receipt-controller");
 const masterController = require("./controllers/master-data-controller");
@@ -1319,6 +1320,10 @@ app.delete('/delete-closing', [isLoginEnsured, security.isAdmin()], function (re
 
 app.get('/deleted-closings', [isLoginEnsured, security.isSuperUser()], function (req, res, next) {
     ClosingDeleteController.getDeletedClosings(req, res, next);
+});
+
+app.get('/location-usage-matrix', [isLoginEnsured, security.isSuperUser()], function (req, res, next) {
+    LocationUsageController.getLocationUsageMatrix(req, res, next);
 });
 
 app.post('/restore-closing', [isLoginEnsured, security.isSuperUser()], function (req, res, next) {
