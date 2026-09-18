@@ -109,6 +109,16 @@ block content
             //- ── TAB 3: Tally Import ─────────────────────────────────────────
             #tab-tally.tab-pane.fade(role="tabpanel")
 
+                //- Resume banner — an unfinished import exists for this location
+                #stepResume.alert.alert-warning(style="display:none")
+                    .d-flex.justify-content-between.align-items-start.flex-wrap
+                        div
+                            strong Unfinished Tally import in progress
+                            .small#resumeDetail
+                        div.mt-1
+                            button.btn.btn-sm.btn-primary.mr-2#btnResume(type="button") Resume
+                            button.btn.btn-sm.btn-outline-danger#btnDiscardResume(type="button") Discard &amp; Start Over
+
                 //- Step 1: Upload
                 #stepUpload
                     .card.mb-4
@@ -135,15 +145,17 @@ block content
                             span.font-weight-bold Reconcile Results
                             span.text-muted.small.ml-2#reconcileSummary
                         .d-flex.gap-2
-                            button.btn.btn-sm.btn-outline-secondary#btnBack(type="button") &larr; Upload Different File
+                            button.btn.btn-sm.btn-outline-secondary#btnBack(type="button") &larr; Discard &amp; Upload Different File
                             button.btn.btn-success#btnSave(type="button")
                                 i.bi.bi-check2-all.mr-1
                                 | Save All
 
                     .alert.alert-info.small.py-2.mb-2
-                        | Matched rows will save automatically. For unmatched rows — map to an existing ledger or click
-                        strong  Create
-                        |  to add it as a new ledger.
+                        | Progress autosaves as you go — safe to come back later. Every row can be changed at any time, including auto-matched ones. Click
+                        strong  Save All
+                        |  to write the matches below into the Ledger Master, or
+                        strong  + Create
+                        |  to add an unmatched name as a new ledger.
 
                     .input-group.input-group-sm.mb-2(style="max-width:320px")
                         .input-group-prepend
@@ -370,88 +382,178 @@ block content
         });
 
         // ── Tally Import ─────────────────────────────────────────────────────
+        window.__activeTallyBatch = !{activeTallyBatch ? JSON.stringify(activeTallyBatch) : 'null'};
         let parsedLedgers    = [];
         let parsedRows       = [];
         let allGroups        = [];
         let pendingCreateRow = null;
+        let currentBatchId   = null;
+
+        const STATUS_LABEL = {
+            AUTO:       { text: 'Auto-matched', cls: 'success' },
+            MANUAL:     { text: 'Matched',      cls: 'success' },
+            CREATED:    { text: 'Created',      cls: 'info' },
+            SKIPPED:    { text: 'Skipped',      cls: 'secondary' },
+            UNRESOLVED: { text: 'Unmatched',    cls: 'warning' }
+        };
+        function statusBadgeHtml(status) {
+            const s = STATUS_LABEL[status] || STATUS_LABEL.UNRESOLVED;
+            return `<span class="badge badge-${s.cls}">${s.text}</span>`;
+        }
+        function formatDMY(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return String(d.getDate()).padStart(2, '0') + '-' + months[d.getMonth()] + '-' + d.getFullYear();
+        }
+
+        function renderResumeBanner(summary) {
+            const el = document.getElementById('stepResume');
+            if (!summary) { el.style.display = 'none'; return; }
+            document.getElementById('resumeDetail').textContent =
+                (summary.file_name || 'Master.txt') + ' — uploaded by ' + (summary.created_by || '—') +
+                ' on ' + formatDMY(summary.creation_date) + ' — ' + summary.resolved + ' of ' + summary.total + ' resolved.';
+            el.style.display = '';
+        }
+        renderResumeBanner(window.__activeTallyBatch);
+
+        async function loadBatch(data) {
+            currentBatchId = data.batch_id || (data.batch && data.batch.batch_id) || null;
+            parsedRows     = data.rows;
+            parsedLedgers  = data.ledgers;
+            allGroups      = data.groups;
+            document.getElementById('stepResume').style.display = 'none';
+            renderReconcile();
+        }
+
+        document.getElementById('btnResume').addEventListener('click', async function() {
+            this.disabled = true;
+            const resp = await fetch('/gl/tally-import/batch/active');
+            const data = await resp.json();
+            this.disabled = false;
+            if (!data.batch) { renderResumeBanner(null); return; }
+            loadBatch(data);
+        });
+
+        document.getElementById('btnDiscardResume').addEventListener('click', async function() {
+            if (!confirm('Discard the unfinished import and its matching progress? This cannot be undone.')) return;
+            this.disabled = true;
+            await fetch('/gl/tally-import/discard', { method: 'POST' });
+            this.disabled = false;
+            window.__activeTallyBatch = null;
+            renderResumeBanner(null);
+        });
 
         document.getElementById('tallyFile').addEventListener('change', function() {
             this.nextElementSibling.textContent = this.files[0] ? this.files[0].name : 'Choose file…';
             document.getElementById('btnParse').disabled = !this.files[0];
         });
 
+        async function requestParse(file, force) {
+            const fd = new FormData();
+            fd.append('tally_file', file);
+            if (force) fd.append('force', 'true');
+            return fetch('/gl/tally-import/parse', { method: 'POST', body: fd });
+        }
+
         document.getElementById('btnParse').addEventListener('click', async function() {
             const file = document.getElementById('tallyFile').files[0];
             if (!file) return;
             this.disabled = true;
             this.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span> Parsing…';
-            const fd = new FormData();
-            fd.append('tally_file', file);
-            const resp = await fetch('/gl/tally-import/parse', { method: 'POST', body: fd });
-            const data = await resp.json();
+
+            let resp = await requestParse(file, false);
+            let data = await resp.json();
+            if (resp.status === 409 && data.error === 'unfinished_import') {
+                const s = data.existing;
+                const msg = 'You have an unfinished import (' + (s.file_name || 'Master.txt') + ', ' +
+                    s.resolved + ' of ' + s.total + ' resolved). Uploading this file will discard it. Continue?';
+                if (!confirm(msg)) {
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-upload mr-1"></i> Upload & Parse';
+                    return;
+                }
+                resp = await requestParse(file, true);
+                data = await resp.json();
+            }
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-upload mr-1"></i> Upload & Parse';
             if (!resp.ok || data.error) { alert('Error: ' + (data.error || 'Unknown')); return; }
-            parsedRows    = data.rows;
-            parsedLedgers = data.ledgers;
-            allGroups     = data.groups;
-            renderReconcile();
+            loadBatch(data);
         });
 
-        document.getElementById('btnBack').addEventListener('click', function() {
+        document.getElementById('btnBack').addEventListener('click', async function() {
+            if (!confirm('Discard this import and its matching progress?')) return;
+            this.disabled = true;
+            await fetch('/gl/tally-import/discard', { method: 'POST' });
+            this.disabled = false;
+            currentBatchId = null;
             document.getElementById('stepUpload').style.display    = '';
             document.getElementById('stepReconcile').style.display = 'none';
             document.getElementById('saveResult').style.display    = 'none';
             document.getElementById('ledgerSearch').value          = '';
+            document.getElementById('tallyFile').value              = '';
+            document.getElementById('tallyFile').nextElementSibling.textContent = 'Choose file…';
+            document.getElementById('btnParse').disabled = true;
         });
+
+        function autosaveRow(row) {
+            if (!row.row_id) return;
+            fetch('/gl/tally-import/row/' + row.row_id, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ledger_id: row.ledger_id, match_status: row.match_status })
+            }).catch(function() { /* best-effort; the row stays editable and the next change retries */ });
+        }
 
         function renderReconcile() {
             const tbody = document.getElementById('reconcileBody');
             tbody.innerHTML = '';
             const ledgerOptions = parsedLedgers
-                .map(l => `<option value="${l.ledger_id}">${l.ledger_name} (${l.group_name})</option>`)
+                .map(l => `<option value="${l.ledger_id}">${escHtml(l.ledger_name)} (${escHtml(l.group_name || '')})</option>`)
                 .join('');
-            let matchedCount = 0, unmatchedCount = 0;
+            let resolvedCount = 0;
             parsedRows.forEach(function(r, i) {
-                const isExact = r.match === 'exact';
-                if (isExact) matchedCount++; else unmatchedCount++;
-                const statusBadge = isExact
-                    ? '<span class="badge badge-success">Matched</span>'
-                    : '<span class="badge badge-warning">No match</span>';
-                let ledgerCell;
-                if (isExact) {
-                    ledgerCell = `<span class="small text-success">${escHtml(r.ledger_name)}</span>
-                        <input type="hidden" class="row-ledger-id" value="${r.ledger_id}">
-                        <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">`;
-                } else {
-                    ledgerCell = `<div class="d-flex align-items-center gap-2">
+                if (r.match_status !== 'UNRESOLVED') resolvedCount++;
+                const ledgerCell = `<div class="d-flex align-items-center gap-2">
                         <select class="form-control form-control-sm row-ledger-id" style="min-width:180px">
                             <option value="">— skip —</option>${ledgerOptions}
                         </select>
-                        <input type="hidden" class="row-tally-name" value="${escHtml(r.tally_name)}">
                         <button class="btn btn-outline-success btn-sm btn-create ml-1"
                             data-tally="${escHtml(r.tally_name)}"
                             data-suggested-group="${r.suggested_group_id || ''}"
                             data-tally-group="${escHtml(r.tally_group_name || '')}"
-                            data-idx="${i}" type="button">+ Create</button>
+                            data-idx="${i}" type="button" title="Create a new ledger for this Tally name">+ Create</button>
                     </div>`;
-                }
                 const tr = document.createElement('tr');
                 tr.dataset.idx = i;
-                tr.innerHTML = `<td class="small">${escHtml(r.tally_name)}</td><td>${ledgerCell}</td><td class="text-center">${statusBadge}</td>`;
+                tr.innerHTML = `<td class="small">${escHtml(r.tally_name)}</td><td>${ledgerCell}</td><td class="text-center row-status">${statusBadgeHtml(r.match_status)}</td>`;
                 tbody.appendChild(tr);
             });
-            document.getElementById('reconcileSummary').textContent = `${matchedCount} matched, ${unmatchedCount} unmatched`;
+            document.getElementById('reconcileSummary').textContent = `${resolvedCount} of ${parsedRows.length} resolved`;
             document.getElementById('stepUpload').style.display    = 'none';
             document.getElementById('stepReconcile').style.display = '';
             document.getElementById('saveResult').style.display    = 'none';
             document.getElementById('ledgerSearch').value          = '';
+
             $('#reconcileBody select.row-ledger-id').select2({ width: '100%', placeholder: '— skip —', dropdownParent: $('body') });
-            // Hide + Create when a ledger is selected; show when cleared
-            $('#reconcileBody').on('change', 'select.row-ledger-id', function() {
-                const btn = $(this).closest('div').find('.btn-create');
-                btn.toggle(!this.value);
+            // Pre-select the row's current match without treating it as a user edit
+            parsedRows.forEach(function(r, i) {
+                if (!r.ledger_id) return;
+                const sel = tbody.querySelector(`tr[data-idx="${i}"] select.row-ledger-id`);
+                if (sel) $(sel).val(String(r.ledger_id)).trigger('change.select2');
             });
+
+            $('#reconcileBody').off('change', 'select.row-ledger-id').on('change', 'select.row-ledger-id', function() {
+                const tr  = this.closest('tr');
+                const idx = parseInt(tr.dataset.idx);
+                const row = parsedRows[idx];
+                const newLedgerId = this.value || null;
+                row.ledger_id    = newLedgerId ? parseInt(newLedgerId) : null;
+                row.match_status = newLedgerId ? 'MANUAL' : 'SKIPPED';
+                tr.querySelector('.row-status').innerHTML = statusBadgeHtml(row.match_status);
+                autosaveRow(row);
+            });
+
             tbody.querySelectorAll('.btn-create').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     const suggestedGroupId = this.dataset.suggestedGroup || '';
@@ -462,7 +564,7 @@ block content
                     hintEl.textContent   = tallyGroup ? 'Tally group: ' + tallyGroup : '';
                     hintEl.style.display = tallyGroup ? '' : 'none';
                     const sel = document.getElementById('createGroupId');
-                    sel.innerHTML = allGroups.map(g => `<option value="${g.group_id}">${g.group_name} (${g.group_nature})</option>`).join('');
+                    sel.innerHTML = allGroups.map(g => `<option value="${g.group_id}">${escHtml(g.group_name)} (${g.group_nature})</option>`).join('');
                     if (suggestedGroupId) sel.value = suggestedGroupId;
                     $('#createLedgerModal').modal('show');
                 });
@@ -489,27 +591,23 @@ block content
             this.disabled = false;
             this.textContent = 'Create Ledger';
             if (!data.success) { alert('Error: ' + data.error); return; }
-            const tbody = document.getElementById('reconcileBody');
-            const tr    = tbody.querySelector(`tr[data-idx="${pendingCreateRow.idx}"]`);
-            if (tr) {
-                tr.querySelector('td:nth-child(2)').innerHTML =
-                    `<span class="small text-success">${escHtml(data.ledger_name)}</span>
-                     <input type="hidden" class="row-ledger-id" value="${data.ledger_id}">
-                     <input type="hidden" class="row-tally-name" value="${escHtml(pendingCreateRow.tally_name)}">`;
-                tr.querySelector('td:nth-child(3)').innerHTML = '<span class="badge badge-success">Created</span>';
-            }
+
             parsedLedgers.push({ ledger_id: data.ledger_id, ledger_name: data.ledger_name, group_name: '' });
+            const row = parsedRows[pendingCreateRow.idx];
+            row.ledger_id    = data.ledger_id;
+            row.match_status = 'CREATED';
+            autosaveRow(row);
+
             $('#createLedgerModal').modal('hide');
             pendingCreateRow = null;
+            renderReconcile();
         });
 
         async function doSave() {
             const mappings = [];
-            document.querySelectorAll('#reconcileBody tr').forEach(function(tr) {
-                const ledgerEl = tr.querySelector('.row-ledger-id');
-                const tallyEl  = tr.querySelector('.row-tally-name');
-                if (!ledgerEl || !tallyEl || !ledgerEl.value) return;
-                mappings.push({ ledger_id: ledgerEl.value, tally_name: tallyEl.value });
+            parsedRows.forEach(function(row) {
+                if (!row.ledger_id) return;
+                mappings.push({ row_id: row.row_id, ledger_id: row.ledger_id, tally_name: row.tally_name });
             });
             if (!mappings.length) { alert('No ledgers to save.'); return; }
             document.getElementById('btnSave').disabled  = true;

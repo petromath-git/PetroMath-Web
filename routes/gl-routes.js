@@ -1000,12 +1000,15 @@ router.get('/ledgers', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
             `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
         ]);
 
+        const activeTallyBatch = await getActiveTallyBatchSummary(locationCode);
+
         res.render('gl-ledgers', {
             title:    'Ledger Master',
             user:     req.user,
             config:   require('../config/app-config').APP_CONFIGS,
             ledgers,
             groups,
+            activeTallyBatch,
             messages: req.flash()
         });
     } catch (err) {
@@ -1626,7 +1629,13 @@ router.post('/api/correction-queue/reprocess', [isLoginEnsured, security.isAdmin
 
 // ── Tally Import ──────────────────────────────────────────────────────────────
 // GET  /gl/tally-import  — upload page
-// POST /gl/tally-import  — parse file, return reconcile data as JSON
+// POST /gl/tally-import/parse — parse file, stage it in gl_tally_import_batch/row, return reconcile data
+//
+// The parsed file and every match/override are persisted to
+// gl_tally_import_batch/gl_tally_import_row as the admin works (autosaved via
+// POST /tally-import/row/:row_id), so logging off mid-reconcile and coming back
+// later resumes exactly where they left off instead of forcing a re-upload.
+// Only one IN_PROGRESS batch is kept per location — see /tally-import/discard.
 
 const multer  = require('multer');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -1644,6 +1653,49 @@ function parseTallyMasterTxt(buf) {
     return names;
 }
 
+async function loadLedgersAndGroups(locationCode) {
+    return Promise.all([
+        db.sequelize.query(`
+            SELECT l.ledger_id, l.ledger_name, l.tally_ledger_name, l.active_flag,
+                   g.group_name
+            FROM gl_ledgers l
+            JOIN gl_ledger_groups g ON g.group_id = l.group_id
+            WHERE l.location_code = :locationCode
+            ORDER BY l.ledger_name
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+        db.sequelize.query(`
+            SELECT group_id, group_name, group_nature FROM gl_ledger_groups
+            WHERE location_code = :locationCode
+            ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
+    ]);
+}
+
+async function getActiveTallyBatchSummary(locationCode) {
+    const [batch] = await db.sequelize.query(`
+        SELECT batch_id, file_name, created_by, creation_date
+        FROM gl_tally_import_batch
+        WHERE location_code = :locationCode AND status = 'IN_PROGRESS'
+        ORDER BY batch_id DESC LIMIT 1
+    `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+    if (!batch) return null;
+
+    const [counts] = await db.sequelize.query(`
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN match_status != 'UNRESOLVED' THEN 1 ELSE 0 END) AS resolved
+        FROM gl_tally_import_row WHERE batch_id = :batchId
+    `, { replacements: { batchId: batch.batch_id }, type: db.Sequelize.QueryTypes.SELECT });
+
+    return {
+        batch_id:      batch.batch_id,
+        file_name:     batch.file_name,
+        created_by:    batch.created_by,
+        creation_date: batch.creation_date,
+        total:         Number(counts.total) || 0,
+        resolved:      Number(counts.resolved) || 0
+    };
+}
+
 router.get('/tally-import', [isLoginEnsured, security.isAdmin()], function(req, res) {
     res.redirect('/gl/ledgers#tab-tally');
 });
@@ -1652,25 +1704,17 @@ router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const locationCode = req.user.location_code;
-    try {
-        const tallyNames = parseTallyMasterTxt(req.file.buffer);
+    const user = req.user.username || String(req.user.Person_id);
+    const force = req.body.force === 'true' || req.body.force === true;
 
-        // Load PetroMath ledgers and groups
-        const [ledgers, groups] = await Promise.all([
-            db.sequelize.query(`
-                SELECT l.ledger_id, l.ledger_name, l.tally_ledger_name, l.active_flag,
-                       g.group_name
-                FROM gl_ledgers l
-                JOIN gl_ledger_groups g ON g.group_id = l.group_id
-                WHERE l.location_code = :locationCode
-                ORDER BY l.ledger_name
-            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
-            db.sequelize.query(`
-                SELECT group_id, group_name, group_nature FROM gl_ledger_groups
-                WHERE location_code = :locationCode
-                ORDER BY FIELD(group_nature,'ASSETS','LIABILITIES','INCOME','EXPENSES'), group_name
-            `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT })
-        ]);
+    try {
+        if (!force) {
+            const existing = await getActiveTallyBatchSummary(locationCode);
+            if (existing) return res.status(409).json({ error: 'unfinished_import', existing });
+        }
+
+        const tallyNames = parseTallyMasterTxt(req.file.buffer);
+        const [ledgers, groups] = await loadLedgersAndGroups(locationCode);
 
         const groupByName = new Map(groups.map(g => [g.group_name.toLowerCase(), g]));
         const groupNames  = new Set(groupByName.keys());
@@ -1707,13 +1751,122 @@ router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.
                 suggested_group_id: pmGroup ? pmGroup.group_id : null,
                 ledger_id:          matched ? matched.ledger_id   : null,
                 ledger_name:        matched ? matched.ledger_name : null,
-                match:              matched ? 'exact' : 'none'
+                match_status:       matched ? 'AUTO' : 'UNRESOLVED'
             });
         }
 
-        res.json({ rows, ledgers, groups });
+        // Retire any prior unfinished batch for this location, then stage the new one
+        await db.sequelize.query(`
+            UPDATE gl_tally_import_batch SET status = 'DISCARDED', updated_by = :user
+            WHERE location_code = :locationCode AND status = 'IN_PROGRESS'
+        `, { replacements: { locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
+
+        const [batchId] = await db.sequelize.query(`
+            INSERT INTO gl_tally_import_batch (location_code, file_name, created_by, updated_by)
+            VALUES (:locationCode, :fileName, :user, :user)
+        `, { replacements: { locationCode, fileName: req.file.originalname, user }, type: db.Sequelize.QueryTypes.INSERT });
+
+        if (rows.length) {
+            const replacements = { batchId };
+            const valuesSql = rows.map((r, i) => {
+                replacements[`ord_${i}`] = i;
+                replacements[`tn_${i}`]  = r.tally_name;
+                replacements[`tg_${i}`]  = r.tally_group_name;
+                replacements[`sg_${i}`]  = r.suggested_group_id;
+                replacements[`lid_${i}`] = r.ledger_id;
+                replacements[`st_${i}`]  = r.match_status;
+                return `(:batchId, :ord_${i}, :tn_${i}, :tg_${i}, :sg_${i}, :lid_${i}, :st_${i})`;
+            }).join(',');
+
+            await db.sequelize.query(`
+                INSERT INTO gl_tally_import_row
+                    (batch_id, row_order, tally_name, tally_group_name, suggested_group_id, ledger_id, match_status)
+                VALUES ${valuesSql}
+            `, { replacements, type: db.Sequelize.QueryTypes.INSERT });
+
+            const staged = await db.sequelize.query(`
+                SELECT row_id, row_order FROM gl_tally_import_row WHERE batch_id = :batchId ORDER BY row_order
+            `, { replacements: { batchId }, type: db.Sequelize.QueryTypes.SELECT });
+            staged.forEach((s, i) => { rows[i].row_id = s.row_id; });
+        }
+
+        res.json({ batch_id: batchId, rows, ledgers, groups });
     } catch (err) {
         console.error('Tally import parse error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /gl/tally-import/batch/active — resume the location's in-progress import, if any
+router.get('/tally-import/batch/active', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const [batch] = await db.sequelize.query(`
+            SELECT batch_id, file_name FROM gl_tally_import_batch
+            WHERE location_code = :locationCode AND status = 'IN_PROGRESS'
+            ORDER BY batch_id DESC LIMIT 1
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        if (!batch) return res.json({ batch: null });
+
+        const [rows, [ledgers, groups]] = await Promise.all([
+            db.sequelize.query(`
+                SELECT row_id, tally_name, tally_group_name, suggested_group_id, ledger_id, match_status
+                FROM gl_tally_import_row WHERE batch_id = :batchId ORDER BY row_order
+            `, { replacements: { batchId: batch.batch_id }, type: db.Sequelize.QueryTypes.SELECT }),
+            loadLedgersAndGroups(locationCode)
+        ]);
+
+        res.json({ batch, rows, ledgers, groups });
+    } catch (err) {
+        console.error('Tally import active-batch error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /gl/tally-import/row/:row_id — autosave a single row's match as the admin works
+router.post('/tally-import/row/:row_id', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
+    const rowId = parseInt(req.params.row_id);
+    const { ledger_id, match_status } = req.body;
+    const validStatuses = ['AUTO', 'MANUAL', 'CREATED', 'SKIPPED', 'UNRESOLVED'];
+
+    if (!rowId || !validStatuses.includes(match_status)) {
+        return res.status(400).json({ error: 'Invalid row_id or match_status' });
+    }
+
+    try {
+        await db.sequelize.query(`
+            UPDATE gl_tally_import_row r
+            JOIN gl_tally_import_batch b ON b.batch_id = r.batch_id
+            SET r.ledger_id = :ledgerId, r.match_status = :matchStatus, r.updated_by = :user
+            WHERE r.row_id = :rowId AND b.location_code = :locationCode AND b.status = 'IN_PROGRESS'
+        `, {
+            replacements: {
+                rowId, locationCode, user, matchStatus: match_status,
+                ledgerId: ledger_id ? parseInt(ledger_id) : null
+            },
+            type: db.Sequelize.QueryTypes.UPDATE
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Tally import row autosave error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /gl/tally-import/discard — abandon the location's in-progress import (wrong file uploaded, etc.)
+router.post('/tally-import/discard', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const user = req.user.username || String(req.user.Person_id);
+    try {
+        await db.sequelize.query(`
+            UPDATE gl_tally_import_batch SET status = 'DISCARDED', updated_by = :user
+            WHERE location_code = :locationCode AND status = 'IN_PROGRESS'
+        `, { replacements: { locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Tally import discard error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1721,7 +1874,7 @@ router.post('/tally-import/parse', [isLoginEnsured, security.isAdmin()], upload.
 router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
     const user = req.user.username || String(req.user.Person_id);
-    const { mappings } = req.body; // [{ ledger_id, tally_name }]
+    const { mappings } = req.body; // [{ row_id, ledger_id, tally_name }]
 
     if (!Array.isArray(mappings) || !mappings.length) {
         return res.status(400).json({ error: 'No mappings provided' });
@@ -1730,7 +1883,11 @@ router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async fu
     try {
         // Build a single batch UPDATE using CASE
         const valid = mappings
-            .map(m => ({ ledger_id: parseInt(m.ledger_id), tally_name: (m.tally_name || '').trim() || null }))
+            .map(m => ({
+                row_id:     m.row_id ? parseInt(m.row_id) : null,
+                ledger_id:  parseInt(m.ledger_id),
+                tally_name: (m.tally_name || '').trim() || null
+            }))
             .filter(m => m.ledger_id);
 
         if (!valid.length) return res.json({ success: true, updated: 0 });
@@ -1749,6 +1906,13 @@ router.post('/tally-import/save', [isLoginEnsured, security.isAdmin()], async fu
                 updated_by = :user
             WHERE ledger_id IN (${ids}) AND location_code = :locationCode
         `, { replacements, type: db.Sequelize.QueryTypes.UPDATE });
+
+        const rowIds = valid.map(m => m.row_id).filter(Boolean);
+        if (rowIds.length) {
+            await db.sequelize.query(`
+                UPDATE gl_tally_import_row SET applied_flag = 'Y' WHERE row_id IN (:rowIds)
+            `, { replacements: { rowIds }, type: db.Sequelize.QueryTypes.UPDATE });
+        }
 
         res.json({ success: true, updated: valid.length });
     } catch (err) {
