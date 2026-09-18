@@ -1,0 +1,73 @@
+extends layout
+
+block content
+    .container-fluid.mt-3
+        .row.mb-3
+            .col
+                h4 Location Usage Matrix
+                p.text-muted Shows shift-closing activity per location so you can spot locations that have stopped using the application.
+
+        .row.mb-3
+            .col-6.col-md-2
+                .card.text-center
+                    .card-body.py-2
+                        .h5.mb-0= summary.total
+                        small.text-muted Total Locations
+            .col-6.col-md-2
+                .card.text-center.border-success
+                    .card-body.py-2
+                        .h5.mb-0.text-success= summary.active
+                        small.text-muted= `Active (≤${activeThreshold}d)`
+            .col-6.col-md-2
+                .card.text-center.border-warning
+                    .card-body.py-2
+                        .h5.mb-0.text-warning= summary.dormant
+                        small.text-muted= `Dormant (≤${dormantThreshold}d)`
+            .col-6.col-md-2
+                .card.text-center.border-danger
+                    .card-body.py-2
+                        .h5.mb-0.text-danger= summary.inactive
+                        small.text-muted= `Inactive (>${dormantThreshold}d)`
+            .col-6.col-md-2
+                .card.text-center.border-secondary
+                    .card-body.py-2
+                        .h5.mb-0.text-secondary= summary.neverUsed
+                        small.text-muted Never Used
+
+        if records && records.length > 0
+            .table-responsive
+                table.table.table-sm.table-bordered.table-hover
+                    thead.thead-dark
+                        tr
+                            th Location Code
+                            th Location Name
+                            th Location Status
+                            th Usage Status
+                            th Total Shifts
+                            th Closed
+                            th Draft
+                            th Shifts (Last 30d)
+                            th First Shift
+                            th Last Shift
+                            th Days Since Last Shift
+                    tbody
+                        each rec in records
+                            tr
+                                td= rec.location_code
+                                td= rec.location_name
+                                td
+                                    if rec.is_active_location
+                                        span.badge.badge-info Active
+                                    else
+                                        span.badge.badge-dark Closed
+                                td
+                                    span(class=`badge ${rec.status.badgeClass}`)= rec.status.label
+                                td.text-right= rec.total_shifts
+                                td.text-right= rec.closed_shifts
+                                td.text-right= rec.draft_shifts
+                                td.text-right= rec.shifts_last_30_days
+                                td= rec.first_shift_date
+                                td= rec.last_shift_date
+                                td.text-right= rec.days_since_last_shift != null ? rec.days_since_last_shift : '-'
+        else
+            .alert.alert-info No locations found.
