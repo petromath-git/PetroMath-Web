@@ -182,6 +182,9 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 UNION ALL
 
                 -- Day Bill Sales (cash + digital portions; credits are tracked separately above)
+                -- is_tank_product=1 gate matches get_closing_product_stock_balance/
+                -- get_all_products_stock_summary — generate_day_bill also copies 2T oil rows
+                -- into t_day_bill_items, so without this gate 2T oil double-counts with the branch above.
                 SELECT
                     tdb.bill_date as txn_date,
                     CONVERT('DAY BILL' USING utf8mb4) as txn_type,
@@ -195,6 +198,7 @@ getStockLedger: async (productId, locationCode, fromDate, toDate) => {
                 FROM t_day_bill tdb
                 JOIN t_day_bill_header tdbh ON tdbh.day_bill_id = tdb.day_bill_id
                 JOIN t_day_bill_items tdi ON tdi.header_id = tdbh.header_id
+                JOIN m_product dbp ON dbp.product_id = tdi.product_id AND dbp.is_tank_product = 1
                 WHERE tdi.product_id = ?
                 AND tdb.location_code = ?
                 AND tdb.bill_date BETWEEN ? AND ?
