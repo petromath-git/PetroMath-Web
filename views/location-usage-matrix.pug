@@ -35,8 +35,16 @@ block content
                         small.text-muted Never Used
 
         if records && records.length > 0
+            .row.mb-2.align-items-center
+                .col-md-6
+                    .custom-control.custom-switch
+                        input#toggleClosedLocations.custom-control-input(type='checkbox')
+                        label.custom-control-label(for='toggleClosedLocations') Show closed locations
+                .col-md-6.text-md-right
+                    small.text-muted#closedHiddenNote
+
             .table-responsive
-                table.table.table-sm.table-bordered.table-hover
+                table.table.table-sm.table-bordered.table-hover#locationUsageTable
                     thead.thead-dark
                         tr
                             th Location Code
@@ -52,7 +60,7 @@ block content
                             th Days Since Last Shift
                     tbody
                         each rec in records
-                            tr
+                            tr(data-location-status=rec.is_active_location ? 'active' : 'closed')
                                 td= rec.location_code
                                 td= rec.location_name
                                 td
@@ -71,3 +79,25 @@ block content
                                 td.text-right= rec.days_since_last_shift != null ? rec.days_since_last_shift : '-'
         else
             .alert.alert-info No locations found.
+
+    script.
+        document.addEventListener('DOMContentLoaded', function() {
+            var toggle = document.getElementById('toggleClosedLocations');
+            var note = document.getElementById('closedHiddenNote');
+            if (!toggle) return;
+
+            var closedRows = document.querySelectorAll('#locationUsageTable tbody tr[data-location-status="closed"]');
+
+            function applyFilter() {
+                var showClosed = toggle.checked;
+                closedRows.forEach(function(row) {
+                    row.style.display = showClosed ? '' : 'none';
+                });
+                note.textContent = showClosed || closedRows.length === 0
+                    ? ''
+                    : closedRows.length + ' closed location(s) hidden';
+            }
+
+            toggle.addEventListener('change', applyFilter);
+            applyFilter();
+        });
