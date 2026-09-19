@@ -114,7 +114,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
 async function reprocessEvents(locationCode, fromDate, toDate, processedBy, logger) {
     const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
 
-    const [, meta] = await db.sequelize.query(`
+    const [, affectedRows] = await db.sequelize.query(`
         UPDATE gl_accounting_events
         SET event_status  = 'UNPROCESSED',
             event_type    = 'UPDATE',
@@ -130,7 +130,7 @@ async function reprocessEvents(locationCode, fromDate, toDate, processedBy, logg
         type: QueryTypes.UPDATE
     });
 
-    log.info(`Reprocess: reset ${meta?.affectedRows || 0} events to UNPROCESSED for ${fromDate} → ${toDate}`);
+    log.info(`Reprocess: reset ${affectedRows || 0} events to UNPROCESSED for ${fromDate} → ${toDate}`);
 
     return await processEvents(locationCode, fromDate, toDate, processedBy, log);
 }

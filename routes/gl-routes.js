@@ -1326,11 +1326,11 @@ router.post('/api/financial-years/:id/set-current', [isLoginEnsured, security.is
             `UPDATE gl_financial_years SET is_current = 'N' WHERE location_code = :locationCode`,
             { replacements: { locationCode }, type: db.Sequelize.QueryTypes.UPDATE, transaction: t }
         );
-        const [, meta] = await db.sequelize.query(
+        const [, affectedRows] = await db.sequelize.query(
             `UPDATE gl_financial_years SET is_current = 'Y' WHERE fy_id = :fyId AND location_code = :locationCode`,
             { replacements: { fyId, locationCode }, type: db.Sequelize.QueryTypes.UPDATE, transaction: t }
         );
-        if (!meta?.affectedRows) {
+        if (!affectedRows) {
             await t.rollback();
             return res.status(404).json({ success: false, error: 'Financial year not found' });
         }
@@ -1349,13 +1349,18 @@ router.post('/api/financial-years/:id/close', [isLoginEnsured, security.isAdmin(
     const user = req.user.username || String(req.user.Person_id);
 
     try {
-        const [, meta] = await db.sequelize.query(`
+        const [rowExists] = await db.sequelize.query(
+            `SELECT 1 FROM gl_financial_years WHERE fy_id = :fyId AND location_code = :locationCode`,
+            { replacements: { fyId, locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!rowExists) return res.status(404).json({ success: false, error: 'Financial year not found' });
+
+        await db.sequelize.query(`
             UPDATE gl_financial_years
             SET is_closed = 'Y', closed_at = NOW(), closed_by = :user, updated_by = :user
             WHERE fy_id = :fyId AND location_code = :locationCode
         `, { replacements: { fyId, locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
 
-        if (!meta?.affectedRows) return res.status(404).json({ success: false, error: 'Financial year not found' });
         res.json({ success: true });
     } catch (err) {
         console.error('Close FY error:', err);
@@ -1369,13 +1374,18 @@ router.post('/api/financial-years/:id/reopen', [isLoginEnsured, security.isAdmin
     const user = req.user.username || String(req.user.Person_id);
 
     try {
-        const [, meta] = await db.sequelize.query(`
+        const [rowExists] = await db.sequelize.query(
+            `SELECT 1 FROM gl_financial_years WHERE fy_id = :fyId AND location_code = :locationCode`,
+            { replacements: { fyId, locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!rowExists) return res.status(404).json({ success: false, error: 'Financial year not found' });
+
+        await db.sequelize.query(`
             UPDATE gl_financial_years
             SET is_closed = 'N', closed_at = NULL, closed_by = NULL, updated_by = :user
             WHERE fy_id = :fyId AND location_code = :locationCode
         `, { replacements: { fyId, locationCode, user }, type: db.Sequelize.QueryTypes.UPDATE });
 
-        if (!meta?.affectedRows) return res.status(404).json({ success: false, error: 'Financial year not found' });
         res.json({ success: true });
     } catch (err) {
         console.error('Reopen FY error:', err);
@@ -2176,7 +2186,7 @@ router.post('/api/retry-event/:id', [isLoginEnsured, security.isAdmin()], async 
     const eventId = parseInt(req.params.id);
 
     try {
-        const [, meta] = await db.sequelize.query(`
+        const [, affectedRows] = await db.sequelize.query(`
             UPDATE gl_accounting_events
             SET event_status  = 'UNPROCESSED',
                 error_message = NULL,
@@ -2187,7 +2197,7 @@ router.post('/api/retry-event/:id', [isLoginEnsured, security.isAdmin()], async 
               AND event_status  = 'ERROR'
         `, { replacements: { eventId, locationCode }, type: db.Sequelize.QueryTypes.UPDATE });
 
-        if (!meta?.affectedRows) {
+        if (!affectedRows) {
             return res.status(404).json({ success: false, error: 'Event not found or not in ERROR status' });
         }
         res.json({ success: true });
@@ -2216,7 +2226,7 @@ router.post('/api/retry-events', [isLoginEnsured, security.isAdmin()], async fun
         const replacements = { locationCode };
         ids.forEach((id, i) => { replacements[`id${i}`] = id; });
 
-        const [, meta] = await db.sequelize.query(`
+        const [, affectedRows] = await db.sequelize.query(`
             UPDATE gl_accounting_events
             SET event_status  = 'UNPROCESSED',
                 error_message = NULL,
@@ -2227,7 +2237,7 @@ router.post('/api/retry-events', [isLoginEnsured, security.isAdmin()], async fun
               AND event_status  = 'ERROR'
         `, { replacements, type: db.Sequelize.QueryTypes.UPDATE });
 
-        res.json({ success: true, updated: meta?.affectedRows || 0 });
+        res.json({ success: true, updated: affectedRows || 0 });
     } catch (err) {
         console.error('Bulk retry events error:', err);
         res.status(500).json({ success: false, error: err.message });
