@@ -1629,7 +1629,7 @@ async function reverseExistingVouchers(locationCode, sourceType, sourceId, rever
                  narration, source_type, source_id, is_reversal, reversal_of_voucher_id,
                  is_exported, posted_by, created_by)
             VALUES
-                (:locationCode, :fyId, :voucherType, NOW(), :voucherNo,
+                (:locationCode, :fyId, :voucherType, :voucherDate, :voucherNo,
                  :narration, :sourceType, :sourceId, 'Y', :originalId,
                  'N', :reversedBy, :reversedBy)
         `, {
@@ -1637,6 +1637,7 @@ async function reverseExistingVouchers(locationCode, sourceType, sourceId, rever
                 locationCode,
                 fyId:        v.fy_id,
                 voucherType: v.voucher_type,
+                voucherDate: v.voucher_date,
                 voucherNo,
                 narration:   `REVERSAL of ${v.voucher_type} — ${v.narration || ''}`,
                 sourceType,
