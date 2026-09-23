@@ -216,8 +216,8 @@ block content
                                         a.btn.btn-info(href='/edit-draft-closing?closingId='+val.closingId)
                                             span.oi.oi-book
                                     td
-                                        // Reopen button - SuperUser always has access, Admin needs config permission
-                                        - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
+                                        // Reopen button - SuperUser/PowerUser always have access, Admin needs config permission
+                                        - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'PowerUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
                                         if canReopen && canReopenShift
                                             button.btn.btn-warning(onClick=`reopenShift(${val.closingId})`)
                                                 span.oi.oi-action-undo
@@ -342,7 +342,7 @@ block content
                                     button.action-btn.btn-delete(onClick=`deleteClosing(${val.closingId})`) Delete
                             else
                                 a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) View
-                                - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
+                                - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'PowerUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
                                 if canReopen && canReopenShift
                                     button.action-btn.btn-reopen(onClick=`reopenShift(${val.closingId})`) Reopen
         else
