@@ -59,7 +59,7 @@ block content
                                     if c.status === 'DRAFT'
                                         button.btn.btn-sm.btn-outline-danger(onclick=`deleteBowserClosing(${c.bowser_closing_id})`) Delete
                                     else if c.status === 'CLOSED'
-                                        - const canReopen = (user.Role === 'SuperUser') || (user.Role === 'Admin' && allowBowserReopen === 'Y')
+                                        - const canReopen = (user.Role === 'SuperUser') || (user.Role === 'PowerUser') || (user.Role === 'Admin' && allowBowserReopen === 'Y')
                                         if canReopen
                                             button.btn.btn-sm.btn-outline-warning.ml-1(onclick=`reopenBowserClosing(${c.bowser_closing_id})`) Reopen
         else
