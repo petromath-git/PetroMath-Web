@@ -14,6 +14,7 @@ const isLoginEnsured = login.ensureLoggedIn({});
 
 const SCRIPT_PATH = '/home/ubuntu/refresh_dev_from_s3.sh';
 const PAUSE_FILE   = '/home/ubuntu/.dev_refresh_paused';
+const PAUSE_HOLD_FILE = '/home/ubuntu/.dev_refresh_paused.hold'; // pause file parked during a manual run
 const LOG_FILE     = '/home/ubuntu/logs/dev_refresh_s3.log';
 
 function isDevEnv() {
@@ -36,7 +37,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function(req, res) {
         lastRefresh = rows[0] || null;
     } catch (e) { /* table may not exist yet */ }
 
-    const isPaused  = fs.existsSync(PAUSE_FILE);
+    const isPaused  = fs.existsSync(PAUSE_FILE) || fs.existsSync(PAUSE_HOLD_FILE);
     const isRunning = await checkRunning();
 
     let logTail = '';
@@ -73,6 +74,7 @@ router.post('/resume', [isLoginEnsured, security.isAdmin()], function(req, res) 
     if (!isDevEnv()) return res.status(404).json({ error: 'Not available' });
     try {
         if (fs.existsSync(PAUSE_FILE)) fs.unlinkSync(PAUSE_FILE);
+        if (fs.existsSync(PAUSE_HOLD_FILE)) fs.unlinkSync(PAUSE_HOLD_FILE);
         res.json({ success: true, paused: false });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -88,9 +90,17 @@ router.post('/run-now', [isLoginEnsured, security.isAdmin()], async function(req
     const running = await checkRunning();
     if (running) return res.status(409).json({ error: 'Refresh is already running' });
 
-    if (fs.existsSync(PAUSE_FILE)) fs.unlinkSync(PAUSE_FILE);
+    // The script exits early when the pause file exists, so move it aside for this
+    // manual run and restore it when the script finishes — a manual run must not
+    // silently un-pause the 4-hourly auto-refresh.
+    const wasPaused = fs.existsSync(PAUSE_FILE);
+    if (wasPaused) fs.renameSync(PAUSE_FILE, PAUSE_HOLD_FILE);
 
-    exec(`bash ${SCRIPT_PATH} >> ${LOG_FILE} 2>&1 &`, (err) => {
+    const cmd = wasPaused
+        ? `(bash ${SCRIPT_PATH} >> ${LOG_FILE} 2>&1; [ -f ${PAUSE_HOLD_FILE} ] && mv -f ${PAUSE_HOLD_FILE} ${PAUSE_FILE}) > /dev/null 2>&1 &`
+        : `bash ${SCRIPT_PATH} >> ${LOG_FILE} 2>&1 &`;
+
+    exec(cmd, (err) => {
         if (err) console.error('Dev refresh spawn error:', err);
     });
 
@@ -110,7 +120,7 @@ router.get('/status', [isLoginEnsured, security.isAdmin()], async function(req, 
         lastRefresh = rows[0] || null;
     } catch (e) { /* ok */ }
 
-    const isPaused  = fs.existsSync(PAUSE_FILE);
+    const isPaused  = fs.existsSync(PAUSE_FILE) || fs.existsSync(PAUSE_HOLD_FILE);
     const isRunning = await checkRunning();
 
     let logTail = '';
