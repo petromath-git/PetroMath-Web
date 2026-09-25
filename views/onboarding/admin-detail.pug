@@ -142,10 +142,12 @@ block content
                                 th Tank Connected
                                 th Next Stamping
                         tbody
+                            - const tankProduct = {}
+                            - formData.tanks.forEach(t => { if (t.tank_name) tankProduct[t.tank_name.trim().toUpperCase()] = t.product_short_name })
                             each n in formData.nozzles
                                 tr
                                     td.m-title= n.nozzle_name || '—'
-                                    td(data-label="Product")= n.nozzle_product || '—'
+                                    td(data-label="Product")= tankProduct[(n.tank_connected || '').trim().toUpperCase()] || n.nozzle_product || '—'
                                     td(data-label="DU Make")= n.du_make || '—'
                                     td.m-summary(data-label="Tank")= n.tank_connected || '—'
                                     td(data-label="Next Stamping")= n.next_stamping_date || '—'
@@ -384,11 +386,9 @@ block content
                 var nn = (n.nozzle_name || '').trim();
                 if (!nn) { issues.push('Nozzle row with empty name'); return; }
                 var tc = (n.tank_connected || '').trim().toUpperCase();
-                if (!tc) warnings.push('Nozzle "' + nn + '" not connected to any tank');
+                if (!tc) issues.push('Nozzle "' + nn + '" not connected to any tank — its product comes from the tank');
                 else if (!tankNames.has(tc)) issues.push('Nozzle "' + nn + '" → tank "' + n.tank_connected + '" not found in Tanks');
-                var np = (n.nozzle_product || '').trim().toUpperCase();
-                if (!np) warnings.push('Nozzle "' + nn + '" has no product set');
-                else if (!productSN.has(np)) warnings.push('Nozzle "' + nn + '" → product "' + n.nozzle_product + '" not in Metered Products (short name mismatch?)');
+                // Product comes from the connected tank, which the Tanks check above already validates
             });
 
             (fd.banks || []).forEach(function(b) {
