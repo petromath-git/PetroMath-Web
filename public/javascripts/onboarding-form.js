@@ -212,7 +212,6 @@ function buildNewRow(section, id) {
 
         'nozzles': `<tr ${a}>
             <td data-label="Nozzle Name"><input class="form-control form-control-sm" type="text" data-field="nozzle_name" data-no-space="true" placeholder="No spaces e.g. MS1.1"></td>
-            <td data-label="Product"><input class="form-control form-control-sm" type="text" data-field="nozzle_product" placeholder="Short Name"></td>
             <td data-label="DU Make"><input class="form-control form-control-sm" type="text" data-field="du_make" placeholder="Tokheim / Gilbarco"></td>
             <td data-label="Tank"><select class="form-control form-control-sm" data-field="tank_connected">${tankOpts()}</select></td>
             <td data-label="Stamping Date"><input class="form-control form-control-sm" type="date" data-field="next_stamping_date"></td>
