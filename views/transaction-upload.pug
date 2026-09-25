@@ -131,7 +131,15 @@ block content
                                     span.text-danger  *
                                 input#transactionFile.form-control.form-control-lg(type='file' accept='.xlsx,.xls' required)
                                 small.form-text.text-muted Supported formats: .xlsx, .xls (Max 5MB, up to 1000 transactions)
-                            
+                            //- Shown only when the server reports the uploaded file is password-protected
+                            #filePasswordGroup.mb-3(style='display: none;')
+                                label.form-label(for='filePassword')
+                                    | File Password:
+                                    span.text-danger  *
+                                input#filePassword.form-control.form-control-lg(type='password' autocomplete='new-password')
+                                #filePasswordFeedback.invalid-feedback
+                                small.form-text.text-muted This file is password-protected. Enter the password you use to open it in Excel, then click Next again.
+
                             .text-center.mt-4
                                 button#btnUpload.btn.btn-primary.btn-lg(type='button' disabled)
                                     i.bi.bi-arrow-right.me-2
@@ -301,7 +309,19 @@ block content
         // Enable upload button when both bank and file selected
         document.getElementById('bank_id').addEventListener('change', checkUploadReady);
         document.getElementById('transactionFile').addEventListener('change', checkUploadReady);
-        
+        document.getElementById('filePassword').addEventListener('input', function() {
+            this.classList.remove('is-invalid');
+        });
+        // A different file may not need a password — hide and clear the field
+        document.getElementById('transactionFile').addEventListener('change', hideFilePassword);
+
+        function hideFilePassword() {
+            const pwd = document.getElementById('filePassword');
+            pwd.value = '';
+            pwd.classList.remove('is-invalid');
+            document.getElementById('filePasswordGroup').style.display = 'none';
+        }
+
         function checkUploadReady() {
             const bankId = document.getElementById('bank_id').value;
             const file = document.getElementById('transactionFile').files[0];
@@ -324,6 +344,8 @@ block content
             
             const formData = new FormData();
             formData.append('bank_id', bankId);
+            // Text fields must precede the file so multer has them on req.body
+            formData.append('file_password', document.getElementById('filePassword').value);
             formData.append('transactionFile', file);
             
             try {
@@ -338,6 +360,17 @@ block content
                     uploadedTransactions = data.transactions;
                     displayStep2(data);
                     goToStep(2);
+                } else if (data.errorType === 'PASSWORD_REQUIRED' || data.errorType === 'PASSWORD_INCORRECT') {
+                    // Reveal the password field inline instead of an alert
+                    this.disabled = false;
+                    this.innerHTML = originalButtonHtml;
+                    const pwd = document.getElementById('filePassword');
+                    document.getElementById('filePasswordGroup').style.display = 'block';
+                    document.getElementById('filePasswordFeedback').textContent =
+                        data.errorType === 'PASSWORD_INCORRECT' ? data.error : '';
+                    pwd.classList.toggle('is-invalid', data.errorType === 'PASSWORD_INCORRECT');
+                    pwd.select();
+                    pwd.focus();
                 } else {
                     alert(`Error: ${data.error}`);
                     this.disabled = false;
@@ -557,7 +590,8 @@ block content
             // Clear file input
             const fileInput = document.getElementById('transactionFile');
             fileInput.value = '';
-            
+            hideFilePassword();
+
             // Re-check if button should be enabled
             checkUploadReady();
             

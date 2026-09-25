@@ -474,6 +474,51 @@ function isRealBinaryWorkbook(buffer) {
     return isZip || isOle;
 }
 
+// ========== Password-protected workbook handling ==========
+// Some banks (e.g. KVB) only export password-protected .xlsx files. An
+// encrypted OOXML file is wrapped in an OLE container, so it passes
+// isRealBinaryWorkbook() but XLSX.read() throws "File is password-protected".
+// Decrypt it in memory with the password the user keyed in on upload; the
+// password is never logged or stored.
+// Returns { buffer } on success, or { errorType, error } for the caller to send.
+async function decryptIfProtected(buffer, password) {
+    const isOle = buffer.length >= 4 &&
+        buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
+    if (!isOle) return { buffer };
+
+    const officeCrypto = require('officecrypto-tool');
+    let encrypted;
+    try {
+        encrypted = officeCrypto.isEncrypted(buffer);
+    } catch (e) {
+        return { buffer }; // not an encrypted container — let the normal parser handle it
+    }
+    if (!encrypted) return { buffer };
+
+    if (!password) {
+        return {
+            errorType: 'PASSWORD_REQUIRED',
+            error: 'This file is password-protected. Please enter the file password and try again.'
+        };
+    }
+
+    try {
+        return { buffer: await officeCrypto.decrypt(buffer, { password }) };
+    } catch (e) {
+        if (/password is incorrect/i.test(e.message)) {
+            return {
+                errorType: 'PASSWORD_INCORRECT',
+                error: 'The file password is incorrect. Please check it and try again.'
+            };
+        }
+        console.error('Failed to decrypt password-protected upload:', e.message);
+        return {
+            errorType: 'DECRYPT_FAILED',
+            error: 'Could not open this password-protected file. Please remove the password in Excel and upload again.'
+        };
+    }
+}
+
 function parsePlainTextToData(buffer) {
     const text = buffer.toString('utf8');
     return text.split(/\r\n|\r|\n/).map(line => line.split('\t'));
@@ -687,6 +732,18 @@ previewTransactions: async (req, res) => {
                 error: 'No file uploaded'
             });
         }
+
+        // Decrypt password-protected files first, so the retained debug copy
+        // and every parser below see the plain workbook.
+        const decrypted = await decryptIfProtected(req.file.buffer, req.body.file_password);
+        if (decrypted.errorType) {
+            return res.status(400).json({
+                success: false,
+                error: decrypted.error,
+                errorType: decrypted.errorType
+            });
+        }
+        req.file.buffer = decrypted.buffer;
 
         await purgeExpiredDebugUploads();
         let retainedFileName = null;
