@@ -122,6 +122,26 @@ generate_day_bill_sp: BEGIN
     SELECT COUNT(*) INTO v_oil_count  FROM tmp_db_oil;
 
     IF v_pump_count = 0 AND v_oil_count = 0 THEN
+        --    No CLOSED shifts left for the day (e.g. the only shift was reopened
+        --    or deleted). Empty any existing day bill instead of leaving it stale:
+        --    items removed, header totals zeroed (bill numbers kept for re-close),
+        --    and the parent row touched so the GL update trigger reverses postings.
+        SELECT day_bill_id INTO v_day_bill_id
+        FROM   t_day_bill
+        WHERE  location_code = p_location_code AND bill_date = p_bill_date;
+
+        IF v_day_bill_id IS NOT NULL THEN
+            DELETE it FROM t_day_bill_items it
+            JOIN t_day_bill_header h ON h.header_id = it.header_id
+            WHERE h.day_bill_id = v_day_bill_id;
+
+            UPDATE t_day_bill_header SET total_amount = 0 WHERE day_bill_id = v_day_bill_id;
+
+            UPDATE t_day_bill
+            SET    updated_by = p_user, updation_date = NOW()
+            WHERE  day_bill_id = v_day_bill_id;
+        END IF;
+
         DROP TEMPORARY TABLE IF EXISTS tmp_db_pump;
         DROP TEMPORARY TABLE IF EXISTS tmp_db_oil;
         LEAVE generate_day_bill_sp;
