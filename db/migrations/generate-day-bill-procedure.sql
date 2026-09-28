@@ -68,7 +68,8 @@ generate_day_bill_sp: BEGIN
             / NULLIF(SUM(r.closing_reading - r.opening_reading - COALESCE(r.testing, 0)), 0)
         AS DECIMAL(10,3))  AS price,
         CAST(0 AS DECIMAL(12,3)) AS cashsale_qty,
-        CAST(0 AS DECIMAL(12,3)) AS net_qty
+        CAST(0 AS DECIMAL(12,3)) AS net_qty,
+        CAST(0 AS DECIMAL(12,3)) AS split_qty
     FROM t_reading r
     JOIN t_closing c  ON r.closing_id = c.closing_id
     JOIN m_pump mp    ON r.pump_id = mp.pump_id
@@ -155,20 +156,57 @@ generate_day_bill_sp: BEGIN
       AND tci.product_id IN (SELECT product_id FROM tmp_db_pump)
     GROUP BY tci.product_id;
 
+    -- ── 4c. Credit quantities — exclude off-meter (barrel) sales ────────────
+    --    off_meter_sale = 1 means the product was handed over physically without
+    --    going through the pump meter, so it must NOT be deducted from pumped_qty.
+    --    Built before the digital split (step 6/9) so credits are netted out first.
+    CREATE TEMPORARY TABLE tmp_db_credit
+    SELECT
+        tc.product_id,
+        CAST(SUM(tc.qty) AS DECIMAL(12,3)) AS credit_qty
+    FROM t_credits tc
+    JOIN t_closing c ON tc.closing_id = c.closing_id
+    WHERE c.location_code = p_location_code
+      AND DATE(c.closing_date) = p_bill_date
+      AND c.closing_status = 'CLOSED'
+      AND COALESCE(tc.off_meter_sale, 0) = 0
+    GROUP BY tc.product_id;
+
     -- ── 5. Compute net_qty = pumped - cashsales - intercompany (floor at 0) ─────
+    --    split_qty = net_qty - credits (floor at 0): the quantity actually left for
+    --    cash + digital, used as the basis for the digital split. Splitting on
+    --    net_qty instead over-allocated digital to credit-heavy products, whose
+    --    cash line then floored at 0 while other products' cash stayed inflated
+    --    (day bill + credits exceeded the meter).
     UPDATE tmp_db_pump p
     LEFT  JOIN tmp_db_cashsale cs     ON p.product_id = cs.product_id
     LEFT  JOIN tmp_db_intercompany ic ON p.product_id = ic.product_id
+    LEFT  JOIN tmp_db_credit cr       ON p.product_id = cr.product_id
     SET   p.cashsale_qty = COALESCE(cs.cashsale_qty, 0),
           p.net_qty      = GREATEST(0, p.pumped_qty
                                        - COALESCE(cs.cashsale_qty, 0)
-                                       - COALESCE(ic.intercompany_qty, 0));
+                                       - COALESCE(ic.intercompany_qty, 0)),
+          p.split_qty    = GREATEST(0, p.pumped_qty
+                                       - COALESCE(cs.cashsale_qty, 0)
+                                       - COALESCE(ic.intercompany_qty, 0)
+                                       - COALESCE(cr.credit_qty, 0));
 
-    -- ── 6. Total net revenue (denominator for digital split) ─────────────────
-    SELECT COALESCE(SUM(net_qty * price), 0)
+    -- ── 6. Total split revenue (denominator for digital split) ───────────────
+    SELECT COALESCE(SUM(split_qty * price), 0)
     INTO   v_total_net_revenue
     FROM   tmp_db_pump
     WHERE  price > 0;
+
+    --    Fallback: if credits consumed every product's quantity (data anomaly —
+    --    digital recorded on a day with nothing left after credits), split on
+    --    net_qty as before rather than dropping the digital amount.
+    IF v_total_net_revenue = 0 THEN
+        UPDATE tmp_db_pump SET split_qty = net_qty;
+        SELECT COALESCE(SUM(split_qty * price), 0)
+        INTO   v_total_net_revenue
+        FROM   tmp_db_pump
+        WHERE  price > 0;
+    END IF;
 
     -- ── 7. Digital vendor totals for the day ─────────────────────────────────
     CREATE TEMPORARY TABLE tmp_db_digital
@@ -203,23 +241,10 @@ generate_day_bill_sp: BEGIN
              digital_amount DESC
     LIMIT 1;
 
-    -- ── 8. Credit quantities — exclude off-meter (barrel) sales ─────────────
-    --    off_meter_sale = 1 means the product was handed over physically without
-    --    going through the pump meter, so it must NOT be deducted from pumped_qty.
-    CREATE TEMPORARY TABLE tmp_db_credit
-    SELECT
-        tc.product_id,
-        CAST(SUM(tc.qty) AS DECIMAL(12,3)) AS credit_qty
-    FROM t_credits tc
-    JOIN t_closing c ON tc.closing_id = c.closing_id
-    WHERE c.location_code = p_location_code
-      AND DATE(c.closing_date) = p_bill_date
-      AND c.closing_status = 'CLOSED'
-      AND COALESCE(tc.off_meter_sale, 0) = 0
-    GROUP BY tc.product_id;
+    -- ── 8. (credit quantities moved to step 4c) ──────────────────────────────
 
     -- ── 9. Proportionate digital items ───────────────────────────────────────
-    --    digital_qty[V,P] = (net_revenue[P] / total_net_revenue) × (vendor_amt[V] / price[P])
+    --    digital_qty[V,P] = (split_revenue[P] / total_split_revenue) × (vendor_amt[V] / price[P])
     CREATE TEMPORARY TABLE tmp_db_dig_items
     SELECT
         d.vendor_id,
@@ -227,7 +252,7 @@ generate_day_bill_sp: BEGIN
         CAST(
             CASE
                 WHEN v_total_net_revenue > 0 AND p.price > 0
-                THEN (p.net_qty * p.price / v_total_net_revenue) * (d.digital_amount / p.price)
+                THEN (p.split_qty * p.price / v_total_net_revenue) * (d.digital_amount / p.price)
                 ELSE 0
             END
         AS DECIMAL(12,6)) AS digital_qty
