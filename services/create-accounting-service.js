@@ -26,6 +26,10 @@
 //                                                         balances (adjustment_type=201 → "Opening Balance
 //                                                         Equity", off the P&L; other types resolve by
 //                                                         their own lookup name, else "General Adjustment").
+//   CREDIT_RECEIPT      (source_id = treceipt_id)      — credit-customer receipt: digital vendor DR (if
+//                                                         digital_creditlist_id set) or Cash-in-Hand DR
+//                                                         (receipt_type 'Cash') / Customer CR. Bank-type
+//                                                         receipts post from their BANK_TXN instead.
 //
 // Raised automatically by DB triggers on source tables.
 // UPDATE events reverse existing vouchers and regenerate fresh ones.
@@ -45,7 +49,7 @@ const VOUCHER_PREFIXES = {
 
 // Source types that belong to a shift — blocked if t_closing is still DRAFT.
 // BANK_TXN / PURCHASE_INVOICE / MANUAL_JOURNAL are not shift-bound and always process.
-const SHIFT_BOUND_TYPES  = new Set(['CREDIT_SALE', 'CASH_SALE', 'DAY_BILL']);
+const SHIFT_BOUND_TYPES  = new Set(['CREDIT_SALE', 'CASH_SALE', 'DAY_BILL', 'CREDIT_RECEIPT']);
 
 // Source types that belong to a bowser closing — blocked if t_bowser_closing is still DRAFT.
 const BOWSER_BOUND_TYPES = new Set(['BOWSER_CREDIT_SALE', 'BOWSER_CASH_SALE', 'BOWSER_DIGITAL_SALE']);
@@ -406,6 +410,22 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
           )
     `);
 
+    await run('CREDIT_RECEIPT', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT tr.location_code, fy.fy_id, 'CREDIT_RECEIPT', tr.treceipt_id, 'CREATE',
+               tr.receipt_date, 'UNPROCESSED', :createdBy
+        FROM t_receipts tr
+        JOIN gl_financial_years fy ON fy.location_code = tr.location_code
+            AND tr.receipt_date BETWEEN fy.start_date AND fy.end_date
+        WHERE tr.location_code = :locationCode
+          AND tr.receipt_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'CREDIT_RECEIPT' AND e.source_id = tr.treceipt_id
+          )
+    `);
+
     log.info(`Generate Events done — total inserted=${total}` +
         (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
@@ -436,6 +456,7 @@ async function processEvent(event, processedBy) {
         case 'TANK_INVOICE':        return await processTankInvoiceEvent(event, processedBy);
         case 'CASHFLOW_TXN':        return await processCashflowTxnEvent(event, processedBy);
         case 'ADJUSTMENT':          return await processAdjustmentEvent(event, processedBy);
+        case 'CREDIT_RECEIPT':      return await processCreditReceiptEvent(event, processedBy);
         default:
             throw new Error(`Unhandled source_type: ${event.source_type}`);
     }
@@ -1370,6 +1391,80 @@ async function processAdjustmentEvent(event, processedBy) {
         sourceId:     adjustmentId,
         narration,
         lines,
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+// ─── CREDIT_RECEIPT Handler ───────────────────────────────────────────────────
+// One voucher per credit-customer receipt in t_receipts. The customer side is
+// always a CR to the customer's own ledger; the DR side depends on how the
+// money came in:
+//   digital_creditlist_id set -> the digital vendor (Paytm, fleet card, ...),
+//                                whose later bank settlement credits it back
+//   receipt_type 'Cash'       -> Cash-in-Hand (the cashflow "Cash Receipt"
+//                                line is SKIP in gl_static_ledger_map, so
+//                                this is the only place cash receipts post)
+// Everything else posts nothing here: bank-type receipts (Cheque, RTGS/NEFT,
+// Bank Deposit, or anything with source_txn_id) are journaled from the linked
+// BANK_TXN, and 'others' has no known DR side.
+
+async function processCreditReceiptEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: receiptId, event_date } = event;
+
+    const rows = await db.sequelize.query(`
+        SELECT tr.treceipt_id, tr.receipt_no, tr.receipt_type, tr.amount,
+               tr.creditlist_id, tr.digital_creditlist_id, tr.source_txn_id, tr.source_split_id,
+               cl.Company_Name  AS customer_name,
+               dcl.Company_Name AS vendor_name
+        FROM t_receipts tr
+        JOIN m_credit_list cl       ON cl.creditlist_id  = tr.creditlist_id
+        LEFT JOIN m_credit_list dcl ON dcl.creditlist_id = tr.digital_creditlist_id
+        WHERE tr.treceipt_id = :receiptId
+    `, { replacements: { receiptId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Receipt not found: treceipt_id=${receiptId}`);
+    const row = rows[0];
+
+    const amount = Math.round(parseFloat(row.amount || 0) * 100) / 100;
+    const isCash    = (row.receipt_type || '').toLowerCase() === 'cash';
+    const isDigital = !!row.digital_creditlist_id;
+    const fromBank  = !!row.source_txn_id || !!row.source_split_id;
+
+    if (amount <= 0 || fromBank || (!isCash && !isDigital)) {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const customerLedgerId = await resolveLedger(location_code, 'CREDIT', row.creditlist_id);
+    if (!customerLedgerId) throw new Error(`CREDIT GL ledger not found for creditlist_id=${row.creditlist_id} (${row.customer_name}, receipt no ${row.receipt_no})`);
+
+    let drLedgerId;
+    if (isDigital) {
+        drLedgerId = await resolveLedger(location_code, 'CREDIT', row.digital_creditlist_id);
+        if (!drLedgerId) throw new Error(`Digital vendor GL ledger not found for creditlist_id=${row.digital_creditlist_id} (${row.vendor_name}, receipt no ${row.receipt_no})`);
+    } else {
+        drLedgerId = await resolveCashLedger(location_code);
+        if (!drLedgerId) throw new Error(`Cash-in-Hand ledger not found for location ${location_code}`);
+    }
+
+    const narration = `Receipt No ${row.receipt_no} | ${row.customer_name}` +
+        (isDigital ? ` via ${row.vendor_name}` : ' | Cash') + ` | ₹${amount.toFixed(2)} | ${event_date}`;
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType:  isDigital ? 'JOURNAL' : 'RECEIPT',
+        voucherDate:  event_date,
+        sourceType:   'CREDIT_RECEIPT',
+        sourceId:     receiptId,
+        narration,
+        lines: [
+            { ledger_id: drLedgerId,       dr_amount: amount, cr_amount: 0,      narration },
+            { ledger_id: customerLedgerId, dr_amount: 0,      cr_amount: amount, narration }
+        ],
         postedBy:     processedBy
     });
 

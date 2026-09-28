@@ -2485,6 +2485,32 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermissio
                     ]
                 };
             }
+        } else if (event.source_type === 'CREDIT_RECEIPT') {
+            const rows = await db.sequelize.query(`
+                SELECT tr.receipt_no, tr.receipt_date, tr.receipt_type, tr.amount, tr.notes,
+                       tr.source_txn_id, cl.Company_Name AS customer_name, dcl.Company_Name AS vendor_name
+                FROM t_receipts tr
+                JOIN m_credit_list cl       ON cl.creditlist_id  = tr.creditlist_id
+                LEFT JOIN m_credit_list dcl ON dcl.creditlist_id = tr.digital_creditlist_id
+                WHERE tr.treceipt_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Credit Receipt',
+                    fields: [
+                        { label: 'Receipt No',     value: r.receipt_no },
+                        { label: 'Date',           value: r.receipt_date ? String(r.receipt_date).substring(0,10) : '' },
+                        { label: 'Customer',       value: r.customer_name },
+                        { label: 'Type',           value: r.receipt_type },
+                        { label: 'Digital Vendor', value: r.vendor_name },
+                        { label: 'Amount',         value: r.amount },
+                        { label: 'Bank Txn',       value: r.source_txn_id },
+                        { label: 'Notes',          value: r.notes },
+                    ]
+                };
+            }
         }
 
         res.json({
