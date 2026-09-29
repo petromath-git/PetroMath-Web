@@ -1152,8 +1152,12 @@ app.get('/reports-sales-summary', isLoginEnsured, function (req, res, next) {
     reportsController.getSalesSummaryReport(req, res, next);
 });
 
-app.post('/reports-sales-summary', isLoginEnsured, function (req, res, next) {    
+app.post('/reports-sales-summary', isLoginEnsured, function (req, res, next) {
     reportsController.getSalesSummaryReport(req, res, next);
+});
+
+app.post('/reports-sales-summary/excel', isLoginEnsured, function (req, res, next) {
+    reportsController.exportSalesSummaryExcel(req, res, next);
 });
 
 app.get('/reports-creditsummary', isLoginEnsured, function (req, res, next) {

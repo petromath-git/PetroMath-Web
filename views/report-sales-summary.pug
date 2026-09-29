@@ -163,6 +163,35 @@ block content
                     renderTable(filtered, "Sales (Ltrs.)");
             }
 
+            // Excel export - posts the current dates, view and day filters
+            function exportSalesSummaryExcel() {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/reports-sales-summary/excel';
+
+                const fields = {
+                    fromClosingDate: document.getElementById('fromclosingDate').value,
+                    toClosingDate: document.getElementById('toclosingDate').value,
+                    viewType: currentViewType
+                };
+                if (currentViewType === 'daily') {
+                    fields.dayFilter = document.getElementById('dayFilter').value;
+                    fields.weekendOnly = document.getElementById('weekendOnly').checked ? 'Y' : 'N';
+                }
+
+                Object.keys(fields).forEach(name => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = fields[name];
+                    form.appendChild(input);
+                });
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+
             // Switch between Day-wise and Month-wise views
             function switchView(viewType) {
                 document.getElementById('viewTypeInput').value = viewType;
@@ -251,6 +280,9 @@ block content
                 td &nbsp;
 
                 include report-print-download.pug
+                td
+                    button.btn.btn-success.ml-2(type='button', onClick='exportSalesSummaryExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
+                        i.bi.bi-file-earmark-spreadsheet
 
 
     // ================================

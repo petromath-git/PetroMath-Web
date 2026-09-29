@@ -7,6 +7,52 @@ var CreditDao = require("../dao/credits-dao");
 const moment = require('moment');
 const locationConfig = require('../utils/location-config');
 
+// Builds the Sales Summary rows (one per day or month) shared by the screen and the Excel export.
+async function buildSalesSummaryRows(locationCode, fromDate, toDate, viewType) {
+    const data = viewType === 'monthly'
+        ? await ReportDao.getMonthlySales(locationCode, fromDate, toDate)
+        : await ReportDao.getSales(locationCode, fromDate, toDate);
+
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return data.map((salesSummary) => {
+        const keyValue = {};
+
+        if (viewType === 'monthly') {
+            keyValue['Month'] = salesSummary.month_formatted;
+        } else {
+            keyValue['Date'] = salesSummary.closing_date_formatted;
+            const dateObj = new Date(salesSummary.closing_date_formatted.split('-').reverse().join('-'));
+            keyValue['Day'] = dayNames[dateObj.getDay()];
+        }
+
+        // Product columns are dynamic
+        Object.keys(salesSummary).forEach((key) => {
+            if (!['closing_date_formatted', 'month_formatted', 'month_key', 'loose'].includes(key)) {
+                keyValue[key] = salesSummary[key];
+            }
+        });
+
+        keyValue['2T Loose'] = salesSummary.loose;
+        return keyValue;
+    });
+}
+
+// Appends a 'Total' row summing every product column (skips Date/Month/Day).
+function appendSalesTotalRow(rows, viewType) {
+    if (rows.length === 0) return rows;
+    const totals = {};
+    rows.forEach((row) => {
+        for (const key in row) {
+            if (key === 'Date' || key === 'Month' || key === 'Day') continue;
+            totals[key] = (totals[key] || 0) + Number(row[key] || 0);
+        }
+    });
+    const totalRow = viewType === 'monthly' ? { 'Month': 'Total' } : { 'Date': 'Total', 'Day': '' };
+    Object.keys(totals).forEach((key) => { totalRow[key] = totals[key]; });
+    rows.push(totalRow);
+    return rows;
+}
+
 module.exports = {
      getCreditReport: async(req, res) => {
        //console.log(req);
@@ -1003,68 +1049,11 @@ getSalesSummaryReport: async(req, res) => {
         toDate = req.body.toClosingDate;
     }
     
-    let Saleslist = [];     
     let renderData = {};
 
-    // Fetch data based on view type
-    let data1;
-    if (viewType === 'monthly') {
-        data1 = await ReportDao.getMonthlySales(locationCode, fromDate, toDate);
-    } else {
-        data1 = await ReportDao.getSales(locationCode, fromDate, toDate);
-    }
+    const Saleslist = await buildSalesSummaryRows(locationCode, fromDate, toDate, viewType);
+    appendSalesTotalRow(Saleslist, viewType);
 
-    // Process the data
-    data1.forEach((salesSummary) => {
-        const keyValue = {};
-        
-        // Handle date column based on view type
-        if (viewType === 'monthly') {
-            keyValue['Month'] = salesSummary.month_formatted;
-        } else {
-            keyValue['Date'] = salesSummary.closing_date_formatted;
-            
-            // ADD DAY COLUMN FOR DAILY VIEW
-            const dateObj = new Date(salesSummary.closing_date_formatted.split('-').reverse().join('-'));
-            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            keyValue['Day'] = dayNames[dateObj.getDay()];
-        }
-        
-        // Handle unknown columns dynamically (for product sales data)
-        Object.keys(salesSummary).forEach((key) => {
-            // Skip already handled known columns
-            if (!['closing_date_formatted', 'month_formatted', 'month_key', 'loose'].includes(key)) {
-                keyValue[key] = salesSummary[key];
-            }
-        });
-
-        // Add the '2T Loose' column
-        keyValue['2T Loose'] = salesSummary.loose;  
-
-        // Push the created key-value pair object to Saleslist
-        Saleslist.push(keyValue);
-    });
-
-    // Compute totals for each column (excluding the 'Date'/'Month'/'Day' column)
-    if (Saleslist.length > 0) {
-        const totals = {};
-        Saleslist.forEach((row) => {
-            for (const key in row) {
-                if (key === 'Date' || key === 'Month' || key === 'Day') continue;
-                // Convert values to numbers; if not a number, treat as 0.
-                totals[key] = (totals[key] || 0) + Number(row[key] || 0);
-            }
-        });
-
-        // Create a new row for totals
-        const totalRow = viewType === 'monthly' ? { 'Month': 'Total' } : { 'Date': 'Total', 'Day': '' };
-        Object.keys(totals).forEach((key) => {
-            totalRow[key] = totals[key];
-        });
-        // Append the total row to the Saleslist
-        Saleslist.push(totalRow);
-    }
-    
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
     const formattedToDate = moment(toDate).format('DD/MM/YYYY'); 
     
@@ -1094,7 +1083,107 @@ getSalesSummaryReport: async(req, res) => {
                         resolve(html);
                     }
                 });
-        }); 
+        });
+    }
+},
+
+exportSalesSummaryExcel: async(req, res) => {
+    try {
+        const ExcelJS = require('exceljs');
+
+        const locationCode = req.user.location_code;
+        const fromDate = req.body.fromClosingDate || dateFormat(new Date(), "yyyy-mm-dd");
+        const toDate = req.body.toClosingDate || dateFormat(new Date(), "yyyy-mm-dd");
+        const viewType = req.body.viewType === 'monthly' ? 'monthly' : 'daily';
+
+        let rows = await buildSalesSummaryRows(locationCode, fromDate, toDate, viewType);
+
+        // Apply the same Day / Weekend Only filters the screen applies (daily view only)
+        if (viewType === 'daily') {
+            if (req.body.weekendOnly === 'Y') {
+                rows = rows.filter(r => r.Day === 'Sat' || r.Day === 'Sun');
+            } else if (req.body.dayFilter) {
+                rows = rows.filter(r => r.Day === req.body.dayFilter);
+            }
+        }
+        appendSalesTotalRow(rows, viewType);
+
+        const labelKeys = viewType === 'monthly' ? ['Month'] : ['Date', 'Day'];
+        const columnKeys = rows.length > 0 ? Object.keys(rows[0]) : labelKeys;
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Sales Summary');
+        const lastColumnName = sheet.getColumn(columnKeys.length).letter;
+        let currentRow = 1;
+
+        sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+        sheet.getCell(`A${currentRow}`).value = viewType === 'monthly'
+            ? 'FUEL SALES SUMMARY - MONTH-WISE (Ltrs.)'
+            : 'FUEL SALES SUMMARY - DAY-WISE (Ltrs.)';
+        sheet.getCell(`A${currentRow}`).font = { bold: true, size: 14 };
+        sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+        currentRow++;
+
+        sheet.mergeCells(`A${currentRow}:${lastColumnName}${currentRow}`);
+        sheet.getCell(`A${currentRow}`).value =
+            `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
+        sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+        currentRow += 2;
+
+        const thinBorder = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        };
+
+        const headerRow = sheet.getRow(currentRow);
+        headerRow.values = columnKeys;
+        headerRow.font = { bold: true };
+        headerRow.eachCell((cell) => {
+            cell.border = thinBorder;
+            cell.alignment = { horizontal: 'center' };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+        });
+        currentRow++;
+
+        rows.forEach((entry) => {
+            const isTotal = entry.Date === 'Total' || entry.Month === 'Total';
+            const isWeekend = viewType === 'daily' && (entry.Day === 'Sat' || entry.Day === 'Sun');
+            const dataRow = sheet.getRow(currentRow);
+
+            columnKeys.forEach((key, index) => {
+                const cell = dataRow.getCell(index + 1);
+                if (labelKeys.includes(key)) {
+                    cell.value = entry[key] ?? '';
+                    if (key === 'Day') cell.alignment = { horizontal: 'center' };
+                } else {
+                    cell.value = Number(entry[key] || 0);
+                    cell.numFmt = '#,##,##0.00';
+                }
+                cell.border = thinBorder;
+                if (isTotal) {
+                    cell.font = { bold: true, color: { argb: 'FFC00000' } };
+                } else if (isWeekend) {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+                }
+            });
+            currentRow++;
+        });
+
+        columnKeys.forEach((key, index) => {
+            sheet.getColumn(index + 1).width = key === 'Day' ? 8 : (labelKeys.includes(key) ? 14 : 16);
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const filename = `SalesSummary_${viewType === 'monthly' ? 'Monthly' : 'Daily'}_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buffer);
+    } catch (error) {
+        console.error('Error generating Sales Summary Excel export:', error);
+        res.status(500).send('An error occurred while generating the Excel file.');
     }
 },
 
