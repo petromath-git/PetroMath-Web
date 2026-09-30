@@ -17,6 +17,14 @@ function formatDateForDisplay(d) {
     return dateFormat(new Date(d), 'dd-mmm-yyyy');
 }
 
+// Public endpoints resolve the token through this so a deactivated link
+// behaves as not-found for writes and shows a clear message on the form.
+async function findLiveByToken(token) {
+    const onboarding = await OnboardingDao.findByToken(token);
+    if (!onboarding || onboarding.link_active === 'N') return null;
+    return onboarding;
+}
+
 module.exports = {
     // ── Public form ────────────────────────────────────────────────────────────
     getForm: async (req, res, next) => {
@@ -24,6 +32,9 @@ module.exports = {
             const onboarding = await OnboardingDao.findByToken(req.params.token);
             if (!onboarding) {
                 return res.status(404).render('error', { message: 'Onboarding link not found or expired.', error: {} });
+            }
+            if (onboarding.link_active === 'N') {
+                return res.status(410).render('error', { message: 'This onboarding link has been deactivated. Please contact PetroMath support.', error: {} });
             }
             const formData = await OnboardingDao.getAllData(onboarding.id);
             formData.nozzles = formData.nozzles.map(n => ({
@@ -43,7 +54,7 @@ module.exports = {
 
     upsertRo: async (req, res, next) => {
         try {
-            const onboarding = await OnboardingDao.findByToken(req.params.token);
+            const onboarding = await findLiveByToken(req.params.token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
             await OnboardingDao.upsertRo(onboarding.id, req.body);
             res.json({ ok: true });
@@ -56,7 +67,7 @@ module.exports = {
         try {
             const { token, section } = req.params;
             if (!OnboardingDao.SECTION_MAP[section]) return res.status(400).json({ error: 'Invalid section' });
-            const onboarding = await OnboardingDao.findByToken(token);
+            const onboarding = await findLiveByToken(token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
             const id = await OnboardingDao.addRow(onboarding.id, section);
             res.json({ id });
@@ -69,7 +80,7 @@ module.exports = {
         try {
             const { token, section, rowId } = req.params;
             if (!OnboardingDao.SECTION_MAP[section]) return res.status(400).json({ error: 'Invalid section' });
-            const onboarding = await OnboardingDao.findByToken(token);
+            const onboarding = await findLiveByToken(token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
             const data = { ...req.body };
             // Tank Short Name isn't shown on the form anymore (it confused users into
@@ -88,7 +99,7 @@ module.exports = {
         try {
             const { token, section, rowId } = req.params;
             if (!OnboardingDao.SECTION_MAP[section]) return res.status(400).json({ error: 'Invalid section' });
-            const onboarding = await OnboardingDao.findByToken(token);
+            const onboarding = await findLiveByToken(token);
             if (!onboarding) return res.status(404).json({ error: 'Not found' });
             await OnboardingDao.deleteRow(onboarding.id, section, parseInt(rowId, 10));
             res.json({ ok: true });
@@ -151,6 +162,16 @@ module.exports = {
             const { status, notes } = req.body;
             if (!['active', 'setup_done'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
             await OnboardingDao.updateStatus(req.params.id, status, notes);
+            res.json({ ok: true });
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    adminSetLinkActive: async (req, res, next) => {
+        try {
+            if (typeof req.body.active !== 'boolean') return res.status(400).json({ error: 'active (boolean) is required' });
+            await OnboardingDao.setLinkActive(req.params.id, req.body.active);
             res.json({ ok: true });
         } catch (e) {
             next(e);

@@ -31,6 +31,8 @@ block content
                                             span.badge.badge-success Setup Done
                                         else
                                             span.badge.badge-warning.text-dark Active
+                                        if ob.link_active === 'N'
+                                            span.badge.badge-danger.ml-1 Link Deactivated
                                     td= ob.created_at ? new Date(ob.created_at).toLocaleDateString('en-IN') : ''
                                     td
                                         .input-group.input-group-sm

@@ -19,6 +19,7 @@ router.get('/config-hints',   isLoggedIn, isSuperUser, ctrl.adminConfigHints);  
 router.get('/hsn-suggestions', isLoggedIn, isSuperUser, ctrl.hsnSuggestions);    // must be before /:id
 router.get('/:id',              isLoggedIn, isSuperUser, ctrl.adminDetail);
 router.patch('/:id/status',     isLoggedIn, isSuperUser, ctrl.adminUpdateStatus);
+router.patch('/:id/link',       isLoggedIn, isSuperUser, ctrl.adminSetLinkActive);
 router.post('/:id/migrate',     isLoggedIn, isSuperUser, migrateCtrl.migrate);
 router.post('/:id/apply-config', isLoggedIn, isSuperUser, ctrl.applyConfig);
 
