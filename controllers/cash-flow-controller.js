@@ -62,8 +62,20 @@ module.exports = {
 
 
 
-    triggerCashSalesByDate: (req, res, next) => {
+    triggerCashSalesByDate: async (req, res, next) => {
         let locationCode = req.user.location_code;
+
+        // With CASHFLOW_ENABLED off, receipts/advances/tank receipts are closed out
+        // at save time (cashflow_date stamped), so a Day Close generated here would
+        // silently miss them. Refuse before a DRAFT row is created.
+        // generate_cashflow enforces the same gate at DB level.
+        const cashflowEnabledRaw = await locationConfig.getLocationConfigValue(locationCode, 'CASHFLOW_ENABLED', 'false');
+        if (String(cashflowEnabledRaw).toLowerCase() !== 'true') {
+            return gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
+                req.body.cashflow_toDate_hiddenValue, req.user, res, next,
+                { error: "Cashflow is not enabled for this location (CASHFLOW_ENABLED), so Day Close cannot be generated. Please contact support." });
+        }
+
         const generateDate = new Date(req.body.generateDate);
         const previousDate = new Date(generateDate);
         previousDate.setDate(generateDate.getDate() - 1);
@@ -411,9 +423,12 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
     {
         res.redirect("/cashflow?id=" + cashflowId);
     }).catch((err) => {
+        // SIGNAL SQLSTATE '45000' from generate_cashflow carries a user-facing message
+        const dbErr = err && (err.original || err.parent);
+        const message = dbErr && dbErr.sqlState === '45000' ? dbErr.sqlMessage : "Error while triggering procedure.";
         gatherCashflowClosings(req.body.cashflow_fromDate_hiddenValue,
             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
-            {error: "Error while triggering procedure."});
+            {error: message});
     });
 }
 
