@@ -2,6 +2,10 @@
 const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 const OnboardingDao = require('../dao/onboarding-dao');
+const bcrypt = require('bcrypt');
+
+// Password for the ADMIN-<LOC> login created on migrate — client changes it after handoff
+const DEFAULT_ADMIN_PASSWORD = 'welcome123';
 
 // RGB colors for standard metered products (by short_name)
 const PRODUCT_RGB = { MS: '217,234,211', HSD: '172,197,220' };
@@ -379,7 +383,31 @@ module.exports = {
                 results.push({ section: 'Ledger Rules', inserted: 0, skipped: 0, errors: [e.message] });
             }
 
-            // ── Step 12: Refresh Menu Cache ───────────────────────────────────────
+            // ── Step 12: Default Admin login (ADMIN-<LOC> / welcome123) ──────────
+            // Keyed on User_Name (unique index), so re-running migrate never duplicates it.
+            {
+                const userName = `ADMIN-${loc.toUpperCase()}`;
+                try {
+                    const exists = await selectOne(
+                        'SELECT Person_id FROM m_persons WHERE User_Name = :userName', { userName }
+                    );
+                    if (exists) {
+                        results.push({ section: `Admin User (${userName})`, inserted: 0, skipped: 1, errors: ['Already exists — skipped'] });
+                    } else {
+                        const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
+                        await insertRow(
+                            `INSERT INTO m_persons (Person_Name, User_Name, Password, Role, location_code, effective_start_date, effective_end_date, created_by, updated_by, creation_date)
+                             VALUES ('ADMIN', :userName, :pwd, 'Admin', :loc, CURDATE(), '9999-12-31', 'onboarding', 'onboarding', NOW())`,
+                            { userName, pwd: hashedPassword, loc }
+                        );
+                        results.push({ section: `Admin User (${userName})`, inserted: 1, skipped: 0, errors: [] });
+                    }
+                } catch (e) {
+                    results.push({ section: `Admin User (${userName})`, inserted: 0, skipped: 0, errors: [e.message] });
+                }
+            }
+
+            // ── Step 13: Refresh Menu Cache ───────────────────────────────────────
             try {
                 await db.sequelize.query('CALL RefreshMenuCache()', { type: QueryTypes.RAW });
                 results.push({ section: 'Menu Cache', inserted: 1, skipped: 0, errors: [] });
