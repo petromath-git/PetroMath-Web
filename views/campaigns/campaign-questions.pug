@@ -13,10 +13,14 @@ block content
                                 small.text-muted
                                     | Campaign Code: #{campaign.campaign_code} | 
                                     | Location: #{campaign.location_name} | 
-                                    | Duration: #{moment(campaign.start_date).format('DD/MM/YYYY')} to #{moment(campaign.end_date).format('DD/MM/YYYY')}
-                            a.btn.btn-secondary(href='/campaigns')
-                                i.fas.fa-arrow-left
-                                |  Back to Campaigns
+                                    | Duration: #{moment(campaign.start_date).format('DD-MMM-YYYY')} to #{moment(campaign.end_date).format('DD-MMM-YYYY')}
+                            div
+                                a.btn.btn-success.mr-2(href=`/campaigns/${campaign.id}/responses`)
+                                    i.fas.fa-users
+                                    |  Responses
+                                a.btn.btn-secondary(href='/campaigns')
+                                    i.fas.fa-arrow-left
+                                    |  Back to Campaigns
                 
                 //- Existing Questions List
                 .card.mb-3
@@ -59,7 +63,22 @@ block content
                                                     if question.response_count > 0
                                                         br
                                                         small.text-success (#{question.correct_count} correct)
-                                                td.text-center
+                                                td.text-center.text-nowrap
+                                                    button.btn.btn-sm.btn-primary.mr-1.btn-edit(
+                                                        title='Edit question'
+                                                        data-question-id=question.id
+                                                        data-question-date=question.question_date_ymd
+                                                        data-question-text=question.question_text
+                                                        data-image-url=question.question_image_url || ''
+                                                        data-option-a=question.option_a
+                                                        data-option-b=question.option_b
+                                                        data-option-c=question.option_c
+                                                        data-option-d=question.option_d
+                                                        data-correct-answer=question.correct_answer
+                                                        data-explanation=question.explanation || ''
+                                                        data-has-responses=question.response_count > 0 ? '1' : '0'
+                                                    )
+                                                        i.fas.fa-pen
                                                     if question.response_count == 0
                                                         button.btn.btn-sm.btn-danger.btn-delete(data-question-id=question.id)
                                                             i.fas.fa-trash
@@ -72,18 +91,21 @@ block content
                                 |  No questions added yet. Add your first question below.
                 
                 //- Add New Question Form
-                .card
+                .card#questionFormCard
                     .card-header.bg-primary.text-white
-                        h5.mb-0
+                        h5.mb-0#questionFormTitle
                             i.fas.fa-plus-circle
                             |  Add New Question
                     .card-body
+                        #editNotice.alert.alert-warning(style='display:none')
+                            i.fas.fa-lock
+                            |  This question already has responses - its date and correct answer are locked. You can still fix the text and options.
                         form#questionForm
                             .row
                                 .col-md-6
                                     .form-group
                                         label(for='question_date') Question Date *
-                                        input#question_date.form-control(type='date' name='question_date' required min=campaign.start_date max=campaign.end_date)
+                                        input#question_date.form-control(type='date' name='question_date' required min=campaign.start_date_ymd max=campaign.end_date_ymd)
                                         small.form-text.text-muted Must be within campaign duration
                                 
                                 .col-md-6
@@ -144,8 +166,8 @@ block content
                                     button#btnSubmit.btn.btn-success(type='submit')
                                         i.fas.fa-save
                                         |  Save Question
-                                    |  
-                                    button.btn.btn-secondary(type='reset') Clear Form
+                                    |
+                                    button#btnClear.btn.btn-secondary(type='button') Clear Form
                 
                 //- Preview Modal
                 #previewModal.modal.fade(tabindex='-1' role='dialog')
@@ -166,15 +188,21 @@ block content
     script.
         $(document).ready(function() {
             const campaignId = #{campaign.id};
-            
+            let editingQuestionId = null;
+
+            // Escape user-entered text before putting it into preview HTML
+            function esc(text) {
+                return $('<div>').text(text || '').html();
+            }
+
             // Preview functionality
             $('#btnPreview').on('click', function() {
                 const questionText = $('#question_text').val();
                 const imageUrl = $('#question_image_url').val();
-                const optionA = $('#option_a').val();
-                const optionB = $('#option_b').val();
-                const optionC = $('#option_c').val();
-                const optionD = $('#option_d').val();
+                const optionA = esc($('#option_a').val());
+                const optionB = esc($('#option_b').val());
+                const optionC = esc($('#option_c').val());
+                const optionD = esc($('#option_d').val());
                 const correctAnswer = $('#correct_answer').val();
                 
                 if (!questionText) {
@@ -188,12 +216,12 @@ block content
                 // Question image
                 if (imageUrl) {
                     previewHtml += '<div class="text-center mb-3">';
-                    previewHtml += '<img src="' + imageUrl + '" class="img-fluid" style="max-height: 300px;" onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'200\'%3E%3Crect width=\'200\' height=\'200\' fill=\'%23ddd\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%23999\'%3EImage not found%3C/text%3E%3C/svg%3E\'">';
+                    previewHtml += '<img src="' + esc(imageUrl) + '" class="img-fluid" style="max-height: 300px;" alt="Image not found">';
                     previewHtml += '</div>';
                 }
                 
                 // Question text
-                previewHtml += '<h5 class="mb-3">' + questionText + '</h5>';
+                previewHtml += '<h5 class="mb-3">' + esc(questionText) + '</h5>';
                 
                 // Options
                 previewHtml += '<div class="list-group">';
@@ -233,10 +261,51 @@ block content
                 $('#previewModal').modal('show');
             });
             
-            // Form submission
+            // Switch the form back to "Add New Question"
+            function resetForm() {
+                editingQuestionId = null;
+                $('#questionForm')[0].reset();
+                $('#question_date, #correct_answer').prop('disabled', false);
+                $('#editNotice').hide();
+                $('#questionFormTitle').html('<i class="fas fa-plus-circle"></i> Add New Question');
+                $('#btnSubmit').html('<i class="fas fa-save"></i> Save Question');
+                $('#btnClear').text('Clear Form');
+            }
+
+            $('#btnClear').on('click', resetForm);
+
+            // Edit question - load it into the form
+            $('.btn-edit').on('click', function() {
+                const btn = $(this);
+                editingQuestionId = btn.data('question-id');
+
+                $('#question_date').val(btn.attr('data-question-date'));
+                $('#question_text').val(btn.attr('data-question-text'));
+                $('#question_image_url').val(btn.attr('data-image-url'));
+                $('#option_a').val(btn.attr('data-option-a'));
+                $('#option_b').val(btn.attr('data-option-b'));
+                $('#option_c').val(btn.attr('data-option-c'));
+                $('#option_d').val(btn.attr('data-option-d'));
+                $('#correct_answer').val(btn.attr('data-correct-answer'));
+                $('#explanation').val(btn.attr('data-explanation'));
+
+                // Date and correct answer are locked once people have answered
+                const hasResponses = btn.attr('data-has-responses') === '1';
+                $('#question_date, #correct_answer').prop('disabled', hasResponses);
+                $('#editNotice').toggle(hasResponses);
+
+                $('#questionFormTitle').html('<i class="fas fa-pen"></i> Edit Question');
+                $('#btnSubmit').html('<i class="fas fa-save"></i> Update Question');
+                $('#btnClear').text('Cancel Edit');
+
+                $('html, body').animate({ scrollTop: $('#questionFormCard').offset().top - 20 }, 300);
+            });
+
+            // Form submission (add or update)
             $('#questionForm').on('submit', function(e) {
                 e.preventDefault();
-                
+
+                const submitLabel = editingQuestionId ? 'Update Question' : 'Save Question';
                 $('#btnSubmit').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
                 
                 const formData = {
@@ -252,26 +321,26 @@ block content
                 };
                 
                 $.ajax({
-                    url: '/campaigns/' + campaignId + '/questions',
-                    method: 'POST',
+                    url: '/campaigns/' + campaignId + '/questions' + (editingQuestionId ? '/' + editingQuestionId : ''),
+                    method: editingQuestionId ? 'PUT' : 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(formData),
                     success: function(response) {
                         if (response.success) {
-                            alert('Question added successfully!');
+                            alert(editingQuestionId ? 'Question updated successfully!' : 'Question added successfully!');
                             location.reload();
                         } else {
-                            alert('Error: ' + (response.error || 'Failed to add question'));
-                            $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Save Question');
+                            alert('Error: ' + (response.error || 'Failed to save question'));
+                            $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> ' + submitLabel);
                         }
                     },
                     error: function(xhr) {
-                        let errorMsg = 'Failed to add question';
+                        let errorMsg = 'Failed to save question';
                         if (xhr.responseJSON && xhr.responseJSON.error) {
                             errorMsg = xhr.responseJSON.error;
                         }
                         alert('Error: ' + errorMsg);
-                        $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> Save Question');
+                        $('#btnSubmit').prop('disabled', false).html('<i class="fas fa-save"></i> ' + submitLabel);
                     }
                 });
             });
