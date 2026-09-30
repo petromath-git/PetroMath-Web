@@ -30,12 +30,18 @@ block content
                     span.badge.badge-warning.text-dark.mr-2 Active
                     button.btn.btn-sm.btn-success.mr-1#btnMarkDone(type="button") Mark Setup Done
                 button.btn.btn-sm.btn-outline-primary#btnMigrate(type="button" data-toggle="modal" data-target="#migrateModal") Migrate to PetroMath →
+                if onboarding.link_active === 'N'
+                    button.btn.btn-sm.btn-outline-success.ml-1#btnToggleLink(type="button" data-active="false") Reactivate Link
+                else
+                    button.btn.btn-sm.btn-outline-danger.ml-1#btnToggleLink(type="button" data-active="true") Deactivate Link
 
         //- URL card
         .card.shadow-sm.mb-3
             .card-body.py-2
                 .d-flex.align-items-center.flex-wrap
                     span.text-muted.mr-2.small Onboarding URL:
+                    if onboarding.link_active === 'N'
+                        span.badge.badge-danger.mr-2 Link Deactivated
                     .input-group.input-group-sm
                         input.form-control#detailUrl(type="text" readonly value=`${baseUrl}/onboard/${onboarding.token}` style="font-size:12px;")
                         .input-group-append
@@ -505,6 +511,21 @@ block content
         var btnActive = document.getElementById('btnMarkActive');
         if (btnDone) btnDone.addEventListener('click', function() { updateStatus('setup_done'); });
         if (btnActive) btnActive.addEventListener('click', function() { updateStatus('active'); });
+
+        document.getElementById('btnToggleLink').addEventListener('click', async function() {
+            var activate = this.dataset.active !== 'true';
+            var msg = activate
+                ? 'Reactivate this onboarding link? The customer will be able to open and edit the form again.'
+                : 'Deactivate this onboarding link? Anyone opening it will see a "link deactivated" message and cannot view or edit the data.';
+            if (!confirm(msg)) return;
+            var r = await fetch('/admin/onboarding/' + OB_ID + '/link', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: activate })
+            });
+            if (r.ok) location.reload();
+            else alert('Failed to update link.');
+        });
 
         document.getElementById('btnSaveNotes').addEventListener('click', async function() {
             var notes = document.getElementById('adminNotes').value;
