@@ -55,6 +55,13 @@ module.exports = {
         );
     },
 
+    setLinkActive: async (id, active) => {
+        await db.sequelize.query(
+            'UPDATE t_onboarding SET link_active = :flag WHERE id = :id',
+            { replacements: { id, flag: active ? 'Y' : 'N' }, type: QueryTypes.UPDATE }
+        );
+    },
+
     getRo: async (onboardingId) => {
         const [row] = await db.sequelize.query(
             'SELECT * FROM t_onboarding_ro WHERE onboarding_id = :onboardingId',
