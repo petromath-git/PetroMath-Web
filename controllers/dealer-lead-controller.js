@@ -58,7 +58,12 @@ module.exports = {
     getAdminList: async (req, res, next) => {
         try {
             const leads = await dealerLeadDao.getAllLeads();
-            res.render('dealer-lead-admin', { leads, moment });
+            res.render('dealer-lead-admin', {
+                title: 'Dealer Leads',
+                user: req.user,
+                leads,
+                moment
+            });
         } catch (error) {
             next(error);
         }
