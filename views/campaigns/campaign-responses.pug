@@ -1,0 +1,249 @@
+extends ../layout
+
+block content
+    .container-fluid.mt-3
+        .row
+            .col-12
+                //- Campaign Info Card
+                .card.mb-3
+                    .card-header
+                        .d-flex.justify-content-between.align-items-center
+                            div
+                                h4.mb-0= campaign.name
+                                small.text-muted
+                                    | Campaign Code: #{campaign.campaign_code} |
+                                    | Location: #{campaign.location_name} |
+                                    | Duration: #{moment(campaign.start_date).format('DD-MMM-YYYY')} to #{moment(campaign.end_date).format('DD-MMM-YYYY')}
+                            div
+                                a.btn.btn-info.mr-2(href=`/campaigns/${campaign.id}/questions`)
+                                    i.fas.fa-edit
+                                    |  Questions
+                                a.btn.btn-secondary(href='/campaigns')
+                                    i.fas.fa-arrow-left
+                                    |  Back to Campaigns
+
+                //- Filters
+                .card.mb-3
+                    .card-body
+                        form#filterForm(method='GET' action=`/campaigns/${campaign.id}/responses`)
+                            .row
+                                .col-md-3
+                                    label(for='from_date') From Date
+                                    input#from_date.form-control(type='date' name='from_date' value=filters.fromDate || '')
+                                .col-md-3
+                                    label(for='to_date') To Date
+                                    input#to_date.form-control(type='date' name='to_date' value=filters.toDate || '')
+                                .col-md-2.d-flex.align-items-end
+                                    .form-check.mb-2
+                                        input#correct_only.form-check-input(type='checkbox' name='correct_only' value='1' checked=filters.correctOnly)
+                                        label.form-check-label(for='correct_only') Correct only
+                                .col-md-2.d-flex.align-items-end
+                                    button.btn.btn-info.btn-block(type='submit')
+                                        i.fas.fa-filter
+                                        |  Filter
+                                .col-md-2.d-flex.align-items-end
+                                    a.btn.btn-secondary.btn-block(href=`/campaigns/${campaign.id}/responses`)
+                                        i.fas.fa-redo
+                                        |  Reset
+
+                //- Daily Winners
+                .card.mb-3
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        h5.mb-0
+                            i.fas.fa-trophy
+                            |  Daily Winners
+                        a.btn.btn-warning(href=`/campaigns/${campaign.id}/winners/print` target='_blank')
+                            i.fas.fa-print
+                            |  Print Winners Poster
+                    .card-body
+                        if dailyWinners && dailyWinners.length > 0
+                            .table-responsive
+                                table.table.table-bordered.table-hover.mb-0
+                                    thead.thead-light
+                                        tr
+                                            th Date
+                                            th.text-center Responses
+                                            th.text-center Correct
+                                            th Winner
+                                            th Prize
+                                            th.text-center Actions
+                                    tbody
+                                        each d in dailyWinners
+                                            tr
+                                                td
+                                                    | #{d.question_date_formatted}
+                                                    if d.is_today
+                                                        span.badge.badge-info.ml-1 Today
+                                                td.text-center= d.response_count
+                                                td.text-center= d.correct_count
+                                                td
+                                                    if d.winner_id
+                                                        i.fas.fa-trophy.text-warning
+                                                        |  #{d.winner_name} (#{d.winner_phone})
+                                                    else
+                                                        span.text-muted Not picked
+                                                td
+                                                    if d.winner_id && d.prize_claimed == 1
+                                                        span.badge.badge-success Given
+                                                        br
+                                                        small.text-muted= d.prize_claimed_at_formatted
+                                                        if d.notes
+                                                            br
+                                                            small.text-muted= d.notes
+                                                    else if d.winner_id
+                                                        span.badge.badge-warning Pending
+                                                td.text-center
+                                                    if !d.winner_id
+                                                        button.btn.btn-sm.btn-primary.btn-draw(
+                                                            data-question-id=d.question_id
+                                                            data-date=d.question_date_formatted
+                                                            data-today=d.is_today ? '1' : '0'
+                                                            disabled=d.correct_count == 0
+                                                            title=d.correct_count == 0 ? 'No correct answers' : 'Pick a random correct answer'
+                                                        )
+                                                            i.fas.fa-random
+                                                            |  Draw Winner
+                                                    else if d.prize_claimed != 1
+                                                        button.btn.btn-sm.btn-success.mr-1.btn-claim(data-winner-id=d.winner_id data-name=d.winner_name title='Mark prize as given')
+                                                            i.fas.fa-gift
+                                                            |  Prize Given
+                                                        button.btn.btn-sm.btn-outline-secondary.mr-1.btn-draw(
+                                                            data-question-id=d.question_id
+                                                            data-date=d.question_date_formatted
+                                                            data-today=d.is_today ? '1' : '0'
+                                                            data-redraw='1'
+                                                            title='Draw again (replaces current winner)'
+                                                        )
+                                                            i.fas.fa-random
+                                                        button.btn.btn-sm.btn-outline-danger.btn-remove-winner(data-winner-id=d.winner_id data-name=d.winner_name title='Remove winner')
+                                                            i.fas.fa-times
+                        else
+                            p.text-center.text-muted.mb-0 No questions yet
+
+                //- Responses
+                .card
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        h5.mb-0
+                            i.fas.fa-users
+                            |  Responses (#{summary.total})
+                            small.text-muted.ml-2
+                                | #{summary.correct} correct • #{summary.wrong} wrong • #{summary.participants} unique participants
+                        button#btnExport.btn.btn-success(type='button' disabled=summary.total === 0)
+                            i.fas.fa-file-excel
+                            |  Export to Excel
+                    .card-body
+                        if responses && responses.length > 0
+                            .table-responsive
+                                table.table.table-striped.table-bordered.table-hover
+                                    thead.thead-dark
+                                        tr
+                                            th Question Date
+                                            th Question
+                                            th Name
+                                            th Mobile
+                                            th.text-center Answer
+                                            th.text-center Result
+                                            th Submitted At
+                                            th.text-center Winner
+                                    tbody
+                                        each r in responses
+                                            tr(class=r.is_winner == 1 ? 'table-warning' : '')
+                                                td= r.question_date_formatted
+                                                td
+                                                    small= r.question_text
+                                                td
+                                                    | #{r.participant_name}
+                                                    if r.is_winner == 1
+                                                        i.fas.fa-trophy.text-warning.ml-1(title='Winner')
+                                                td= r.participant_phone
+                                                td.text-center
+                                                    | #{r.selected_answer}
+                                                    if r.is_correct != 1
+                                                        small.text-muted  (ans: #{r.correct_answer})
+                                                td.text-center
+                                                    if r.is_correct == 1
+                                                        span.badge.badge-success Correct
+                                                    else
+                                                        span.badge.badge-danger Wrong
+                                                td
+                                                    small= r.submitted_at_formatted
+                                                td.text-center
+                                                    if r.is_winner == 1
+                                                        span.badge.badge-warning Winner
+                                                    else if r.is_correct == 1
+                                                        button.btn.btn-sm.btn-outline-primary.btn-mark-winner(
+                                                            data-response-id=r.id
+                                                            data-name=r.participant_name
+                                                            data-date=r.question_date_formatted
+                                                            title='Mark as winner for this day'
+                                                        )
+                                                            i.fas.fa-trophy
+                        else
+                            p.text-center.text-muted.mb-0 No responses found
+
+    script.
+        $(document).ready(function() {
+            // Export uses the same filters as the page
+            $('#btnExport').on('click', function() {
+                const params = $('#filterForm').serialize();
+                window.location.href = '/campaigns/#{campaign.id}/responses/export' + (params ? '?' + params : '');
+            });
+
+            const baseUrl = '/campaigns/#{campaign.id}';
+
+            function callApi(method, url, data) {
+                $.ajax({
+                    url: url,
+                    method: method,
+                    contentType: 'application/json',
+                    data: data ? JSON.stringify(data) : undefined,
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.message);
+                            location.reload();
+                        } else {
+                            alert('Error: ' + (response.error || 'Request failed'));
+                        }
+                    },
+                    error: function(xhr) {
+                        alert('Error: ' + ((xhr.responseJSON && xhr.responseJSON.error) || 'Request failed'));
+                    }
+                });
+            }
+
+            // Random draw (or redraw) from correct answers
+            $('.btn-draw').on('click', function() {
+                const btn = $(this);
+                let msg = 'Draw a random winner from the correct answers for ' + btn.data('date') + '?';
+                if (btn.data('today') == 1) {
+                    msg += '\n\nNote: this is TODAY\'s question - more people may still answer.';
+                }
+                if (btn.data('redraw') == 1) {
+                    msg += '\n\nThis will REPLACE the current winner.';
+                }
+                if (!confirm(msg)) return;
+                callApi('POST', baseUrl + '/questions/' + btn.data('question-id') + '/draw-winner');
+            });
+
+            // Manual pick
+            $('.btn-mark-winner').on('click', function() {
+                const btn = $(this);
+                if (!confirm('Mark ' + btn.data('name') + ' as the winner for ' + btn.data('date') + '?\n\nAny existing winner for that day (prize not yet given) will be replaced.')) return;
+                callApi('POST', baseUrl + '/responses/' + btn.data('response-id') + '/mark-winner');
+            });
+
+            // Prize given
+            $('.btn-claim').on('click', function() {
+                const btn = $(this);
+                const notes = prompt('Prize given to ' + btn.data('name') + '.\n\nOptional note (e.g. what was given / who handed it over):', '');
+                if (notes === null) return;
+                callApi('POST', baseUrl + '/winners/' + btn.data('winner-id') + '/claim', { notes: notes });
+            });
+
+            // Remove winner
+            $('.btn-remove-winner').on('click', function() {
+                const btn = $(this);
+                if (!confirm('Remove ' + btn.data('name') + ' as winner?')) return;
+                callApi('DELETE', baseUrl + '/winners/' + btn.data('winner-id'));
+            });
+        });

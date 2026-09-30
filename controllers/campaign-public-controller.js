@@ -35,12 +35,16 @@ module.exports = {
             
             // Get today's stats
             const stats = await campaignDao.getTodaysQuestionStats(question.id);
-            
+
+            // Get recent winners (phone masked)
+            const winners = await campaignDao.getCampaignWinners(campaign.id, 7);
+
             res.render('campaigns/campaign-public', {
                 title: campaign.name,
                 campaign: campaign,
                 question: question,
                 stats: stats,
+                winners: winners,
                 moment: moment
             });
 
@@ -80,12 +84,30 @@ module.exports = {
                 });
             }
             
-            // Validate phone number (10 digits)
-            const phone = req.body.phone.trim();
-            if (!/^\d{10}$/.test(phone)) {
+            // Validate name
+            const name = String(req.body.name || '').trim();
+            if (!name || name.length > 100) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Please enter a valid 10-digit phone number'
+                    error: 'Please enter your name (max 100 characters)'
+                });
+            }
+
+            // Validate phone number (10-digit Indian mobile, starts with 6-9)
+            const phone = String(req.body.phone || '').trim();
+            if (!/^[6-9]\d{9}$/.test(phone)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Please enter a valid 10-digit mobile number'
+                });
+            }
+
+            // Validate answer
+            const selectedAnswer = req.body.answer;
+            if (!['A', 'B', 'C', 'D'].includes(selectedAnswer)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Please select an answer'
                 });
             }
             
@@ -100,7 +122,6 @@ module.exports = {
             }
             
             // Check if answer is correct
-            const selectedAnswer = req.body.answer;
             const isCorrect = (selectedAnswer === question.correct_answer);
             
             // Get IP address for fraud prevention
@@ -109,7 +130,7 @@ module.exports = {
             // Submit answer
             const answerData = {
                 question_id: question.id,
-                participant_name: req.body.name.trim(),
+                participant_name: name,
                 participant_phone: phone,
                 selected_answer: selectedAnswer,
                 is_correct: isCorrect ? 1 : 0,
@@ -130,6 +151,14 @@ module.exports = {
             });
 
         } catch (error) {
+            // Double-submit race: the one_per_day unique key caught a second answer from the same phone
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'You have already answered today\'s question. Please try again tomorrow!'
+                });
+            }
+
             console.error('Error in submitPublicAnswer:', error);
             res.status(500).json({
                 success: false,
