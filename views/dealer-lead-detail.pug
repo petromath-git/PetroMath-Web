@@ -1,0 +1,216 @@
+extends layout
+
+block content
+    style.
+        .timeline { list-style: none; padding-left: 0; margin: 0; }
+        .timeline li { border-left: 3px solid #dee2e6; padding: 0 0 14px 14px; position: relative; }
+        .timeline li::before { content: ''; position: absolute; left: -7px; top: 4px; width: 11px; height: 11px; border-radius: 50%; background: #1a73e8; }
+        .timeline li.edit::before { background: #adb5bd; }
+        .timeline .when { font-size: .8rem; color: #6c757d; }
+
+    - var statusOf = {}
+    each s in statuses
+        - statusOf[s.code] = s
+    - var st = statusOf[lead.status] || { label: lead.status, badge: 'light' }
+    - var isClosed = closedStatuses.indexOf(lead.status) !== -1
+    - var tomorrow = moment().add(1, 'day').format('YYYY-MM-DD')
+    - var defaultOwner = lead.assigned_to || user.Person_id
+    - var leadOilCompanies = oilCompanies.indexOf(lead.oil_company) === -1 ? oilCompanies.concat([lead.oil_company]) : oilCompanies
+
+    .container-fluid.mt-3
+        a.btn.btn-sm.btn-link.pl-0.mb-2(href='/dealer-leads/admin' + (backQuery ? '?' + backQuery : ''))
+            i.bi.bi-arrow-left
+            |  Back to leads
+
+        //- ── Lead header ──
+        .card.mb-3
+            .card-body
+                .d-flex.justify-content-between.flex-wrap
+                    div.mb-2
+                        h4.mb-1
+                            if lead.is_priority === 'Y'
+                                span.text-warning(title='Priority') ★
+                            = lead.contact_person_name || lead.bunk_name
+                        .text-muted
+                            if lead.contact_person_name && lead.bunk_name !== 'Not noted'
+                                | #{lead.bunk_name} ·
+                            | #{lead.place}
+                            if lead.district && lead.district !== lead.place && lead.district !== 'Not noted'
+                                | , #{lead.district}
+                            |  · #{lead.oil_company}
+                        if lead.phone_number
+                            .mt-2
+                                a.btn.btn-sm.btn-outline-primary.mr-2(href='tel:' + lead.phone_number)
+                                    i.bi.bi-telephone
+                                    |  #{lead.phone_number}
+                                if waNumber
+                                    a.btn.btn-sm.btn-outline-success(href='https://wa.me/' + waNumber target='_blank' rel='noopener')
+                                        i.bi.bi-whatsapp
+                                        |  WhatsApp
+                        else
+                            .mt-2.text-danger No phone number on record
+                    div.text-md-right
+                        span.badge(class='badge-' + st.badge style='font-size:1rem')= st.label
+                        .small.mt-2 Owner:
+                            strong= lead.assigned_to_name || 'Unassigned'
+                        if !isClosed
+                            .small Next follow-up:
+                                strong= lead.next_followup_date ? moment(lead.next_followup_date).format('DD-MMM-YYYY') : 'not set'
+                        .small.text-muted
+                            | #{lead.event_name || lead.lead_mode} · collected #{moment(lead.creation_date).format('DD-MMM-YYYY')}
+                if lead.needs_verification
+                    .alert.alert-warning.py-2.mt-2.mb-0
+                        i.bi.bi-exclamation-triangle
+                        |  Check: #{lead.needs_verification}
+                if lead.notes
+                    .mt-2.small
+                        strong Notes:
+                        = lead.notes
+
+        .row
+            //- ── Log an activity ──
+            .col-lg-5.mb-3
+                .card
+                    .card-header
+                        strong Log call / follow-up
+                    .card-body
+                        form(method='POST' action='/dealer-leads/admin/' + lead.lead_id + '/activity')
+                            .form-row
+                                .col-5.mb-2
+                                    label.small.mb-1 Type
+                                    select.form-control.form-control-sm(name='activity_type' required)
+                                        each t in activityTypes
+                                            option(value=t.code)= t.label
+                                .col-7.mb-2
+                                    label.small.mb-1 Outcome
+                                    select#outcome.form-control.form-control-sm(name='outcome' required)
+                                        option(value='') Choose...
+                                        each o in outcomes
+                                            option(value=o.code data-suggest=o.suggestStatus || '')= o.label
+                            .mb-2
+                                label.small.mb-1 What was discussed
+                                textarea.form-control.form-control-sm(name='notes' rows='3' maxlength='1000' placeholder='e.g. Owner busy, call after 6 pm. Wants day-close reports.')
+                            .form-row
+                                .col-6.mb-2
+                                    label.small.mb-1 Status now
+                                    select#status.form-control.form-control-sm(name='status' required)
+                                        each s in statuses
+                                            option(value=s.code selected=s.code === lead.status)= s.label
+                                .col-6.mb-2
+                                    label.small.mb-1 Owner
+                                    select.form-control.form-control-sm(name='assigned_to')
+                                        option(value='') Unassigned
+                                        each a in assignees
+                                            option(value=a.Person_id selected=a.Person_id === defaultOwner)= a.Person_Name
+                            #followupGroup.mb-2
+                                label.small.mb-1 Next follow-up
+                                input#nextFollowup.form-control.form-control-sm(type='date' name='next_followup_date' value=tomorrow)
+                                .mt-1
+                                    each d in [{ n: 1, l: 'Tomorrow' }, { n: 3, l: '+3 days' }, { n: 7, l: '+1 week' }, { n: 30, l: '+1 month' }]
+                                        button.btn.btn-sm.btn-outline-secondary.mr-1.mb-1.quick-date(type='button' data-date=moment().add(d.n, 'day').format('YYYY-MM-DD'))= d.l
+                            #closedNote.small.text-muted.mb-2(style='display:none') This closes the lead, so no follow-up date is needed.
+                            button.btn.btn-primary.btn-block(type='submit')
+                                i.bi.bi-check2-circle
+                                |  Save
+
+                //- ── Correct lead details ──
+                .card.mt-3
+                    .card-header
+                        a.text-dark(data-toggle='collapse' href='#editDetails')
+                            i.bi.bi-pencil
+                            |  Edit lead details
+                    #editDetails.collapse
+                        .card-body
+                            form(method='POST' action='/dealer-leads/admin/' + lead.lead_id)
+                                .form-row
+                                    .col-6.mb-2
+                                        label.small.mb-1 Contact person
+                                        input.form-control.form-control-sm(name='contact_person_name' value=lead.contact_person_name || '' maxlength='100')
+                                    .col-6.mb-2
+                                        label.small.mb-1 Role
+                                        select.form-control.form-control-sm(name='contact_role')
+                                            each r in roles
+                                                option(value=r selected=r === lead.contact_role)= r.charAt(0) + r.slice(1).toLowerCase()
+                                    .col-12.mb-2
+                                        label.small.mb-1 Bunk name
+                                        input.form-control.form-control-sm(name='bunk_name' value=lead.bunk_name required maxlength='150')
+                                    .col-6.mb-2
+                                        label.small.mb-1 Phone
+                                        input.form-control.form-control-sm(name='phone_number' value=lead.phone_number maxlength='15')
+                                    .col-6.mb-2
+                                        label.small.mb-1 Oil company
+                                        select.form-control.form-control-sm(name='oil_company')
+                                            each o in leadOilCompanies
+                                                option(value=o selected=o === lead.oil_company)= o
+                                    .col-6.mb-2
+                                        label.small.mb-1 Place
+                                        input.form-control.form-control-sm(name='place' value=lead.place required maxlength='100')
+                                    .col-6.mb-2
+                                        label.small.mb-1 District
+                                        input.form-control.form-control-sm(name='district' value=lead.district required maxlength='100')
+                                    .col-12.mb-2
+                                        label.small.mb-1 Notes
+                                        textarea.form-control.form-control-sm(name='notes' rows='2' maxlength='500')= lead.notes || ''
+                                    .col-12.mb-2
+                                        label.small.mb-1 Needs verification (clear it once checked)
+                                        input.form-control.form-control-sm(name='needs_verification' value=lead.needs_verification || '' maxlength='255')
+                                    .col-12.mb-2
+                                        .custom-control.custom-checkbox
+                                            input#editPriority.custom-control-input(type='checkbox' name='is_priority' value='Y' checked=lead.is_priority === 'Y')
+                                            label.custom-control-label(for='editPriority') ★ Priority lead
+                                button.btn.btn-outline-primary.btn-sm(type='submit') Save details
+
+            //- ── History ──
+            .col-lg-7.mb-3
+                .card
+                    .card-header
+                        strong History (#{activities.length})
+                    .card-body
+                        if activities.length === 0
+                            .text-muted No calls logged yet.
+                        else
+                            ul.timeline
+                                each a in activities
+                                    li(class=a.activity_type === 'EDIT' ? 'edit' : '')
+                                        .when
+                                            | #{moment(a.creation_date).format('DD-MMM-YYYY HH:mm')} · #{a.created_by_name || a.created_by}
+                                        div
+                                            strong= a.activity_label
+                                            if a.outcome_label
+                                                |  — #{a.outcome_label}
+                                        if a.notes
+                                            div(style='white-space:pre-wrap')= a.notes
+                                        if a.activity_type !== 'EDIT'
+                                            .small.text-muted
+                                                | Status: #{a.status_label}
+                                                if a.assigned_to_after_name
+                                                    |  · Owner: #{a.assigned_to_after_name}
+                                                if a.next_followup_date
+                                                    |  · Next: #{moment(a.next_followup_date).format('DD-MMM-YYYY')}
+
+    script.
+        (function () {
+            var closed = !{JSON.stringify(closedStatuses)};
+            var status = document.getElementById('status');
+            var followupGroup = document.getElementById('followupGroup');
+            var closedNote = document.getElementById('closedNote');
+            var nextFollowup = document.getElementById('nextFollowup');
+
+            function syncFollowup() {
+                var isClosed = closed.indexOf(status.value) !== -1;
+                followupGroup.style.display = isClosed ? 'none' : '';
+                closedNote.style.display = isClosed ? '' : 'none';
+                nextFollowup.required = !isClosed;
+            }
+
+            document.getElementById('outcome').addEventListener('change', function () {
+                var suggest = this.options[this.selectedIndex].getAttribute('data-suggest');
+                if (suggest) status.value = suggest;
+                syncFollowup();
+            });
+            status.addEventListener('change', syncFollowup);
+            document.querySelectorAll('.quick-date').forEach(function (btn) {
+                btn.addEventListener('click', function () { nextFollowup.value = btn.getAttribute('data-date'); });
+            });
+            syncFollowup();
+        })();
