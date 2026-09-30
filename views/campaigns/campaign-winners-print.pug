@@ -1,0 +1,140 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        title= title
+        link(rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css')
+        style.
+            @page {
+                size: A4;
+                margin: 1cm;
+            }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                color: #222;
+                padding: 20px;
+                text-align: center;
+            }
+            .poster {
+                border: 6px solid #F4C430;
+                border-radius: 16px;
+                padding: 30px 25px;
+                min-height: 26cm;
+            }
+            .trophy {
+                font-size: 64px;
+                color: #F4C430;
+            }
+            h1 {
+                font-size: 40px;
+                margin: 10px 0 5px;
+                letter-spacing: 2px;
+            }
+            h2 {
+                font-size: 24px;
+                color: #555;
+                font-weight: normal;
+            }
+            .location {
+                font-size: 16px;
+                color: #777;
+                margin-top: 5px;
+            }
+            .prize {
+                display: inline-block;
+                margin-top: 15px;
+                padding: 8px 20px;
+                background: #F4C430;
+                border-radius: 20px;
+                font-weight: bold;
+                font-size: 16px;
+            }
+            table {
+                width: 100%;
+                margin-top: 30px;
+                border-collapse: collapse;
+                font-size: 20px;
+            }
+            th {
+                background: #222;
+                color: #F4C430;
+                padding: 12px;
+            }
+            td {
+                padding: 12px;
+                border-bottom: 1px solid #ddd;
+            }
+            tr:nth-child(even) td {
+                background: #FFF8E1;
+            }
+            .empty {
+                margin-top: 40px;
+                font-size: 20px;
+                color: #777;
+            }
+            .footer {
+                margin-top: 30px;
+                font-size: 16px;
+                color: #555;
+            }
+            .no-print {
+                margin-bottom: 15px;
+            }
+            .no-print button {
+                padding: 8px 20px;
+                font-size: 16px;
+                cursor: pointer;
+            }
+            @media print {
+                .no-print {
+                    display: none;
+                }
+                body {
+                    padding: 0;
+                }
+            }
+
+    body
+        .no-print
+            button(onclick='window.print()')
+                i.fas.fa-print
+                |  Print
+
+        .poster
+            i.fas.fa-trophy.trophy
+            h1 WINNERS
+            h2= campaign.name
+            .location
+                i.fas.fa-map-marker-alt
+                |  #{campaign.location_name}
+            if campaign.prize_description
+                .prize
+                    i.fas.fa-gift
+                    |  #{campaign.prize_description}
+
+            if winners && winners.length > 0
+                table
+                    thead
+                        tr
+                            th Date
+                            th Winner
+                            th Mobile
+                    tbody
+                        each w in winners
+                            tr
+                                td= w.question_date_formatted
+                                td= w.participant_name
+                                td= w.phone_masked
+            else
+                .empty No winners announced yet
+
+            .footer
+                | Congratulations to all our winners! Scan the QR code at the station to play today's quiz.
+
+        script.
+            window.onload = function() { window.print(); };

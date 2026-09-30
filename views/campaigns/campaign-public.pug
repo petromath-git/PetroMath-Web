@@ -236,6 +236,32 @@ html(lang='en')
                 display: block;
                 margin-top: 2px;
             }
+            .winner-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: #1A1A1A;
+                padding: 8px 10px;
+                border-radius: 8px;
+                margin-top: 6px;
+                font-size: 14px;
+            }
+            .winner-date {
+                color: #F4C430;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+            .winner-name {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .winner-phone {
+                color: #AAAAAA;
+                font-size: 12px;
+                white-space: nowrap;
+            }
             .result-modal {
                 position: fixed;
                 top: 0;
@@ -426,7 +452,8 @@ html(lang='en')
                             type='tel' 
                             name='phone' 
                             required 
-                            pattern='[0-9]{10}' 
+                            pattern='[6-9][0-9]{9}'
+                            title='10-digit mobile number starting with 6, 7, 8 or 9'
                             maxlength='10' 
                             placeholder='10-digit number'
                             inputmode='numeric'
@@ -454,7 +481,19 @@ html(lang='en')
                         .stat-item
                             span.stat-value= stats.wrong_responses
                             span.stat-label Wrong
-        
+
+                //- Recent Winners
+                if winners && winners.length > 0
+                    .stats-card
+                        .stats-title
+                            i.fas.fa-trophy
+                            |  RECENT WINNERS
+                        each w in winners
+                            .winner-row
+                                span.winner-date= moment(w.question_date).format('DD-MMM')
+                                span.winner-name= w.participant_name
+                                span.winner-phone= w.phone_masked
+
         //- Result Modal
         #resultModal.result-modal
             .result-content
