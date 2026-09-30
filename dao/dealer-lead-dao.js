@@ -31,7 +31,8 @@ module.exports = {
     getAllLeads: async () => {
         return db.sequelize.query(`
             SELECT lead_id, bunk_name, place, district, phone_number, oil_company,
-                   contact_person_name, contact_role, lead_mode, generated_by, notes, creation_date
+                   contact_person_name, contact_role, lead_mode, event_name, is_priority,
+                   generated_by, notes, needs_verification, creation_date
             FROM t_dealer_lead
             ORDER BY creation_date DESC
         `, {
