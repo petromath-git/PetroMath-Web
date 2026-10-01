@@ -839,51 +839,45 @@ app.post('/reports-customer', isLoginEnsured, function (req, res, next) {
 //     });
 // });
 
-app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    let loginUserId = req.user.Person_id;
-    const userId = req.params.id;
-    if (userId == loginUserId) {
-        res.status(400).send({ error: 'Cannot disable ' + req.user.Person_Name + ' as you are logged in as ' + req.user.Person_Name });
-    } else {
-        PersonDao.disableUser(userId).then(data => {
-            if (data == 1) {
-                res.status(200).send({ message: 'User disabled successfully.' });
-            } else {
-                res.status(500).send({ error: 'Error disabling user.' });
-            }
-        })
+app.put('/disable-user/:id', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const check = await masterController.checkCanManageUser(req.user, req.params.id);
+        if (!check.ok) return res.status(check.status).send({ error: check.error });
+        const data = await PersonDao.disableUser(req.params.id);
+        if (data == 1) {
+            res.status(200).send({ message: 'User disabled successfully.' });
+        } else {
+            res.status(500).send({ error: 'Error disabling user.' });
+        }
+    } catch (err) {
+        console.error('Error disabling user:', err);
+        res.status(500).send({ error: 'Error disabling user.' });
     }
 });
 
+// Disabled users now live on the Users page behind a toggle
 app.get('/enable_user', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    masterController.findDisableUsers(req.user.location_code)
-        .then(data => {
-            res.render('enable_user', {
-                title: 'Disabled Users',
-                user: req.user,
-                users: data
-            });
-        })
-        .catch(err => {
-            console.error("Error fetching users:", err);
-            res.status(500).send("An error occurred.");
-        });
+    res.redirect('/users?view=disabled');
 });
 
 
 
 
 
-app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    const userId = req.params.id;
-    PersonDao.enableUser(userId)
-        .then(data => {
-            if (data == 1) {
-                res.status(200).send({ success: true, message: 'User enabled successfully.' });
-            } else {
-                res.status(400).send({ success: false, error: 'Error enabling user.' });
-            }
-        })
+app.put('/enable-user/:id', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const check = await masterController.checkCanManageUser(req.user, req.params.id);
+        if (!check.ok) return res.status(check.status).send({ success: false, error: check.error });
+        const data = await PersonDao.enableUser(req.params.id);
+        if (data == 1) {
+            res.status(200).send({ success: true, message: 'User enabled successfully.' });
+        } else {
+            res.status(400).send({ success: false, error: 'Error enabling user.' });
+        }
+    } catch (err) {
+        console.error('Error enabling user:', err);
+        res.status(500).send({ success: false, error: 'Error enabling user.' });
+    }
 });
 
 
@@ -907,10 +901,8 @@ app.post('/digital', [isLoginEnsured, security.isAdmin()], function (req, res) {
 
 
 
-app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    masterController.findUsers(req.user.location_code).then(data => {
-        res.render('users', { title: 'Users', user: req.user, users: data });
-    });
+app.get('/users', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    masterController.renderUsersPage(req, res, { view: req.query.view }).catch(next);
 });
 
 
