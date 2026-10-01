@@ -84,7 +84,7 @@ block content
                                     select#decanttime.form-control(name='decant_time' required)
                                         if config.decantTimelists
                                             each val in config.decantTimelists
-                                                option(value=`${val}` selected= (receiptsData.decant_time === val))= val
+                                                option(value=`${val}` selected= (receiptsData.decant_time === val))= val.replace('.', ':').padStart(5, '0')
                                 div.form-group.col-md-4
                                     label(for='inchargeid') Decant Incharge
                                     select#inchargeid.form-control(name='Decant_Inchargeid' required)
@@ -127,7 +127,6 @@ block content
                                             tr
                                                 th(scope="col") Tank
                                                 th(scope="col") Quantity (KL)
-                                                th(scope="col") EB
                                                 th(scope="col") Notes
                                                 th(scope="col")
 
@@ -197,7 +196,6 @@ block content
                                                     tr
                                                         th(scope="col") Tank
                                                         th(scope="col") Quantity (KL)
-                                                        th(scope="col") EB
                                                         th(scope="col") Notes
                                                 - var rowCnt = 0
                                                 while rowCnt < maxDecantLines

@@ -288,7 +288,8 @@ mixin addDecantLines(decantRowno,rowData)
         - trClass = ''
     tr(class=trClass id=trId)
         input(type='hidden' id=prefix + decantRowno + '_hiddenId' value=rowData.tdtank_id)
-        //- Dips and amount are no longer entered; hidden so older values survive a re-save
+        //- EB flag, dips and amount are no longer entered; hidden so older values survive a re-save
+        input(type='hidden' id=prefix + "eb_" + decantRowno value=(rowData.EB_MS_FLAG || 'N'))
         input(type='hidden' id=prefix + "opening_dip_" + decantRowno value=rowData.opening_dip)
         input(type='hidden' id=prefix + "closing_dip_" + decantRowno value=rowData.closing_dip)
         input(type='hidden' id=prefix + "amt_" + decantRowno value=rowData.amount)
@@ -302,8 +303,6 @@ mixin addDecantLines(decantRowno,rowData)
                 if tankQuantities && tankQuantities.length
                     each val in tankQuantities
                         option(value=val.description selected= (rowData.quantity === val.description))= val.description
-        td
-            input.form-control(type="checkbox", id=prefix+"eb_" + decantRowno, name= prefix+"eb_" + decantRowno, value=rowData.EB_MS_FLAG, onClick="changeEBflag('"+prefix+"',"+decantRowno+")" checked=('Y'===rowData.EB_MS_FLAG))
         td
             textarea.form-control(name=prefix + "notes_" + decantRowno id=prefix+"notes_"+ decantRowno rows=1 maxlength=500 placeholder="Optional" style="height:38px")= rowData.notes
         td

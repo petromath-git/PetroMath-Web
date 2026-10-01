@@ -1,119 +1,102 @@
 extends layout
 
 block content
-    form(method='GET' action='/tankreceipts' id='receipts-by-date')
-        table.center
-            tr
-                td Date Range:
-                td
-                    select#tankReceiptDateRange.form-control(onchange='updateTankReceiptDateRange()')
-                        option(value='this_week') This Week
-                        option(value='this_month' selected) This Month
-                        option(value='last_month') Last Month
-                        option(value='this_financial_year') This Financial Year
-                        option(value='last_financial_year') Last Financial Year
-                        option(value='custom') Custom Date
-                td &nbsp;
-                td#tankrcpt_fromDateLabel(style='display:none') From Date:
-                td
-                    input#tankreceipts_fromDate.form-control(type='date', name='tankreceipts_fromDate', value=fromDate max=currentDate required style='display:none')
-                td &nbsp;
-                td#tankrcpt_toDateLabel(style='display:none') To Date:
-                td
-                    input#tankreceipts_toDate.form-control(type='date', name='tankreceipts_toDate', value=toDate max=currentDate required style='display:none')
-                td &nbsp;
-                td
-                    button.btn.btn-primary(type='submit') Go
-    div &nbsp;
-    div 
-        if tankReceiptsValues && tankReceiptsValues.length > 0
-            table(class="table")
-                thead(class="thead-light")
-                    tr
-                        th Invoice Date
-                        th Invoice Number
-                        th Decant Date
-                        th Decant Time
-                        th Decant Incharge
-                        th TT Number
-                        th Driver
-                        th Helper
-                        if productColumns && productColumns.length > 0
-                            each col in productColumns
-                                th= col.label
-                        else
-                            th MS
-                            th HSD
-                            th XMS
-                        th Amount
-                        th Status
-                        th Edit/View
-                        th Delete
-                    tbody
-                        each val in tankReceiptsValues
-                            tr(id=`tank-receipt-${val.ttank_id}`)
-                                td
-                                   span= val.invoice_date
-                                td
-                                    span= val.invoice_number
-                                    if val.hasInvoice
-                                        |
-                                        button.btn.btn-link.btn-sm.p-0.ml-1(type='button' title='View Invoice' onclick=`showInvoicePreview('${val.invoice_number}')`)
-                                            span.bi.bi-file-pdf-fill.text-danger
-                                td
-                                    span= val.decant_date
-                                td
-                                    span= val.decant_time
-                                td
-                                    span= val.decant_incharge
-                                td
-                                    span= val.truck_number
-                                td
-                                    span= val.driver
-                                td
-                                    span= val.helper
+    - const fmtAmt = (n) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    - const ranges = [['this_week', 'This Week'], ['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This Financial Year'], ['last_financial_year', 'Last Financial Year'], ['custom', 'Custom Dates']];
+    - const isCustom = range === 'custom';
+
+    //- ── Page header: creating a receipt is a separate action from browsing history ──
+    div.d-flex.flex-wrap.justify-content-between.align-items-center.mb-3
+        h4.my-1 Tank Receipts
+        if(user.isAdmin)
+            form.my-1(method='GET' action='/new-decant' id='get-new-decant')
+                button.btn.btn-primary(type='button' onclick='getNewDecantPage()')
+                    span.oi.oi-plus
+                    span &nbsp;New Tank Receipt
+
+    //- ── Receipt History ──
+    div.card
+        div.card-header.d-flex.flex-wrap.justify-content-between.align-items-center
+            strong.my-1 Receipt History
+            form.form-inline.my-1(method='GET' action='/tankreceipts' id='receipts-by-date')
+                label.mr-2(for='tankReceiptDateRange') Show
+                select#tankReceiptDateRange.form-control.form-control-sm.mr-2(name='range' onchange='updateTankReceiptDateRange()')
+                    each r in ranges
+                        option(value=r[0] selected=(range === r[0]))= r[1]
+                label.mr-2#tankrcpt_fromDateLabel(for='tankreceipts_fromDate' class=(isCustom ? '' : 'd-none')) From
+                input#tankreceipts_fromDate.form-control.form-control-sm.mr-2(type='date', name='tankreceipts_fromDate', value=fromDate max=currentDate required class=(isCustom ? '' : 'd-none'))
+                label.mr-2#tankrcpt_toDateLabel(for='tankreceipts_toDate' class=(isCustom ? '' : 'd-none')) To
+                input#tankreceipts_toDate.form-control.form-control-sm.mr-2(type='date', name='tankreceipts_toDate', value=toDate max=currentDate required class=(isCustom ? '' : 'd-none'))
+                button.btn.btn-sm.btn-outline-primary#tankrcpt_showBtn(type='submit' class=(isCustom ? '' : 'd-none')) Show
+        div.card-body.p-0
+            if tankReceiptsValues && tankReceiptsValues.length > 0
+                div.table-responsive
+                    table.table.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Invoice Date
+                                th Invoice No.
+                                th Decanted On
+                                th TT Number
+                                th.d-none.d-lg-table-cell Incharge
+                                th.d-none.d-lg-table-cell Driver
                                 if productColumns && productColumns.length > 0
                                     each col in productColumns
-                                        td
-                                            span= val[col.key]
+                                        th.text-right #{col.label} (KL)
                                 else
+                                    th.text-right MS (KL)
+                                    th.text-right HSD (KL)
+                                    th.text-right XMS (KL)
+                                th.text-right Amount
+                                th Status
+                                th Actions
+                        tbody
+                            each val in tankReceiptsValues
+                                tr(id=`tank-receipt-${val.ttank_id}`)
+                                    td.text-nowrap= val.invoice_date
+                                    td.text-nowrap
+                                        span= val.invoice_number
+                                        if val.hasInvoice
+                                            button.btn.btn-link.btn-sm.p-0.ml-1(type='button' title='View invoice' onclick=`showInvoicePreview('${val.invoice_number}')`)
+                                                span.bi.bi-file-pdf-fill.text-danger
+                                    td.text-nowrap
+                                        span= val.decant_date
+                                        if val.decant_time
+                                            small.text-muted.ml-1= val.decant_time
+                                    td.text-nowrap= val.truck_number
+                                    td.d-none.d-lg-table-cell= val.decant_incharge
+                                    td.d-none.d-lg-table-cell= val.driver
+                                    if productColumns && productColumns.length > 0
+                                        each col in productColumns
+                                            td.text-right= val[col.key]
+                                    else
+                                        td.text-right= val.MS
+                                        td.text-right= val.HSD
+                                        td.text-right= val.XMS
+                                    if Number(val.amount) > 0
+                                        td.text-right.text-nowrap ₹ #{fmtAmt(val.amount)}
+                                    else
+                                        td.text-right.text-muted —
                                     td
-                                        span= val.MS
-                                    td
-                                        span= val.HSD
-                                    td
-                                        span= val.XMS
-                                td
-                                    span= val.amount
-                                td
-                                    span= val.closingStatus
-                                if (val.closingStatus === 'DRAFT')
-                                    td
-                                        div.row
-                                        a.btn.btn-info(href='/edit-draft-tankrcpt?closingId='+val.ttank_id)
-                                            span.oi.oi-pencil
-                                    if(user.isAdmin)
-                                        td
-                                            div.row
-                                            a.btn.btn-danger(onClick=`deleteTankReceipt(${val.ttank_id})`)
-                                                span.oi.oi-trash
-                                if (val.closingStatus === 'CLOSED')
-                                    td
-                                        div.row
-                                        a.btn.btn-info(href='/edit-draft-tankrcpt?closingId=' + val.ttank_id)
-                                            span.oi.oi-book
-                                    td &nbsp;
-        else
-            div.row &nbsp;
-            div.row.bg-light No records to display.
-        
-        div.row
-        if(user.isAdmin)
-            div.col &nbsp;
-            form(method='GET' action='/new-decant' id='get-new-decant')
-                div.row
-                    div.col
-                        button.btn.btn-primary(type='button' onclick='getNewDecantPage()') Add New
+                                        if val.closingStatus === 'CLOSED'
+                                            span.badge.badge-success Closed
+                                        else
+                                            span.badge.badge-warning Draft
+                                    td.text-nowrap
+                                        if val.closingStatus === 'CLOSED'
+                                            a.btn.btn-sm.btn-outline-secondary.my-1(href='/edit-draft-tankrcpt?closingId=' + val.ttank_id, title='View receipt')
+                                                span.oi.oi-eye
+                                                span &nbsp;View
+                                        else
+                                            a.btn.btn-sm.btn-primary.mr-1.my-1(href='/edit-draft-tankrcpt?closingId=' + val.ttank_id, title='Continue receipt')
+                                                span.oi.oi-pencil
+                                                span &nbsp;Continue
+                                            if(user.isAdmin)
+                                                button.btn.btn-sm.btn-outline-danger.my-1(type='button' onClick=`deleteTankReceipt(${val.ttank_id})`, title='Delete draft')
+                                                    span.oi.oi-trash
+                                                    span &nbsp;Delete
+            else
+                p.text-muted.text-center.my-4 No tank receipts in this date range.
 
     div.modal.fade#invoicePreviewModal(tabindex='-1' role='dialog' aria-labelledby='invoicePreviewTitle' aria-hidden='true')
         div.modal-dialog.modal-lg(role='document')
