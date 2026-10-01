@@ -652,10 +652,11 @@ const getHomeData = async (req, res, next) => {
         closingQueryFromDate = req.query.fromClosingDate;
         closingQueryToDate = req.query.toClosingDate;
     } else {
-        // Auto-filter to most recent closing date
-        const mostRecentDate = await TxnReadDao.getMostRecentClosingDate(locationCode);
-        closingQueryFromDate = mostRecentDate;
-        closingQueryToDate = mostRecentDate;
+        // Auto-filter to the last N days that had shifts (1 by default; single-shift
+        // locations like PAC set SHIFT_LIST_DEFAULT_DAYS higher to see a few days)
+        const defaultDays = await locationConfig.getLocationConfigValue(locationCode, 'SHIFT_LIST_DEFAULT_DAYS', 1);
+        closingQueryFromDate = await TxnReadDao.getMostRecentClosingDate(locationCode, defaultDays);
+        closingQueryToDate = await TxnReadDao.getMostRecentClosingDate(locationCode);
     }
 
 
