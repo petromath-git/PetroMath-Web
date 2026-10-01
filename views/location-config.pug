@@ -133,6 +133,102 @@ block content
             border-right: 0;
         }
 
+        /* Long SETTING_NAMES have no spaces — let them wrap instead of overflowing */
+        .setting-picker-name,
+        .config-card .card-header strong,
+        #catalog-table td strong {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        /* Add-config setting picker */
+        .setting-picker-list {
+            max-height: 40vh;
+            overflow-y: auto;
+            margin-top: 6px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .setting-picker-list .list-group-item {
+            min-height: 44px;
+            padding: 8px 12px;
+            border-left: 0;
+            border-right: 0;
+        }
+        .setting-picker-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .setting-selected {
+            padding: 10px 12px;
+            border: 1px solid #28a745;
+            border-radius: 4px;
+            background: #f0fff4;
+        }
+
+        /* Phones: full-screen modals with the footer pinned and the body scrolling */
+        @media (max-width: 575.98px) {
+            .modal-dialog,
+            .modal-dialog-scrollable {
+                margin: 0;
+                max-width: none;
+                height: 100%;
+                max-height: none;
+                min-height: 100%;
+            }
+            .modal-dialog-centered::before {
+                display: none;
+            }
+            .modal-content,
+            .modal-dialog-scrollable .modal-content {
+                height: 100%;
+                max-height: 100%;
+                border: 0;
+                border-radius: 0;
+            }
+            .modal-body {
+                overflow-y: auto;
+            }
+            .setting-picker-list {
+                max-height: 50vh;
+            }
+            /* 16px stops iOS Safari from zooming in when an input is focused */
+            .modal .form-control,
+            #searchInput {
+                font-size: 16px;
+            }
+        }
+
+        /* Setting Catalog: stack each row as a block instead of a 5-column table */
+        @media (max-width: 767.98px) {
+            #catalog-table thead {
+                display: none;
+            }
+            #catalog-table,
+            #catalog-table tbody,
+            #catalog-table tr,
+            #catalog-table td {
+                display: block;
+                width: 100% !important;
+            }
+            #catalog-table tr {
+                position: relative;
+                padding: 8px 0;
+                border-bottom: 1px solid #dee2e6;
+            }
+            #catalog-table td {
+                border: 0;
+                padding: 2px 52px 2px 4px;
+            }
+            #catalog-table td:last-child {
+                position: absolute;
+                top: 8px;
+                right: 4px;
+                width: auto !important;
+                padding: 0;
+            }
+        }
+
     // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
@@ -357,7 +453,8 @@ block content
                     h5.modal-title
                         i.bi.bi-plus-circle.me-2
                         | Add Configuration
-                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
                 .modal-body
                     form#addConfigForm
                         .row.g-3
@@ -374,25 +471,39 @@ block content
                                         option(value=user.location_code, selected)= user.location_code
                             
                             .col-12
-                                label.form-label(for='addSettingName') Setting Name
+                                label.form-label(for='addSettingSearch') Setting Name
                                     span.text-danger  *
-                                if isSuperUser
-                                    input.form-control#addSettingName(
-                                        type='text',
-                                        required,
-                                        placeholder='e.g., MAX_CREDIT_DAYS',
-                                        list='settingNamesList'
+                                input#addSettingName(type='hidden')
+                                // Chosen setting (replaces the picker once a setting is tapped)
+                                #addSettingSelected.setting-selected.d-none
+                                    .d-flex.justify-content-between.align-items-start
+                                        .mr-2
+                                            strong.setting-picker-name#addSettingSelectedName
+                                            .small.text-muted#addSettingSelectedDesc
+                                        button.btn.btn-sm.btn-outline-primary#addSettingChangeBtn(type='button') Change
+                                // Search + tappable list (a <datalist> is near-unusable on mobile)
+                                #addSettingPicker
+                                    input.form-control#addSettingSearch(
+                                        type='search',
+                                        placeholder='Search setting name or description...',
+                                        autocomplete='off'
                                     )
-                                    datalist#settingNamesList
-                                        each name in settingNames
-                                            option(value=name)
-                                    .form-text Uppercase recommended. Existing names shown as suggestions — you can also enter a brand-new one.
-                                else
-                                    select.form-control#addSettingName(required)
-                                        option(value='', selected, disabled) Select a setting
-                                        each name in settingNames
-                                            option(value=name)= name
-                                    .form-text Only existing setting names can be used here.
+                                    .list-group.setting-picker-list#addSettingList
+                                        if isSuperUser
+                                            button.list-group-item.list-group-item-action.list-group-item-success.d-none#addSettingNewItem(type='button')
+                                                i.bi.bi-plus-circle.mr-1
+                                                | Use new setting
+                                                strong.setting-picker-name#addSettingNewName
+                                        each entry in settingCatalog
+                                            button.list-group-item.list-group-item-action.setting-picker-item(type='button', data-setting-name=entry.setting_name)
+                                                .setting-picker-name= entry.setting_name
+                                                if entry.short_description
+                                                    .small.text-muted= entry.short_description
+                                        .list-group-item.text-muted.small.d-none#addSettingNoMatch No matching setting
+                                    if isSuperUser
+                                        .form-text Tap an existing setting, or type a brand-new name (saved in uppercase).
+                                    else
+                                        .form-text Only existing setting names can be used here.
 
                             .col-12
                                 label.form-label(for='addSettingValue') Setting Value
@@ -434,7 +545,8 @@ block content
                     h5.modal-title
                         i.bi.bi-pencil.me-2
                         | Edit Configuration
-                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
                 .modal-body
                     // Config info card
                     .card.mb-3.bg-light
@@ -493,7 +605,8 @@ block content
                         i.bi.bi-journal-text.me-2
                         | Setting Catalog
                         small.text-muted.ms-2 (search by what a setting does, not just its name)
-                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
                 .modal-body
                     .input-group.mb-3
                         .input-group-prepend
@@ -549,7 +662,8 @@ block content
                     h5.modal-title
                         i.bi.bi-journal-text.me-2
                         | Edit Description
-                    button.btn-close(type='button' data-dismiss='modal' aria-label='Close')
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
                 .modal-body
                     .card.mb-3.bg-light
                         .card-body.py-2
@@ -714,15 +828,7 @@ block content
                 window.location.href = `/location-config?location=${selectedLocation}`;
             });
 
-            // Setting name input - auto uppercase (SuperUser free-text field only)
-            $('#addSettingName').on('input', function() {
-                if (this.tagName === 'INPUT') this.value = this.value.toUpperCase();
-            });
-
-            // Swap the value input (text/number/select) to match the selected setting's rule
-            $('#addSettingName').on('input change', function() {
-                applyValueRuleToField('add', $(this).val().trim().toUpperCase());
-            });
+            initializeSettingPicker();
 
             // Value rule editor (SuperUser only, inside Edit Description modal)
             $('#descValueType').on('change', function() {
@@ -730,6 +836,59 @@ block content
                 $('#descLookupTypeGroup').toggleClass('d-none', type !== 'LOOKUP');
                 $('#descMinValueGroup, #descMaxValueGroup').toggleClass('d-none', type !== 'NUMBER');
             });
+        }
+
+        // Add-config setting picker: filter the tappable list as the user types; SuperUser
+        // can also pick a brand-new name when nothing matches it exactly.
+        function initializeSettingPicker() {
+            const $search = $('#addSettingSearch');
+            const $items = $('#addSettingList .setting-picker-item');
+
+            $search.on('input', function() {
+                const term = $(this).val().trim().toLowerCase();
+                let visibleCount = 0;
+                let exactMatch = false;
+                $items.each(function() {
+                    const matches = !term || $(this).text().toLowerCase().indexOf(term) > -1;
+                    $(this).toggleClass('d-none', !matches);
+                    if (matches) visibleCount++;
+                    if ($(this).attr('data-setting-name').toLowerCase() === term) exactMatch = true;
+                });
+                const newName = $(this).val().trim().toUpperCase();
+                const showNew = isSuperUser && !!newName && !exactMatch;
+                $('#addSettingNewName').text(newName);
+                $('#addSettingNewItem').toggleClass('d-none', !showNew);
+                $('#addSettingNoMatch').toggleClass('d-none', visibleCount > 0 || showNew);
+            });
+
+            $items.on('click', function() {
+                selectSetting($(this).attr('data-setting-name'));
+            });
+            $('#addSettingNewItem').on('click', function() {
+                selectSetting($search.val().trim().toUpperCase());
+            });
+            $('#addSettingChangeBtn').on('click', function() {
+                clearSettingSelection();
+                $search.trigger('focus');
+            });
+        }
+
+        function selectSetting(settingName) {
+            const entry = settingCatalogData.find(c => c.setting_name === settingName);
+            $('#addSettingName').val(settingName);
+            $('#addSettingSelectedName').text(settingName);
+            $('#addSettingSelectedDesc').text(entry ? (entry.short_description || '') : 'New setting');
+            $('#addSettingPicker').addClass('d-none');
+            $('#addSettingSelected').removeClass('d-none');
+            applyValueRuleToField('add', settingName);
+        }
+
+        function clearSettingSelection() {
+            $('#addSettingName').val('');
+            $('#addSettingSelected').addClass('d-none');
+            $('#addSettingPicker').removeClass('d-none');
+            $('#addSettingSearch').val('').trigger('input');
+            applyValueRuleToField('add', '');
         }
 
         function initializeCatalogSearch() {
@@ -891,6 +1050,7 @@ block content
                     showAlert(result.message, 'success');
                     $('#addConfigModal').modal('hide');
                     $('#addConfigForm')[0].reset();
+                    clearSettingSelection();
                     
                     // Reload after short delay
                     setTimeout(() => {
