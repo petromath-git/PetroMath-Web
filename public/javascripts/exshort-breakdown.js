@@ -29,7 +29,7 @@
             '      </div>' +
             '      <div class="modal-body" id="' + MODAL_ID + 'Body"></div>' +
             '      <div class="modal-footer">' +
-            '        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>' +
+            '        <button type="button" class="btn btn-outline-secondary" onclick="printExShortBreakdown()">Print</button>' +
             '        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>' +
             '      </div>' +
             '    </div>' +
@@ -123,5 +123,49 @@
             .catch(function () {
                 body.innerHTML = '<div class="alert alert-danger">Could not load the breakdown.</div>';
             });
+    };
+
+    // Prints only the breakdown (not the page behind the modal) from a hidden
+    // iframe with its own minimal styles — so it doesn't depend on Bootstrap.
+    const PRINT_CSS =
+        'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#000;margin:16px;}' +
+        'h3{font-size:16px;margin:0 0 8px;}' +
+        'table{width:100%;border-collapse:collapse;margin-bottom:8px;}' +
+        'td,th{padding:3px 6px;border-top:1px solid #ccc;text-align:left;vertical-align:top;}' +
+        'th{padding-top:10px;}' +
+        '.text-right{text-align:right;white-space:nowrap;}' +
+        '.pl-4{padding-left:24px;}' +
+        '.small{font-size:11px;}' +
+        '.text-muted{color:#555;}' +
+        '.text-danger{color:#c00;}' +
+        '.text-success{color:#060;}' +
+        '.table-light td{background:#f3f3f3;}' +
+        '.table-info td{background:#e3f2f7;}' +
+        '.table-warning td{background:#fff3cd;}' +
+        '.badge{border:1px solid #888;border-radius:3px;padding:0 4px;font-size:11px;}' +
+        '.alert{border:1px solid #999;padding:6px;margin-top:6px;}' +
+        '.mb-2{margin-bottom:8px;}' +
+        'tr{page-break-inside:avoid;}' +
+        '*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+
+    window.printExShortBreakdown = function () {
+        const body = document.getElementById(MODAL_ID + 'Body');
+        if (!body) return;
+        let frame = document.getElementById(MODAL_ID + 'PrintFrame');
+        if (frame) frame.remove();
+        frame = document.createElement('iframe');
+        frame.id = MODAL_ID + 'PrintFrame';
+        frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+        document.body.appendChild(frame);
+
+        const doc = frame.contentWindow.document;
+        doc.open();
+        doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Excess / Shortage</title>' +
+                  '<style>' + PRINT_CSS + '</style></head><body>' +
+                  '<h3>How the Excess / Shortage is calculated</h3>' + body.innerHTML +
+                  '</body></html>');
+        doc.close();
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
     };
 })();
