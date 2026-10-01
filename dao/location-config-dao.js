@@ -3,13 +3,19 @@ const Sequelize = require("sequelize");
 const { Op } = require("sequelize");
 const LocationConfig = db.location_config;
 const LocationConfigCatalog = db.location_config_catalog;
+const moment = require('moment');
+
+// Today in IST, matching the DB's CURDATE() (session time_zone +05:30) that
+// utils/location-config.js uses when reading settings. A UTC date here hid new
+// rows / mis-dated saves between 00:00 and 05:30 IST.
+const todayIST = (offsetDays = 0) => moment().utcOffset('+05:30').add(offsetDays, 'days').format('YYYY-MM-DD');
 
 module.exports = {
     
     // Get a specific setting for a location (with fallback to global '*')
     getSetting: async (locationCode, settingName) => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             // First try location-specific setting
             let config = await LocationConfig.findOne({
@@ -45,7 +51,7 @@ module.exports = {
     // Set a setting for a location
     setSetting: async (locationCode, settingName, settingValue, createdBy = 'system') => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             // End-date any existing active setting
             await LocationConfig.update(
@@ -80,7 +86,7 @@ module.exports = {
     // Get all settings for a location (merged with global defaults)
     getAllSettings: async (locationCode) => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             // Get all active settings for this location and global (*)
             const configs = await LocationConfig.findAll({
@@ -112,7 +118,7 @@ module.exports = {
     // Get all active configs with optional location filter
     getAllConfigs: async (locationFilter = null) => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             let whereClause = {
                 effective_start_date: { [Op.lte]: currentDate },
@@ -155,7 +161,7 @@ module.exports = {
     // Get history/expired configs
     getHistoryConfigs: async (locationFilter = null) => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             let whereClause = {
                 effective_end_date: { [Op.lt]: currentDate }
@@ -299,7 +305,7 @@ module.exports = {
     // Check if duplicate setting exists for location (among active configs)
     checkDuplicateSetting: async (locationCode, settingName, excludeConfigId = null) => {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             
             let whereClause = {
                 location_code: locationCode,
@@ -341,7 +347,7 @@ module.exports = {
                 location_code: location_code,
                 setting_name: setting_name,
                 setting_value: setting_value,
-                effective_start_date: effective_start_date || new Date().toISOString().split('T')[0],
+                effective_start_date: effective_start_date || todayIST(),
                 effective_end_date: '9999-12-31',
                 created_by: created_by || 'system',
                 updated_by: created_by || 'system',
@@ -367,15 +373,13 @@ module.exports = {
             }
 
             // Check if it's still active
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = todayIST();
             if (existingConfig.effective_end_date < currentDate) {
                 throw new Error('Cannot update expired config');
             }
 
             // End-date the existing config (set end date to yesterday)
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const endDate = yesterday.toISOString().split('T')[0];
+            const endDate = todayIST(-1);
             
             await LocationConfig.update(
                 { 
