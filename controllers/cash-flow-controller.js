@@ -1,10 +1,8 @@
 const dateFormat = require('dateformat');
 const utils = require("../utils/app-utils");
 const cashflowDao = require("../dao/cashflow-closing-dao");
-const TxnReadDao = require("../dao/txn-read-dao");
 const adjustmentsDao = require("../dao/adjustments-dao");
 const config = require("../config/app-config").APP_CONFIGS;
-const appCache = require("../utils/app-cache");
 const locationConfig = require("../utils/location-config");
 const security = require("../utils/app-security");
 
@@ -325,24 +323,6 @@ reopenCashflow: async (req, res, next) => {
 
 };
 
-function getManagerNames(closingValues, cashflowDate, personData) {
-    let managers = '', managerName = '';
-    if (closingValues) {
-        closingValues.forEach((closing) => {
-            if (cashflowDate == closing.closing_date_fmt1) {
-                managerName = utils.getPersonName(closing.closer_id, personData);
-                if(!managers.includes(managerName)) {
-                    if(managers.length > 0) {
-                        managers += ", ";
-                    }
-                    managers += managerName;
-                }
-            }
-        });
-    }
-    return managers.toString();
-}
-
 function collectCreditAndDebits(result) {
     if (!result) return { data: [], options: [] };
     const creditOrDebits = (result.transactions || []).map((t) => ({
@@ -377,6 +357,7 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             user: req.user,
             config: config,
             cashFlowStatus: values[0].value.status,
+            cashflowDate: dateFormat(values[0].value.cashflow_date, 'yyyy-mm-dd'),
             cashFlowDenoms: values[3].value,
             cashflowId: req.query.id,
             cashFlowCredits: creditData.data,
@@ -395,27 +376,55 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
     if(fromDate === undefined) fromDate = dateFormat(new Date(), "yyyy-mm-dd");
     if(toDate === undefined) toDate = dateFormat(new Date(), "yyyy-mm-dd");
     Promise.allSettled([cashflowDao.findCashflowClosings(user.location_code, fromDate, toDate),
-    TxnReadDao.getClosingDetailsByDateFormat(user.location_code, fromDate, toDate)]).then(values => {
+    cashflowDao.findClosedCashflowTotals(user.location_code, fromDate, toDate),
+    cashflowDao.findLatestCashflowClosing(user.location_code)]).then(values => {
         let cashflowValues = [];
+        const totalsById = new Map((values[1].value || []).map(t => [t.cashflow_id, t]));
         if(values[0].value) {
-            const personData = appCache.getPersonCache();
-            values[0].value.forEach(cashflow => {
+            // Newest first — the history list reads top-down from the latest day
+            [...values[0].value].reverse().forEach(cashflow => {
+                const totals = cashflow.status === 'CLOSED' ? totalsById.get(cashflow.cashflowId) : null;
                 cashflowValues.push({
                     cashflowId: cashflow.cashflowId,
                     status: cashflow.status,
                     notes: cashflow.notes,
                     date: dateFormat(cashflow.cashflow_date, 'dd-mmm-yyyy'),
-                    managers: getManagerNames(values[1].value, cashflow.cashflow_date, personData)
+                    isoDate: dateFormat(cashflow.cashflow_date, 'yyyy-mm-dd'),
+                    weekday: dateFormat(cashflow.cashflow_date, 'ddd'),
+                    inflow: totals ? Number(totals.inflow) : null,
+                    outflow: totals ? Number(totals.outflow) : null,
+                    balance: totals ? Number(totals.inflow) - Number(totals.outflow) : null
                 });
             });
         }
         res.render('cash-flow-home', {
-            title: "CashFlow:Home", user: user,
+            title: "Day Close", user: user,
             fromDate: fromDate, toDate: toDate,
             cashflowValues: cashflowValues,
+            nextDayClose: getNextDayClose(values[2].value),
             generateDate : utils.currentDate(), currentDate: utils.currentDate(),
             messages: messagesOptional});
     });
+}
+
+// What the user should do next: continue the open DRAFT, or generate the day
+// after the last CLOSED one (generation requires the previous day to be closed).
+function getNextDayClose(latestRows) {
+    const latest = latestRows && latestRows[0];
+    if (!latest) return { mode: 'NEW' };
+    if (latest.closing_status !== 'CLOSED') {
+        return {
+            mode: 'DRAFT', cashflowId: latest.cashflow_id,
+            date: dateFormat(new Date(latest.cashflow_date + 'T00:00:00'), 'dd-mmm-yyyy')
+        };
+    }
+    const next = new Date(latest.cashflow_date + 'T00:00:00');
+    next.setDate(next.getDate() + 1);
+    const nextIso = dateFormat(next, 'yyyy-mm-dd');
+    if (nextIso > utils.currentDate()) {
+        return { mode: 'UP_TO_DATE', lastDate: dateFormat(new Date(latest.cashflow_date + 'T00:00:00'), 'dd-mmm-yyyy') };
+    }
+    return { mode: 'GENERATE', isoDate: nextIso, date: dateFormat(next, 'dd-mmm-yyyy') };
 }
 
 function triggerAndGetCashflowData(cashflowId, req, res, next) {

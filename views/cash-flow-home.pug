@@ -1,72 +1,94 @@
 extends layout
 
 block content
-    div.row
-        div.col-6
-            form(method='GET' action='/cashflowhome' id='cashflowhome')
-                table.center
-                    tr
-                        td From Date:
-                        td
-                            input#cashflow_fromDate.form-control(type='date', name='cashflow_fromDate', value=fromDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
-                        td &nbsp;
-                        td To Date:
-                        td
-                            input#cashflow_toDate.form-control(type='date', name='cashflow_toDate', value=toDate max=currentDate format="dd/mm/yyyy" required onChange="copyToHidden(this);")
-                        td &nbsp;
-                        td
-                            button.btn.btn-primary(type='submit') Go
-        div.col-6
-            form(method='POST' action='/cashflow' id='cashflow')
-                input(type='hidden' id='cashflow_fromDate_hiddenValue' name='cashflow_fromDate_hiddenValue' value=fromDate)
-                input(type='hidden' id='cashflow_toDate_hiddenValue' name='cashflow_toDate_hiddenValue' value=toDate)
-                div(style="text-align:right;")
-                    table
-                        tr
-                            td
-                                button.btn.btn-primary(type='submit') Generate cash flow
-                            td
-                                span &nbsp;
-                            td
-                                span for date :
-                            td
-                                span &nbsp;
-                            td
-                                input#generateDate.form-control(type='date', name='generateDate' value=generateDate, max=generateDate format="dd/mm/yyyy" required)
+    - const fmtAmt = (n) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    div &nbsp;
-    div
-        if cashflowValues && cashflowValues.length > 0
-            table(class="table")
-                thead(class="thead-light")
-                    tr
-                        th Date
-                        th Manager
-                        th Status
-                        th Actions
-                    tbody
-                        each val in cashflowValues
-                            tr(id=`cashflow-record-${val.cashflowId}`)
-                                td
-                                    span= val.date
-                                td
-                                    span= val.managers
-                                td
-                                    span= val.status
-                                if (val.status === 'DRAFT')
+    //- ── Next Day Close: the one action the user needs to take ──
+    div.card.mb-4.border-primary
+        div.card-header.bg-primary.text-white
+            strong Next Day Close
+        div.card-body
+            if nextDayClose.mode === 'DRAFT'
+                div.d-flex.flex-wrap.align-items-center
+                    h5.mb-0.mr-3= nextDayClose.date
+                    span.badge.badge-warning.mr-3 Draft
+                    a.btn.btn-primary.my-1(href='/cashflow?id=' + nextDayClose.cashflowId) Continue Day Close &raquo;
+                small.text-muted.d-block.mt-2 This day close is in progress. Review it, then close it to generate the report.
+            else if nextDayClose.mode === 'UP_TO_DATE'
+                div.d-flex.flex-wrap.align-items-center
+                    span.badge.badge-success.mr-3 Up to date
+                    span All days up to #{nextDayClose.lastDate} are closed.
+            else
+                form.form-inline(method='POST' action='/cashflow' id='cashflow')
+                    input(type='hidden' name='cashflow_fromDate_hiddenValue' value=fromDate)
+                    input(type='hidden' name='cashflow_toDate_hiddenValue' value=toDate)
+                    label.mr-2(for='generateDate') Day to close:
+                    input#generateDate.form-control.mr-3.my-1(type='date', name='generateDate', value=(nextDayClose.mode === 'GENERATE' ? nextDayClose.isoDate : generateDate), max=currentDate, required)
+                    button.btn.btn-primary.my-1(type='submit') Generate Day Close &raquo;
+                if nextDayClose.mode === 'GENERATE'
+                    small.text-muted.d-block.mt-2 The previous day is closed, so #{nextDayClose.date} is next.
+                else
+                    small.text-muted.d-block.mt-2 No day close exists yet for this location — pick the first day to close.
+
+    //- ── Day Close History ──
+    div.card
+        div.card-header.d-flex.flex-wrap.justify-content-between.align-items-center
+            strong.my-1 Day Close History
+            form.form-inline.my-1(method='GET' action='/cashflowhome' id='cashflowhome')
+                label.mr-2(for='cashflow_fromDate') From
+                input#cashflow_fromDate.form-control.form-control-sm.mr-2(type='date', name='cashflow_fromDate', value=fromDate, max=currentDate, required)
+                label.mr-2(for='cashflow_toDate') To
+                input#cashflow_toDate.form-control.form-control-sm.mr-2(type='date', name='cashflow_toDate', value=toDate, max=currentDate, required)
+                button.btn.btn-sm.btn-outline-primary(type='submit') Show
+        div.card-body.p-0
+            if cashflowValues && cashflowValues.length > 0
+                div.table-responsive
+                    table.table.table-hover.mb-0
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Day
+                                th Status
+                                th.text-right.d-none.d-md-table-cell Inflow
+                                th.text-right.d-none.d-md-table-cell Outflow
+                                th.text-right Cash Balance
+                                th Actions
+                        tbody
+                            each val in cashflowValues
+                                tr(id=`cashflow-record-${val.cashflowId}`)
+                                    td.text-nowrap= val.date
+                                    td= val.weekday
                                     td
-                                        a.btn.btn-info(href='/cashflow?id=' + val.cashflowId)
-                                            span.oi.oi-pencil
-                                        if(user.isAdmin)
-                                            span &nbsp;
-                                            a.btn.btn-danger(onClick=`deleteCashflow(${val.cashflowId})`)
-                                                span.oi.oi-trash
-                                if (val.status === 'CLOSED')
-                                    td
-                                        a.btn.btn-info(href='/cashflow?id=' + val.cashflowId)
-                                            span.oi.oi-envelope-open
-                                        // Add reopen button for SuperUser, PowerUser and GOBI-INC
-                                        if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC')
-                                            span &nbsp;
-                                            button.btn.btn-warning(onClick=`reopenCashflow(${val.cashflowId})`)
-                                                span.oi.oi-action-undo
+                                        if val.status === 'CLOSED'
+                                            span.badge.badge-success Closed
+                                        else
+                                            span.badge.badge-warning Draft
+                                    if val.status === 'CLOSED'
+                                        td.text-right.text-nowrap.d-none.d-md-table-cell= '₹ ' + fmtAmt(val.inflow)
+                                        td.text-right.text-nowrap.d-none.d-md-table-cell= '₹ ' + fmtAmt(val.outflow)
+                                        td.text-right.text-nowrap.font-weight-bold= fmtAmt(val.balance)
+                                    else
+                                        td.text-right.text-muted.d-none.d-md-table-cell —
+                                        td.text-right.text-muted.d-none.d-md-table-cell —
+                                        td.text-right.text-muted —
+                                    td.text-nowrap
+                                        if val.status === 'CLOSED'
+                                            a.btn.btn-sm.btn-outline-secondary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='View day close')
+                                                span.oi.oi-eye
+                                                span &nbsp;View
+                                            if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC')
+                                                button.btn.btn-sm.btn-outline-warning.mr-1.my-1(onClick=`reopenCashflow(${val.cashflowId})`, title='Reopen as draft')
+                                                    span.oi.oi-action-undo
+                                                    span &nbsp;Reopen
+                                            a.btn.btn-sm.btn-outline-danger.my-1(href='/reports-dsr?date=' + val.isoDate, title='Daily Sales Report', aria-label='Daily Sales Report')
+                                                i.bi.bi-file-earmark-pdf-fill
+                                        else
+                                            a.btn.btn-sm.btn-primary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='Continue day close')
+                                                span.oi.oi-pencil
+                                                span &nbsp;Continue
+                                            if(user.isAdmin)
+                                                button.btn.btn-sm.btn-outline-danger.my-1(onClick=`deleteCashflow(${val.cashflowId})`, title='Delete draft')
+                                                    span.oi.oi-trash
+                                                    span &nbsp;Delete
+            else
+                p.text-muted.text-center.my-4 No day closes in this date range.
