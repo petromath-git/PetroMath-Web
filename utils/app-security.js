@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../config/app-config");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
+const dateFormat = require("dateformat");
 
 const publicDir = path.join(__dirname, "..", "public");
 
@@ -24,6 +25,16 @@ module.exports = {
             }
             res.status(403).send('You do not have access to this page.');
         };
+    },
+
+    // 🔹 Same rule as web login: active only while effective_end_date is after today
+    //    (Disable sets it to today; a missing end date counts as disabled).
+    isAccountActive: (effectiveEndDate) => {
+        if (!effectiveEndDate) return false;
+        const endDate = effectiveEndDate instanceof Date
+            ? dateFormat(effectiveEndDate, "yyyy-mm-dd")
+            : String(effectiveEndDate).slice(0, 10);
+        return endDate > dateFormat(new Date(), "yyyy-mm-dd");
     },
 
     // 🔹 Quick admin check for internal use

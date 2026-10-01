@@ -119,6 +119,10 @@ passport.serializeUser((userData, done) => {
 passport.deserializeUser(function (userInfo, done) {
     Person.findOne({where: {'User_Name': userInfo.User_Name}})
         .then(function (user) {
+            // Ends the session of a user disabled after logging in
+            if (!user || !security.isAccountActive(user.effective_end_date)) {
+                return done(null, false);
+            }
             done(null, userInfo);
         })
         .catch(function (err) {
