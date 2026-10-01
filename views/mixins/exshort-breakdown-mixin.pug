@@ -1,0 +1,9 @@
+//- Wraps an excess/shortage figure in a link that opens the breakdown popup
+//- (public/javascripts/exshort-breakdown.js), only when the location has
+//- SHOW_EXSHORT_BREAKDOWN = 'Y'. Otherwise renders the figure as-is.
+mixin exShortBreakdownLink(onclickJs)
+    if showExShortBreakdown
+        a(href='#' title='See how this is calculated' style='text-decoration: underline dotted;' onclick=onclickJs + ' return false;')
+            block
+    else
+        block
