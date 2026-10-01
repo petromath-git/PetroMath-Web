@@ -141,10 +141,10 @@ block content
             span &nbsp;
             span
                 //- After closing, land on that day's Day Close report
-                button.btn.btn-dark(id='cashflow-close' disabled=true onClick=`finishClosing('cashflowId','close-cashflow','reports-cashflow?date=${cashflowDate}')`) CLOSE &raquo;
+                button.btn.btn-dark(id='cashflow-close' disabled=true onClick=`finishClosing('cashflowId','close-cashflow','reports-dsr?date=${cashflowDate}')`) CLOSE &raquo;
         else
-            a.btn.btn-primary(href='/reports-cashflow?date=' + cashflowDate)
-                span.oi.oi-document
+            a.btn.btn-primary(href='/reports-dsr?date=' + cashflowDate)
+                i.bi.bi-file-earmark-pdf
                 span &nbsp;View Day Close Report
             span &nbsp;
             a.btn.btn-outline-secondary(href='/cashflowhome') Back to Day Close

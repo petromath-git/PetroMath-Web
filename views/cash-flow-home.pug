@@ -73,16 +73,16 @@ block content
                                         td.text-right.text-muted —
                                     td.text-nowrap
                                         if val.status === 'CLOSED'
-                                            a.btn.btn-sm.btn-primary.mr-1.my-1(href='/reports-cashflow?date=' + val.isoDate, title='Day Close report')
-                                                span.oi.oi-document
-                                                span &nbsp;Report
                                             a.btn.btn-sm.btn-outline-secondary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='View day close')
                                                 span.oi.oi-eye
                                                 span &nbsp;View
                                             if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC')
-                                                button.btn.btn-sm.btn-outline-warning.my-1(onClick=`reopenCashflow(${val.cashflowId})`, title='Reopen as draft')
+                                                button.btn.btn-sm.btn-outline-warning.mr-1.my-1(onClick=`reopenCashflow(${val.cashflowId})`, title='Reopen as draft')
                                                     span.oi.oi-action-undo
                                                     span &nbsp;Reopen
+                                            a.btn.btn-sm.btn-primary.my-1(href='/reports-dsr?date=' + val.isoDate, title='Daily Sales Report')
+                                                i.bi.bi-file-earmark-pdf
+                                                span &nbsp;Report
                                         else
                                             a.btn.btn-sm.btn-primary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='Continue day close')
                                                 span.oi.oi-pencil

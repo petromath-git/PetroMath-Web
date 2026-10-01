@@ -1181,7 +1181,9 @@ app.post('/reports-cashflow', isLoginEnsured, function (req, res, next) {
 });
 
 app.get('/reports-dsr', isLoginEnsured, function (req, res, next) {
-    req.body.fromClosingDate = new Date(Date.now());
+    // ?date=YYYY-MM-DD opens a specific day (linked from the Day Close page)
+    const requestedDate = req.query.date;
+    req.body.fromClosingDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate || '') ? requestedDate : new Date(Date.now());
     req.body.caller = 'notpdf';
     dsrReportsController.getdsrReport(req, res, next);
 });
