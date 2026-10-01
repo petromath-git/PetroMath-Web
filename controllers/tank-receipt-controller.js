@@ -75,7 +75,7 @@ module.exports = {
                         Promise.reject(err);
                     });
             } else {
-                getTankReceipts(req, res, next);
+                getHomeData(req, res, next);
             }
         })
 
@@ -419,6 +419,7 @@ const getHomeData = (req, res, next) => {
     if(req.query.tankreceipts_toDate) {
         toDate = req.query.tankreceipts_toDate;
     }
+    const range = req.query.range || (req.query.tankreceipts_fromDate ? 'custom' : 'this_month');
     Promise.allSettled([
         getTankRcptByDate(locationCode, fromDate, toDate),
         getTankProductColumns(locationCode),
@@ -440,7 +441,9 @@ const getHomeData = (req, res, next) => {
                 // amount now. Older receipts with line amounts but no invoice keep showing those.
                 const invoiceTotal = invoiceTotals.get(r.invoice_number);
                 if (invoiceTotal != null) r.amount = invoiceTotal;
+                r.decant_time = formatDecantTime(r.decant_time);
             });
+            receipts.reverse();   // newest first
 
             res.render('tankreceipts', {
                 title: 'Tank Receipts',
@@ -451,9 +454,17 @@ const getHomeData = (req, res, next) => {
                 currentDate: utils.currentDate(),
                 fromDate: fromDate,
                 toDate: toDate,
+                range: range,
             });
         });
 }
+
+// decant_time is stored as decimal hours.minutes (e.g. 14.30) -> "14:30"
+const formatDecantTime = (t) => {
+    if (t == null || t === '') return '';
+    const [h, m = '00'] = String(t).split('.');
+    return h.padStart(2, '0') + ':' + m.padEnd(2, '0');
+};
 
 const getTankRcptByDate = (locationCode, fromDate, toDate) => {
     return new Promise((resolve, reject) => {

@@ -2765,7 +2765,7 @@ function formDecantLines(tdtank_Id, decantLineTag, decantRow, user) {
         'quantity': parseFloat(document.getElementById(decantLineTag + 'tankqty_' + decantRow).value),
         'opening_dip': getVal(decantLineTag + 'opening_dip_' + decantRow),
         'closing_dip': getVal(decantLineTag + 'closing_dip_' + decantRow),
-        'EB_MS_FLAG': document.getElementById(decantLineTag + 'eb_' + decantRow).value,
+        'EB_MS_FLAG': getVal(decantLineTag + 'eb_' + decantRow) || 'N',
         'notes': document.getElementById(decantLineTag + 'notes_' + decantRow).value,
         'amount': getVal(decantLineTag + 'amt_' + decantRow),
         'created_by': user.User_Name,
@@ -2788,10 +2788,15 @@ function populateReceiptSummary(obj) {
             const getValueFromLabelId = labels[j].id.replace("val-", "");
             labels[j].textContent = document.getElementById(getValueFromLabelId) ? document.getElementById(getValueFromLabelId).value : "";
         }
+        // Dates: format the live date input as DD-MON-YYYY (the h_ copy goes stale
+        // once the user changes the date); fall back to the h_ copy otherwise
         const dateValues = elements[i].querySelectorAll('[id^=valDate-]');
         for (let j = 0; j < dateValues.length; j++) {
-            const getValueFromLabelId = dateValues[j].id.replace("valDate-", "h_");
-            dateValues[j].textContent = document.getElementById(getValueFromLabelId).value;
+            const liveInput = document.getElementById(dateValues[j].id.replace("valDate-", ""));
+            const hiddenCopy = document.getElementById(dateValues[j].id.replace("valDate-", "h_"));
+            dateValues[j].textContent = (liveInput && liveInput.value)
+                ? formatDateDDMonYYYY(liveInput.value)
+                : (hiddenCopy ? hiddenCopy.value : '');
         }
 
         const texts = elements[i].querySelectorAll('[id^=valText-]');
@@ -3919,19 +3924,14 @@ function updateTankReceiptDateRange() {
         toDate = '';
     }
 
-    fromDateInput.value = fromDate ? formatDateToISOString(fromDate) : '';
-    toDateInput.value = toDate ? formatDateToISOString(toDate) : '';
+    // Custom keeps the dates already shown, so the user only adjusts them
+    if (fromDate) fromDateInput.value = formatDateToISOString(fromDate);
+    if (toDate) toDateInput.value = formatDateToISOString(toDate);
 
-    if (dateRange === 'custom') {
-        fromDateInput.style.display = 'block';
-        toDateInput.style.display = 'block';
-        fromDateLabel.style.display = 'table-cell';
-        toDateLabel.style.display = 'table-cell';
-    } else {
-        fromDateInput.style.display = 'none';
-        toDateInput.style.display = 'none';
-        fromDateLabel.style.display = 'none';
-        toDateLabel.style.display = 'none';
+    const isCustom = dateRange === 'custom';
+    [fromDateInput, toDateInput, fromDateLabel, toDateLabel, document.getElementById('tankrcpt_showBtn')]
+        .forEach(el => { if (el) el.classList.toggle('d-none', !isCustom); });
+    if (!isCustom) {
         document.getElementById('receipts-by-date').submit();
     }
 }
