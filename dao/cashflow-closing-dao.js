@@ -39,6 +39,43 @@ module.exports = {
         });
     },
 
+    // Inflow/outflow per CLOSED day close, using the same entry_type rule as the
+    // Cashflow report (reports-cashflow) so the numbers always agree with it.
+    findClosedCashflowTotals: (locationCode, fromDate, toDate) => {
+        return db.sequelize.query(
+            `SELECT tcc.cashflow_id,
+                    COALESCE(SUM(CASE WHEN tct.entry_type = 'CREDIT' THEN tct.amount END), 0) AS inflow,
+                    COALESCE(SUM(CASE WHEN tct.entry_type = 'DEBIT'  THEN tct.amount END), 0) AS outflow
+             FROM t_cashflow_closing tcc
+             LEFT JOIN t_cashflow_transaction tct ON tct.cashflow_id = tcc.cashflow_id
+             WHERE tcc.location_code = :locationCode
+               AND tcc.closing_status = 'CLOSED'
+               AND DATE(tcc.cashflow_date) BETWEEN :fromDate AND :toDate
+             GROUP BY tcc.cashflow_id`,
+            {
+                replacements: { locationCode, fromDate, toDate },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+    },
+
+    // Most recent day close (any status) — drives the "next day close" card.
+    findLatestCashflowClosing: (locationCode) => {
+        return db.sequelize.query(
+            `SELECT cashflow_id,
+                    DATE_FORMAT(cashflow_date, '%Y-%m-%d') AS cashflow_date,
+                    closing_status
+             FROM t_cashflow_closing
+             WHERE location_code = :locationCode
+             ORDER BY cashflow_date DESC, cashflow_id DESC
+             LIMIT 1`,
+            {
+                replacements: { locationCode },
+                type: Sequelize.QueryTypes.SELECT
+            }
+        );
+    },
+
     findLatestCashflowDate: (locationCode) => {
         return db.sequelize.query(
             `SELECT DATE_FORMAT(MAX(cashflow_date), '%Y-%m-%d') as latest_date 
