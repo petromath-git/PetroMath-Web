@@ -472,7 +472,6 @@ module.exports = {
           'Decant Date': stockreceipt.decant_date,
           'Decant Time': stockreceipt.decant_time,
           'Truck Number': stockreceipt.truck_number,
-          'Odometer Reading': stockreceipt.odometer_reading,
            Driver: stockreceipt.driver,
            Helper: stockreceipt.helper,
            'Decant Incharge': stockreceipt.decant_incharge,

@@ -2527,7 +2527,7 @@ function formDecant(ttank_id, user) {
         'driver_name': document.getElementById('driverid').value,
         'helper_id': getDatalistId('helperid', 'driver-list'),
         'helper_name': document.getElementById('helperid').value,
-        'odometer_reading': document.getElementById('odometer').value,
+        'odometer_reading': document.getElementById('odometer').value || null,
         'truck_halt_flag': document.getElementById('halt_chk').value,
         'decant_time': document.getElementById('decanttime').value,
         'created_by': user.User_Name,
@@ -2728,24 +2728,6 @@ function saveDecantLines() {
         const linesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + decantRow + ']:not([type="hidden"])');
         let newLines = [], updateLines = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
-        let amountMissing = false;
-        linesObj.forEach((linesObj) => {
-            if (!linesObj.className.includes('-none')) {
-                const linesObjRowNum = linesObj.id.replace(decantRow, '');
-                const amtField = document.getElementById(decantLineTag + 'amt_' + linesObjRowNum);
-                if (amtField && (amtField.value === '' || amtField.value === null)) {
-                    amtField.classList.add('is-invalid');
-                    amountMissing = true;
-                } else if (amtField) {
-                    amtField.classList.remove('is-invalid');
-                }
-            }
-        });
-        if (amountMissing) {
-            alert('Amount is required for all decant lines.');
-            resolve(false);
-            return;
-        }
         linesObj.forEach((linesObj) => {
             if (!linesObj.className.includes('-none')) {
                 const linesObjRowNum = linesObj.id.replace(decantRow, '');
@@ -2781,11 +2763,11 @@ function formDecantLines(tdtank_Id, decantLineTag, decantRow, user) {
         'ttank_id': document.getElementById('closing_hiddenId').value,
         'tank_id': document.getElementById(decantLineTag + 'tank_' + decantRow).value,
         'quantity': parseFloat(document.getElementById(decantLineTag + 'tankqty_' + decantRow).value),
-        'opening_dip': document.getElementById(decantLineTag + 'opening_dip_' + decantRow).value,
-        'closing_dip': document.getElementById(decantLineTag + 'closing_dip_' + decantRow).value,
+        'opening_dip': getVal(decantLineTag + 'opening_dip_' + decantRow),
+        'closing_dip': getVal(decantLineTag + 'closing_dip_' + decantRow),
         'EB_MS_FLAG': document.getElementById(decantLineTag + 'eb_' + decantRow).value,
         'notes': document.getElementById(decantLineTag + 'notes_' + decantRow).value,
-        'amount': document.getElementById(decantLineTag + 'amt_' + decantRow).value,
+        'amount': getVal(decantLineTag + 'amt_' + decantRow),
         'created_by': user.User_Name,
         'updated_by': user.User_Name
     };
@@ -3690,14 +3672,23 @@ function renderInvoiceConfirmForm(data, products, mappings, tempId, supplier, su
     const decantInvoiceNo = ((document.getElementById('invoiceno') || {}).value || '').trim();
     const parsedInvoiceNo = (h.invoice_number || '').trim();
     const frozen = !!(document.getElementById('freezedRecord_hiddenValue'));
+    const canFixClosed = frozen && !!document.getElementById('invoiceNoEditBtn');
     const mismatch = decantInvoiceNo && parsedInvoiceNo && decantInvoiceNo !== parsedInvoiceNo;
+    let mismatchHelp;
+    if (canFixClosed) {
+        mismatchHelp = `If the receipt's number was mistyped, correct it and save this invoice:
+            <button type="button" class="btn btn-sm btn-danger ml-1" onclick="useInvoiceNumberFromPdf()">Change receipt to ${parsedInvoiceNo}</button>
+            <span id="invoiceNoFixStatus" class="ml-1"></span>`;
+    } else if (frozen) {
+        mismatchHelp = 'This receipt is closed — ask an admin to correct its invoice number, or upload the correct invoice PDF.';
+    } else {
+        mismatchHelp = 'Update the invoice number on the Header tab to <strong>' + parsedInvoiceNo + '</strong> first, then re-upload.';
+    }
     const mismatchBanner = mismatch
         ? `<div class="alert alert-danger py-1 px-2 mb-2 small">
                <strong>Cannot save — invoice number mismatch.</strong>
                The decant header has <strong>${decantInvoiceNo}</strong> but this PDF is for <strong>${parsedInvoiceNo}</strong>.
-               ${frozen
-                   ? 'This receipt is closed and cannot be changed. Upload the correct invoice PDF.'
-                   : 'Update the invoice number on the Header tab to <strong>' + parsedInvoiceNo + '</strong> first, then re-upload.'}
+               ${mismatchHelp}
            </div>`
         : '';
 
@@ -3730,6 +3721,87 @@ function renderInvoiceConfirmForm(data, products, mappings, tempId, supplier, su
 
     // Store parsed data on container for saveInvoice to read
     container._parsedData = data;
+    container._confirmFormArgs = [data, products, mappings, tempId, supplier, supplierId];
+}
+
+// Closed receipts: the invoice number is the one header field that can still be
+// corrected, since a typo there makes the invoice PDF upload fail the number match.
+function startInvoiceNumberEdit() {
+    const input = document.getElementById('invoiceNoEditInput');
+    input.value = document.getElementById('invoiceno').value;
+    setInvoiceNumberEditMode(true);
+    setInvoiceNoEditStatus('', '');
+    input.focus();
+    input.select();
+}
+
+function cancelInvoiceNumberEdit() {
+    setInvoiceNumberEditMode(false);
+    setInvoiceNoEditStatus('', '');
+}
+
+function setInvoiceNumberEditMode(editing) {
+    document.getElementById('val-invoiceno').classList.toggle('d-none', editing);
+    document.getElementById('invoiceNoEditBtn').classList.toggle('d-none', editing);
+    document.getElementById('invoiceNoEditGroup').classList.toggle('d-none', !editing);
+}
+
+function setInvoiceNoEditStatus(text, cssClass) {
+    const el = document.getElementById('invoiceNoEditStatus');
+    if (el) { el.textContent = text; el.className = 'd-block ' + cssClass; }
+}
+
+async function saveClosedInvoiceNumber() {
+    const newNumber = document.getElementById('invoiceNoEditInput').value.trim();
+    if (newNumber === document.getElementById('invoiceno').value.trim()) { cancelInvoiceNumberEdit(); return; }
+    const result = await updateReceiptInvoiceNumber(newNumber);
+    if (result.success) {
+        setInvoiceNumberEditMode(false);
+        setInvoiceNoEditStatus('Invoice number updated.', 'text-success');
+    } else {
+        setInvoiceNoEditStatus(result.error, 'text-danger');
+    }
+}
+
+// Invoice tab, closed receipt: adopt the uploaded PDF's invoice number, then
+// redraw the confirm form so the invoice can be saved
+async function useInvoiceNumberFromPdf() {
+    const container = document.getElementById('invoiceTabContent');
+    const args = container._confirmFormArgs;
+    const pdfNumber = ((args[0].header || {}).invoice_number || '').trim();
+    const current = document.getElementById('invoiceno').value;
+    if (!confirm(`Change this receipt's invoice number from ${current} to ${pdfNumber}?`)) return;
+
+    const result = await updateReceiptInvoiceNumber(pdfNumber);
+    if (result.success) {
+        renderInvoiceConfirmForm(...args);
+    } else {
+        const statusEl = document.getElementById('invoiceNoFixStatus');
+        if (statusEl) statusEl.textContent = result.error;
+    }
+}
+
+async function updateReceiptInvoiceNumber(invoiceNumber) {
+    if (!invoiceNumber) return { success: false, error: 'Invoice number cannot be empty.' };
+    try {
+        const resp = await fetch('/tank-receipts/update-invoice-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ttankId: document.getElementById('closing_hiddenId').value, invoiceNumber })
+        });
+        if (resp.status === 403) return { success: false, error: 'Only admins can change the invoice number.' };
+        const json = await resp.json();
+        if (json.success) {
+            document.getElementById('invoiceno').value = json.invoiceNumber;
+            const label = document.getElementById('val-invoiceno');
+            if (label) label.textContent = json.invoiceNumber;
+            const c = document.getElementById('invoiceTabContent');
+            if (c) delete c.dataset.savedInvoiceNumber;
+        }
+        return json;
+    } catch (e) {
+        return { success: false, error: 'Error: ' + e.message };
+    }
 }
 
 async function saveInvoice(tempId, supplier, supplierId) {

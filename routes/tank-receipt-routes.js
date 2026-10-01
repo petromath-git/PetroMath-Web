@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const tankReceiptController = require('../controllers/tank-receipt-controller');
+const security = require('../utils/app-security');
 
 const isLoginEnsured = login.ensureLoggedIn({});
 
@@ -66,6 +67,12 @@ router.get('/invoice-preview',
 router.get('/check-invoice-number',
     isLoginEnsured,
     (req, res, next) => tankReceiptController.checkInvoiceNumber(req, res, next)
+);
+
+// Correct the invoice number on a receipt, including a CLOSED one
+router.post('/update-invoice-number',
+    [isLoginEnsured, security.isAdmin()],
+    (req, res, next) => tankReceiptController.updateInvoiceNumber(req, res, next)
 );
 
 module.exports = router;
