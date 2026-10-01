@@ -1,5 +1,6 @@
 const dbMapping = require("../db/ui-db-field-mapping")
 const dateFormat = require('dateformat');
+const moment = require('moment');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const db = require("../db/db-connection");
@@ -459,6 +460,10 @@ const getHomeData = (req, res, next) => {
         });
 }
 
+// DD-MMM-YYYY (e.g. 30-Sep-2026). Formatted here rather than taken from the view's
+// pre-formatted columns, which can render the full month name.
+const formatListDate = (d) => d ? moment(d).utcOffset(config.TIMEZONE).format('DD-MMM-YYYY') : '';
+
 // decant_time is stored as decimal hours.minutes (e.g. 14.30) -> "14:30"
 const formatDecantTime = (t) => {
     if (t == null || t === '') return '';
@@ -473,9 +478,9 @@ const getTankRcptByDate = (locationCode, fromDate, toDate) => {
             .then(data => {
                 data.forEach((receiptsData) => {
                     receipts.push({ttank_id: receiptsData.ttank_id,
-                        invoice_date: receiptsData.fomratted_inv_date,
+                        invoice_date: formatListDate(receiptsData.invoice_date),
                         invoice_number: receiptsData.invoice_number,
-                        decant_date: receiptsData.fomratted_decant_date,
+                        decant_date: formatListDate(receiptsData.decant_date),
                         decant_time: receiptsData.decant_time,
                         decant_incharge: receiptsData.decant_incharge,
                         truck_number: receiptsData.truck_number,
