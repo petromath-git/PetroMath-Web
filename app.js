@@ -1334,6 +1334,10 @@ app.get('/get-excess-shortage', isLoginEnsured, function (req, res, next) {
     HomeController.getExcessShortage(req, res, next);
 });
 
+app.get('/excess-shortage-breakdown', isLoginEnsured, function (req, res, next) {
+    HomeController.getExcessShortageBreakdown(req, res, next);
+});
+
 // Reopen shift closing
 app.post('/reopen-shift', isLoginEnsured, function (req, res, next) {
     ClosingEditController.reopenShift(req, res, next);

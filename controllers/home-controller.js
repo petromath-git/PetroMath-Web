@@ -101,6 +101,12 @@ module.exports = {
     config.APP_CONFIGS.maxCreditReceiptsRowCnt
     ));
 
+    const showExShortBreakdown = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'SHOW_EXSHORT_BREAKDOWN',
+    'N' // default - disabled
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -118,6 +124,7 @@ module.exports = {
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
+                            showExShortBreakdown: showExShortBreakdown === 'Y',
                             config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                             cashiers: values[0].value.cashiers,
                             minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
@@ -339,6 +346,118 @@ module.exports = {
                     res.status(500).send({error: result.error});
                 }
             });
+        }
+    },
+
+    // Explains a shift's excess/shortage line by line (popup on the shift list
+    // and the closing Summary tab). Read-only.
+    getExcessShortageBreakdown: async (req, res) => {
+        try {
+            const closingId = parseInt(req.query.id, 10);
+            if (!closingId) {
+                return res.status(400).json({ error: 'Closing ID is required.' });
+            }
+            const data = await TxnReadDao.getExcessShortageBreakdown(closingId);
+            if (!data.header || !security.canAccessLocation(req.user, data.header.location_code)) {
+                return res.status(404).json({ error: 'Shift not found.' });
+            }
+            const enabled = await locationConfig.getLocationConfigValue(
+                data.header.location_code, 'SHOW_EXSHORT_BREAKDOWN', 'N');
+            if (enabled !== 'Y') {
+                return res.status(403).json({ error: 'The excess/shortage breakdown is not enabled for this location.' });
+            }
+
+            const num = (v) => Number(v) || 0;
+            const fix = (v, d) => num(v).toFixed(d);
+            // CALCULATE_EXSHORTAGE stores each component in DECIMAL(10,2), i.e.
+            // rounds each one to 2 decimals before adding them up.
+            const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+            const section = (label, rows) => ({
+                label,
+                rows,
+                total: round2(rows.reduce((s, r) => s + num(r.amount), 0))
+            });
+
+            const add = [
+                section('Meter sales (pump readings)', data.readings.map(r => ({
+                    label: `${r.pump_code || 'Pump'} (${r.product_code || '-'})`,
+                    detail: `${fix(r.closing_reading, 3)} − ${fix(r.opening_reading, 3)} − testing ${fix(r.testing, 2)} = ${fix(r.qty, 3)} × ₹${fix(r.price, 2)}`,
+                    amount: num(r.amount)
+                }))),
+                section('2T oil sales', data.twoTOil.map(r => ({
+                    label: r.name,
+                    detail: `given ${fix(r.given_qty, 3)} − returned ${fix(r.returned_qty, 3)} = ${fix(r.qty, 3)} × ₹${fix(r.price, 2)}`,
+                    amount: num(r.amount)
+                }))),
+                section('Lube / non-pump cash sales (after discount)', data.lubeSales.map(r => ({
+                    label: r.name, detail: `qty ${fix(r.qty, 3)}`, amount: num(r.amount)
+                }))),
+                section('Opening cash given to cashier', [{
+                    label: 'Opening cash', detail: '', amount: num(data.header.cash)
+                }]),
+                section('Cash collected from credit customers', data.cashReceipts.map(r => ({
+                    label: r.name, detail: '', amount: num(r.amount)
+                }))),
+                section('Employee advance recovered (cash in)', data.employeeLedger
+                    .filter(r => r.txn_type === 'ADVANCE_RECOVERY')
+                    .map(r => ({ label: r.name, detail: 'Advance recovery', amount: num(r.credit_amount) })))
+            ];
+
+            const less = [
+                section('Credit sales of pump products', data.credits.map(r => ({
+                    label: r.name, detail: `${r.product} · qty ${fix(r.qty, 3)}`, amount: num(r.amount)
+                }))),
+                section('Digital sales (UPI / card)', data.digitalSales.map(r => ({
+                    label: r.name, detail: '', amount: num(r.amount)
+                }))),
+                section('Discounts given on pump-product cash bills', data.pumpDiscounts.map(r => ({
+                    label: r.name, detail: `qty ${fix(r.qty, 3)}`, amount: num(r.amount)
+                }))),
+                section('Fuel transferred to bowser', data.intercompany.map(r => ({
+                    label: r.name, detail: `${fix(r.qty, 3)} × ₹${fix(r.rate, 2)}`, amount: num(r.amount)
+                }))),
+                section('Expenses paid from cash', data.expenses.map(r => ({
+                    label: r.name, detail: '', amount: num(r.amount)
+                }))),
+                section('Employee advances / payments (cash out)', data.employeeLedger
+                    .filter(r => r.txn_type === 'ADVANCE' || r.txn_type === 'PAYMENT')
+                    .map(r => ({ label: r.name, detail: r.txn_type === 'ADVANCE' ? 'Advance' : 'Payment', amount: num(r.debit_amount) })))
+            ];
+
+            const counted = section('Cash counted (denominations)', data.denominations.map(r => ({
+                label: String(r.denomination) === '0' ? 'Coins / loose' : `₹${r.denomination}`,
+                detail: String(r.denomination) === '0' ? '' : `× ${r.denomcount}`,
+                amount: num(r.amount)
+            })));
+
+            const totalAdd = round2(add.reduce((s, x) => s + x.total, 0));
+            const totalLess = round2(less.reduce((s, x) => s + x.total, 0));
+            const expected = round2(totalAdd - totalLess);
+            const computed = round2(counted.total - expected);
+            const live = num(data.header.live_ex_short);
+            const stored = data.header.ex_short === null ? null : num(data.header.ex_short);
+
+            res.json({
+                header: {
+                    closingId: data.header.closing_id,
+                    closingDate: data.header.closing_date,
+                    cashierName: data.header.cashier_name,
+                    status: data.header.closing_status
+                },
+                add: add.filter(x => x.rows.length),
+                less: less.filter(x => x.rows.length),
+                counted,
+                totals: {
+                    totalAdd, totalLess, expected, counted: counted.total, computed, live,
+                    // Value saved when the shift was closed — can differ from today's
+                    // recalculation if entries were changed after closing.
+                    stored: data.header.closing_status === 'CLOSED' ? stored : null,
+                    matchesFunction: Math.abs(computed - live) < 0.05
+                }
+            });
+        } catch (err) {
+            console.error('getExcessShortageBreakdown error:', err);
+            res.status(500).json({ error: 'Could not load the excess/shortage breakdown.' });
         }
     },
 
@@ -598,6 +717,12 @@ const getHomeData = async (req, res, next) => {
             'N'
         );
 
+        const showExShortBreakdown = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'SHOW_EXSHORT_BREAKDOWN',
+            'N'
+        );
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
@@ -624,6 +749,7 @@ const getHomeData = async (req, res, next) => {
                 showDayCloseGrouping: showDayCloseGrouping,
                 allowShiftReopen: allowShiftReopen,
                 showTestingSummary: showTestingSummary,
+                showExShortBreakdown: showExShortBreakdown === 'Y',
                 devBackupInfo: devBackupInfo,
             });
         }).catch(error => {

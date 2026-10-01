@@ -1,6 +1,7 @@
 extends layout
 include mixins/new-closing-mixins
 include mixins/summary-mixins
+include mixins/exshort-breakdown-mixin
 
 block content    
     - var maxCreditsRowCnt = config.maxCreditsRowCnt;
@@ -702,8 +703,9 @@ block content
                                                 span(id='val-cashGiven')
                                             div.col-3
                                                 span Excess/Shortage:&nbsp;
-                                                span#excess_storage_color
-                                                    b#excess_storage Excess
+                                                +exShortBreakdownLink("showExShortBreakdown(document.getElementById('closing_hiddenId').value);")
+                                                    span#excess_storage_color
+                                                        b#excess_storage Excess
 
                                     // Summary: pump reading details
                                     div#v-pump-readings
@@ -946,4 +948,6 @@ block content
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
+    if showExShortBreakdown
+        script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)
 

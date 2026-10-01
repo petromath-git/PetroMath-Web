@@ -134,6 +134,12 @@ module.exports = {
                 config.APP_CONFIGS.maxCreditReceiptsRowCnt
             ));
 
+            const showExShortBreakdown = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'SHOW_EXSHORT_BREAKDOWN',
+                'N' // default - disabled
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -162,6 +168,7 @@ module.exports = {
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
+                        showExShortBreakdown: showExShortBreakdown === 'Y',
                         config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                         currentDate: utils.currentDate(),
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
