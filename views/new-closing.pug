@@ -1,6 +1,7 @@
 extends layout
 include mixins/new-closing-mixins
 include mixins/summary-mixins
+include mixins/exshort-breakdown-mixin
 
 block content
     style.
@@ -621,7 +622,7 @@ block content
                                     div.table-success.row(align="center")
                                         div.col
                                             span Excess/Shortage:&nbsp;
-                                            a(href='#' title='See how this is calculated' style='text-decoration: underline dotted;' onclick="showExShortBreakdown(document.getElementById('closing_hiddenId').value); return false;")
+                                            +exShortBreakdownLink("showExShortBreakdown(document.getElementById('closing_hiddenId').value);")
                                                 span#excess_storage_color
                                                     b#excess_storage Excess
 
@@ -863,4 +864,5 @@ block content
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
-    script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)
+    if showExShortBreakdown
+        script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)
