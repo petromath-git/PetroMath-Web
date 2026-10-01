@@ -2,7 +2,24 @@ extends layout
 include mixins/mixins
 
 block content
-    form(method='POST' action='/users')
+    - var roles = manageableRoles || []
+    - var canManage = function (role) { return user.Role === 'SuperUser' || roles.includes(role) }
+    - var showDisabled = view === 'disabled'
+
+    div.d-flex.flex-wrap.justify-content-between.align-items-center.mb-3
+        div.btn-group.btn-group-toggle.mb-2(role="group" aria-label="Show users")
+            a.btn(href="/users" class=showDisabled ? 'btn-outline-secondary' : 'btn-secondary')
+                | Active
+                span.badge.badge-light= users.length
+            a.btn(href="/users?view=disabled" class=showDisabled ? 'btn-secondary' : 'btn-outline-secondary')
+                | Disabled
+                span.badge.badge-light= disabledUsers.length
+        if roles.length
+            button.btn.btn-primary.mb-2(type="button" data-toggle="modal" data-target="#add-user-modal")
+                span.oi.oi-plus
+                |  Add User
+
+    if !showDisabled
         table(class="table" id="users-table")
             thead(class="thead-light")
                 tr
@@ -11,7 +28,7 @@ block content
                     th(scope="col") UserName
                     th(scope="col") Role
                     th(scope="col") Start Date
-                    th(scope="col") Disable User  
+                    th(scope="col") Disable
             tbody
                 each val, index in users
                     tr(id='user-' + index)
@@ -21,46 +38,88 @@ block content
                         td= val.role
                         td= val.effective_start_date
                         td
-                            div.align-items-start
-                                - var canDisable = false
-                                - if (user.Role === 'SuperUser')
-                                    - canDisable = true
-                                - else if (user.Role === 'Admin' && val.role !== 'SuperUser' && val.role !== 'Admin')
-                                    - canDisable = true
-                                - else if (user.Role === 'Manager' && (val.role === 'Cashier' || val.role === 'Driver' || val.role === 'Helper'))
-                                    - canDisable = true
-                                
-                                if canDisable
-                                    button.btn.btn-info(id="disable-user-"+index, onclick="disableUser('"+index+"', '"+ val.id +"')")
-                                        span.oi.oi-delete
-                                else
-                                    span.text-muted No permission
-                - var rowCnt = 0
-                while rowCnt < 1
-                    +addNewUser(rowCnt++, user.Role)
-        div(align="center")
-            button.btn.btn-primary(type="button", onClick="window.location.href='/enable_user'", id="enable-user", title="Enable User") Enable User
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'users')", id='users-add-new', title="Only one can be added at a time.") Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='users-save') Save
+                            if val.id === user.Person_id
+                                span.text-muted You
+                            else if canManage(val.role)
+                                button.btn.btn-outline-danger.btn-sm(type="button" title="Disable user" onclick="setUserEnabled('" + val.id + "', false)")
+                                    span.oi.oi-ban
+                                    |  Disable
+                            else
+                                span.text-muted No permission
+                if !users.length
+                    tr
+                        td.text-center.text-muted(colspan="6") No active users
+    else
+        table(class="table" id="disabled-users-table")
+            thead(class="thead-light")
+                tr
+                    th(scope="col") #
+                    th(scope="col") Name
+                    th(scope="col") UserName
+                    th(scope="col") Role
+                    th(scope="col") Disabled On
+                    th(scope="col") Enable
+            tbody
+                each val, index in disabledUsers
+                    tr(id='disabled-user-' + index)
+                        th(scope="row")= index + 1
+                        td= val.name
+                        td= val.username
+                        td= val.role
+                        td= val.effective_end_date
+                        td
+                            if canManage(val.role)
+                                button.btn.btn-outline-success.btn-sm(type="button" title="Enable user" onclick="setUserEnabled('" + val.id + "', true)")
+                                    span.oi.oi-check
+                                    |  Enable
+                            else
+                                span.text-muted No permission
+                if !disabledUsers.length
+                    tr
+                        td.text-center.text-muted(colspan="6") No disabled users
 
-    script.                
+    //- Add User modal — posts the same field names dbMapping.newUser reads
+    if roles.length
+        div.modal.fade#add-user-modal(tabindex="-1" role="dialog" aria-labelledby="add-user-title" aria-hidden="true")
+            div.modal-dialog(role="document")
+                form.modal-content#add-user-form(method='POST' action='/users')
+                    div.modal-header
+                        h5.modal-title#add-user-title Add User
+                        button.close(type="button" data-dismiss="modal" aria-label="Close")
+                            span(aria-hidden="true") &times;
+                    div.modal-body
+                        div.form-group
+                            label(for='m_user_name_0') Full Name
+                            input.form-control(type='text', name='m_user_name_0', id='m_user_name_0', required, oninput='validateAndGenerateUsername(0)', placeholder='Enter full name (CAPS only)', maxlength='20', title='Only capital letters and spaces allowed')
+                        div.form-group
+                            label(for='m_user_username_0') Username
+                            input.form-control(type='text', name='m_user_username_0', id='m_user_username_0', placeholder='Auto-generated from name', readonly)
+                            small.text-muted Generated automatically. Default password: welcome123
+                        div.form-group
+                            label(for='m_user_role_0') Role
+                            select.form-control(name='m_user_role_0', id='m_user_role_0', required)
+                                each role in roles
+                                    option= role
+                    div.modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-primary(type="submit" id='users-save') Save
+
+    script.
         function validateAndGenerateUsername(rowCnt) {
             const nameField = document.getElementById('m_user_name_' + rowCnt);
             const usernameField = document.getElementById('m_user_username_' + rowCnt);
             const locationCode = '#{user.location_code}';
-            
+
             let value = nameField.value;
-            
+
             // Only do minimal cleaning - don't trim during typing
             let cleaned = value.toUpperCase().replace(/[^A-Z\s]/g, '');
-            
+
             // Update field only if it actually changed
             if (cleaned !== value) {
                 nameField.value = cleaned;
             }
-            
+
             // Generate username from trimmed version (for username only)
             const trimmed = cleaned.trim();
             if (trimmed.length > 0) {
@@ -73,26 +132,32 @@ block content
                 nameField.classList.add('is-invalid');
             }
         }
-    
+
         function createSmartUsername(fullName, locationCode) {
             let shortName = fullName.replace(/\s+/g, '');
             return shortName.length <= 6 ? shortName + '-' + locationCode : shortName.substring(0, 6) + '-' + locationCode;
         }
-        
-        // Add form validation before submit
+
+        function setUserEnabled(userId, enable) {
+            if (!confirm('Please confirm if you want to ' + (enable ? 'enable' : 'disable') + ' the user?')) return;
+            putAjax((enable ? 'enable-user/' : 'disable-user/') + userId, {}).then(success => {
+                if (success) window.location.href = enable ? '/users?view=disabled' : '/users';
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
-            const form = document.querySelector('form[action="/users"]');
+            const form = document.getElementById('add-user-form');
             if (form) {
                 form.addEventListener('submit', function(e) {
-                    const nameFields = document.querySelectorAll('input[name^="m_user_name_"]');
-                    for (let field of nameFields) {
-                        if (field.offsetParent !== null && field.value.trim() === '') {
-                            e.preventDefault();
-                            alert('Name cannot be empty or just spaces');
-                            field.focus();
-                            return false;
-                        }
+                    const nameField = document.getElementById('m_user_name_0');
+                    if (nameField.value.trim() === '') {
+                        e.preventDefault();
+                        alert('Name cannot be empty or just spaces');
+                        nameField.focus();
                     }
                 });
+                $('#add-user-modal').on('shown.bs.modal', function () {
+                    document.getElementById('m_user_name_0').focus();
+                });
             }
-            });
+        });
