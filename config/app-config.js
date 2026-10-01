@@ -244,6 +244,13 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
       cashSaleTypeCodes: cashSaleTypeCodes,
       receiptTypes: RECEIPT_TYPES,
       adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES, ...POWER_USER_ROLES, ...SUPERUSER_ROLES],
+      // Roles each role may create / disable on the Users page (strictly below itself)
+      manageableRoles: {
+            SuperUser: ['PowerUser', 'Admin', 'Manager', 'Cashier', 'Driver', 'Helper'],
+            PowerUser: ['Admin', 'Manager', 'Cashier', 'Driver', 'Helper'],
+            Admin: ['Manager', 'Cashier', 'Driver', 'Helper'],
+            Manager: ['Cashier', 'Driver', 'Helper'],
+      },
 productUnits: ['LIT', 'NOS'],
       decantTimelists: ['0.00','0.30','1.00','1.30','2.00','2.30','3.00','3.30','4.00','4.30','5.00','5.30','6.00','6.30','7.00','7.30',
                         '8.00','8.30','9.00','9.30','10.00','10.30','11.00','11.30','12.00','12.30','13.00','13.30',
