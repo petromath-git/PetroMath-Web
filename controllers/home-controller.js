@@ -101,6 +101,12 @@ module.exports = {
     config.APP_CONFIGS.maxCreditReceiptsRowCnt
     ));
 
+    const showExShortBreakdown = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'SHOW_EXSHORT_BREAKDOWN',
+    'N' // default - disabled
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -118,6 +124,7 @@ module.exports = {
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
+                            showExShortBreakdown: showExShortBreakdown === 'Y',
                             config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                             cashiers: values[0].value.cashiers,
                             minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
@@ -358,6 +365,11 @@ module.exports = {
             const data = await TxnReadDao.getExcessShortageBreakdown(closingId);
             if (!data.header || !security.canAccessLocation(req.user, data.header.location_code)) {
                 return res.status(404).json({ error: 'Shift not found.' });
+            }
+            const enabled = await locationConfig.getLocationConfigValue(
+                data.header.location_code, 'SHOW_EXSHORT_BREAKDOWN', 'N');
+            if (enabled !== 'Y') {
+                return res.status(403).json({ error: 'The excess/shortage breakdown is not enabled for this location.' });
             }
 
             const num = (v) => Number(v) || 0;
@@ -710,6 +722,12 @@ const getHomeData = async (req, res, next) => {
             'N'
         );
 
+        const showExShortBreakdown = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'SHOW_EXSHORT_BREAKDOWN',
+            'N'
+        );
+
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
@@ -736,6 +754,7 @@ const getHomeData = async (req, res, next) => {
                 showDayCloseGrouping: showDayCloseGrouping,
                 allowShiftReopen: allowShiftReopen,
                 showTestingSummary: showTestingSummary,
+                showExShortBreakdown: showExShortBreakdown === 'Y',
                 devBackupInfo: devBackupInfo,
             });
         }).catch(error => {
