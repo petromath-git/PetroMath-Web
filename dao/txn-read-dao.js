@@ -494,6 +494,132 @@ getMostRecentClosingDate: async (locationCode) => {
         return closingTxn;
     },
 
+    // Line-level breakdown of CALCULATE_EXSHORTAGE for the "how was this
+    // computed" popup. Every query below mirrors one component of the
+    // function (db/migrations/add-employee-advance-to-exshortage.sql) —
+    // same filters, same arithmetic, same NULL behaviour — only grouped so
+    // the user can see the lines. If the function changes, change these too;
+    // the controller cross-checks the total against the function itself.
+    getExcessShortageBreakdown: async (closingId) => {
+        const opts = { replacements: { closingId }, type: Sequelize.QueryTypes.SELECT };
+        const pumpProductsSql = `
+            SELECT DISTINCT mp2.product_code
+            FROM t_reading tr
+            INNER JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
+            WHERE tr.closing_id = :closingId`;
+        const q = (sql) => db.sequelize.query(sql, opts);
+
+        const [header, readings, credits, lubeSales, pumpDiscounts, twoTOil, expenses,
+               denominations, digitalSales, intercompany, cashReceipts, employeeLedger] = await Promise.all([
+            q(`SELECT tc.closing_id, tc.location_code, tc.closing_status, tc.cash, tc.ex_short,
+                      DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date,
+                      p.Person_Name AS cashier_name,
+                      CALCULATE_EXSHORTAGE(tc.closing_id) AS live_ex_short
+               FROM t_closing tc
+               LEFT JOIN m_persons p ON p.Person_id = tc.cashier_id
+               WHERE tc.closing_id = :closingId`),
+
+            q(`SELECT mp.pump_code, mp.product_code, tr.opening_reading, tr.closing_reading, tr.testing, tr.price,
+                      (tr.closing_reading - tr.opening_reading - tr.testing) AS qty,
+                      (tr.closing_reading - tr.opening_reading - tr.testing) * tr.price AS amount
+               FROM t_reading tr
+               LEFT JOIN m_pump mp ON mp.pump_id = tr.pump_id
+               WHERE tr.closing_id = :closingId
+               ORDER BY mp.display_order, mp.pump_code`),
+
+            q(`SELECT cl.Company_Name AS name, mp.product_name AS product, SUM(tc.qty) AS qty, SUM(tc.price * tc.qty) AS amount
+               FROM t_credits tc
+               INNER JOIN m_product mp ON tc.product_id = mp.product_id
+               INNER JOIN (${pumpProductsSql}) pump_products ON mp.product_name = pump_products.product_code
+               LEFT JOIN m_credit_list cl ON cl.creditlist_id = tc.creditlist_id
+               WHERE tc.closing_id = :closingId
+                 AND COALESCE(tc.off_meter_sale, 0) = 0
+               GROUP BY cl.Company_Name, mp.product_name
+               ORDER BY cl.Company_Name, mp.product_name`),
+
+            q(`SELECT mp.product_name AS name, SUM(cs.qty) AS qty, SUM((cs.price - cs.price_discount) * cs.qty) AS amount
+               FROM t_cashsales cs
+               INNER JOIN m_product mp ON cs.product_id = mp.product_id
+               WHERE cs.closing_id = :closingId
+                 AND mp.product_name NOT IN (${pumpProductsSql})
+               GROUP BY mp.product_name
+               ORDER BY mp.product_name`),
+
+            q(`SELECT mp.product_name AS name, SUM(cs.qty) AS qty, SUM(cs.price_discount * cs.qty) AS amount
+               FROM t_cashsales cs
+               INNER JOIN m_product mp ON cs.product_id = mp.product_id
+               WHERE cs.closing_id = :closingId
+                 AND mp.product_name IN (${pumpProductsSql})
+               GROUP BY mp.product_name
+               HAVING SUM(cs.price_discount * cs.qty) <> 0
+               ORDER BY mp.product_name`),
+
+            q(`SELECT mp.product_name AS name, t.price, t.given_qty, t.returned_qty,
+                      (t.given_qty - t.returned_qty) AS qty,
+                      t.price * (t.given_qty - t.returned_qty) AS amount
+               FROM t_2toil t
+               LEFT JOIN m_product mp ON mp.product_id = t.product_id
+               WHERE t.closing_id = :closingId
+               ORDER BY mp.product_name`),
+
+            q(`SELECT me.Expense_name AS name, SUM(te.amount) AS amount
+               FROM t_expense te
+               LEFT JOIN m_expense me ON me.Expense_id = te.expense_id
+               WHERE te.closing_id = :closingId
+               GROUP BY me.Expense_name
+               ORDER BY me.Expense_name`),
+
+            q(`SELECT denomination, denomcount,
+                      IF(denomination = '0', 1, denomination) * denomcount AS amount
+               FROM t_denomination
+               WHERE closing_id = :closingId
+               ORDER BY denomination DESC`),
+
+            q(`SELECT cl.Company_Name AS name, SUM(ds.amount) AS amount
+               FROM t_digital_sales ds
+               LEFT JOIN m_credit_list cl ON cl.creditlist_id = ds.vendor_id
+               WHERE ds.closing_id = :closingId
+               GROUP BY cl.Company_Name
+               ORDER BY cl.Company_Name`),
+
+            q(`SELECT x.name, x.qty, x.rate, x.qty * x.rate AS amount
+               FROM (
+                   SELECT p.product_name AS name, tci.quantity AS qty,
+                          (SELECT AVG(tr.price)
+                           FROM t_reading tr
+                           JOIN m_pump mp ON tr.pump_id = mp.pump_id
+                           JOIN m_product mp2 ON mp.product_code = mp2.product_name
+                           WHERE tr.closing_id = :closingId
+                             AND mp2.product_id = tci.product_id) AS rate
+                   FROM t_closing_intercompany tci
+                   LEFT JOIN m_product p ON p.product_id = tci.product_id
+                   WHERE tci.closing_id = :closingId
+               ) x`),
+
+            q(`SELECT cl.Company_Name AS name, SUM(r.amount) AS amount
+               FROM t_receipts r
+               LEFT JOIN m_credit_list cl ON cl.creditlist_id = r.creditlist_id
+               WHERE r.closing_id = :closingId
+                 AND r.receipt_type = 'Cash'
+               GROUP BY cl.Company_Name
+               ORDER BY cl.Company_Name`),
+
+            q(`SELECT e.name, l.txn_type, SUM(l.debit_amount) AS debit_amount, SUM(l.credit_amount) AS credit_amount
+               FROM t_employee_ledger l
+               LEFT JOIN m_employee e ON e.employee_id = l.employee_id
+               WHERE l.closing_id = :closingId
+                 AND l.txn_type IN ('ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY')
+               GROUP BY e.name, l.txn_type
+               ORDER BY e.name, l.txn_type`)
+        ]);
+
+        return {
+            header: header[0] || null,
+            readings, credits, lubeSales, pumpDiscounts, twoTOil, expenses,
+            denominations, digitalSales, intercompany, cashReceipts, employeeLedger
+        };
+    },
+
     getClosingSaleByMonth: (locationCode) => {
         return TxnClosingViews.findAll({
             attributes: [
