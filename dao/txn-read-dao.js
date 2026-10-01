@@ -291,28 +291,46 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
     }
 },
 
-getMostRecentClosingDate: async (locationCode) => {
+// With dayCount > 1, returns the oldest of the last `dayCount` distinct closing
+// dates — i.e. the from-date that covers the last N days that had shifts.
+getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
     try {
+        const offset = Math.max(parseInt(dayCount, 10) || 1, 1) - 1;
         const query = `
-            SELECT DATE(closing_date) as most_recent_date
-            FROM t_closing
-            WHERE location_code = :locationCode
-            ORDER BY closing_date DESC
-            LIMIT 1
+            SELECT closing_day as most_recent_date
+            FROM (
+                SELECT DISTINCT DATE(closing_date) as closing_day
+                FROM t_closing
+                WHERE location_code = :locationCode
+            ) d
+            ORDER BY closing_day DESC
+            LIMIT 1 OFFSET ${offset}
         `;
-        
-        const result = await db.sequelize.query(query, {
+
+        let result = await db.sequelize.query(query, {
             replacements: { locationCode },
             type: db.Sequelize.QueryTypes.SELECT
         });
-        
+
+        // Fewer than N days of history — fall back to the oldest closing day
+        if ((!result || result.length === 0) && offset > 0) {
+            result = await db.sequelize.query(`
+                SELECT DATE(MIN(closing_date)) as most_recent_date
+                FROM t_closing
+                WHERE location_code = :locationCode
+            `, {
+                replacements: { locationCode },
+                type: db.Sequelize.QueryTypes.SELECT
+            });
+        }
+
         if (result && result.length > 0 && result[0].most_recent_date) {
             return moment(result[0].most_recent_date).format('YYYY-MM-DD');
         }
-        
+
         // If no closings found, return today's date as fallback
         return moment().format('YYYY-MM-DD');
-        
+
     } catch (error) {
         console.error('Error in getMostRecentClosingDate:', error.message);
         // Return today's date as fallback on error
