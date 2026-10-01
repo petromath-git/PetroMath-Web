@@ -64,8 +64,8 @@ block content
                                         else
                                             span.badge.badge-warning Draft
                                     if val.status === 'CLOSED'
-                                        td.text-right.text-nowrap.d-none.d-md-table-cell= fmtAmt(val.inflow)
-                                        td.text-right.text-nowrap.d-none.d-md-table-cell= fmtAmt(val.outflow)
+                                        td.text-right.text-nowrap.d-none.d-md-table-cell= '₹ ' + fmtAmt(val.inflow)
+                                        td.text-right.text-nowrap.d-none.d-md-table-cell= '₹ ' + fmtAmt(val.outflow)
                                         td.text-right.text-nowrap.font-weight-bold= fmtAmt(val.balance)
                                     else
                                         td.text-right.text-muted.d-none.d-md-table-cell —
