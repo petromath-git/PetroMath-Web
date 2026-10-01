@@ -47,6 +47,7 @@ block content
                         thead.thead-light
                             tr
                                 th Date
+                                th Day
                                 th Status
                                 th.d-none.d-md-table-cell Managers
                                 th.text-right.d-none.d-md-table-cell Inflow
@@ -55,8 +56,10 @@ block content
                                 th Actions
                         tbody
                             each val in cashflowValues
-                                tr(id=`cashflow-record-${val.cashflowId}`)
+                                //- Sundays shaded: cash balance usually runs high then
+                                tr(id=`cashflow-record-${val.cashflowId}`, class=(val.weekday === 'Sun' ? 'table-info' : ''))
                                     td.text-nowrap= val.date
+                                    td(class=(val.weekday === 'Sun' ? 'font-weight-bold' : ''))= val.weekday
                                     td
                                         if val.status === 'CLOSED'
                                             span.badge.badge-success Closed
