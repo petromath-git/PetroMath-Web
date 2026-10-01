@@ -189,13 +189,14 @@ block content
                                     td
                                         span= val.l2tData || '0.00'
                                 td
-                                    if val.expenseData && val.expenseData != 0
-                                        if val.expenseData > 0
-                                            strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                    a(href='#' title='See how this is calculated' style='text-decoration: underline dotted;' onclick=`showExShortBreakdown(${val.closingId}); return false;`)
+                                        if val.expenseData && val.expenseData != 0
+                                            if val.expenseData > 0
+                                                strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                            else
+                                                strong.text-danger= parseFloat(val.expenseData).toFixed(2)
                                         else
-                                            strong.text-danger= parseFloat(val.expenseData).toFixed(2)
-                                    else
-                                        strong.text-muted 0.00
+                                            strong.text-muted 0.00
                                 td
                                     if val.closingStatus === 'CLOSED'
                                         span.badge.badge-success Closed
@@ -330,10 +331,11 @@ block content
                             .card-row
                                 .card-label Short/Excess
                                 .card-value
-                                    if val.expenseData > 0
-                                        strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
-                                    else
-                                        strong.text-danger= parseFloat(val.expenseData).toFixed(2)
+                                    a(href='#' style='text-decoration: underline dotted;' onclick=`showExShortBreakdown(${val.closingId}); return false;`)
+                                        if val.expenseData > 0
+                                            strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
+                                        else
+                                            strong.text-danger= parseFloat(val.expenseData).toFixed(2)
 
                         .card-actions
                             if val.closingStatus === 'DRAFT'
@@ -373,7 +375,8 @@ block content
                                 td(scope="row")= val.message
     
     script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`)
-    
+    script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)
+
     script.
         // Toggle filter collapse
         function toggleFilters() {
