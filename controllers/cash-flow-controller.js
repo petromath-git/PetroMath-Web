@@ -412,6 +412,7 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
                     notes: cashflow.notes,
                     date: dateFormat(cashflow.cashflow_date, 'dd-mmm-yyyy'),
                     isoDate: dateFormat(cashflow.cashflow_date, 'yyyy-mm-dd'),
+                    weekday: dateFormat(cashflow.cashflow_date, 'ddd'),
                     managers: getManagerNames(values[1].value, cashflow.cashflow_date, personData),
                     inflow: totals ? Number(totals.inflow) : null,
                     outflow: totals ? Number(totals.outflow) : null,
