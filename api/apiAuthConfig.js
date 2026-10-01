@@ -3,6 +3,7 @@ const LocalStrategy = require("passport-local").Strategy;
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
+const security = require("../utils/app-security");
 
 
 // ORM DB - start
@@ -36,6 +37,10 @@ passport.use('local-api', new LocalStrategy(
                 return done(null, false, { message: 'Invalid username or password' });
             }
 
+            if (!security.isAccountActive(user.effective_end_date)) {
+                return done(null, false, { message: 'Your user account is disabled' });
+            }
+
             return done(null, user);
         } catch (err) {
             return done(err);
@@ -66,8 +71,18 @@ module.exports.verifyToken = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
         if (err) return res.status(403).json({ success: false, message: "Invalid token" });
+        try {
+            // Tokens don't expire, so re-check the account is still enabled
+            const person = await Person.findByPk(decoded.person_id, { attributes: ['effective_end_date'] });
+            if (!person || !security.isAccountActive(person.effective_end_date)) {
+                return res.status(401).json({ success: false, message: "Your user account is disabled" });
+            }
+        } catch (e) {
+            console.error("verifyToken account check failed:", e);
+            return res.status(500).json({ success: false, message: "Internal server error" });
+        }
         req.user = decoded;
         next();
     });
