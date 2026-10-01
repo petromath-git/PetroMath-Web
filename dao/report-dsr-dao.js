@@ -503,12 +503,22 @@ getCashsales: async (locationCode, reportDate) => {
               ` SELECT 
                                   DATE_FORMAT(tts.invoice_date, '%d-%m-%Y') invoice_date,
                                   tts.invoice_number,
-                                  (SELECT 
-                                          SUM(amount)
-                                      FROM
-                                          t_tank_stk_rcpt_dtl
-                                      WHERE
-                                          ttank_id = tts.ttank_id) invoice_amount,
+                                  -- uploaded invoice total; older receipts fall back to their decant line amounts
+                                  COALESCE(
+                                      (SELECT
+                                              ti.total_invoice_amount
+                                          FROM
+                                              t_tank_invoice ti
+                                          WHERE
+                                              ti.location_id = tts.location_code
+                                              AND ti.invoice_number = tts.invoice_number
+                                          LIMIT 1),
+                                      (SELECT
+                                              SUM(amount)
+                                          FROM
+                                              t_tank_stk_rcpt_dtl
+                                          WHERE
+                                              ttank_id = tts.ttank_id)) invoice_amount,
                                   DATE_FORMAT(tts.decant_date, '%d-%m-%Y') decant_date,
                                   tts.decant_time,
                                   coalesce(tts.truck_number,'-') truck_number,

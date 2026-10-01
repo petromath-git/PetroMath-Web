@@ -56,61 +56,60 @@ block content
                 div.row &nbsp;
                 //div#new_decantheader(class= headerTabActiveStatus)
                 div.container-fluid#new_decantheader(class= headerTabActiveStatus)
+                    //- Odometer and truck halt are no longer captured; hidden so older values survive a re-save
+                    input(type='hidden' id='odometer' value=receiptsData.odometer_reading)
+                    input(type='hidden' id='halt_chk' value=(receiptsData.truck_halt_flag || 'N'))
                     div
-                        div.col-12
-                            div.table-responsive
-                                table.table#tankheader-table
-                                    tbody.w-100
-                                        thead(class="thead-light")
-                                            tr
-                                                th(scope="col") Invoice Date
-                                                th(scope="col") Invoice Number
-                                                th(scope="col") Decant Date
-                                                th(scope="col") Decant Time
-                                                th(scope="col") Decant Incharge
-                                                th(scope="col") TT Number
-                                                th(scope="col") Driver
-                                                th(scope="col") Helper
-                                                th(scope="col") Odometer Reading
-                                                th(scope="col") Truck Halt
-                                            tr 
-                                                td
-                                                    input(type='hidden' id='h_invoiceDate' value= receiptsData.h_invoiceDate)
-                                                    input#invoiceDate.form-control(type='date', name='invoiceDate', value=receiptsData.invoice_date max=currentDate required)
-                                                td
-                                                    input#invoiceno.form-control(type="text" name="invoice_no" value=receiptsData.invoice_number required onblur="checkInvoiceNumberDuplicate()")
-                                                td 
-                                                    input(type='hidden' id='h_decantDate' value= receiptsData.h_decantDate)
-                                                    input#decantDate.form-control(type='date', name='decantDate', value=receiptsData.decant_date max=currentDate required)
-                                                td
-                                                    select#decanttime.form-control(name='decant_time' required)
-                                                        if config.decantTimelists
-                                                            each val in config.decantTimelists
-                                                                option(value=`${val}` selected= (receiptsData.decant_time === val))= val
-                                                
-                                                td
-                                                    select#inchargeid.form-control(name='Decant_Inchargeid' required)
-                                                        if inchargers
-                                                            each val in inchargers
-                                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.decant_incharge))= val.personName
-                                                td
-                                                    input#ttnumber.form-control(type='text' name='Decant_ttnumber' list='truck-list' autocomplete='off' required value=receiptsData.truck_display)
-                                                    datalist#truck-list
-                                                        if trucks
-                                                            each val in trucks
-                                                                option(value=`${val.truck_number}` data-id=`${val.truck_id}`)
-                                                td
-                                                    input#driverid.form-control(type='text' name='Driverid' list='driver-list' autocomplete='off' required value=receiptsData.driver_display)
-                                                    datalist#driver-list
-                                                        if drivers
-                                                            each val in drivers
-                                                                option(value=`${val.personName}` data-id=`${val.personId}`)
-                                                td
-                                                    input#helperid.form-control(type='text' name='helperid' list='driver-list' autocomplete='off' required value=receiptsData.helper_display)
-                                                td
-                                                    input#odometer.form-control(type="text" name="odometer" value=receiptsData.odometer_reading)
-                                                td  
-                                                    input#halt_chk.form-control(type="checkbox" name="decant_halt_chk"  value=receiptsData.truck_halt_flag, onClick="changeHaltflag()", checked=('Y'===receiptsData.truck_halt_flag))
+                        div.col-lg-10
+                            if(!freezedRecord)
+                                div.alert.alert-light.border.small.py-2
+                                    | Have the invoice PDF? Upload it on the #[a.font-weight-bold(href='#' onclick="document.getElementById('invoice_tab').click(); return false;") Invoice tab] to fill in the invoice number, date and truck.
+                            h6.text-muted.text-uppercase.small.font-weight-bold.mb-2 Invoice
+                            div.form-row
+                                div.form-group.col-md-4
+                                    label(for='invoiceno') Invoice Number
+                                    input#invoiceno.form-control(type="text" name="invoice_no" value=receiptsData.invoice_number required onblur="checkInvoiceNumberDuplicate()")
+                                div.form-group.col-md-4
+                                    label(for='invoiceDate') Invoice Date
+                                    input(type='hidden' id='h_invoiceDate' value= receiptsData.h_invoiceDate)
+                                    input#invoiceDate.form-control(type='date', name='invoiceDate', value=receiptsData.invoice_date max=currentDate required)
+                            h6.text-muted.text-uppercase.small.font-weight-bold.mb-2.mt-2 Decanting
+                            div.form-row
+                                div.form-group.col-md-4
+                                    label(for='decantDate') Decant Date
+                                    input(type='hidden' id='h_decantDate' value= receiptsData.h_decantDate)
+                                    input#decantDate.form-control(type='date', name='decantDate', value=receiptsData.decant_date max=currentDate required)
+                                div.form-group.col-md-4
+                                    label(for='decanttime') Decant Time
+                                    select#decanttime.form-control(name='decant_time' required)
+                                        if config.decantTimelists
+                                            each val in config.decantTimelists
+                                                option(value=`${val}` selected= (receiptsData.decant_time === val))= val.replace('.', ':').padStart(5, '0')
+                                div.form-group.col-md-4
+                                    label(for='inchargeid') Decant Incharge
+                                    select#inchargeid.form-control(name='Decant_Inchargeid' required)
+                                        if inchargers
+                                            each val in inchargers
+                                                option(value=`${val.personId}` selected=(val.personId === receiptsData.decant_incharge))= val.personName
+                            h6.text-muted.text-uppercase.small.font-weight-bold.mb-2.mt-2 Tanker
+                            div.form-row
+                                div.form-group.col-md-4
+                                    label(for='ttnumber') TT Number
+                                    input#ttnumber.form-control(type='text' name='Decant_ttnumber' list='truck-list' autocomplete='off' required value=receiptsData.truck_display)
+                                    datalist#truck-list
+                                        if trucks
+                                            each val in trucks
+                                                option(value=`${val.truck_number}` data-id=`${val.truck_id}`)
+                                div.form-group.col-md-4
+                                    label(for='driverid') Driver
+                                    input#driverid.form-control(type='text' name='Driverid' list='driver-list' autocomplete='off' required value=receiptsData.driver_display)
+                                    datalist#driver-list
+                                        if drivers
+                                            each val in drivers
+                                                option(value=`${val.personName}` data-id=`${val.personId}`)
+                                div.form-group.col-md-4
+                                    label(for='helperid') Helper
+                                    input#helperid.form-control(type='text' name='helperid' list='driver-list' autocomplete='off' required value=receiptsData.helper_display)
                         div.row
                             div.col &nbsp;
                         div.row(align="center")
@@ -120,20 +119,17 @@ block content
                 // ----------------------- New Decant Lines ----------------------------
                 div.tab-pane.fade#new_decantlines(class= divDisableClass)
                     div
-                        div.col-16
+                        div.col-lg-10
                             div.table-responsive
                                 table.table#tankReceipts-table
                                     tbody.w-100
                                         thead.thead-light
                                             tr
                                                 th(scope="col") Tank
-                                                th(scope="col") Quantity-KL
-                                                th(scope="col") EB
-                                                th(scope="col") Opening Dip
-                                                th(scope="col") Closing Dip
+                                                th(scope="col") Quantity (KL)
                                                 th(scope="col") Notes
-                                                th(scope="col") Amount
-                                           
+                                                th(scope="col")
+
                                             - var rowCnt = 0
                                             while rowCnt < maxDecantLines
                                                 +addDecantLines(rowCnt, decantLines[rowCnt++])
@@ -154,7 +150,7 @@ block content
                                             table.table.table-sm
                                                 thead.thead-light
                                                     tr
-                                                       th(scope="col") Invoice Date
+                                                        th(scope="col") Invoice Date
                                                         th(scope="col") Invoice Number
                                                         th(scope="col") Decant Date
                                                         th(scope="col") Decant Time
@@ -162,14 +158,23 @@ block content
                                                         th(scope="col") TT Number
                                                         th(scope="col") Driver
                                                         th(scope="col") Helper
-                                                        th(scope="col") Odometer
-                                                        th(scope="col") Truck Halt
                                                     tr
                                                         td
                                                             span(id='valDate-invoiceDate')
-                                                        td 
+                                                        td
                                                             span(id='val-invoiceno')
-                                                        td 
+                                                            //- The rest of a closed receipt is frozen, but a mistyped invoice
+                                                            //- number blocks the invoice PDF upload, so admins can still fix it
+                                                            if(freezedRecord && user.isAdmin)
+                                                                button.btn.btn-link.btn-sm.py-0#invoiceNoEditBtn(type='button' title='Correct the invoice number' onclick='startInvoiceNumberEdit()')
+                                                                    span.oi.oi-pencil
+                                                                div.input-group.input-group-sm.d-none#invoiceNoEditGroup(style='min-width:240px')
+                                                                    input.form-control#invoiceNoEditInput(type='text' maxlength='45' onkeydown="if (event.key === 'Enter') { event.preventDefault(); saveClosedInvoiceNumber(); }")
+                                                                    div.input-group-append
+                                                                        button.btn.btn-primary(type='button' onclick='saveClosedInvoiceNumber()') Save
+                                                                        button.btn.btn-outline-secondary(type='button' onclick='cancelInvoiceNumberEdit()') Cancel
+                                                                small.d-block#invoiceNoEditStatus
+                                                        td
                                                             span(id='valDate-decantDate')
                                                         td  
                                                             span(id='valText-decanttime')
@@ -179,12 +184,8 @@ block content
                                                             span(id='valText-ttnumber')
                                                         td 
                                                             span(id='valText-driverid')
-                                                        td  
+                                                        td
                                                             span(id='valText-helperid')
-                                                        td
-                                                            span(id='val-odometer')          
-                                                        td
-                                                            span(id='val-halt_chk')
 
                                     //Summary: Decant Lines
                                 div.col-10#v-decant_lines
@@ -194,12 +195,8 @@ block content
                                                 thead.thead-light
                                                     tr
                                                         th(scope="col") Tank
-                                                        th(scope="col") Quantity-KL
-                                                        th(scope="col") EB
-                                                        th(scope="col") Opening Dip
-                                                        th(scope="col") Closing Dip
+                                                        th(scope="col") Quantity (KL)
                                                         th(scope="col") Notes
-                                                        th(scope="col") Amount
                                                 - var rowCnt = 0
                                                 while rowCnt < maxDecantLines
                                                     +summaryDecantLinesData(rowCnt++)

@@ -1,5 +1,6 @@
 const dbMapping = require("../db/ui-db-field-mapping")
 const dateFormat = require('dateformat');
+const moment = require('moment');
 const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const db = require("../db/db-connection");
@@ -75,7 +76,7 @@ module.exports = {
                         Promise.reject(err);
                     });
             } else {
-                getTankReceipts(req, res, next);
+                getHomeData(req, res, next);
             }
         })
 
@@ -419,15 +420,16 @@ const getHomeData = (req, res, next) => {
     if(req.query.tankreceipts_toDate) {
         toDate = req.query.tankreceipts_toDate;
     }
+    const range = req.query.range || (req.query.tankreceipts_fromDate ? 'custom' : 'this_month');
     Promise.allSettled([
         getTankRcptByDate(locationCode, fromDate, toDate),
         getTankProductColumns(locationCode),
         getTankProductQty(locationCode, fromDate, toDate),
-        getInvoiceNumbersSet(locationCode)
+        getInvoiceTotals(locationCode)
     ]).then(values => {
             const receipts = values[0].value || [];
             const productColumns = values[1].value || [];
-            const invoiceNumbers = values[3].value || new Set();
+            const invoiceTotals = values[3].value || new Map();
             const qtyMap = {};
             (values[2].value || []).forEach(row => {
                 if (!qtyMap[row.ttank_id]) qtyMap[row.ttank_id] = {};
@@ -435,8 +437,14 @@ const getHomeData = (req, res, next) => {
             });
             receipts.forEach(r => {
                 Object.assign(r, qtyMap[r.ttank_id] || {});
-                r.hasInvoice = invoiceNumbers.has(r.invoice_number);
+                r.hasInvoice = invoiceTotals.has(r.invoice_number);
+                // Decant lines no longer carry an amount; the uploaded invoice total is the
+                // amount now. Older receipts with line amounts but no invoice keep showing those.
+                const invoiceTotal = invoiceTotals.get(r.invoice_number);
+                if (invoiceTotal != null) r.amount = invoiceTotal;
+                r.decant_time = formatDecantTime(r.decant_time);
             });
+            receipts.reverse();   // newest first
 
             res.render('tankreceipts', {
                 title: 'Tank Receipts',
@@ -447,9 +455,21 @@ const getHomeData = (req, res, next) => {
                 currentDate: utils.currentDate(),
                 fromDate: fromDate,
                 toDate: toDate,
+                range: range,
             });
         });
 }
+
+// DD-MMM-YYYY (e.g. 30-Sep-2026). Formatted here rather than taken from the view's
+// pre-formatted columns, which can render the full month name.
+const formatListDate = (d) => d ? moment(d).utcOffset(config.TIMEZONE).format('DD-MMM-YYYY') : '';
+
+// decant_time is stored as decimal hours.minutes (e.g. 14.30) -> "14:30"
+const formatDecantTime = (t) => {
+    if (t == null || t === '') return '';
+    const [h, m = '00'] = String(t).split('.');
+    return h.padStart(2, '0') + ':' + m.padEnd(2, '0');
+};
 
 const getTankRcptByDate = (locationCode, fromDate, toDate) => {
     return new Promise((resolve, reject) => {
@@ -458,9 +478,9 @@ const getTankRcptByDate = (locationCode, fromDate, toDate) => {
             .then(data => {
                 data.forEach((receiptsData) => {
                     receipts.push({ttank_id: receiptsData.ttank_id,
-                        invoice_date: receiptsData.fomratted_inv_date,
+                        invoice_date: formatListDate(receiptsData.invoice_date),
                         invoice_number: receiptsData.invoice_number,
-                        decant_date: receiptsData.fomratted_decant_date,
+                        decant_date: formatListDate(receiptsData.decant_date),
                         decant_time: receiptsData.decant_time,
                         decant_incharge: receiptsData.decant_incharge,
                         truck_number: receiptsData.truck_number,
@@ -564,14 +584,55 @@ module.exports.checkInvoiceNumber = async (req, res) => {
     }
 };
 
-const getInvoiceNumbersSet = (locationCode) => {
+// Allowed on CLOSED receipts too: a mistyped invoice number otherwise blocks the
+// invoice PDF upload (it must match the receipt's number) with no way to fix it.
+module.exports.updateInvoiceNumber = async (req, res) => {
+    try {
+        const ttankId = parseInt(req.body.ttankId, 10);
+        const invoiceNumber = String(req.body.invoiceNumber || '').trim();
+        const locationCode = req.user.location_code;
+        if (!ttankId) return res.status(400).json({ success: false, error: 'Receipt id is required.' });
+        if (!invoiceNumber) return res.status(400).json({ success: false, error: 'Invoice number cannot be empty.' });
+        if (invoiceNumber.length > 45) return res.status(400).json({ success: false, error: 'Invoice number is too long (max 45 characters).' });
+
+        const [receipt] = await db.sequelize.query(
+            `SELECT ttank_id, invoice_number FROM t_tank_stk_rcpt WHERE ttank_id = :ttankId AND location_code = :locationCode`,
+            { replacements: { ttankId, locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (!receipt) return res.status(404).json({ success: false, error: 'Tank receipt not found.' });
+        if (receipt.invoice_number === invoiceNumber) return res.json({ success: true, invoiceNumber });
+
+        const [duplicate] = await db.sequelize.query(
+            `SELECT ttank_id FROM t_tank_stk_rcpt
+              WHERE location_code = :locationCode AND invoice_number = :invoiceNumber AND ttank_id != :ttankId
+              LIMIT 1`,
+            { replacements: { locationCode, invoiceNumber, ttankId }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        if (duplicate) {
+            return res.status(409).json({ success: false, error: `Invoice ${invoiceNumber} is already recorded in receipt #${duplicate.ttank_id}.` });
+        }
+
+        await db.sequelize.query(
+            `UPDATE t_tank_stk_rcpt SET invoice_number = :invoiceNumber, updated_by = :userName WHERE ttank_id = :ttankId`,
+            { replacements: { invoiceNumber, userName: req.user.User_Name, ttankId }, type: db.Sequelize.QueryTypes.UPDATE }
+        );
+        console.log(`Tank receipt ${ttankId} (${locationCode}) invoice number changed from "${receipt.invoice_number}" to "${invoiceNumber}" by ${req.user.User_Name}`);
+        return res.json({ success: true, invoiceNumber });
+    } catch (err) {
+        console.error('updateInvoiceNumber error:', err);
+        return res.status(500).json({ success: false, error: 'Failed to update invoice number.' });
+    }
+};
+
+// invoice_number -> total_invoice_amount (null when the invoice has no total)
+const getInvoiceTotals = (locationCode) => {
     return new Promise((resolve) => {
         db.sequelize.query(
-            `SELECT invoice_number FROM t_tank_invoice WHERE location_id = :locationCode AND invoice_number IS NOT NULL`,
+            `SELECT invoice_number, total_invoice_amount FROM t_tank_invoice WHERE location_id = :locationCode AND invoice_number IS NOT NULL`,
             { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
         ).then(rows => {
-            resolve(new Set(rows.map(r => r.invoice_number)));
-        }).catch(() => resolve(new Set()));
+            resolve(new Map(rows.map(r => [r.invoice_number, r.total_invoice_amount])));
+        }).catch(() => resolve(new Map()));
     });
 }
 
