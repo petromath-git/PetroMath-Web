@@ -26,6 +26,9 @@ router.get('/', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING
 // POST /platform-billing/generate
 router.post('/generate', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.generateInvoices);
 
+// GET /platform-billing/runs
+router.get('/runs', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getRuns);
+
 // POST /platform-billing/payments
 router.post('/payments', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.recordPayment);
 
