@@ -6,6 +6,7 @@ const fs = require('fs');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
 const PlatformBillingSvc = require('../services/platform-billing-service');
 const LocationDao = require('../dao/location-dao');
+const { GENERATION_DAY } = require('../services/platform-billing-scheduler');
 
 // Static PDF assets (logo, signature) base64-embedded so the PDF is
 // self-contained — page.setContent() has no base URL to resolve a relative
@@ -27,6 +28,18 @@ function getImageBase64(filename) {
     return pdfImageCache[filename];
 }
 
+// "Sep 2026" for a full calendar month, otherwise the exact range
+// (part month, or a multi-month annual period)
+function serviceLabel(startDate, endDate) {
+    const start = new Date(dateFormat(startDate, 'yyyy-mm-dd') + 'T00:00:00');
+    const end = new Date(dateFormat(endDate, 'yyyy-mm-dd') + 'T00:00:00');
+    const lastOfStartMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+    if (start.getDate() === 1 && end.getTime() === lastOfStartMonth.getTime()) {
+        return dateFormat(start, 'mmm yyyy');
+    }
+    return dateFormat(start, 'dd-mmm-yyyy') + ' – ' + dateFormat(end, 'dd-mmm-yyyy');
+}
+
 const PlatformBillingController = {
 
     // ─── GET /platform-billing (master) ────────────────────────────────────
@@ -45,9 +58,16 @@ const PlatformBillingController = {
                 LocationDao.findActiveLocations()
             ]);
 
+            invoices.forEach(inv => { inv.service_label = serviceLabel(inv.period_start_date, inv.period_end_date); });
+
+            const now = new Date();
+            const nextRun = new Date(now.getFullYear(), now.getMonth() + (now.getDate() > GENERATION_DAY ? 1 : 0), GENERATION_DAY);
+
             res.render('platform-billing/master-list', {
                 title: 'Platform Billing',
                 invoices,
+                nextAutoRun: dateFormat(nextRun, 'dd-mmm-yyyy'),
+                thisMonth: dateFormat(now, 'yyyy-mm'),
                 locations,
                 fromPeriod,
                 toPeriod,
@@ -61,21 +81,32 @@ const PlatformBillingController = {
     },
 
     // ─── POST /platform-billing/generate (master) ──────────────────────────
-    // Manual trigger: generate invoices for a given month (YYYY-MM-01)
+    // Manual trigger. mode 'DUE' = the same run the scheduler does (each
+    // location's due month per its billing timing, plus any skipped month);
+    // otherwise bill one specific service month (periodStartDate, YYYY-MM-DD).
     generateInvoices: async (req, res) => {
         try {
-            const periodStartDate = req.body.periodStartDate;
-            if (!periodStartDate) {
-                return res.status(400).json({ error: 'periodStartDate is required' });
-            }
             const userId = req.user.User_Name || req.user.Person_Name;
-            const result = await PlatformBillingSvc.generateInvoicesForPeriod(periodStartDate, userId, {
-                locationCode: req.body.locationCode || null,
-                generatedDate: req.body.generatedDate || null
-            });
+            const locationCode = req.body.locationCode || null;
+            let result;
+            if (req.body.mode === 'DUE') {
+                result = await PlatformBillingSvc.generateDueInvoices(userId, { locationCode });
+            } else {
+                const periodStartDate = req.body.periodStartDate;
+                if (!periodStartDate) {
+                    return res.status(400).json({ error: 'periodStartDate is required' });
+                }
+                result = await PlatformBillingSvc.generateInvoicesForPeriod(periodStartDate, userId, {
+                    locationCode,
+                    generatedDate: req.body.generatedDate || null
+                });
+            }
             res.json({ success: true, ...result });
         } catch (err) {
             console.error('PlatformBillingController.generateInvoices:', err);
+            if (err.message === 'Cannot bill a future month') {
+                return res.status(400).json({ error: err.message });
+            }
             res.status(500).json({ error: 'Failed to generate invoices' });
         }
     },
@@ -172,13 +203,13 @@ const PlatformBillingController = {
     // ─── POST /platform-billing/plans (master) ──────────────────────────────
     savePlan: async (req, res) => {
         try {
-            const { location_code, plan_duration_months, plan_rate, discount_type, discount_value, effective_start_date, remarks } = req.body;
+            const { location_code, plan_duration_months, billing_timing, plan_rate, discount_type, discount_value, effective_start_date, remarks } = req.body;
             if (!location_code || !effective_start_date || plan_rate == null) {
                 return res.status(400).json({ error: 'location_code, plan_rate and effective_start_date are required' });
             }
             const userId = req.user.User_Name || req.user.Person_Name;
             await PlatformBillingSvc.updateBillingPlan({
-                location_code, plan_duration_months, plan_rate, discount_type, discount_value, effective_start_date, remarks
+                location_code, plan_duration_months, billing_timing, plan_rate, discount_type, discount_value, effective_start_date, remarks
             }, userId);
             res.json({ success: true });
         } catch (err) {

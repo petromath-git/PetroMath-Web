@@ -24,7 +24,7 @@ const PlatformBillingDao = {
     getActiveBillingPlansForGeneration: (asOfDate, locationCode) => {
         return db.sequelize.query(
             `SELECT
-                bp.billing_plan_id, bp.location_code, bp.plan_duration_months,
+                bp.billing_plan_id, bp.location_code, bp.plan_duration_months, bp.billing_timing,
                 bp.plan_rate, bp.discount_type, bp.discount_value, bp.trial_end_date,
                 l.location_name
             FROM m_location_billing_plan bp
@@ -48,7 +48,7 @@ const PlatformBillingDao = {
     // Current billing plan (any effective_end_date >= today) for every location that has one
     findAllCurrentBillingPlans: () => {
         return db.sequelize.query(
-            `SELECT bp.billing_plan_id, bp.location_code, l.location_name, bp.plan_duration_months,
+            `SELECT bp.billing_plan_id, bp.location_code, l.location_name, bp.plan_duration_months, bp.billing_timing,
                     bp.plan_rate, bp.discount_type, bp.discount_value, bp.trial_end_date,
                     bp.effective_start_date, bp.remarks
              FROM m_location_billing_plan bp
@@ -69,17 +69,23 @@ const PlatformBillingDao = {
 
     // ─── Invoices ──────────────────────────────────────────────────────────
 
-    // Any non-cancelled invoice whose period already covers this date
-    // (used to skip locations already billed for the period, e.g. annual plans)
-    findCoveringInvoice: (locationCode, date) => {
-        return db.platform_invoice.findOne({
-            where: {
-                location_code: locationCode,
-                status: { [Op.ne]: 'CANCELLED' },
-                period_start_date: { [Op.lte]: date },
-                period_end_date: { [Op.gte]: date }
-            }
-        });
+    // Any invoice whose period overlaps [fromDate, toDate] — used to skip a
+    // month that's already billed, whether by a full-month, part-month
+    // (e.g. a first month billed from the start date) or annual invoice.
+    // Cancelled invoices are ignored unless includeCancelled is set.
+    findOverlappingInvoice: (locationCode, fromDate, toDate, includeCancelled = false) => {
+        const where = {
+            location_code: locationCode,
+            period_start_date: { [Op.lte]: toDate },
+            period_end_date: { [Op.gte]: fromDate }
+        };
+        if (!includeCancelled) where.status = { [Op.ne]: 'CANCELLED' };
+        return db.platform_invoice.findOne({ where });
+    },
+
+    // Start date of a location's first-ever invoice (null if never invoiced)
+    findFirstInvoiceStartDate: (locationCode) => {
+        return db.platform_invoice.min('period_start_date', { where: { location_code: locationCode } });
     },
 
     createInvoice: (invoiceData, items) => {
@@ -143,7 +149,7 @@ const PlatformBillingDao = {
                 pi.invoice_id, pi.location_code, l.location_name, pi.invoice_number,
                 pi.period_start_date, pi.period_end_date, pi.gross_amount,
                 pi.discount_amount, pi.net_amount, pi.due_date, pi.status,
-                pi.generated_date,
+                pi.generated_date, cp.billing_timing,
                 COALESCE((
                     SELECT SUM(ppa.allocated_amount)
                     FROM t_platform_payment_allocation ppa
@@ -151,6 +157,8 @@ const PlatformBillingDao = {
                 ), 0) AS paid_amount
             FROM t_platform_invoice pi
             JOIN m_location l ON l.location_code = pi.location_code
+            LEFT JOIN m_location_billing_plan cp
+                   ON cp.location_code = pi.location_code AND cp.effective_end_date = '9999-12-31'
             WHERE pi.period_start_date BETWEEN :fromPeriod AND :toPeriod
               AND (:locationCode IS NULL OR pi.location_code = :locationCode)
             ORDER BY pi.period_start_date DESC, l.location_name`,

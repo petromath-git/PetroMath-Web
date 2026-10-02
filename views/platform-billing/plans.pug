@@ -23,6 +23,7 @@ block content
                         tr
                             th Location
                             th Duration
+                            th Billing Timing
                             th.text-right Rate
                             th Discount
                             th Since
@@ -33,6 +34,11 @@ block content
                             tr
                                 td= p.location_name + ' (' + p.location_code + ')'
                                 td= p.plan_duration_months >= 12 ? 'Annual' : 'Monthly'
+                                td
+                                    if p.billing_timing === 'ADVANCE'
+                                        span.badge.badge-info(title='Billed at the start of the month, for the current month') Advance
+                                    else
+                                        span.badge.badge-secondary(title='Billed after the month ends, for the month just ended') Arrears
                                 td.text-right ₹#{Number(p.plan_rate).toLocaleString('en-IN', {minimumFractionDigits: 2})}
                                 td
                                     if p.discount_type === 'NONE'
@@ -48,6 +54,7 @@ block content
                                         type='button'
                                         data-location=p.location_code
                                         data-duration=p.plan_duration_months
+                                        data-timing=p.billing_timing
                                         data-rate=p.plan_rate
                                         data-discount-type=p.discount_type
                                         data-discount-value=p.discount_value
@@ -78,6 +85,11 @@ block content
                             option(value='1') Monthly
                             option(value='12') Annual
                     .mb-3
+                        label.form-label Billing Timing:
+                        select#planTiming.form-control
+                            option(value='ARREARS') Arrears — bill the month just ended (e.g. Sep billed on 3 Oct)
+                            option(value='ADVANCE') Advance — bill the current month (e.g. Oct billed on 3 Oct)
+                    .mb-3
                         label.form-label Rate (for the whole duration):
                         input#planRate.form-control(type='number' step='0.01' min='0')
                     .mb-3
@@ -105,6 +117,7 @@ block content
             $('#planModalTitle').text(prefill ? 'Update Billing Plan' : 'Add Billing Plan');
             $('#planLocation').val(prefill ? prefill.location : '');
             $('#planDuration').val(prefill ? prefill.duration : '1');
+            $('#planTiming').val(prefill && prefill.timing ? prefill.timing : 'ARREARS');
             $('#planRate').val(prefill ? prefill.rate : '');
             $('#planDiscountType').val(prefill ? prefill.discountType : 'NONE');
             $('#planDiscountValue').val(prefill ? prefill.discountValue : '0');
@@ -119,6 +132,7 @@ block content
             openPlanModal({
                 location: $(this).data('location'),
                 duration: $(this).data('duration'),
+                timing: $(this).data('timing'),
                 rate: $(this).data('rate'),
                 discountType: $(this).data('discount-type'),
                 discountValue: $(this).data('discount-value'),
@@ -137,6 +151,7 @@ block content
                 data: JSON.stringify({
                     location_code: location_code,
                     plan_duration_months: parseInt($('#planDuration').val(), 10),
+                    billing_timing: $('#planTiming').val(),
                     plan_rate: plan_rate,
                     discount_type: $('#planDiscountType').val(),
                     discount_value: parseFloat($('#planDiscountValue').val()) || 0,

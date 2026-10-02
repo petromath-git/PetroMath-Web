@@ -17,6 +17,12 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.INTEGER,
             defaultValue: 1
         },
+        billing_timing: {
+            // ARREARS = bill the month just ended; ADVANCE = bill the current month
+            type: DataTypes.STRING(10),
+            allowNull: false,
+            defaultValue: 'ARREARS'
+        },
         plan_rate: {
             // Price for the whole duration, not per-month
             type: DataTypes.DECIMAL(12, 2),

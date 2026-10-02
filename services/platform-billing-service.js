@@ -9,84 +9,161 @@ const DistributorService = require('./distributor-service');
 
 const DUE_DAYS_AFTER_GENERATION = 5; // payment is usually received within 5 days of the invoice being generated
 
+const MAX_CATCH_UP_MONTHS = 12; // gap-filling never reaches further back than this
+
 /**
- * Generate platform invoices for every active, non-trial location whose
- * billing plan isn't already covered by a prior invoice (e.g. an annual
- * plan already covers this month).
+ * Generate every invoice that is due today, for every location with a
+ * billing plan in force — what the scheduler runs, and what "Bill everything
+ * due" on the invoice page runs.
  *
- * @param {string} periodStartDate  YYYY-MM-DD, first of the billing month
+ * Each plan's billing_timing decides the latest month that is due:
+ *   ARREARS — the month that just ended (billed after it's over)
+ *   ADVANCE — the current month (billed at its start)
+ *
+ * Also fills gaps: any month between the location's first invoice and that
+ * latest due month with no invoice at all (e.g. a month skipped while
+ * switching timing) is billed too, at most MAX_CATCH_UP_MONTHS back. A
+ * location that has never been invoiced is only billed for the latest due
+ * month — its first (often part) month is billed by hand.
+ *
+ * @param {string} userId
+ * @param {object} [options]
+ * @param {string} [options.locationCode]   restrict to one location
+ * @param {string} [options.today]          YYYY-MM-DD, defaults to today
+ * @returns {{ generated: string[], skipped: {location_code:string, reason:string}[] }}
+ */
+async function generateDueInvoices(userId, options = {}) {
+    const today = options.today || dateFormat(new Date(), 'yyyy-mm-dd');
+    const thisMonth = monthStart(today);
+    const ctx = { userId, generatedDate: today, generated: [], skipped: [] };
+
+    const plans = await PlatformBillingDao.getActiveBillingPlansForGeneration(today, options.locationCode);
+    const seen = new Set();
+
+    for (const plan of plans) {
+        if (seen.has(plan.location_code)) continue;
+        seen.add(plan.location_code);
+
+        const lastDueMonth = plan.billing_timing === 'ADVANCE' ? thisMonth : addMonths(thisMonth, -1);
+
+        const firstInvoiceStart = await PlatformBillingDao.findFirstInvoiceStartDate(plan.location_code);
+        let month = firstInvoiceStart ? monthStart(dateFormat(firstInvoiceStart, 'yyyy-mm-dd')) : lastDueMonth;
+        const earliestAllowed = addMonths(lastDueMonth, -(MAX_CATCH_UP_MONTHS - 1));
+        if (month < earliestAllowed) month = earliestAllowed;
+
+        for (; month <= lastDueMonth; month = addMonths(month, 1)) {
+            const isGapMonth = month < lastDueMonth;
+            await generateForLocationMonth(plan.location_code, month, ctx, {
+                // A gap month that was billed and then cancelled stays
+                // cancelled — only a month with no invoice at all is filled.
+                includeCancelled: isGapMonth,
+                // Already-billed / out-of-plan gap months are the normal
+                // case, not worth reporting as skipped.
+                reportSkips: !isGapMonth
+            });
+        }
+    }
+
+    return { generated: ctx.generated, skipped: ctx.skipped };
+}
+
+/**
+ * Generate invoices for one specific service month (manual backfill from
+ * the invoice page), regardless of billing timing. Months already billed
+ * or still in trial are skipped.
+ *
+ * @param {string} periodStartDate  any YYYY-MM-DD inside the service month
  * @param {string} userId
  * @param {object} [options]
  * @param {string} [options.locationCode]   restrict generation to one location
  * @param {string} [options.generatedDate]  YYYY-MM-DD, defaults to today; due date is
  *                                          computed as generatedDate + 5 days, not
- *                                          relative to the period — invoices are
- *                                          typically raised a few days into the
- *                                          following month, not on day 1 of the period
+ *                                          relative to the period
  * @returns {{ generated: string[], skipped: {location_code:string, reason:string}[] }}
  */
 async function generateInvoicesForPeriod(periodStartDate, userId, options = {}) {
     const generatedDate = options.generatedDate || dateFormat(new Date(), 'yyyy-mm-dd');
-    const dueDate = addDays(generatedDate, DUE_DAYS_AFTER_GENERATION);
-
-    const plans = await PlatformBillingDao.getActiveBillingPlansForGeneration(periodStartDate, options.locationCode);
-    const generated = [];
-    const skipped = [];
-
-    for (const plan of plans) {
-        try {
-            if (plan.trial_end_date && periodStartDate < dateFormat(plan.trial_end_date, 'yyyy-mm-dd')) {
-                skipped.push({ location_code: plan.location_code, reason: 'In trial period' });
-                continue;
-            }
-
-            const covering = await PlatformBillingDao.findCoveringInvoice(plan.location_code, periodStartDate);
-            if (covering) {
-                skipped.push({ location_code: plan.location_code, reason: `Already covered by invoice ${covering.invoice_number}` });
-                continue;
-            }
-
-            const periodEndDate = addMonthsMinusOneDay(periodStartDate, plan.plan_duration_months);
-
-            const gross = Number(plan.plan_rate) || 0;
-            const discount = computeDiscount(gross, plan.discount_type, plan.discount_value);
-            const net = Math.max(0, gross - discount);
-
-            const invoiceNumber = buildInvoiceNumber(plan.location_code, periodStartDate);
-
-            const items = [{
-                description: plan.plan_duration_months >= 12 ? 'PetroMath platform subscription (Annual)' : 'PetroMath platform subscription (Monthly)',
-                amount: gross
-            }];
-            if (discount > 0) {
-                items.push({ description: 'Discount', amount: -discount });
-            }
-
-            await PlatformBillingDao.createInvoice({
-                location_code: plan.location_code,
-                invoice_number: invoiceNumber,
-                period_start_date: periodStartDate,
-                period_end_date: periodEndDate,
-                gross_amount: gross,
-                discount_amount: discount,
-                net_amount: net,
-                due_date: dueDate,
-                status: net <= 0 ? 'PAID' : 'UNPAID',
-                generated_date: generatedDate,
-                created_by: userId,
-                creation_date: new Date(),
-                updated_by: userId,
-                updation_date: new Date()
-            }, items);
-
-            generated.push(invoiceNumber);
-        } catch (err) {
-            console.error(`PlatformBillingService: failed to generate invoice for ${plan.location_code}:`, err);
-            skipped.push({ location_code: plan.location_code, reason: 'Error: ' + err.message });
-        }
+    const month = monthStart(periodStartDate);
+    if (month > monthStart(generatedDate)) {
+        throw new Error('Cannot bill a future month');
     }
 
-    return { generated, skipped };
+    const ctx = { userId, generatedDate, generated: [], skipped: [] };
+    const plans = await PlatformBillingDao.getActiveBillingPlansForGeneration(month, options.locationCode);
+    const seen = new Set();
+    for (const plan of plans) {
+        if (seen.has(plan.location_code)) continue;
+        seen.add(plan.location_code);
+        await generateForLocationMonth(plan.location_code, month, ctx, { plan, reportSkips: true });
+    }
+    return { generated: ctx.generated, skipped: ctx.skipped };
+}
+
+/**
+ * Create one location's invoice for the service month starting at `month`
+ * (YYYY-MM-01), unless it's already billed, in trial, or has no plan in
+ * force on the 1st. Results are pushed onto ctx.generated / ctx.skipped.
+ */
+async function generateForLocationMonth(locationCode, month, ctx, opts = {}) {
+    const skip = (reason) => { if (opts.reportSkips) ctx.skipped.push({ location_code: locationCode, reason }); };
+    try {
+        const plan = opts.plan
+            || (await PlatformBillingDao.getActiveBillingPlansForGeneration(month, locationCode))[0];
+        if (!plan) {
+            skip(`No billing plan in force on ${month}`);
+            return;
+        }
+
+        if (plan.trial_end_date && month < dateFormat(plan.trial_end_date, 'yyyy-mm-dd')) {
+            skip('In trial period');
+            return;
+        }
+
+        const covering = await PlatformBillingDao.findOverlappingInvoice(
+            locationCode, month, addMonths(month, 1, -1), opts.includeCancelled);
+        if (covering) {
+            skip(`Already covered by invoice ${covering.invoice_number}`);
+            return;
+        }
+
+        const periodEndDate = addMonths(month, plan.plan_duration_months, -1);
+
+        const gross = Number(plan.plan_rate) || 0;
+        const discount = computeDiscount(gross, plan.discount_type, plan.discount_value);
+        const net = Math.max(0, gross - discount);
+
+        const invoiceNumber = buildInvoiceNumber(locationCode, month);
+
+        const items = [{
+            description: plan.plan_duration_months >= 12 ? 'PetroMath platform subscription (Annual)' : 'PetroMath platform subscription (Monthly)',
+            amount: gross
+        }];
+        if (discount > 0) {
+            items.push({ description: 'Discount', amount: -discount });
+        }
+
+        await PlatformBillingDao.createInvoice({
+            location_code: locationCode,
+            invoice_number: invoiceNumber,
+            period_start_date: month,
+            period_end_date: periodEndDate,
+            gross_amount: gross,
+            discount_amount: discount,
+            net_amount: net,
+            due_date: addDays(ctx.generatedDate, DUE_DAYS_AFTER_GENERATION),
+            status: net <= 0 ? 'PAID' : 'UNPAID',
+            generated_date: ctx.generatedDate,
+            created_by: ctx.userId,
+            creation_date: new Date(),
+            updated_by: ctx.userId,
+            updation_date: new Date()
+        }, items);
+
+        ctx.generated.push(invoiceNumber);
+    } catch (err) {
+        console.error(`PlatformBillingService: failed to generate invoice for ${locationCode} ${month}:`, err);
+        ctx.skipped.push({ location_code: locationCode, reason: 'Error: ' + err.message });
+    }
 }
 
 /**
@@ -178,6 +255,7 @@ async function updateBillingPlan(planData, userId) {
     return PlatformBillingDao.upsertBillingPlan({
         location_code: planData.location_code,
         plan_duration_months: planData.plan_duration_months || 1,
+        billing_timing: planData.billing_timing === 'ADVANCE' ? 'ADVANCE' : 'ARREARS',
         plan_rate: planData.plan_rate,
         discount_type: planData.discount_type || 'NONE',
         discount_value: planData.discount_value || 0,
@@ -233,14 +311,20 @@ function addDays(dateStr, days) {
     return dateFormat(d, 'yyyy-mm-dd');
 }
 
-function addMonthsMinusOneDay(dateStr, months) {
+// Day-1 dates only, so setMonth never overflows into the next month
+function addMonths(dateStr, months, plusDays = 0) {
     const d = new Date(dateStr + 'T00:00:00');
     d.setMonth(d.getMonth() + months);
-    d.setDate(d.getDate() - 1);
+    d.setDate(d.getDate() + plusDays);
     return dateFormat(d, 'yyyy-mm-dd');
 }
 
+function monthStart(dateStr) {
+    return dateStr.slice(0, 7) + '-01';
+}
+
 module.exports = {
+    generateDueInvoices,
     generateInvoicesForPeriod,
     recordPayment,
     recordBulkPayment,
