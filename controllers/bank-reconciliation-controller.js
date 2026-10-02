@@ -3,6 +3,8 @@ const moment = require('moment');
 const locationConfigDao = require('../dao/location-config-dao');
 const dateFormat = require('dateformat');
 const { debugLog } = require('../utils/debug-logger');
+const { isPdfFile, parsePdfStatementToData, PdfPasswordError } = require('../utils/pdf-statement-parsers');
+const { decryptIfProtected } = require('../utils/statement-decrypt');
 
 module.exports = {
     /**
@@ -588,8 +590,37 @@ uploadBankStatement: async (req, res) => {
             });
         }
 
+        // Password-protected Excel (e.g. KVB) — decrypt before any parser sees it
+        const decrypted = await decryptIfProtected(req.file.buffer, req.body.file_password);
+        if (decrypted.errorType) {
+            return res.status(400).json({
+                success: false,
+                error: decrypted.error,
+                errorType: decrypted.errorType
+            });
+        }
+        req.file.buffer = decrypted.buffer;
+
         let data;
-        if (isHtmlFile(req.file.buffer)) {
+        if (isPdfFile(req.file.buffer)) {
+            await debugLog(locationCode, `PDF detected, using PDF parser for ${template.bank_name}`);
+            try {
+                data = await parsePdfStatementToData(req.file.buffer, template.bank_name, req.body.file_password);
+            } catch (pdfErr) {
+                if (pdfErr instanceof PdfPasswordError) {
+                    return res.status(400).json({
+                        success: false,
+                        error: pdfErr.message,
+                        errorType: pdfErr.errorType
+                    });
+                }
+                console.error('PDF statement parse failed:', pdfErr.message);
+                return res.status(400).json({
+                    success: false,
+                    error: `Could not read this PDF statement: ${pdfErr.message}`
+                });
+            }
+        } else if (isHtmlFile(req.file.buffer)) {
             await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
             data = parseHtmlXlsToData(req.file.buffer);
         } else {

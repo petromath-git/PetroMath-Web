@@ -11,10 +11,11 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-            file.mimetype === 'application/vnd.ms-excel') {
+            file.mimetype === 'application/vnd.ms-excel' ||
+            file.mimetype === 'application/pdf') {
             cb(null, true);
         } else {
-            cb(new Error('Only Excel files (.xlsx, .xls) are allowed'));
+            cb(new Error('Only Excel (.xlsx, .xls) or PDF files are allowed'));
         }
     }
 });

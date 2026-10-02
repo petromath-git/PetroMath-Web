@@ -368,6 +368,19 @@ block content
         
         // UPLOAD TAB FUNCTIONS
 
+        // A different file may not need a password — hide and clear the field
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('bankStatementFile').addEventListener('change', function() {
+                const pwd = document.getElementById('filePassword');
+                pwd.value = '';
+                pwd.classList.remove('is-invalid');
+                document.getElementById('filePasswordGroup').style.display = 'none';
+            });
+            document.getElementById('filePassword').addEventListener('input', function() {
+                this.classList.remove('is-invalid');
+            });
+        });
+
         async function uploadAndSave() {
             const fileInput = document.getElementById('bankStatementFile');
             const bankId = document.getElementById('upload_bank_id').value;
@@ -388,8 +401,10 @@ block content
             statusDiv.innerHTML = '';
 
             const formData = new FormData();
-            formData.append('bankStatement', fileInput.files[0]);
+            // Text fields must precede the file so multer has them on req.body
             formData.append('bank_id', bankId);
+            formData.append('file_password', document.getElementById('filePassword').value);
+            formData.append('bankStatement', fileInput.files[0]);
 
             try {
                 const response = await fetch('/reports-bank-recon/upload', {
@@ -406,6 +421,17 @@ block content
                             ${data.message}. Page will reload.
                         </div>`;
                     setTimeout(() => location.reload(), 1500);
+                } else if (data.errorType === 'PASSWORD_REQUIRED' || data.errorType === 'PASSWORD_INCORRECT') {
+                    // Reveal the password field inline instead of an error box
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-upload me-2"></i>Upload & Save';
+                    const pwd = document.getElementById('filePassword');
+                    document.getElementById('filePasswordGroup').style.display = 'block';
+                    document.getElementById('filePasswordFeedback').textContent =
+                        data.errorType === 'PASSWORD_INCORRECT' ? data.error : '';
+                    pwd.classList.toggle('is-invalid', data.errorType === 'PASSWORD_INCORRECT');
+                    pwd.select();
+                    pwd.focus();
                 } else {
                     statusDiv.innerHTML = `
                         <div class="alert alert-danger">
@@ -786,13 +812,21 @@ block content
                                         #lastUploadText
                                 .col-md-6
                                     label.form-label 
-                                        | Select Excel File:
+                                        | Select Statement File:
                                         span.text-danger  *
-                                    input#bankStatementFile.form-control(type='file' accept='.xlsx,.xls' required)
+                                    input#bankStatementFile.form-control(type='file' accept='.xlsx,.xls,.pdf' required)
+                                    //- Shown only when the server reports the uploaded file is password-protected
+                                    #filePasswordGroup.mt-2(style='display: none;')
+                                        label.form-label(for='filePassword')
+                                            | File Password:
+                                            span.text-danger  *
+                                        input#filePassword.form-control(type='password' autocomplete='new-password')
+                                        #filePasswordFeedback.invalid-feedback
+                                        small.form-text.text-muted This file is password-protected. Enter the password you use to open it, then click Upload & Save again.
                                 .col-12
                                     .alert.alert-info.mb-0
                                         i.bi.bi-info-circle.me-2
-                                        | Upload your bank statement in Excel format (.xlsx or .xls). Existing records for the uploaded date range will be replaced.
+                                        | Upload your bank statement in Excel format (.xlsx or .xls), or PDF for banks with a PDF template. Existing records for the uploaded date range will be replaced.
                             .row.mt-3
                                 .col-12
                                     button#btnUploadSave.btn.btn-primary.btn-lg(type='button' onclick='uploadAndSave()')
