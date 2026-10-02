@@ -268,6 +268,18 @@ block content
             history.replaceState(null, null, e.target.getAttribute('href'));
         });
 
+        // ── Reload that keeps an open Tally reconcile ────────────────────────
+        // Ledger Master is server-rendered and the reconcile dropdowns come from
+        // the batch fetch, so a reload is what picks up a newly added ledger in
+        // both. Row matches autosave, so the open batch is re-resumed after it.
+        const RESUME_KEY = 'glLedgersResumeTally';
+        function reloadPage() {
+            if (currentBatchId) {
+                try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ scrollY: window.scrollY })); } catch (e) {}
+            }
+            location.reload();
+        }
+
         // ── Ledger Master ────────────────────────────────────────────────────
         let editingLedgerId = null;
 
@@ -333,7 +345,7 @@ block content
                 if (editingLedgerId) body.active_flag = active;
                 const resp = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 const data = await resp.json();
-                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+                if (data.success) { reloadPage(); } else { alert('Error: ' + data.error); this.disabled = false; }
             } catch (e) { alert('Network error.'); this.disabled = false; }
         });
 
@@ -368,7 +380,7 @@ block content
                 const method = editingGroupId ? 'PUT' : 'POST';
                 const resp   = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_name: name, group_nature: nature }) });
                 const data   = await resp.json();
-                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); this.disabled = false; }
+                if (data.success) { reloadPage(); } else { alert('Error: ' + data.error); this.disabled = false; }
             } catch (e) { alert('Network error.'); this.disabled = false; }
         });
 
@@ -377,7 +389,7 @@ block content
                 if (!confirm('Delete group "' + this.dataset.name + '"?')) return;
                 const resp = await fetch('/gl/api/ledger-groups/' + this.dataset.id, { method: 'DELETE' });
                 const data = await resp.json();
-                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); }
+                if (data.success) { reloadPage(); } else { alert('Error: ' + data.error); }
             });
         });
 
@@ -426,14 +438,27 @@ block content
             renderReconcile();
         }
 
-        document.getElementById('btnResume').addEventListener('click', async function() {
-            this.disabled = true;
+        async function resumeBatch() {
             const resp = await fetch('/gl/tally-import/batch/active');
             const data = await resp.json();
-            this.disabled = false;
-            if (!data.batch) { renderResumeBanner(null); return; }
+            if (!data.batch) { renderResumeBanner(null); return false; }
             loadBatch(data);
+            return true;
+        }
+
+        document.getElementById('btnResume').addEventListener('click', async function() {
+            this.disabled = true;
+            await resumeBatch();
+            this.disabled = false;
         });
+
+        // Coming back from reloadPage() with a reconcile open — reopen it
+        (async function() {
+            let state = null;
+            try { state = JSON.parse(sessionStorage.getItem(RESUME_KEY)); sessionStorage.removeItem(RESUME_KEY); } catch (e) {}
+            if (!state || !window.__activeTallyBatch) return;
+            if (await resumeBatch() && state.scrollY) window.scrollTo(0, state.scrollY);
+        })();
 
         document.getElementById('btnDiscardResume').addEventListener('click', async function() {
             if (!confirm('Discard the unfinished import and its matching progress? This cannot be undone.')) return;
@@ -498,8 +523,8 @@ block content
         });
 
         function autosaveRow(row) {
-            if (!row.row_id) return;
-            fetch('/gl/tally-import/row/' + row.row_id, {
+            if (!row.row_id) return Promise.resolve();
+            return fetch('/gl/tally-import/row/' + row.row_id, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ledger_id: row.ledger_id, match_status: row.match_status })
             }).catch(function() { /* best-effort; the row stays editable and the next change retries */ });
@@ -588,19 +613,20 @@ block content
                 body: JSON.stringify({ tally_name: pendingCreateRow.tally_name, group_id: groupId })
             });
             const data = await resp.json();
-            this.disabled = false;
-            this.textContent = 'Create Ledger';
-            if (!data.success) { alert('Error: ' + data.error); return; }
+            if (!data.success) {
+                this.disabled = false;
+                this.textContent = 'Create Ledger';
+                alert('Error: ' + data.error);
+                return;
+            }
 
-            parsedLedgers.push({ ledger_id: data.ledger_id, ledger_name: data.ledger_name, group_name: '' });
+            // Save the row's match first, then reload so the new ledger shows in
+            // Ledger Master and in every row's dropdown (with its group name)
             const row = parsedRows[pendingCreateRow.idx];
             row.ledger_id    = data.ledger_id;
             row.match_status = 'CREATED';
-            autosaveRow(row);
-
-            $('#createLedgerModal').modal('hide');
-            pendingCreateRow = null;
-            renderReconcile();
+            await autosaveRow(row);
+            reloadPage();
         });
 
         async function doSave() {
