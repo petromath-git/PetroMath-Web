@@ -1348,7 +1348,7 @@ async function processAdjustmentEvent(event, processedBy) {
 
     const rows = await db.sequelize.query(`
         SELECT adjustment_id, description, external_id, external_source, ledger_name,
-               debit_amount, credit_amount, adjustment_type, status
+               debit_amount, credit_amount, adjustment_type, status, reference_no
         FROM t_adjustments
         WHERE adjustment_id = :adjustmentId
     `, { replacements: { adjustmentId }, type: QueryTypes.SELECT });
@@ -1371,7 +1371,7 @@ async function processAdjustmentEvent(event, processedBy) {
     }
 
     const counterLedgerId = await resolveAdjustmentCounterpartLedger(row, location_code);
-    const typeLedgerId    = await resolveAdjustmentTypeLedger(row.adjustment_type, location_code);
+    const typeLedgerId    = await resolveAdjustmentTypeLedger(row.adjustment_type, location_code, row.reference_no);
 
     const narration = `Adjustment #${adjustmentId}${row.description ? ' | ' + row.description : ''} | ₹${amount.toFixed(2)} | ${event_date}`;
 
@@ -1503,10 +1503,24 @@ async function resolveAdjustmentCounterpartLedger(row, locationCode) {
 // equity ledger, off the P&L. Every other type resolves by its own m_lookup
 // description (matches the ADJUSTMENT_TYPE lookup name to a same-named
 // ledger — e.g. 205 "Digital Vendor Charges", 207 "POS Rental Charges").
-// Anything that can't resolve (including adjustment_type='REVERSAL', which
-// isn't a lookup code) falls back to "General Adjustment" — never blocks.
-async function resolveAdjustmentTypeLedger(adjustmentType, locationCode) {
-    if (adjustmentType === '201') {
+// adjustment_type='REVERSAL' (adjustments-dao createReversalEntry) posts against
+// the same ledger as the entry it reverses, found via reference_no 'REV-<id>';
+// otherwise the reversal would leave the original expense/income in place and
+// park the offset in General Adjustment.
+// Anything that can't resolve falls back to "General Adjustment" — never blocks.
+async function resolveAdjustmentTypeLedger(adjustmentType, locationCode, referenceNo) {
+    if (adjustmentType === 'REVERSAL') {
+        const m = /^REV-(\d+)$/.exec(referenceNo || '');
+        if (m) {
+            const orig = await db.sequelize.query(`
+                SELECT adjustment_type FROM t_adjustments WHERE adjustment_id = :originalId
+            `, { replacements: { originalId: parseInt(m[1], 10) }, type: QueryTypes.SELECT });
+
+            if (orig.length && orig[0].adjustment_type !== 'REVERSAL') {
+                return resolveAdjustmentTypeLedger(orig[0].adjustment_type, locationCode);
+            }
+        }
+    } else if (adjustmentType === '201') {
         const info = await resolveLedgerByName(locationCode, 'Opening Balance Equity');
         if (info) return info.ledger_id;
     } else if (/^\d+$/.test(adjustmentType)) {
