@@ -1,0 +1,112 @@
+extends ../layout
+
+block content
+    style.
+        .badge-run-SUCCESS { background-color: #198754; color: #fff; }
+        .badge-run-PARTIAL { background-color: #fd7e14; color: #fff; }
+        .badge-run-FAILED { background-color: #dc3545; color: #fff; }
+        .badge-run-RUNNING { background-color: #0d6efd; color: #fff; }
+        .badge-run-SKIPPED { background-color: #6c757d; color: #fff; }
+        tr.run-row { cursor: pointer; }
+        tr.run-detail td { background-color: #f8f9fa; }
+
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-clock-history.me-2
+                    | Billing Run Log
+                a.btn.btn-outline-secondary.btn-sm(href='/platform-billing')
+                    i.bi.bi-arrow-left.me-1
+                    | Back to Invoices
+        .card-body
+            .small.text-muted.mb-2
+                | Every invoice-generation run: the automatic run on the 3rd (Scheduled), the catch-up when the app restarts (Startup — only kept when it billed something or hit an error), and Generate from the invoice page (Manual). Click a row to see its log.
+            .row.g-3
+                .col-md-3.col-6
+                    label.form-label From Date:
+                    input#fromDate.form-control(type='date' value=fromDate)
+                .col-md-3.col-6
+                    label.form-label To Date:
+                    input#toDate.form-control(type='date' value=toDate max=today)
+                .col-md-2.d-flex.align-items-end
+                    button.btn.btn-primary.w-100(type='button' onclick='applyFilter()')
+                        i.bi.bi-search.me-2
+                        | Go
+
+    div.container-fluid
+        if runs && runs.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th Started
+                            th Trigger
+                            th Requested By
+                            th What
+                            th.text-center Status
+                            th.text-right Generated
+                            th.text-right Skipped
+                            th.text-right Failed
+                            th.text-right Took
+                            th Instance
+                    tbody
+                        each r in runs
+                            tr.run-row(data-run=r.run_id)
+                                td.text-nowrap
+                                    i.bi.bi-chevron-right.me-1.run-chevron
+                                    = r.started_label
+                                td= r.trigger_type.charAt(0) + r.trigger_type.slice(1).toLowerCase()
+                                td= r.requested_by
+                                td
+                                    = r.run_mode === 'DUE' ? 'Everything due' : 'Service month ' + r.period_label
+                                    if r.location_code
+                                        |  — #{r.location_code}
+                                td.text-center
+                                    span.badge(class=`badge-run-${r.status}`)= r.status
+                                td.text-right= r.generated_count
+                                td.text-right= r.skipped_count
+                                td.text-right(class=r.error_count ? 'text-danger font-weight-bold' : '')= r.error_count
+                                td.text-right= r.duration_label
+                                td.small.text-muted= r.instance_name || '—'
+                            tr.run-detail(id=`run-detail-${r.run_id}` style='display:none;')
+                                td(colspan='10')
+                                    if r.error_message
+                                        .text-danger.mb-2
+                                            i.bi.bi-exclamation-triangle.me-1
+                                            = r.error_message
+                                    if r.status === 'RUNNING'
+                                        .text-muted.mb-2 Still running, or the app stopped before it finished — check the PM2 log for "PlatformBilling".
+                                    .row
+                                        .col-md-5
+                                            strong Generated (#{r.log.generated.length})
+                                            if r.log.generated.length
+                                                ul.mb-0
+                                                    each inv in r.log.generated
+                                                        li= inv
+                                            else
+                                                .text-muted None
+                                        .col-md-7
+                                            strong Skipped (#{r.log.skipped.length})
+                                            if r.log.skipped.length
+                                                ul.mb-0
+                                                    each s in r.log.skipped
+                                                        li(class=s.reason.indexOf('Error:') === 0 ? 'text-danger' : '')
+                                                            strong= s.location_code
+                                                            |  — #{s.reason}
+                                            else
+                                                .text-muted None
+        else
+            .alert.alert-info No billing runs in this date range.
+
+    script.
+        function applyFilter() {
+            window.location.href = '/platform-billing/runs?fromDate=' + document.getElementById('fromDate').value
+                + '&toDate=' + document.getElementById('toDate').value;
+        }
+
+        $('.run-row').on('click', function() {
+            const detail = $('#run-detail-' + $(this).data('run'));
+            detail.toggle();
+            $(this).find('.run-chevron').toggleClass('bi-chevron-right bi-chevron-down');
+        });
