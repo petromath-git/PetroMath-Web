@@ -1,6 +1,7 @@
 // controllers/transaction-upload-controller.js
 const BankStatementDao = require('../dao/bank-statement-dao');
 const { debugLog } = require('../utils/debug-logger');
+const { isPdfFile, parsePdfStatementToData, PdfPasswordError } = require('../utils/pdf-statement-parsers');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
 const fs = require('fs/promises');
 const path = require('path');
@@ -762,7 +763,25 @@ previewTransactions: async (req, res) => {
         }
 
         let data;
-        if (isHtmlFile(req.file.buffer)) {
+        if (isPdfFile(req.file.buffer)) {
+            await debugLog(locationCode, `PDF detected, using PDF parser for ${template.bank_name}`);
+            try {
+                data = await parsePdfStatementToData(req.file.buffer, template.bank_name, req.body.file_password);
+            } catch (pdfErr) {
+                if (pdfErr instanceof PdfPasswordError) {
+                    return res.status(400).json({
+                        success: false,
+                        error: pdfErr.message,
+                        errorType: pdfErr.errorType
+                    });
+                }
+                console.error('PDF statement parse failed:', pdfErr.message);
+                return res.status(400).json({
+                    success: false,
+                    error: `Could not read this PDF statement: ${pdfErr.message}`
+                });
+            }
+        } else if (isHtmlFile(req.file.buffer)) {
             await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
             data = parseHtmlXlsToData(req.file.buffer);
         } else if (!isRealBinaryWorkbook(req.file.buffer)) {
