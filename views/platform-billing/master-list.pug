@@ -16,6 +16,10 @@ block content
         .badge-status-PARTIAL { background-color: #fd7e14; }
         .badge-status-PAID { background-color: #198754; }
         .badge-status-CANCELLED { background-color: #6c757d; }
+        .badge-run-SUCCESS { background-color: #198754; color: #fff; }
+        .badge-run-PARTIAL { background-color: #fd7e14; color: #fff; }
+        .badge-run-FAILED { background-color: #dc3545; color: #fff; }
+        .badge-run-RUNNING { background-color: #0d6efd; color: #fff; }
 
     .card.mb-3
         .card-header(style='background-color: #f8f9fa;')
@@ -33,6 +37,9 @@ block content
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/ledger')
                         i.bi.bi-journal-text.me-1
                         | Ledger
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/runs')
+                        i.bi.bi-clock-history.me-1
+                        | Run Log
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/distributors')
                         i.bi.bi-people.me-1
                         | Distributors
@@ -49,6 +56,17 @@ block content
                 | Arrears locations are billed for the month just ended, Advance locations for the current month.
                 | Set each location's timing on
                 a(href='/platform-billing/plans')  Billing Plans
+            .small.mb-2
+                if lastRun
+                    | Last run: #{lastRun.started_label} (#{lastRun.trigger_type.toLowerCase()}) —
+                    span.badge.ml-1(class=`badge-run-${lastRun.status}`)= lastRun.status
+                    |  #{lastRun.generated_count} generated
+                    if lastRun.error_count
+                        | , #{lastRun.error_count} failed
+                    |  ·
+                    a(href='/platform-billing/runs')  view log
+                else
+                    span.text-muted No billing runs recorded yet.
             .row.g-3
                 .col-md-2.col-6
                     label.form-label Period:

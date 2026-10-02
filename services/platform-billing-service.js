@@ -4,6 +4,8 @@
 // Not to be confused with fuel/oil-company billing (Day Bill, tank invoices).
 //
 const dateFormat = require('dateformat');
+const os = require('os');
+const path = require('path');
 const PlatformBillingDao = require('../dao/platform-billing-dao');
 const DistributorService = require('./distributor-service');
 
@@ -97,6 +99,90 @@ async function generateInvoicesForPeriod(periodStartDate, userId, options = {}) 
         await generateForLocationMonth(plan.location_code, month, ctx, { plan, reportSkips: true });
     }
     return { generated: ctx.generated, skipped: ctx.skipped };
+}
+
+/**
+ * Run invoice generation under the cross-instance lock and record it in
+ * the run log (t_platform_billing_run, shown on /platform-billing/runs).
+ * Every caller — scheduler, startup catch-up, Generate dialog — goes
+ * through here.
+ *
+ * @param {object} req
+ * @param {string} req.triggerType      SCHEDULED | STARTUP | MANUAL
+ * @param {string} req.requestedBy
+ * @param {string} req.mode             DUE (generateDueInvoices) | MONTH (generateInvoicesForPeriod)
+ * @param {string} [req.periodStartDate] MONTH mode: any YYYY-MM-DD in the service month
+ * @param {string} [req.locationCode]
+ * @param {boolean} [req.logOnlyIfActive] don't keep the log row if nothing was
+ *                                        generated and nothing failed — for the
+ *                                        startup catch-up, which runs on every restart
+ * @returns {{ runId:number|null, status:string, generated:string[], skipped:object[] }}
+ */
+async function runGeneration(req) {
+    if (req.mode === 'MONTH' && monthStart(req.periodStartDate) > monthStart(dateFormat(new Date(), 'yyyy-mm-dd'))) {
+        throw new Error('Cannot bill a future month');
+    }
+
+    const now = () => dateFormat(new Date(), 'yyyy-mm-dd HH:MM:ss');
+    const run = {
+        trigger_type: req.triggerType,
+        requested_by: req.requestedBy,
+        run_mode: req.mode,
+        period_start: req.mode === 'MONTH' ? monthStart(req.periodStartDate) : null,
+        location_code: req.locationCode || null,
+        started_at: now(),
+        instance_name: `${os.hostname()}:${path.basename(process.cwd())}`.slice(0, 150)
+    };
+
+    const lock = await PlatformBillingDao.withGenerationLock(async () => {
+        const runId = await PlatformBillingDao.createRun({ ...run, status: 'RUNNING' });
+        let result = { generated: [], skipped: [] };
+        let status, errorMessage = null;
+        try {
+            result = req.mode === 'MONTH'
+                ? await generateInvoicesForPeriod(req.periodStartDate, req.requestedBy, { locationCode: req.locationCode })
+                : await generateDueInvoices(req.requestedBy, { locationCode: req.locationCode });
+            status = result.skipped.some(isErrorSkip) ? 'PARTIAL' : 'SUCCESS';
+        } catch (err) {
+            console.error('PlatformBillingService.runGeneration:', err);
+            status = 'FAILED';
+            errorMessage = String(err.message || err).slice(0, 1000);
+        }
+        await PlatformBillingDao.finishRun(runId, {
+            status,
+            finished_at: now(),
+            generated_count: result.generated.length,
+            skipped_count: result.skipped.length,
+            error_count: result.skipped.filter(isErrorSkip).length,
+            log_json: JSON.stringify(result),
+            error_message: errorMessage
+        });
+        return { runId, status, ...result };
+    });
+
+    if (!lock.acquired) {
+        // Another instance is mid-run. Startup catch-ups collide like this on
+        // every beta deploy (two app folders restart together) — not worth a row.
+        if (req.logOnlyIfActive) return { runId: null, status: 'SKIPPED', generated: [], skipped: [] };
+        // Otherwise record that this request was turned away
+        const runId = await PlatformBillingDao.createRun({ ...run, status: 'SKIPPED' });
+        await PlatformBillingDao.finishRun(runId, {
+            status: 'SKIPPED', finished_at: now(), generated_count: 0, skipped_count: 0, error_count: 0,
+            log_json: null, error_message: 'Another billing run was already in progress'
+        });
+        return { runId, status: 'SKIPPED', generated: [], skipped: [] };
+    }
+
+    const out = lock.result;
+    if (req.logOnlyIfActive && out.status === 'SUCCESS' && out.generated.length === 0) {
+        await PlatformBillingDao.deleteRun(out.runId);
+        out.runId = null;
+    }
+    return out;
+}
+
+function isErrorSkip(s) {
+    return typeof s.reason === 'string' && s.reason.startsWith('Error:');
 }
 
 /**
@@ -324,6 +410,7 @@ function monthStart(dateStr) {
 }
 
 module.exports = {
+    runGeneration,
     generateDueInvoices,
     generateInvoicesForPeriod,
     recordPayment,
