@@ -52,12 +52,20 @@ const PlatformBillingController = {
             );
             const toPeriod = req.query.toPeriod || today;
             const locationCode = req.query.locationCode || null;
+            // PAID / UNPAID (UNPAID + PARTIAL, i.e. balance still due); blank = all
+            const paymentStatus = ['PAID', 'UNPAID'].includes(req.query.paymentStatus) ? req.query.paymentStatus : '';
 
-            const [invoices, locations, lastRun] = await Promise.all([
+            let [invoices, locations, lastRun] = await Promise.all([
                 PlatformBillingDao.findAllInvoices(fromPeriod, toPeriod, locationCode),
                 LocationDao.findActiveLocations(),
                 PlatformBillingDao.findLastRun()
             ]);
+
+            if (paymentStatus === 'PAID') {
+                invoices = invoices.filter(inv => inv.status === 'PAID');
+            } else if (paymentStatus === 'UNPAID') {
+                invoices = invoices.filter(inv => inv.status === 'UNPAID' || inv.status === 'PARTIAL');
+            }
 
             invoices.forEach(inv => { inv.service_label = serviceLabel(inv.period_start_date, inv.period_end_date); });
             if (lastRun) lastRun.started_label = dateFormat(lastRun.started_at, 'dd-mmm-yyyy HH:MM');
@@ -75,6 +83,7 @@ const PlatformBillingController = {
                 fromPeriod,
                 toPeriod,
                 locationCode,
+                paymentStatus,
                 today,
                 user: req.user
             });
