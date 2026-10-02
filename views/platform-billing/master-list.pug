@@ -16,6 +16,10 @@ block content
         .badge-status-PARTIAL { background-color: #fd7e14; }
         .badge-status-PAID { background-color: #198754; }
         .badge-status-CANCELLED { background-color: #6c757d; }
+        .badge-run-SUCCESS { background-color: #198754; color: #fff; }
+        .badge-run-PARTIAL { background-color: #fd7e14; color: #fff; }
+        .badge-run-FAILED { background-color: #dc3545; color: #fff; }
+        .badge-run-RUNNING { background-color: #0d6efd; color: #fff; }
 
     .card.mb-3
         .card-header(style='background-color: #f8f9fa;')
@@ -33,6 +37,9 @@ block content
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/ledger')
                         i.bi.bi-journal-text.me-1
                         | Ledger
+                    a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/runs')
+                        i.bi.bi-clock-history.me-1
+                        | Run Log
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/distributors')
                         i.bi.bi-people.me-1
                         | Distributors
@@ -43,6 +50,23 @@ block content
                         i.bi.bi-cash-coin.me-1
                         | Record Payment
         .card-body
+            .small.text-muted.mb-2
+                i.bi.bi-clock-history.me-1
+                | Invoices are generated automatically on the 3rd of every month (next run: #{nextAutoRun}) —
+                | Arrears locations are billed for the month just ended, Advance locations for the current month.
+                | Set each location's timing on
+                a(href='/platform-billing/plans')  Billing Plans
+            .small.mb-2
+                if lastRun
+                    | Last run: #{lastRun.started_label} (#{lastRun.trigger_type.toLowerCase()}) —
+                    span.badge.ml-1(class=`badge-run-${lastRun.status}`)= lastRun.status
+                    |  #{lastRun.generated_count} generated
+                    if lastRun.error_count
+                        | , #{lastRun.error_count} failed
+                    |  ·
+                    a(href='/platform-billing/runs')  view log
+                else
+                    span.text-muted No billing runs recorded yet.
             .row.g-3
                 .col-md-2.col-6
                     label.form-label Period:
@@ -77,7 +101,7 @@ block content
                         tr
                             th Location
                             th Invoice #
-                            th Period
+                            th Service Month
                             th.text-right Gross
                             th.text-right Discount
                             th.text-right Net
@@ -89,9 +113,12 @@ block content
                     tbody
                         each inv in invoices
                             tr
-                                td= inv.location_name + ' (' + inv.location_code + ')'
+                                td
+                                    = inv.location_name + ' (' + inv.location_code + ')'
+                                    if inv.billing_timing
+                                        span.badge.ml-1(class=inv.billing_timing === 'ADVANCE' ? 'badge-info' : 'badge-secondary' title='Current billing timing')= inv.billing_timing === 'ADVANCE' ? 'Advance' : 'Arrears'
                                 td= inv.invoice_number
-                                td= new Date(inv.period_start_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) + ' – ' + new Date(inv.period_end_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+                                td= inv.service_label
                                 td.text-right= Number(inv.gross_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
                                 td.text-right= Number(inv.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
                                 td.text-right= Number(inv.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
@@ -117,9 +144,28 @@ block content
                     button.close(type='button' data-dismiss='modal' aria-label='Close')
                         span(aria-hidden='true') &times;
                 .modal-body
-                    label.form-label Billing Month (1st of month):
-                    input#genPeriodStart.form-control(type='date')
-                    small.text-muted Generates one invoice per active location for this period. Locations already covered by an existing invoice (e.g. annual prepay) or still in trial are skipped automatically.
+                    p.small.text-muted You normally don't need this — the same run happens automatically on the 3rd of every month.
+                    .form-check.mb-2
+                        input.form-check-input#genModeDue(type='radio' name='genMode' value='DUE' checked)
+                        label.form-check-label(for='genModeDue')
+                            strong Bill everything that's due now
+                            br
+                            small.text-muted Each location's due month as per its billing timing, plus any month that was missed. Already-billed months are skipped.
+                    .form-check.mb-2
+                        input.form-check-input#genModeMonth(type='radio' name='genMode' value='MONTH')
+                        label.form-check-label(for='genModeMonth')
+                            strong Bill a specific service month
+                            br
+                            small.text-muted Ignores billing timing — use for a one-off backfill.
+                    #genMonthBlock.pl-4(style='display:none;')
+                        label.form-label Service month:
+                        input#genPeriodMonth.form-control(type='month' max=thisMonth)
+                    .mt-3
+                        label.form-label Location:
+                        select#genLocation.form-control
+                            option(value='') All locations
+                            each loc in locations
+                                option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-success#btnGenerate(type='button') Generate
@@ -214,25 +260,44 @@ block content
         });
 
         $('#btnOpenGenerate').on('click', function() {
-            $('#genPeriodStart').val('');
+            $('#genModeDue').prop('checked', true);
+            $('#genMonthBlock').hide();
+            $('#genPeriodMonth').val('');
+            $('#genLocation').val('');
             $('#generateModal').modal('show');
         });
 
+        $('input[name="genMode"]').on('change', function() {
+            $('#genMonthBlock').toggle($('#genModeMonth').is(':checked'));
+        });
+
         $('#btnGenerate').on('click', function() {
-            const period = $('#genPeriodStart').val();
-            if (!period) { alert('Please select a billing month.'); return; }
+            const payload = { locationCode: $('#genLocation').val() || null };
+            if ($('#genModeMonth').is(':checked')) {
+                const month = $('#genPeriodMonth').val(); // YYYY-MM
+                if (!month) { alert('Please select a service month.'); return; }
+                payload.periodStartDate = month + '-01';
+            } else {
+                payload.mode = 'DUE';
+            }
             $(this).prop('disabled', true).text('Generating...');
             $.ajax({
                 url: '/platform-billing/generate',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ periodStartDate: period }),
+                data: JSON.stringify(payload),
                 success: function(res) {
-                    alert('Generated: ' + res.generated.length + ', Skipped: ' + res.skipped.length);
+                    let msg = 'Generated: ' + res.generated.length;
+                    if (res.generated.length) msg += '\n  ' + res.generated.join('\n  ');
+                    if (res.skipped.length) {
+                        msg += '\n\nSkipped: ' + res.skipped.length + '\n  ' +
+                            res.skipped.map(function(s) { return s.location_code + ' — ' + s.reason; }).join('\n  ');
+                    }
+                    alert(msg);
                     window.location.reload();
                 },
-                error: function() {
-                    alert('Invoice generation failed.');
+                error: function(xhr) {
+                    alert('Invoice generation failed' + (xhr.responseJSON && xhr.responseJSON.error ? ': ' + xhr.responseJSON.error : '.'));
                     $('#btnGenerate').prop('disabled', false).text('Generate');
                 }
             });
