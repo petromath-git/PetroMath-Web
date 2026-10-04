@@ -81,6 +81,12 @@ module.exports = {
             where: {'treceipt_id': receipt.treceipt_id},
         });
     },
+    findTypeById: (receiptId) => {
+        return CashReceipts.findOne({
+            attributes: ['treceipt_id', 'receipt_type'],
+            where: { treceipt_id: receiptId },
+        });
+    },
     findById: (receiptId) => {
         return CashReceipts.findOne({
             attributes: ['treceipt_id', 'cashflow_date', 'pending_cashflow_id', 'closing_id'],
