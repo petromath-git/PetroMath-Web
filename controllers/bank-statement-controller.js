@@ -4,6 +4,8 @@ const config = require("../config/app-config");
 const BankStatementDao = require("../dao/bank-statement-dao");
 const locationConfigDao = require('../dao/location-config-dao');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
+const locationDao = require('../dao/location-dao');
+const { beforeGoLiveError } = require('../utils/golive-guard');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -24,16 +26,18 @@ module.exports = {
             // Split is disabled by default — must be explicitly enabled per location
             const allowSplit = allowSplitSetting === 'true' ? 'true' : 'false';
 
-            const [accountList, locationData, transactionList, transactionTypes, accountingTypes, ledgerList] = await Promise.all([
+            const [accountList, locationData, transactionList, transactionTypes, accountingTypes, ledgerList, goLiveDate] = await Promise.all([
                 BankStatementDao.getBankAccounts(locationCode),
                 BankStatementDao.getLocationId(locationCode),
                 BankStatementDao.getTransactionsByDate(locationCode, fromDate, toDate, bankId),
                 BankStatementDao.getTransactionTypes(),
                 BankStatementDao.getAccountingTypes(),
-                bankId && bankId != 0 ? BankStatementDao.getAllowedLedgers(bankId, locationCode) : Promise.resolve([])
+                bankId && bankId != 0 ? BankStatementDao.getAllowedLedgers(bankId, locationCode) : Promise.resolve([]),
+                locationDao.getGoLiveDate(locationCode)
             ]);
 
             res.render('bank-statement', {
+                goLiveDate: goLiveDate,
                 user: req.user,
                 title: 'Bank Statement',
                 config: config.APP_CONFIGS,
@@ -65,6 +69,12 @@ module.exports = {
         const usedIndices  = Object.keys(req.body)
             .filter(key => key.startsWith('trans_date_'))
             .map(key => key.replace('trans_date_', ''));
+
+        const goLiveError = await beforeGoLiveError(
+            locationCode, usedIndices.map(index => req.body[`trans_date_${index}`]));
+        if (goLiveError) {
+            return res.status(400).send({ error: goLiveError });
+        }
 
         for (const index of usedIndices) {
             const credit = parseFloat(req.body[`creditamount_${index}`] || 0);

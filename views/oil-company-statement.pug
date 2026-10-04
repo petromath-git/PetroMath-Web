@@ -208,7 +208,7 @@ block content
                         if allowManualBankTransactions === 'true'
                             tr#new-transaction-row
                                 td
-                                    input.form-control.form-control-sm(type='date' name='trans_date_0' id='trans_date_0' max=currentDate required)
+                                    input.form-control.form-control-sm(type='date' name='trans_date_0' id='trans_date_0' min=goLiveDate max=currentDate required)
                                 if accountList && accountList.length > 1
                                     td
                                         select.form-control.form-control-sm(name='bank_id_0' id='bank_id_0' onchange='loadLedgersForNewRow()' required)
@@ -248,7 +248,8 @@ block content
             button.btn.btn-success.btn-sm#bulkApplyBtn(onclick='applyBulkReclassify()' disabled) Apply
             button.btn.btn-secondary.btn-sm(onclick='clearBulkSelection()') Cancel
     script.
-        const currentDate = '#{currentDate}';        
+        const currentDate = '#{currentDate}';
+        const goLiveDate = '#{goLiveDate || ''}';        
         let transactionRowCounter = 1;        
         const accountList = !{JSON.stringify(accountList || [])};
         const showAccountColumn = accountList && accountList.length > 1;
@@ -462,7 +463,7 @@ block content
             
             newRow.innerHTML = `
                 <td>
-                    <input class="form-control form-control-sm" type="date" name="trans_date_${transactionRowCounter}" id="trans_date_${transactionRowCounter}" value="${currentDate}" max="${currentDate}" required>
+                    <input class="form-control form-control-sm" type="date" name="trans_date_${transactionRowCounter}" id="trans_date_${transactionRowCounter}" value="${currentDate}" min="${goLiveDate}" max="${currentDate}" required>
                 </td>
                 ${accountColumnHtml}
                 <td>
