@@ -427,9 +427,10 @@ module.exports = {
                 30  // default fallback
             ));
 
-            // SuperUser is exempt so data clean-ups of older entries stay possible
+            // SuperUser is exempt so data clean-ups of older entries stay possible;
+            // opening balances are exempt so owners can correct them any time
             const daysDiff = Math.floor((new Date() - new Date(adjustment.adjustment_date)) / (1000 * 60 * 60 * 24));
-            if (daysDiff > maxDays && role !== 'SuperUser') {
+            if (daysDiff > maxDays && role !== 'SuperUser' && String(adjustment.adjustment_type) !== '201') {
                 return { canModify: false, reason: `Cannot modify adjustments older than ${maxDays} days` };
             }
 
