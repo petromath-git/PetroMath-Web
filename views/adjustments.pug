@@ -1,401 +1,551 @@
 extends layout
 
 block content
-    // Sticky Header Section - Contains title, button, past adjustments header, and filters
-    div.sticky-header-container
-        // Main Header with Add Button
-        div.main-header
-            div.row.mb-3
-                div.col-12
-                    div.d-flex.justify-content-between.align-items-center
-                        h4.mb-0 Adjustment History
-                        if user.Role === 'Admin' || user.Role === 'SuperUser'
-                            a.btn.btn-primary(href='/adjustments/new')
-                                i.bi.bi-plus-circle.me-2
-                                | Add New Adjustment      
-        // Filter Section - Always Expanded
-        div.filter-section-expanded
-            div.filter-header
-                div.d-flex.align-items-center
-                    i.bi.bi-funnel.me-2
-                    strong Search & Filter Adjustments
-            
-            div.filter-content-expanded
-                form#adjustmentFiltersForm
-                    div.form-row
-                        div.col-md-3
-                            label(for='filterDateRange') Date Range
-                            select.form-control#filterDateRange(onchange='updateAdjustmentDateRange()')
-                                option(value='last_30_days' selected) Last 30 Days
-                                option(value='this_month') This Month
-                                option(value='last_month') Last Month
-                                option(value='this_financial_year') This Financial Year
-                                option(value='last_financial_year') Last Financial Year
-                                option(value='custom') Custom Date Range
-                        div.col-md-3
-                            label(for='filterFromDate') From Date
-                            input.form-control(type='date' id='filterFromDate' name='fromDate')
-                        div.col-md-3
-                            label(for='filterToDate') To Date
-                            input.form-control(type='date' id='filterToDate' name='toDate')
-                        div.col-md-3
-                            label(for='filterAdjustmentType') Adjustment Type
-                            select.form-control#filterAdjustmentType(name='adjustmentType')
-                                option(value='') All Types
-                                if adjustmentTypes
-                                    each type in adjustmentTypes
-                                        option(value=type.lookup_id)= type.description
-                    
-                    div.form-row.mt-3
-                        div.col-md-3
-                            label(for='filterAccountType') Account Type
-                            select.form-control#filterAccountType(name='externalSource')
-                                option(value='') All Account Types
-                                option(value='CUSTOMER') Customer
-                                option(value='DIGITAL_VENDOR') Digital Vendor
-                                option(value='SUPPLIER') Supplier
-                                option(value='BANK') Bank Account
-                                option(value='EXPENSE') Expense
-                        div.col-md-3
-                            label(for='filterStatus') Status
-                            select.form-control#filterStatus(name='status')
-                                option(value='') All Status
-                                option(value='ACTIVE' selected) Active
-                                option(value='REVERSED') Reversed
-                        div.col-md-4
-                            label(for='filterSearch') Search (Reference No, Description)
-                            input.form-control#filterSearch(type='text' name='search' placeholder='Enter reference number or description')
-                        div.col-md-2.d-flex.align-items-end
-                            button.btn.btn-primary.mr-2(type='button' onclick='applyFilters()')
-                                i.bi.bi-search
-                                |  Search
-                            button.btn.btn-secondary(type='button' onclick='clearFilters()')
-                                i.bi.bi-x-circle
-                                |  Clear
+    style.
+        .adj-history-table th, .adj-history-table td { vertical-align: middle; white-space: nowrap; }
+        .adj-history-table td.adj-desc { white-space: normal; min-width: 180px; }
+        .adj-history-table td.adj-party { white-space: normal; min-width: 140px; }
+        .adj-history-table .amount-column { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+        .adj-history-table thead th { position: sticky; top: 0; background: #f1f3f5; z-index: 1; }
+        .adj-history-scroll { max-height: 65vh; overflow: auto; }
+        .adj-source { font-size: 0.75em; color: #6c757d; display: block; }
 
-        // Sticky Table Header
-        div.sticky-table-header
-            div.table-responsive
-                table.table.table-sm.enhanced-adjustments-table.mb-0
-                    thead
-                        tr
-                            th Date
-                            th Reference
-                            th.d-none.d-md-table-cell Type
-                            th Description
-                            th.d-none.d-md-table-cell Account
-                            th.amount-column Debit
-                            th.amount-column Credit
-                            th.text-center Status
-                            th.d-none.d-md-table-cell Created By
-                            th.text-center Actions
+    div.d-flex.justify-content-between.align-items-center.mb-3
+        h4.mb-0 Adjustments
 
-    // Results Section - Table Body Only
-    div.results-container
-        div.row
-            div.col-12
-                div.card.borderless-card
-                    div.card-body.p-0
-                        // Loading Spinner
-                        div.loading-spinner#loadingSpinner
-                            div.spinner-border.text-primary(role='status')
-                                span.sr-only Loading...
-                            p.mt-2.text-muted Loading adjustments...
-                        
-                        // Results Table Body Only (Header is sticky above)
-                        div.table-responsive#adjustmentsTableContainer
-                            table.table.table-sm.enhanced-adjustments-table.mb-0#adjustmentsTable
-                                tbody#adjustmentsTableBody
-                                    // Results will be populated here
-                        
-                        // No Results Message
-                        div.no-results#noResults(style='display: none;')
-                            i.bi.bi-info-circle-fill.text-muted(style='font-size: 2rem;')
-                            h5.mt-3 No adjustments found
-                            p.text-muted Try adjusting your search criteria or date range.
-                        
-                        // Summary Footer
-                        div.card-footer#summaryFooter(style='display: none;')
+    //- ── New adjustment (Admin / PowerUser / SuperUser) ──────────────────────
+    if canEdit
+        // Desktop Layout
+        div.adjustment-entry-desktop.mb-4
+            div.card
+                div.card-header.text-white.bg-dark.d-flex.justify-content-between.align-items-center
+                    span New Adjustment
+                    button.btn.btn-sm.btn-outline-light(type='button' data-toggle='collapse' data-target='#adjEntryBody') Show / Hide
+                div.collapse.show#adjEntryBody
+                    div.card-body
+                        form(method='POST' action='/adjustments/new' id='adjustmentForm')
+                            input(type='hidden' name='location_code' value=user.location_code)
                             div.row
+                                div.col-md-3
+                                    label(for='adjustment_date') Date *
+                                    input.form-control(type='date' id='adjustment_date' name='adjustment_date' value=currentDate max=currentDate required)
+                                div.col-md-3
+                                    label(for='reference_no') Reference No.
+                                    input.form-control(type='text' id='reference_no' name='reference_no' placeholder='Optional tracking number')
+                                div.col-md-6
+                                    label(for='adjustment_type') Adjustment Type *
+                                    select.form-control(id='adjustment_type' name='adjustment_type' required)
+                                        option(value='') Select adjustment type
+                                        if adjustmentTypes
+                                            each type in adjustmentTypes
+                                                option(value=type.lookup_id)= type.description
+                            div.row.mt-3
+                                div.col-md-4
+                                    label(for='account_type') Account Type *
+                                    select.form-control(id='account_type' name='account_type' required onchange='loadAccounts()')
+                                        option(value='') Select account type
+                                        option(value='CUSTOMER') Customer
+                                        option(value='DIGITAL_VENDOR') Digital Vendor
+                                        option(value='SUPPLIER') Supplier
+                                        option(value='BANK') Bank Account
+                                        option(value='EXPENSE') Expense
                                 div.col-md-8
-                                    small.text-muted#resultCount 0 adjustments found
-                                div.col-md-4.text-right
-                                    small.text-muted
-                                        | Total Debits: 
-                                        span.font-weight-bold#totalDebits ₹0.00
-                                        |  | Total Credits: 
-                                        span.font-weight-bold#totalCredits ₹0.00
+                                    label(for='account_name') Account Name *
+                                    select.form-control(id='account_name' name='account_name' required disabled)
+                                        option(value='') First select account type
+                            div.row.mt-3
+                                div.col-md-3
+                                    label(for='debit_amount') Debit Amount (₹)
+                                    input.form-control.amount-input(type='number' id='debit_amount' name='debit_amount' min='0' step='0.01' oninput='disableCreditInput()')
+                                div.col-md-3
+                                    label(for='credit_amount') Credit Amount (₹)
+                                    input.form-control.amount-input(type='number' id='credit_amount' name='credit_amount' min='0' step='0.01' oninput='disableDebitInput()')
+                                div.col-md-6
+                                    label Description *
+                                    input.form-control(type='text' id='description' name='description' placeholder='Brief description' required maxlength='500')
+                            div.text-center.mt-3
+                                button.btn.btn-primary(type='button' onclick='validateAndSubmit()') SAVE ADJUSTMENT
+                                span &nbsp;
+                                button.btn.btn-secondary(type='button' onclick='resetForm()') RESET
+
+        // Mobile Layout
+        div.adjustment-date-filter-mobile.mb-4
+            div.text-center.mb-3
+                h5.text-primary New Adjustment
+            form(method='POST' action='/adjustments/new' id='adjustmentFormMobile')
+                input(type='hidden' name='location_code' value=user.location_code)
+                div.form-group
+                    label(for='adjustment_date_mobile') Date *
+                    input.form-control(type='date' id='adjustment_date_mobile' name='adjustment_date' value=currentDate max=currentDate required)
+                div.form-group
+                    label(for='adjustment_type_mobile') Adjustment Type *
+                    select.form-control(id='adjustment_type_mobile' name='adjustment_type' required)
+                        option(value='') Select type
+                        if adjustmentTypes
+                            each type in adjustmentTypes
+                                option(value=type.lookup_id)= type.description
+                div.form-group
+                    label(for='account_type_mobile') Account Type *
+                    select.form-control(id='account_type_mobile' name='account_type' required onchange='loadAccountsMobile()')
+                        option(value='') Select account type
+                        option(value='CUSTOMER') Customer
+                        option(value='DIGITAL_VENDOR') Digital Vendor
+                        option(value='SUPPLIER') Supplier
+                        option(value='BANK') Bank Account
+                        option(value='EXPENSE') Expense
+                div.form-group
+                    label(for='account_name_mobile') Account Name *
+                    select.form-control(id='account_name_mobile' name='account_name' required disabled)
+                        option(value='') First select account type
+                div.form-group
+                    label Amount Type *
+                    div.form-check
+                        input.form-check-input(type='radio' name='amount_type' id='debit_radio' value='debit' onchange='toggleAmountType()')
+                        label.form-check-label(for='debit_radio') Debit (Increase Balance)
+                    div.form-check
+                        input.form-check-input(type='radio' name='amount_type' id='credit_radio' value='credit' onchange='toggleAmountType()')
+                        label.form-check-label(for='credit_radio') Credit (Decrease Balance)
+                    input.form-control.amount-input-mobile(type='number' id='amount_mobile' name='amount' placeholder='Enter amount' min='0' step='0.01' required disabled)
+                div.form-group
+                    label(for='description_mobile') Description *
+                    textarea.form-control(id='description_mobile' name='description' placeholder='Brief description of adjustment' required maxlength='500' rows='3')
+                div.form-group
+                    label(for='reference_no_mobile') Reference No. (Optional)
+                    input.form-control(type='text' id='reference_no_mobile' name='reference_no' placeholder='Tracking number')
+                button.btn.btn-primary.btn-mobile(type='button' onclick='validateAndSubmitMobile()') SAVE ADJUSTMENT
+                button.btn.btn-secondary.btn-mobile(type='button' onclick='resetFormMobile()') RESET
+
+    //- ── History ────────────────────────────────────────────────────────────
+    div.card
+        div.card-header.bg-secondary.text-white
+            i.bi.bi-funnel.mr-2
+            strong Adjustment History
+        div.card-body.pb-2
+            form#adjustmentFiltersForm(onsubmit='applyFilters(); return false;')
+                div.form-row
+                    div.col-md-3.mb-2
+                        label(for='filterDateRange') Date Range
+                        select.form-control#filterDateRange(onchange='updateAdjustmentDateRange()')
+                            option(value='last_30_days' selected) Last 30 Days
+                            option(value='this_month') This Month
+                            option(value='last_month') Last Month
+                            option(value='this_financial_year') This Financial Year
+                            option(value='last_financial_year') Last Financial Year
+                            option(value='custom') Custom Date Range
+                    div.col-md-3.mb-2
+                        label(for='filterFromDate') From Date
+                        input.form-control(type='date' id='filterFromDate' name='fromDate')
+                    div.col-md-3.mb-2
+                        label(for='filterToDate') To Date
+                        input.form-control(type='date' id='filterToDate' name='toDate')
+                    div.col-md-3.mb-2
+                        label(for='filterAdjustmentType') Adjustment Type
+                        select.form-control#filterAdjustmentType(name='adjustmentType')
+                            option(value='') All Types
+                            if adjustmentTypes
+                                each type in adjustmentTypes
+                                    option(value=type.lookup_id)= type.description
+                div.form-row
+                    div.col-md-3.mb-2
+                        label(for='filterAccountType') Account Type
+                        select.form-control#filterAccountType(name='externalSource')
+                            option(value='') All Account Types
+                            option(value='CUSTOMER') Customer
+                            option(value='DIGITAL_VENDOR') Digital Vendor
+                            option(value='SUPPLIER') Supplier
+                            option(value='BANK') Bank Account
+                            option(value='EXPENSE') Expense
+                    div.col-md-3.mb-2
+                        label(for='filterView') Show
+                        select.form-control#filterView(name='view' onchange='applyFilters()')
+                            option(value='active' selected) Active entries
+                            option(value='deleted') Deleted entries
+                    div.col-md-4.mb-2
+                        label(for='filterSearch') Search (Party, Reference, Description)
+                        input.form-control#filterSearch(type='text' name='search' placeholder='Customer name, reference or description')
+                    div.col-md-2.mb-2.d-flex.align-items-end
+                        button.btn.btn-primary.mr-2(type='submit')
+                            i.bi.bi-search
+                            |  Search
+                        button.btn.btn-secondary(type='button' onclick='clearFilters()')
+                            i.bi.bi-x-circle
+                            |  Clear
+
+        div.loading-spinner.text-center.py-4#loadingSpinner(style='display: none;')
+            div.spinner-border.text-primary(role='status')
+            p.mt-2.text-muted Loading adjustments...
+
+        div.alert.alert-warning.mx-3.mb-2#deletedNote(style='display: none;')
+            | These entries were deleted and do not affect any balance. Use
+            strong  Restore
+            |  to put one back exactly as it was.
+
+        div.adj-history-scroll.table-responsive#adjustmentsTableContainer(style='display: none;')
+            table.table.table-sm.table-hover.adj-history-table.mb-0
+                thead#adjustmentsTableHead
+                tbody#adjustmentsTableBody
+
+        div.text-center.py-4#noResults(style='display: none;')
+            i.bi.bi-info-circle-fill.text-muted(style='font-size: 2rem;')
+            h5.mt-3 No adjustments found
+            p.text-muted Try adjusting your search criteria or date range.
+
+        div.card-footer#summaryFooter(style='display: none;')
+            div.row
+                div.col-md-6
+                    small.text-muted#resultCount 0 adjustments found
+                div.col-md-6.text-right
+                    small.text-muted
+                        | Total Debits:
+                        span.font-weight-bold#totalDebits  ₹0.00
+                        |  | Total Credits:
+                        span.font-weight-bold#totalCredits  ₹0.00
 
     script.
-        // Initialize with data from backend
         const adjustmentTypesData = !{JSON.stringify(adjustmentTypes || [])};
         const customerListData = !{JSON.stringify(customerList || [])};
         const digitalVendorListData = !{JSON.stringify(digitalVendorList || [])};
         const supplierListData = !{JSON.stringify(supplierList || [])};
         const bankListData = !{JSON.stringify(bankList || [])};
         const expenseListData = !{JSON.stringify(expenseList || [])};
-        
-        // Make user data available to JavaScript
-        window.userData = !{JSON.stringify(user || {})};
-        window.userRole = !{JSON.stringify(user.Role || '')};
 
-        // Server date data 
+        const canEdit = !{JSON.stringify(!!canEdit)};
+        const OPENING_BALANCE_TYPE = '201';
+
+        // Server date data
         const serverDate = new Date('!{currentDate}');
         const serverYear = !{currentYear};
         const serverMonth = !{currentMonth}; // 1-based month from server
 
-        // Enhanced Past Adjustments Functionality
+        const SOURCE_LABELS = {
+            CUSTOMER: 'Customer', DIGITAL_VENDOR: 'Digital Vendor', SUPPLIER: 'Supplier',
+            BANK: 'Bank', EXPENSE: 'Expense'
+        };
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
         $(document).ready(function() {
-            // Set default date range (last 30 days)
             updateAdjustmentDateRange();
-            
-            // Load initial data
             applyFilters();
         });
-        
-        function updateAdjustmentDateRange() {
-                const dateRange = $('#filterDateRange').val();
-                const today = serverDate;
-                let fromDate, toDate;               
-                
-                
-                switch(dateRange) {
-                    case 'last_30_days':
-                        fromDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-                        toDate = today;
-                        break;
-                        
-                    case 'this_month':
-                        fromDate = new Date(serverYear, serverMonth - 1, 1);
-                        toDate = today;
-                        break;
-                        
-                    case 'last_month':
-                        fromDate = new Date(serverYear, serverMonth - 2, 1);
-                        toDate = new Date(serverYear, serverMonth - 1, 0);
-                        break;
-                        
-                    case 'this_financial_year':
-                        if (serverMonth >= 4) { // April onwards
-                            fromDate = new Date(serverYear, 3, 1); // April 1 current year
-                            toDate = today; // Should be today, not March 31!
-                            console.log('FY Case: April onwards, from April 1 current year to today');
-                        } else { // Jan-Mar
-                            fromDate = new Date(serverYear - 1, 3, 1); // April 1 previous year
-                            toDate = today; // Should be today, not March 31!
-                            console.log('FY Case: Jan-Mar, from April 1 previous year to today');
-                        }
-                        break;
-                        
-                    case 'last_financial_year':
-                        if (serverMonth >= 4) { // April onwards
-                            fromDate = new Date(serverYear - 1, 3, 1); // April 1 previous year
-                            toDate = new Date(serverYear, 2, 31); // March 31 current year
-                            console.log('Last FY Case: April onwards');
-                        } else { // Jan-Mar
-                            fromDate = new Date(serverYear - 2, 3, 1); // April 1 two years ago
-                            toDate = new Date(serverYear - 1, 2, 31); // March 31 previous year
-                            console.log('Last FY Case: Jan-Mar');
-                        }
-                        break;
-                        
-                    case 'custom':
-                        return;
-                        
-                    default:
-                        fromDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-                        toDate = today;
-                }                
-              
 
-                function formatDateForInput(date) {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-                 }
-                
-                $('#filterFromDate').val(formatDateForInput(fromDate));
-                $('#filterToDate').val(formatDateForInput(toDate));
-                
-                const isCustom = dateRange === 'custom';
-                $('#filterFromDate').prop('readonly', !isCustom);
-                $('#filterToDate').prop('readonly', !isCustom);
-                
-                if (isCustom) {
+        // ── Entry form ───────────────────────────────────────────────────────
+        function loadAccounts() {
+            populateAccountDropdown('account_name', document.getElementById('account_type').value);
+        }
+
+        function loadAccountsMobile() {
+            populateAccountDropdown('account_name_mobile', document.getElementById('account_type_mobile').value);
+        }
+
+        function populateAccountDropdown(dropdownId, accountType) {
+            const select = document.getElementById(dropdownId);
+            select.innerHTML = '<option value="">Select account</option>';
+            select.disabled = false;
+
+            const sources = {
+                CUSTOMER:       [customerListData,      c => c.creditlist_id, c => c.Company_Name],
+                DIGITAL_VENDOR: [digitalVendorListData, v => v.creditlist_id, v => v.Company_Name],
+                SUPPLIER:       [supplierListData,      s => s.supplier_id,   s => s.supplier_name],
+                BANK:           [bankListData,          b => b.bank_id,       b => b.account_nickname || b.bank_name],
+                EXPENSE:        [expenseListData,       e => e.expense_id,    e => e.expense_name]
+            };
+            const src = sources[accountType];
+            if (!src) { select.disabled = true; return; }
+
+            const [list, idOf, nameOf] = src;
+            list.forEach(item => {
+                const option = document.createElement('option');
+                option.value = idOf(item);
+                option.textContent = nameOf(item);
+                option.dataset.source = accountType;
+                select.appendChild(option);
+            });
+        }
+
+        function toggleAmountType() {
+            const amountField = document.getElementById('amount_mobile');
+            const picked = document.getElementById('debit_radio').checked || document.getElementById('credit_radio').checked;
+            amountField.disabled = !picked;
+            if (picked) amountField.focus(); else amountField.value = '';
+        }
+
+        function disableCreditInput() {
+            const debitVal = parseFloat(document.getElementById('debit_amount').value || 0);
+            const creditField = document.getElementById('credit_amount');
+            creditField.disabled = debitVal > 0;
+            if (debitVal > 0) creditField.value = '';
+        }
+
+        function disableDebitInput() {
+            const creditVal = parseFloat(document.getElementById('credit_amount').value || 0);
+            const debitField = document.getElementById('debit_amount');
+            debitField.disabled = creditVal > 0;
+            if (creditVal > 0) debitField.value = '';
+        }
+
+        function validateAndSubmit() {
+            if (!validateForm('desktop')) return false;
+            if (confirm('Are you sure you want to save this adjustment?')) {
+                document.getElementById('adjustmentForm').submit();
+            }
+        }
+
+        function validateAndSubmitMobile() {
+            const form = document.getElementById('adjustmentFormMobile');
+            if (!validateForm('mobile')) return false;
+
+            const amountType = document.querySelector('input[name="amount_type"]:checked').value;
+            const amount = document.getElementById('amount_mobile').value;
+            form.insertAdjacentHTML('beforeend',
+                `<input type="hidden" name="debit_amount" value="${amountType === 'debit' ? amount : ''}">` +
+                `<input type="hidden" name="credit_amount" value="${amountType === 'credit' ? amount : ''}">`);
+
+            if (confirm('Are you sure you want to save this adjustment?')) {
+                form.submit();
+            }
+        }
+
+        function validateForm(mode) {
+            const isDesktop = mode === 'desktop';
+            const suffix = isDesktop ? '' : '_mobile';
+
+            if (!document.getElementById('adjustment_date' + suffix).value) { alert('Please select a date.'); return false; }
+            if (!document.getElementById('adjustment_type' + suffix).value) { alert('Please select adjustment type.'); return false; }
+            if (!document.getElementById('account_type' + suffix).value) { alert('Please select account type.'); return false; }
+            if (!document.getElementById('account_name' + suffix).value) { alert('Please select account name.'); return false; }
+            if (!document.getElementById('description' + suffix).value.trim()) { alert('Please enter a description.'); return false; }
+
+            if (isDesktop) {
+                const debitAmount = parseFloat(document.getElementById('debit_amount').value || 0);
+                const creditAmount = parseFloat(document.getElementById('credit_amount').value || 0);
+                if (debitAmount === 0 && creditAmount === 0) { alert('Please enter either debit or credit amount.'); return false; }
+                if (debitAmount > 0 && creditAmount > 0) { alert('Cannot enter both debit and credit amounts.'); return false; }
+            } else {
+                const amountType = document.querySelector('input[name="amount_type"]:checked');
+                const amount = parseFloat(document.getElementById('amount_mobile').value || 0);
+                if (!amountType) { alert('Please select amount type (Debit or Credit).'); return false; }
+                if (amount <= 0) { alert('Please enter a valid amount.'); return false; }
+            }
+            return true;
+        }
+
+        function resetForm() {
+            if (confirm('Are you sure you want to reset the form?')) {
+                document.getElementById('adjustmentForm').reset();
+                document.getElementById('account_name').disabled = true;
+                document.getElementById('debit_amount').disabled = false;
+                document.getElementById('credit_amount').disabled = false;
+            }
+        }
+
+        function resetFormMobile() {
+            if (confirm('Are you sure you want to reset the form?')) {
+                document.getElementById('adjustmentFormMobile').reset();
+                document.getElementById('account_name_mobile').disabled = true;
+                document.getElementById('amount_mobile').disabled = true;
+            }
+        }
+
+        // ── History ──────────────────────────────────────────────────────────
+        function updateAdjustmentDateRange() {
+            const dateRange = $('#filterDateRange').val();
+            const today = serverDate;
+            const fyStartYear = serverMonth >= 4 ? serverYear : serverYear - 1;
+            let fromDate, toDate;
+
+            switch (dateRange) {
+                case 'this_month':
+                    fromDate = new Date(serverYear, serverMonth - 1, 1); toDate = today; break;
+                case 'last_month':
+                    fromDate = new Date(serverYear, serverMonth - 2, 1); toDate = new Date(serverYear, serverMonth - 1, 0); break;
+                case 'this_financial_year':
+                    fromDate = new Date(fyStartYear, 3, 1); toDate = today; break;
+                case 'last_financial_year':
+                    fromDate = new Date(fyStartYear - 1, 3, 1); toDate = new Date(fyStartYear, 2, 31); break;
+                case 'custom':
+                    $('#filterFromDate, #filterToDate').prop('readonly', false);
                     $('#filterFromDate').focus();
-                }
+                    return;
+                default: // last_30_days
+                    fromDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000)); toDate = today;
             }
 
+            $('#filterFromDate').val(toInputDate(fromDate));
+            $('#filterToDate').val(toInputDate(toDate));
+            $('#filterFromDate, #filterToDate').prop('readonly', true);
+        }
+
+        function toInputDate(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function isDeletedView() {
+            return $('#filterView').val() === 'deleted';
+        }
+
         function applyFilters() {
-            const formData = $('#adjustmentFiltersForm').serialize();
-            
             $('#loadingSpinner').show();
-            $('#adjustmentsTableContainer').hide();
-            $('#noResults').hide();
-            $('#summaryFooter').hide();
-            
+            $('#adjustmentsTableContainer, #noResults, #summaryFooter, #deletedNote').hide();
+
             $.ajax({
                 url: '/adjustments/api/list',
                 method: 'POST',
-                data: formData,
+                data: $('#adjustmentFiltersForm').serialize(),
                 success: function(response) {
                     if (response.success) {
                         populateAdjustmentsTable(response.data);
                     } else {
-                        showError('Failed to load adjustments: ' + response.error);
+                        alert('Failed to load adjustments: ' + response.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    showError('Error loading adjustments: ' + error);
+                    alert('Error loading adjustments: ' + error);
                 },
                 complete: function() {
                     $('#loadingSpinner').hide();
                 }
             });
         }
-        
+
         function populateAdjustmentsTable(adjustments) {
+            const deleted = isDeletedView();
+            $('#deletedNote').toggle(deleted);
+
+            $('#adjustmentsTableHead').html(`
+                <tr>
+                    <th>Date</th>
+                    <th>Party</th>
+                    <th class="d-none d-md-table-cell">Type</th>
+                    <th>Description</th>
+                    <th class="amount-column">Debit (₹)</th>
+                    <th class="amount-column">Credit (₹)</th>
+                    ${deleted
+                        ? '<th class="d-none d-md-table-cell">Deleted By / On</th><th>Reason</th>'
+                        : '<th class="d-none d-md-table-cell">Created By</th>'}
+                    <th class="text-center">Actions</th>
+                </tr>`);
+
             const tbody = $('#adjustmentsTableBody');
             tbody.empty();
-            
+
             if (!adjustments || adjustments.length === 0) {
                 $('#noResults').show();
                 return;
             }
-            
+
             let totalDebits = 0;
             let totalCredits = 0;
-            
+
             adjustments.forEach(function(adj) {
                 const debitAmount = adj.debit_amount ? parseFloat(adj.debit_amount) : 0;
                 const creditAmount = adj.credit_amount ? parseFloat(adj.credit_amount) : 0;
-                
                 totalDebits += debitAmount;
                 totalCredits += creditAmount;
-                
-                const row = `
-                    <tr class="${adj.status === 'REVERSED' ? 'table-warning' : ''}">
-                        <td class="small">${formatDate(adj.adjustment_date)}</td>
-                        <td class="small">${adj.reference_no || '-'}</td>
-                        <td class="small d-none d-md-table-cell">
-                            <span class="badge badge-info badge-sm">${getAdjustmentTypeName(adj.adjustment_type)}</span>
-                        </td>
-                        <td class="small">${adj.description}</td>
-                        <td class="small d-none d-md-table-cell">${adj.ledger_name || adj.external_source}</td>
-                        <td class="small amount-column">
-                            ${debitAmount ? '₹' + formatAmount(debitAmount) : '-'}
-                        </td>
-                        <td class="small amount-column">
-                            ${creditAmount ? '₹' + formatAmount(creditAmount) : '-'}
-                        </td>
-                        <td class="small text-center">
-                            <span class="badge ${getStatusBadgeClass(adj.status)} status-badge">${adj.status}</span>
-                        </td>
-                        <td class="small d-none d-md-table-cell">${adj.created_by}</td>
-                        <td class="text-center">
-                            ${getActionButtons(adj)}
-                        </td>
-                    </tr>
-                `;
-                tbody.append(row);
+
+                const ref = adj.reference_no ? `<span class="adj-source">Ref: ${esc(adj.reference_no)}</span>` : '';
+                tbody.append(`
+                    <tr>
+                        <td>${formatDate(adj.adjustment_date)}</td>
+                        <td class="adj-party">${esc(adj.party_name || '-')}
+                            <span class="adj-source">${SOURCE_LABELS[(adj.external_source || '').toUpperCase()] || esc(adj.external_source || '')}</span></td>
+                        <td class="d-none d-md-table-cell">
+                            <span class="badge badge-info">${esc(getAdjustmentTypeName(adj.adjustment_type))}</span></td>
+                        <td class="adj-desc">${esc(adj.description)}${ref}</td>
+                        <td class="amount-column">${debitAmount ? formatAmount(debitAmount) : '-'}</td>
+                        <td class="amount-column">${creditAmount ? formatAmount(creditAmount) : '-'}</td>
+                        ${deleted
+                            ? `<td class="d-none d-md-table-cell">${esc(adj.deleted_by)}<span class="adj-source">${formatDate(adj.deleted_date)}</span></td>
+                               <td class="adj-desc">${esc(adj.delete_reason || '-')}</td>`
+                            : `<td class="d-none d-md-table-cell">${esc(adj.created_by || '')}</td>`}
+                        <td class="text-center">${deleted ? getRestoreButton(adj) : getDeleteButton(adj)}</td>
+                    </tr>`);
             });
-            
-            $('#resultCount').text(`${adjustments.length} adjustment${adjustments.length !== 1 ? 's' : ''} found`);
-            $('#totalDebits').text('₹' + formatAmount(totalDebits));
-            $('#totalCredits').text('₹' + formatAmount(totalCredits));
-            
-            $('#adjustmentsTableContainer').show();
-            $('#summaryFooter').show();
+
+            $('#resultCount').text(`${adjustments.length} ${deleted ? 'deleted ' : ''}adjustment${adjustments.length !== 1 ? 's' : ''} found`);
+            $('#totalDebits').text(' ₹' + formatAmount(totalDebits));
+            $('#totalCredits').text(' ₹' + formatAmount(totalCredits));
+
+            $('#adjustmentsTableContainer, #summaryFooter').show();
         }
-        
+
+        function getDeleteButton(adj) {
+            if (!canEdit) return '<span class="text-muted small">-</span>';
+            if (adj.source_table) return '<span class="text-muted small" title="Created automatically - change it from its source screen">Auto</span>';
+            if (adj.recon_match_id || adj.manual_recon_flag) return '<span class="text-muted small" title="Bank-reconciled - remove the reconciliation first">Reconciled</span>';
+            return `<button class="btn btn-outline-danger btn-sm" onclick="deleteAdjustment(${adj.adjustment_id}, '${adj.adjustment_type}')" title="Delete this adjustment">
+                        <i class="bi bi-trash"></i></button>`;
+        }
+
+        function getRestoreButton(adj) {
+            if (!canEdit) return '<span class="text-muted small">-</span>';
+            return `<button class="btn btn-outline-success btn-sm" onclick="restoreAdjustment(${adj.adjustment_id})" title="Put this adjustment back">
+                        <i class="bi bi-arrow-counterclockwise"></i> Restore</button>`;
+        }
+
+        function deleteAdjustment(adjustmentId, adjustmentType) {
+            const isOpening = String(adjustmentType) === OPENING_BALANCE_TYPE;
+            const warning = isOpening
+                ? `This is an OPENING BALANCE. Deleting it changes this party's balance for every period.\n\n`
+                : '';
+            const reason = prompt(`${warning}Delete adjustment #${adjustmentId}?\n\nPlease enter the reason (required):`);
+            if (reason === null) return;
+            if (!reason.trim()) { alert('A reason is required to delete an adjustment.'); return; }
+
+            postAction(`/adjustments/api/${adjustmentId}/delete`, { reason: reason.trim() }, 'delete');
+        }
+
+        function restoreAdjustment(adjustmentId) {
+            if (!confirm(`Restore adjustment #${adjustmentId}? It will count towards the balance again.`)) return;
+            postAction(`/adjustments/api/${adjustmentId}/restore`, {}, 'restore');
+        }
+
+        function postAction(url, data, verb) {
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: data,
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.message);
+                        applyFilters();
+                    } else {
+                        alert(`Failed to ${verb} adjustment: ` + response.error);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    const msg = (xhr.responseJSON && xhr.responseJSON.error) || error || `Error trying to ${verb} adjustment`;
+                    alert(`Failed to ${verb} adjustment: ` + msg);
+                }
+            });
+        }
+
         function clearFilters() {
             $('#adjustmentFiltersForm')[0].reset();
-            $('#filterStatus').val('ACTIVE');
+            $('#filterView').val('active');
             $('#filterDateRange').val('last_30_days');
-            
             updateAdjustmentDateRange();
             applyFilters();
         }
-        
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleDateString('en-GB');
+
+        // DD-MON-YYYY
+        function formatDate(value) {
+            if (!value) return '-';
+            const d = new Date(value);
+            if (isNaN(d)) return '-';
+            return `${String(d.getDate()).padStart(2, '0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
         }
-        
+
         function formatAmount(amount) {
-            return new Intl.NumberFormat('en-IN', { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 2 
-            }).format(amount);
+            return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
         }
-        
+
         function getAdjustmentTypeName(typeId) {
             const type = adjustmentTypesData.find(t => t.lookup_id == typeId);
-            return type ? type.description : 'Unknown';
+            return type ? type.description : (typeId || 'Unknown');
         }
-        
-        function getStatusBadgeClass(status) {
-            switch(status) {
-                case 'ACTIVE': return 'badge-success';
-                case 'REVERSED': return 'badge-warning';
-                default: return 'badge-secondary';
-            }
+
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
-        
-        function getActionButtons(adj) {
-            if (window.userRole === 'Admin' || window.userRole === 'SuperUser') {
-                if (adj.status === 'ACTIVE' && !adj.source_table && !adj.recon_match_id && !adj.manual_recon_flag) {
-                    return `
-                        <button class="btn btn-outline-danger btn-sm" 
-                                onclick="deleteAdjustment(${adj.adjustment_id})"
-                                title="Delete this adjustment">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    `;
-                }
-            }
-            return '<span class="text-muted small">-</span>';
-        }
-        
-        function deleteAdjustment(adjustmentId) {
-            if (confirm(`Delete adjustment #${adjustmentId}? This cannot be undone.`)) {
-                $.ajax({
-                    url: `/adjustments/api/${adjustmentId}/delete`,
-                    method: 'POST',
-                    success: function(response) {
-                        if (response.success) {
-                            alert('Adjustment deleted.');
-                            applyFilters();
-                        } else {
-                            alert('Failed to delete adjustment: ' + response.error);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        // Parse the JSON response from 400/500 errors
-                        let errorMessage = 'Error deleting adjustment';
-                        if (xhr.responseJSON && xhr.responseJSON.error) {
-                            errorMessage = xhr.responseJSON.error;
-                        } else if (xhr.responseText) {
-                            try {
-                                const parsed = JSON.parse(xhr.responseText);
-                                errorMessage = parsed.error || errorMessage;
-                            } catch(e) {
-                                errorMessage = error || errorMessage;
-                            }
-                        }
-                        alert('Failed to delete adjustment: ' + errorMessage);
-                    }
-                });
-            }
-        }
-        
-        function showError(message) {
-            alert(message);
-        }
-        
-        $('#filterSearch').keypress(function(e) {
-            if (e.which === 13) {
-                applyFilters();
-            }
-        });

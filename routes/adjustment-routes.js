@@ -41,6 +41,11 @@ router.post('/api/:adjustmentId/delete', [isLoginEnsured, security.isAdmin()], f
     adjustmentController.deleteAdjustmentAPI(req, res, next);
 });
 
+// API endpoint to restore a deleted adjustment (admin only)
+router.post('/api/:adjustmentId/restore', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    adjustmentController.restoreAdjustmentAPI(req, res, next);
+});
+
 // Route to view specific adjustment details
 router.get('/:adjustmentId', isLoginEnsured, function (req, res, next) {
     adjustmentController.getAdjustmentDetails(req, res, next);
