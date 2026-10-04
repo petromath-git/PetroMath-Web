@@ -25,12 +25,13 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
             ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
-            getLedgersByGroup(locationCode, 'Purchase Accounts')
+            getLedgersByGroup(locationCode, 'Purchase Accounts'),
+            ProductDao.findDeletableProductIds(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -52,7 +53,8 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 hsn_code: product.hsn_code,
                 is_tank_product: product.is_tank_product,
                 is_lube_product: product.is_lube_product,
-                can_edit_name: canEditNameForRow
+                can_edit_name: canEditNameForRow,
+                can_delete: deletableIds.has(Number(product.product_id))
             });
         });
 
