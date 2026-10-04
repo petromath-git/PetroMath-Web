@@ -15,29 +15,30 @@ block content
     
     //- NEW: Shift Closings Summary Table
     if shiftClosings && shiftClosings.length > 0
-        div.row.mb-4
+        div.row.mb-4.cashflow-page
             div.col-12
                 div.card
                     div.card-header.text-white.bg-dark Cashier Shifts Contributing to this Cash Flow
                     div.card-body
+                        //- On phones only Date / Cashier / Collection / Status are shown
                         div.table-responsive
                             table.table
                                 thead.thead-light
                                     tr
-                                        th.text-center Closing ID
+                                        th.text-center.d-none.d-md-table-cell Closing ID
                                         th.text-center Closing Date
                                         th.text-center Cashier Name
                                         th.text-center Total Collection
                                         th.text-center Status
-                                        th.text-center Notes
+                                        th.text-center.d-none.d-md-table-cell Notes
                                 tbody
                                     - var totalCollectionSum = 0;
                                     each closing in shiftClosings
                                         tr
-                                            td.text-center= closing.closing_id
-                                            td.text-center= new Date(closing.closing_date).toLocaleDateString('en-IN')
+                                            td.text-center.d-none.d-md-table-cell= closing.closing_id
+                                            td.text-center.text-nowrap= new Date(closing.closing_date).toLocaleDateString('en-IN')
                                             td.text-center= closing.cashier_name || 'N/A'
-                                            td.text-right ₹ #{parseFloat(closing.total_collection || 0).toFixed(2)}
+                                            td.text-right.text-nowrap ₹ #{parseFloat(closing.total_collection || 0).toFixed(2)}
                                             td.text-center
                                                 if closing.status === 'CLOSED'
                                                     span.badge.badge-success #{closing.status}
@@ -45,15 +46,17 @@ block content
                                                     span.badge.badge-warning #{closing.status}
                                                 else
                                                     span.badge.badge-secondary #{closing.status}
-                                            td.text-center= closing.notes || '-'
+                                            td.text-center.d-none.d-md-table-cell= closing.notes || '-'
                                         - totalCollectionSum += parseFloat(closing.total_collection || 0);
                                 //- Summary Row
                                 tr.bg-info.text-white.font-weight-bold
-                                    td.text-center(colspan="3") 
+                                    td.d-none.d-md-table-cell &nbsp;
+                                    td.text-center(colspan="2")
                                         strong TOTAL (#{shiftClosings.length} shifts)
-                                    td.text-right
+                                    td.text-right.text-nowrap
                                         strong ₹ #{totalCollectionSum.toFixed(2)}
-                                    td(colspan="2") &nbsp;
+                                    td &nbsp;
+                                    td.d-none.d-md-table-cell &nbsp;
     else
         //- No closings found message
         div.row.mb-4
@@ -64,12 +67,12 @@ block content
 
     div
     //- EXISTING: Credit/Debit Tables (unchanged)
-    div.row#cashflow-txn-data(class=divClass)
-        div.col-6
+    div.row.cashflow-page#cashflow-txn-data(class=divClass)
+        div.col-12.col-lg-6.mb-3
             div.card
                 div.card-header.text-white.bg-dark OutFlow
                 div.card-body
-                    table.table(id= debitPrefix + "table")
+                    table.table.cashflow-entry-table(id= debitPrefix + "table")
                         tbody.thead-light
                             +addCashFlowHeader()
                             - var debitRowCnt = 0
@@ -79,7 +82,7 @@ block content
 
                             while debitRowCnt < maxCashFlowRows
                                 +newCashFlowEntry(config.cashSaleTypes[1], debitPrefix, debitRowCnt++)
-                            tr
+                            tr.cashflow-total-row
                                 td &nbsp;
                                 td(style="text-align:right") Total
                                 td
@@ -87,11 +90,12 @@ block content
                     div
                         a.btn.btn-primary(id='debit-add-new' onclick='showAddedRow(\'cashflow-debit\')')
                             span.oi.oi-plus
-        div.col-6
+                            span.d-md-none &nbsp;Add OutFlow
+        div.col-12.col-lg-6.mb-3
             div.card
                 div.card-header.text-white.bg-dark InFlow
                 div.card-body
-                    table.table(id=creditPrefix+"table")
+                    table.table.cashflow-entry-table(id=creditPrefix+"table")
                         thead.thead-light
                             +addCashFlowHeader()
                             - var rowCnt = 0
@@ -101,7 +105,7 @@ block content
 
                             while rowCnt < maxCashFlowRows
                                 +newCashFlowEntry(config.cashSaleTypes[0], creditPrefix, rowCnt++)
-                            tr
+                            tr.cashflow-total-row
                                 td &nbsp;
                                 td(style="text-align:right") Total
                                 td
@@ -109,6 +113,7 @@ block content
                     div
                         a.btn.btn-primary(id='credit-add-new' onclick='showAddedRow(\'cashflow-credit\')')
                             span.oi.oi-plus
+                            span.d-md-none &nbsp;Add InFlow
     div.row
         div.col-12
             div.card
@@ -117,9 +122,8 @@ block content
                     strong#cashflow-difference-total 0.00
     div &nbsp;
     if showCashFlowDenominations
-        div.row(class=divClass)
-            div.col-4
-            div.col-4
+        div.row.cashflow-page(class=divClass)
+            div.col-12.col-md-6.offset-md-3.col-lg-4.offset-lg-4
                 div.card
                     div.card-header.text-white.bg-dark Denominations
                     div.card-body
@@ -134,7 +138,7 @@ block content
 
     div.row
         div &nbsp;
-    div(style="text-align:center")
+    div.cashflow-actions(style="text-align:center")
         if(cashFlowStatus != 'CLOSED')
             span
                 button.btn.btn-primary(type="button", onClick="saveCashFlowTxnsAndDenoms()") SAVE
