@@ -229,6 +229,8 @@ function showProductMasterRow(obj, prefix) {
 // Users - scripts - end
 
 // Cash flow - scripts - start
+let cashflowReloadAfterSave = false;
+
 function saveCashFlowTxnsAndDenoms() {
     document.getElementById('cashflow-close').disabled = false;
     return new Promise((resolve, reject) => {
@@ -237,6 +239,10 @@ function saveCashFlowTxnsAndDenoms() {
             .then((data) => {
                 if (data) {
                     Promise.all([saveCashFlowTxns('cashflow-debit-', 'cashflow-credit-'), saveCashFlowDenoms()]).then((values) => {
+                        if (cashflowReloadAfterSave) {
+                            // New cash receipts: reload so generate_cashflow shows their lines
+                            setTimeout(() => window.location.reload(), 800);
+                        }
                         if (values[0] && values[1]) {
                             resolve(true);
                         } else {
@@ -258,28 +264,95 @@ function saveCashFlowTxns(debitPrefix, creditPrefix) {
         const newTxns = [].concat(debitData.newTxns, creditData.newTxns);
         const updateTxns = [].concat(debitData.updateTxns, creditData.updateTxns);
         const newHiddenFieldsArr = [].concat(debitData.newHiddenFieldsArr, creditData.newHiddenFieldsArr);
+        const cashReceipts = creditData.cashReceipts;
         debugLog("Consolidated - New cash flow txn data " + JSON.stringify(newTxns));
         debugLog("Consolidated - Update cash flow txn data " + JSON.stringify(updateTxns));
-        if (newTxns.length > 0 || updateTxns.length > 0) {
-            postAjaxNew('save-cashflow-txns', newTxns, updateTxns, undefined, undefined, newHiddenFieldsArr, 'transaction_id')
-                .then((data) => {
-                    undoInvokedValidation(divId);
-                });
-        }
+        const txnsSaved = (newTxns.length > 0 || updateTxns.length > 0)
+            ? postAjaxNew('save-cashflow-txns', newTxns, updateTxns, undefined, undefined, newHiddenFieldsArr, 'transaction_id')
+            : Promise.resolve(true);
+        txnsSaved.then((ok) => {
+            if (!ok || cashReceipts.length === 0) {
+                resolve(ok);
+                return;
+            }
+            // Cash Receipt lines become customer credit receipts; the page is
+            // reloaded so they reappear as the Day Close's generated lines.
+            saveDayCloseReceipts(cashReceipts).then(resolve);
+        });
     });
+}
+
+function saveDayCloseReceipts(cashReceipts) {
+    ajaxLoading('d-md-block');
+    return fetch('/save-cashflow-receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            cashflowId: document.getElementById('cashflowId_hiddenId').value,
+            receipts: cashReceipts
+        })
+    })
+        .then(res => res.json())
+        .then(result => {
+            ajaxLoading('d-md-none');
+            showToastMessage(result, result.error ? 7000 : undefined);
+            if (result.error) {
+                return false;
+            }
+            cashflowReloadAfterSave = true;
+            return true;
+        })
+        .catch(() => {
+            ajaxLoading('d-md-none');
+            showToastMessage({ error: 'Error while saving the cash receipts.' }, 7000);
+            return false;
+        });
+}
+
+// Deletes a cash receipt that was entered from this Day Close (and with it
+// the generated "Cash Receipt" line), then reloads the page.
+function removeDayCloseReceipt(receiptId) {
+    if (!confirm('Delete this cash receipt? It will also be removed from the customer\'s ledger.')) {
+        return;
+    }
+    ajaxLoading('d-md-block');
+    fetch('/remove-cashflow-receipt?id=' + receiptId, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(result => {
+            ajaxLoading('d-md-none');
+            showToastMessage(result, result.error ? 7000 : undefined);
+            if (!result.error) {
+                setTimeout(() => window.location.reload(), 800);
+            }
+        })
+        .catch(() => {
+            ajaxLoading('d-md-none');
+            showToastMessage({ error: 'Error while deleting the cash receipt.' }, 7000);
+        });
 }
 
 function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
     const txnRow = debitOrCreditPrefix + 'table-row-';
     const txnsObj = document.getElementById('cashflow-txn-data').querySelectorAll('[id^=' + txnRow + ']:not([type="hidden"])');
-    let newTxns = [], updateTxns = [], newHiddenFieldsArr = [];
+    let newTxns = [], updateTxns = [], newHiddenFieldsArr = [], cashReceipts = [];
     const user = JSON.parse(document.getElementById("user").value);
     txnsObj.forEach((txnObj) => {
         if (!txnObj.className.includes('-none')) {
             const rowNum = txnObj.id.replace(txnRow, '');
             const amtField = document.getElementById(debitOrCreditPrefix + 'amt-' + rowNum);
+            const customerObj = document.getElementById(debitOrCreditPrefix + 'customer-' + rowNum);
             if (amtField.readOnly) {
                 ; // Do nothing for system generated txns
+            } else if (customerObj && customerObj.style.display !== 'none' && parseFloat(amtField.value) > 0) {
+                // Cash Receipt line -> customer credit receipt (replaces the
+                // row's old free-text line, if it had one)
+                const hiddenField = document.getElementById(debitOrCreditPrefix + rowNum + '_hiddenId');
+                cashReceipts.push({
+                    creditlist_id: customerObj.value,
+                    amount: amtField.value,
+                    notes: document.getElementById(debitOrCreditPrefix + 'remarks-' + rowNum).value,
+                    replaces_txn_id: hiddenField && hiddenField.value ? hiddenField.value : null
+                });
             } else {
                 const hiddenField = document.getElementById(debitOrCreditPrefix + rowNum + '_hiddenId');
                 if (parseFloat(amtField.value) > 0 || (hiddenField.value && parseInt(hiddenField.value) > 0)) {
@@ -296,7 +369,7 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
     });
     debugLog("New cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(newTxns));
     debugLog("Update cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(updateTxns));
-    return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr };
+    return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr, "cashReceipts": cashReceipts };
 }
 
 function formCashFlowTxn(txnId, prefix, rowNum, user) {
@@ -322,16 +395,31 @@ function formCashFlowTxn(txnId, prefix, rowNum, user) {
 // (data-requires-vendor="Y", set from m_account_heads.requires_digital_vendor_link).
 function onCashflowTypeChange(prefix, rowNum) {
     const typeObj = document.getElementById(prefix + 'transaction-' + rowNum);
-    const vendorObj = document.getElementById(prefix + 'vendor-' + rowNum);
-    if (!typeObj || !vendorObj) {
+    if (!typeObj || typeObj.selectedIndex < 0) {
         return;
     }
-    const requiresVendor = typeObj.options[typeObj.selectedIndex].dataset.requiresVendor === 'Y';
-    vendorObj.style.display = requiresVendor ? '' : 'none';
-    vendorObj.required = requiresVendor;
-    if (!requiresVendor) {
-        vendorObj.value = '';
-        vendorObj.className = 'form-control mt-1 digital-vendor-select';
+    const selected = typeObj.options[typeObj.selectedIndex].dataset;
+    const vendorObj = document.getElementById(prefix + 'vendor-' + rowNum);
+    if (vendorObj) {
+        const requiresVendor = selected.requiresVendor === 'Y';
+        vendorObj.style.display = requiresVendor ? '' : 'none';
+        vendorObj.required = requiresVendor;
+        if (!requiresVendor) {
+            vendorObj.value = '';
+            vendorObj.className = 'form-control mt-1 digital-vendor-select';
+        }
+    }
+    // InFlow "Cash Receipt" (data-requires-customer="Y", from
+    // m_account_heads.requires_credit_customer_link): pick the customer.
+    const customerObj = document.getElementById(prefix + 'customer-' + rowNum);
+    if (customerObj) {
+        const requiresCustomer = selected.requiresCustomer === 'Y';
+        customerObj.style.display = requiresCustomer ? '' : 'none';
+        customerObj.required = requiresCustomer;
+        if (!requiresCustomer) {
+            customerObj.value = '';
+            customerObj.className = 'form-control mt-1 cash-receipt-customer-select';
+        }
     }
 }
 
