@@ -1020,7 +1020,9 @@ block content
                                                             else
                                                                 span.text-danger -#{txn.debit_amount.toFixed(2)}
                                                         td.text-center
-                                                            if txn.isUnmatched
+                                                            if txn.isUnmatched && txn.beforeGoLive
+                                                                span.text-muted.small(title='Dated before this location went live on PetroMath - already covered by the opening balances') Before go-live
+                                                            else if txn.isUnmatched
                                                                 button.btn.btn-sm.btn-success(
                                                                     type='button'
                                                                     onclick=`showAddEntryModal('${txn.txn_date}', '${txn.description.replace(/'/g, "\\'")}', ${txn.credit_amount}, ${txn.debit_amount})`
