@@ -184,8 +184,19 @@ module.exports = {
         },
 
     // Get oil companies from lookup table
-    getOilCompanies: async function () {        
+    getOilCompanies: async function () {
         return await lookupDao.getOilCompanies();
+    },
+
+    // Go-live date (YYYY-MM-DD) = earliest m_location.start_date; null if unset.
+    // Mirrors the get_location_golive_date() SQL function used by the guard triggers.
+    getGoLiveDate: async function (locationCode) {
+        const rows = await db.sequelize.query(`
+            SELECT DATE_FORMAT(MIN(DATE(start_date)), '%Y-%m-%d') AS golive
+            FROM m_location
+            WHERE location_code = :locationCode AND start_date > '1971-01-01'
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        return rows[0] ? rows[0].golive : null;
     },
 
     
