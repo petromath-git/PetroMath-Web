@@ -174,55 +174,6 @@ module.exports = {
         }
     },
 
-    // Reverse an adjustment (set status to REVERSED)
-    reverseAdjustment: async (adjustmentId, updatedBy) => {
-        try {
-            const result = await Adjustments.update(
-                { 
-                    status: 'REVERSED',
-                    updated_by: updatedBy,
-                    updation_date: new Date()
-                },
-                {
-                    where: { adjustment_id: adjustmentId }
-                }
-            );
-            return result;
-        } catch (error) {
-            console.error('Error reversing adjustment:', error);
-            throw error;
-        }
-    },
-
-    // Create a reversal entry (opposite of original)
-    createReversalEntry: async (originalAdjustment, reversedBy) => {
-        try {
-            // Create opposite entry
-            const reversalData = {
-                adjustment_date: new Date().toISOString().split('T')[0], // Today's date
-                location_code: originalAdjustment.location_code,
-                reference_no: `REV-${originalAdjustment.adjustment_id}`,
-                description: `Reversal of: ${originalAdjustment.description}`,
-                external_id: originalAdjustment.external_id,
-                external_source: originalAdjustment.external_source,
-                ledger_name: originalAdjustment.ledger_name,
-                // Swap debit and credit amounts
-                debit_amount: originalAdjustment.credit_amount || null,
-                credit_amount: originalAdjustment.debit_amount || null,
-                adjustment_type: 'REVERSAL',
-                status: 'ACTIVE',
-                created_by: reversedBy,
-                updated_by: reversedBy
-            };
-
-            const reversalEntry = await Adjustments.create(reversalData);
-            return reversalEntry;
-        } catch (error) {
-            console.error('Error creating reversal entry:', error);
-            throw error;
-        }
-    },
-
     // Get adjustments summary for dashboard/reports
     getAdjustmentsSummary: async (locationCode, fromDate, toDate) => {
         try {
@@ -340,8 +291,18 @@ module.exports = {
                 return { canModify: false, reason: 'Adjustment not found' };
             }
 
-            if (adjustment.status === 'REVERSED') {
-                return { canModify: false, reason: 'Adjustment is already reversed' };
+            if (adjustment.status !== 'ACTIVE') {
+                return { canModify: false, reason: `Adjustment is ${adjustment.status}` };
+            }
+
+            // Auto-created rows (e.g. digital-vendor cash payout) are owned by their
+            // source screen and must be changed there
+            if (adjustment.source_table) {
+                return { canModify: false, reason: 'This adjustment was created automatically; change it from its source screen' };
+            }
+
+            if (adjustment.recon_match_id || adjustment.manual_recon_flag) {
+                return { canModify: false, reason: 'Adjustment is bank-reconciled; remove the reconciliation first' };
             }
 
             // Get max days from config (global or location-specific)
