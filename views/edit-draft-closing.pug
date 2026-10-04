@@ -41,7 +41,7 @@ block content
     input(type='hidden' id='user' name='user' value= user)
     input(type='hidden' id='closing_hiddenId' value= closingData.closingId)
 
-    form
+    form.closing-page
         div
             if(!freezedRecord)
                 ul.nav.nav-tabs
@@ -132,7 +132,7 @@ block content
                             div.invalid-feedback Closing date is required.
                         div.col
                             label(for='cashGiven') Opening Cash Given:
-                            input#cashGiven.form-control(type='number', name='closing__cashGiven' required value= closingData.cash min=0 oninput='validity.valid||(value="")' step=0.01)
+                            input#cashGiven.form-control(type='number', name='closing__cashGiven' required value= closingData.cash min=0 inputmode='decimal' oninput='validity.valid||(value="")' step=0.01)
                             div.invalid-feedback Cash given is required.
                         div.col
                             label(for='notes') Notes:
@@ -144,7 +144,7 @@ block content
                             +listProductNames(pumpProductValues, 'rate_')
                     div.row
                         div.col &nbsp;
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('attendance_tab')") Next &raquo;
 
@@ -153,7 +153,7 @@ block content
                     div
                         div.col-16
                             div.table-responsive
-                                table.table#attendance-table
+                                table.table.mobile-card-table#attendance-table
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
@@ -178,7 +178,7 @@ block content
                     div.row
                         div.col &nbsp;
 
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('reading_tab')") Next &raquo;
                 // ----------------------- New reading details ----------------------------
@@ -290,7 +290,7 @@ block content
                             pre.text-danger= `Note: Pumps data is empty at backend.`
                     div.row
                         div.col &nbsp;
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             if show2TSalesTab
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('sales_2t_tab')") Next &raquo;
@@ -315,7 +315,7 @@ block content
                                     pre.text-danger= `Note: 2T oil products' data is empty at backend.`
                             div.row
                                 div.col &nbsp;
-                            div.row(align="center")
+                            div.row.closing-next(align="center")
                                 div.col
                                     button.btn.btn-primary(type="button", onClick="trackMenuWithName('cash_sales_tab')") Next &raquo;
                 // ----------------------- New cash sales details ----------------------------
@@ -336,7 +336,7 @@ block content
                     div
                         div.col-16
                             div.table-responsive
-                                table.table#cash-sale-table
+                                table.table.mobile-card-table#cash-sale-table
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
@@ -367,7 +367,7 @@ block content
 
                     div.row
                         div.col &nbsp;
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('credit_sales_tab')") Next &raquo;
 
@@ -431,7 +431,7 @@ block content
                     div
                         div.col-16
                             div.table-responsive
-                                table.table#credit-table
+                                table.table.mobile-card-table#credit-table
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
@@ -463,7 +463,7 @@ block content
 
                     div.row
                         div.col &nbsp;
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('digital_sales_tab')") Next &raquo;
 
@@ -472,7 +472,7 @@ block content
                     div
                         div.col-16
                             div.table-responsive
-                                table.table#digital-sales-table
+                                table.table.mobile-card-table#digital-sales-table
                                     tbody.w-100
                                         thead(class="thead-light")
                                             tr
@@ -501,7 +501,7 @@ block content
 
                     div.row
                         div.col &nbsp;
-                    div.row(align="center")
+                    div.row.closing-next(align="center")
                         div.col
                             button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
 
@@ -511,7 +511,7 @@ block content
                         div
                             div.col-16
                                 div.table-responsive
-                                    table.table#credit-receipts-table
+                                    table.table.mobile-card-table#credit-receipts-table
                                         tbody.w-100
                                             thead(class="thead-light")
                                                 tr
@@ -543,7 +543,7 @@ block content
 
                         div.row
                             div.col &nbsp;
-                        div.row(align="center")
+                        div.row.closing-next(align="center")
                             div.col
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
 
@@ -553,7 +553,7 @@ block content
                         div
                             div.col-16
                                 div.table-responsive
-                                    table.table#employee-advance-table
+                                    table.table.mobile-card-table#employee-advance-table
                                         tbody.w-100
                                             thead(class="thead-light")
                                                 tr
@@ -584,7 +584,7 @@ block content
 
                         div.row
                             div.col &nbsp;
-                        div.row(align="center")
+                        div.row.closing-next(align="center")
                             div.col
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
 
@@ -595,7 +595,7 @@ block content
                             h5.sub-header Expenses
                             if expenseValues && expenseValues.length > 0
                                 div.table-responsive
-                                    table.table#exp-table
+                                    table.table.mobile-card-table#exp-table
                                         tbody
                                             thead(class="thead-light")
                                                 tr
@@ -639,14 +639,14 @@ block content
                     div.row
                         div.col &nbsp;
                     if(user.isAdmin)
-                        div.row(align="center")
+                        div.row.closing-next(align="center")
                             div.col
                                 if expenseValues && expenseValues.length > 0
                                     button.btn.btn-primary(type="button", onClick=`trackMenuWithName('summary_tab')`) Next &raquo;
                                 else
                                     button.btn.btn-primary(type="button", onClick=`document.getElementById('summary_tab').click()`) Next &raquo;
                     else
-                        div.row(align="center")
+                        div.row.closing-next(align="center")
                             div.col
                                 if expenseValues && expenseValues.length > 0
                                     button.btn.btn-primary(type="button", onClick=`saveExpensesAndDenoms()`) Save
@@ -675,7 +675,7 @@ block content
                                     button.btn.btn-info(type="button" onclick="addIntercompanyRow()") Add Bowser Fill
                             div.row
                                 div.col &nbsp;
-                            div.row(align="center")
+                            div.row.closing-next(align="center")
                                 div.col
                                     button.btn.btn-primary(type="button" onclick="saveAndNextIntercompany()") Next &raquo;
                         script.
@@ -914,7 +914,7 @@ block content
                         if(!freezedRecord)
                             div.row
                                 div.col &nbsp;
-                            div(align="center")
+                            div.closing-next(align="center")
                                 span
                                     button.btn.btn-dark(type="button", onClick='finishClosing(\'closing\',\'close-closing\', \'home\')') CLOSE &raquo;
     script.    
@@ -925,6 +925,7 @@ block content
         window.pumpsData = !{JSON.stringify(pumps)};
         window.productValuesData = !{JSON.stringify(productValues)}; 
         window.allowSecondaryPump = !{allowSecondaryPump};
+    +closingMobileTabs()
     // Credit sale Add/Edit modal (shared by the compact credit sales list)
     +creditEntryModal(allowOffMeterSale)
     // Quick Add Vehicle Modal
