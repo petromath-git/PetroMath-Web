@@ -3,6 +3,8 @@ const utils = require("../utils/app-utils");
 const config = require("../config/app-config");
 const OilCompanyDao = require("../dao/oil-company-statement-dao");
 const locationConfigDao = require('../dao/location-config-dao');
+const locationDao = require('../dao/location-dao');
+const { beforeGoLiveError } = require('../utils/golive-guard');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -20,10 +22,11 @@ module.exports = {
             const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
             const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
 
-            const [accountList, locationData, transactionList] = await Promise.all([
+            const [accountList, locationData, transactionList, goLiveDate] = await Promise.all([
                 OilCompanyDao.getOilCompanyAccounts(locationCode),
                 OilCompanyDao.getLocationId(locationCode),
-                OilCompanyDao.getTransactionsByDate(locationCode, fromDate, toDate, bankId)
+                OilCompanyDao.getTransactionsByDate(locationCode, fromDate, toDate, bankId),
+                locationDao.getGoLiveDate(locationCode)
             ]);
 
             // Get allowed ledgers for selected bank (if specific bank is selected)
@@ -33,6 +36,7 @@ module.exports = {
             }
 
             res.render('oil-company-statement', {
+                goLiveDate: goLiveDate,
                 user: req.user,
                 title: 'SAP Statement',
                 config: config.APP_CONFIGS,
@@ -62,6 +66,12 @@ module.exports = {
         const usedIndices = Object.keys(req.body)
             .filter(key => key.startsWith('trans_date_'))
             .map(key => key.replace('trans_date_', ''));
+
+        const goLiveError = await beforeGoLiveError(
+            locationCode, usedIndices.map(index => req.body[`trans_date_${index}`]));
+        if (goLiveError) {
+            return res.status(400).send({ error: goLiveError });
+        }
 
         for (const index of usedIndices) {
             const credit = parseFloat(req.body[`creditamount_${index}`] || 0);
