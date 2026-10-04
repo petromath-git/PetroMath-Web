@@ -99,12 +99,13 @@ block content
                                             onclick=`openEditProductModal(JSON.parse(decodeURIComponent('${productPayload}')))`
                                         )
                                             i.bi.bi-pencil
-                                        button.btn.btn-outline-danger.btn-sm(
-                                            type="button",
-                                            title="Delete product (only if never used)",
-                                            onclick=`deleteProduct(JSON.parse(decodeURIComponent('${productPayload}')))`
-                                        )
-                                            i.bi.bi-trash
+                                        if val.can_delete
+                                            button.btn.btn-outline-danger.btn-sm(
+                                                type="button",
+                                                title="Delete product (never used)",
+                                                onclick=`deleteProduct(JSON.parse(decodeURIComponent('${productPayload}')))`
+                                            )
+                                                i.bi.bi-trash
 
         // Mobile cards view
         .mobile-cards-view.d-block.d-lg-none
@@ -132,12 +133,13 @@ block content
                                         onclick=`openEditProductModal(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
                                     )
                                         i.bi.bi-pencil
-                                    button.btn.btn-outline-danger.btn-sm.ml-1(
-                                        type="button",
-                                        title="Delete product (only if never used)",
-                                        onclick=`deleteProduct(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
-                                    )
-                                        i.bi.bi-trash
+                                    if val.can_delete
+                                        button.btn.btn-outline-danger.btn-sm.ml-1(
+                                            type="button",
+                                            title="Delete product (never used)",
+                                            onclick=`deleteProduct(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
+                                        )
+                                            i.bi.bi-trash
                             .card-body.p-3
                                 .row.g-2
                                     .col-6
@@ -633,7 +635,7 @@ block content
         }
         
         function deleteProduct(product) {
-            if (!confirm(`Delete product ${product.name} (unit ${product.unit || '-'})?\n\nThis is only allowed if the product has never been used in sales, purchases, adjustments or nozzle/tank setup.`)) {
+            if (!confirm(`Delete product ${product.name} (unit ${product.unit || '-'})?\n\nThis cannot be undone.`)) {
                 return;
             }
             fetch(`/products/api/${product.id}`, { method: 'DELETE' })
