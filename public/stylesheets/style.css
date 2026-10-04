@@ -2890,3 +2890,108 @@ body {
         padding: 1px 5px;
     }
 }
+/* ===== "d-md-none" AS A HIDDEN-ROW MARKER =====
+   Pre-allocated entry rows (and #static-snackbar) are hidden with the class
+   "d-md-none", and the JS treats that exact class as "row not in use" — it
+   skips such rows in totals and on save. Bootstrap's d-md-none only hides at
+   >= 768px, so on phones these rows showed up and anything typed into them
+   was silently dropped. Hide them at every width. */
+tr.d-md-none,
+#static-snackbar.d-md-none {
+  display: none !important;
+}
+
+/* ===== DAY CLOSE (cash-flow-home.pug, cash-flow.pug) — MOBILE =====
+   Breakpoint matches older global mobile rules elsewhere in this file that
+   hide every .table-responsive ("BILLS CREATE PAGE MOBILE STYLES"), cap
+   tables at 5 visible rows, hide rows with an empty cell, and force
+   table-layout:fixed + width:auto ("URGENT" / edit-draft-closing blocks).
+   Those rules are opted out of here for .cashflow-page; the selectors below
+   are deliberately more specific than theirs so the !important ones win. */
+@media (max-width: 768px) {
+  /* The global body { padding: 50px } costs a quarter of a phone's width */
+  body:has(.cashflow-page) {
+    padding: 0;
+  }
+  .cashflow-page .card-body {
+    padding: 0.75rem;
+  }
+  .cashflow-page .table-responsive {
+    display: block !important;
+  }
+  .cashflow-page .table {
+    table-layout: auto !important;
+    width: 100% !important;
+  }
+  .cashflow-page .table:not(.cashflow-entry-table) tbody tr:not(.d-md-none) {
+    display: table-row !important;
+  }
+  .cashflow-page .table:not(.cashflow-entry-table) th,
+  .cashflow-page .table:not(.cashflow-entry-table) td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.875rem;
+  }
+
+  /* Entry rows become stacked cards: Transaction + ×, then Remarks, then Amount */
+  .cashflow-entry-table .cashflow-header-row {
+    display: none !important;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) {
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid #dee2e6;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) > td {
+    display: block;
+    border: 0;
+    padding: 0;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) > td:nth-of-type(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) > td:nth-of-type(4) {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) > td:nth-of-type(2),
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) > td:nth-of-type(3) {
+    grid-column: 1 / 3;
+  }
+  .cashflow-page .cashflow-entry-table tr:not(.cashflow-total-row):not(.cashflow-header-row):not(.d-md-none) .close {
+    font-size: 1.75rem;
+    padding: 0 0.5rem;
+  }
+
+  .cashflow-page .cashflow-entry-table tr.cashflow-total-row {
+    display: flex !important;
+    align-items: center;
+    border-top: 2px solid #dee2e6;
+    padding-top: 0.5rem;
+  }
+  .cashflow-entry-table .cashflow-total-row > td {
+    border: 0;
+    padding: 0 0.5rem 0 0;
+  }
+  .cashflow-entry-table .cashflow-total-row > td:first-child {
+    display: none;
+  }
+  .cashflow-entry-table .cashflow-total-row > td:last-child {
+    flex: 1;
+    padding-right: 0;
+  }
+
+  /* Save / Close stay reachable without scrolling to the bottom */
+  .cashflow-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background: #fff;
+    border-top: 1px solid #dee2e6;
+    padding: 0.75rem 0;
+    margin: 0 -15px;
+  }
+}
