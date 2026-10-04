@@ -114,8 +114,19 @@ router.get('/api/data', [isLoginEnsured, security.isAdmin()], function (req, res
 });
 
 // API endpoint for creating new product
-router.post('/api', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, res, next) {
     try {
+        // Same-name products break the m_pump/m_tank name joins and are usually
+        // an onboarding slip (e.g. re-created just to change the unit).
+        const newName = (req.body.product_name || '').trim().toUpperCase();
+        const existing = newName ? await ProductDao.findByName(newName, req.user.location_code) : null;
+        if (existing) {
+            return res.status(400).json({
+                success: false,
+                error: `Product ${existing.product_name} already exists (unit ${existing.unit}). Edit the existing product instead of creating a new one.`
+            });
+        }
+
         // Map the request body to match dbMapping.newProduct expectations
         const mappedReq = {
             body: {
@@ -232,6 +243,37 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
         res.status(500).json({
             success: false,
             error: 'Failed to update product: ' + error.message
+        });
+    }
+});
+
+// API endpoint for deleting a product (only when nothing references it)
+router.delete('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req, res, next) {
+    const productId = req.params.id;
+    const locationCode = req.user.location_code;
+
+    try {
+        const product = await ProductDao.findById(productId, locationCode);
+        if (!product) {
+            return res.status(404).json({ success: false, error: 'Product not found' });
+        }
+
+        const blockers = await ProductDao.getDeleteBlockers(product.product_id, locationCode, product.product_name);
+        if (blockers.length) {
+            const detail = blockers.map(b => `${b.count} ${b.label}`).join(', ');
+            return res.status(400).json({
+                success: false,
+                error: `${product.product_name} cannot be deleted because it is used in: ${detail}.`
+            });
+        }
+
+        await ProductDao.deleteProduct(product.product_id, req.user.username || String(req.user.Person_id));
+        res.json({ success: true, message: `Product ${product.product_name} deleted` });
+    } catch (error) {
+        console.error('Error deleting product:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete product: ' + error.message
         });
     }
 });
