@@ -199,6 +199,15 @@ mixin addCashFlowHeader()
         th(scope="col" width="25%") Amount
         th(scope="col" width="5%")
 
+//- Customer picker for an InFlow row whose Transaction is a Cash Receipt
+//- (data-requires-customer="Y"); shown/required by onCashflowTypeChange
+mixin cashflowCustomerSelect(prefix, rowCnt)
+    select.form-control.mt-1.cash-receipt-customer-select(name=prefix+'customer-'+ rowCnt, id=prefix+'customer-'+ rowCnt, style="display:none")
+        option(value="") -- Select Customer --
+        if cashReceiptCustomers
+            each customer in cashReceiptCustomers
+                option(value=`${customer.creditlist_id}`)= customer.Company_Name
+
 //- exiting cash flow entry
 mixin addCashFlowEntry(val, flow, prefix, rowCnt)
     - let trRowId = prefix + 'table-row-' + rowCnt;
@@ -216,7 +225,12 @@ mixin addCashFlowEntry(val, flow, prefix, rowCnt)
                 input.form-control(readonly value=val.description)
             td
                 input.form-control(id=prefix + 'amt-'+ rowCnt readonly value=val.amount)
-            td &nbsp;
+            if val.originReceiptId && cashFlowStatus !== 'CLOSED'
+                td
+                    button.close(type="button" aria-label="Delete receipt" title="Delete this cash receipt" onclick='removeDayCloseReceipt(' + val.originReceiptId + ')')
+                        span(aria-hidden="true") &times;
+            else
+                td &nbsp;
     else
         tr(id=trRowId)
             input(type='hidden' id=prefix + rowCnt + '_hiddenId' value=val.txn_id)
@@ -224,12 +238,14 @@ mixin addCashFlowEntry(val, flow, prefix, rowCnt)
                 select.form-control(name=prefix + 'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required onchange="onCashflowTypeChange('" + prefix + "', " + rowCnt + ")")
                     if debitOptions && flow === debitLabel
                         each option in debitOptions
-                            option(value=`${option.id}` data-requires-vendor=option.requiresDigitalVendor selected=(option.name === val.type))= option.name
+                            option(value=`${option.id}` data-requires-vendor=option.requiresDigitalVendor data-requires-customer=option.requiresCustomer selected=(option.name === val.type))= option.name
                     if creditOptions && flow === creditLabel
                         each option in creditOptions
-                            option(value=option.id data-requires-vendor=option.requiresDigitalVendor selected=(option.name === val.type))= option.name
+                            option(value=option.id data-requires-vendor=option.requiresDigitalVendor data-requires-customer=option.requiresCustomer selected=(option.name === val.type))= option.name
             td
                 input.form-control(name=prefix+'remarks-'+ rowCnt, id=prefix+'remarks-'+ rowCnt, value=val.description, placeholder='Remarks')
+                if flow === creditLabel
+                    +cashflowCustomerSelect(prefix, rowCnt)
                 if flow === debitLabel
                     select.form-control.mt-1.digital-vendor-select(name=prefix+'vendor-'+ rowCnt, id=prefix+'vendor-'+ rowCnt, style="display:none")
                         option(value="") -- Select Digital Vendor --
@@ -257,12 +273,14 @@ mixin newCashFlowEntry(flow, prefix, rowCnt)
             select.form-control(name=prefix+'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required onchange="onCashflowTypeChange('" + prefix + "', " + rowCnt + ")")
                 if debitOptions && flow === debitLabel
                     each val in debitOptions
-                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor)= val.name
+                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor data-requires-customer=val.requiresCustomer)= val.name
                 if creditOptions && flow === creditLabel
                     each val in creditOptions
-                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor)= val.name
+                        option(value=`${val.id}` data-requires-vendor=val.requiresDigitalVendor data-requires-customer=val.requiresCustomer)= val.name
         td
             input.form-control(name=prefix+'remarks-'+ rowCnt, id=prefix+'remarks-'+ rowCnt, placeholder='Remarks')
+            if flow === creditLabel
+                +cashflowCustomerSelect(prefix, rowCnt)
             if flow === debitLabel
                 select.form-control.mt-1.digital-vendor-select(name=prefix+'vendor-'+ rowCnt, id=prefix+'vendor-'+ rowCnt, style="display:none")
                     option(value="") -- Select Digital Vendor --

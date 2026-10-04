@@ -320,14 +320,17 @@ module.exports = {
                     // 10a: Copy common heads missing by name (exclude any oil-company-specific heads,
                     // and '2T Oil' — generate_cashflow only posts it for MC/MC2/MME/MUE)
                     // JOIN to gl_ledger_groups so gl_group_id is resolved by name for the new location
+                    // requires_credit_customer_link carries the Day Close "Cash Receipt" customer picker
                     await db.sequelize.query(
                         `INSERT INTO m_account_heads
                             (location_code, account_head_name, account_head_type, allowed_entry_type,
                              notes_required_flag, active_flag, effective_start_date, effective_end_date,
-                             gl_group_id, created_by, updated_by, creation_date, updation_date)
+                             gl_group_id, requires_credit_customer_link,
+                             created_by, updated_by, creation_date, updation_date)
                          SELECT :loc, ah.account_head_name, ah.account_head_type, ah.allowed_entry_type,
                             ah.notes_required_flag, ah.active_flag, ah.effective_start_date, ah.effective_end_date,
-                            new_grp.group_id, 'system', 'system', NOW(), NOW()
+                            new_grp.group_id, ah.requires_credit_customer_link,
+                            'system', 'system', NOW(), NOW()
                          FROM m_account_heads ah
                          LEFT JOIN gl_ledger_groups tmpl_grp ON tmpl_grp.group_id       = ah.gl_group_id
                          LEFT JOIN gl_ledger_groups new_grp   ON new_grp.location_code  = :loc
