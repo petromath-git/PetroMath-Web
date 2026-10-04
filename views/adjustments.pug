@@ -345,39 +345,35 @@ block content
         
         function getActionButtons(adj) {
             if (window.userRole === 'Admin' || window.userRole === 'SuperUser') {
-                if (adj.status === 'ACTIVE' && adj.adjustment_type !== 'REVERSAL') {
+                if (adj.status === 'ACTIVE' && !adj.source_table && !adj.recon_match_id && !adj.manual_recon_flag) {
                     return `
-                        <button class="btn btn-outline-warning btn-sm" 
-                                onclick="reverseAdjustmentEnhanced(${adj.adjustment_id})"
-                                title="Reverse this adjustment">
-                            <i class="bi bi-arrow-counterclockwise"></i>
+                        <button class="btn btn-outline-danger btn-sm" 
+                                onclick="deleteAdjustment(${adj.adjustment_id})"
+                                title="Delete this adjustment">
+                            <i class="bi bi-trash"></i>
                         </button>
                     `;
-                } else if (adj.status === 'REVERSED') {
-                    return '<span class="text-muted small">Reversed</span>';
-                } else if (adj.adjustment_type === 'REVERSAL') {
-                    return '<span class="text-muted small">Reversal Entry</span>';
                 }
             }
             return '<span class="text-muted small">-</span>';
         }
         
-        function reverseAdjustmentEnhanced(adjustmentId) {
-            if (confirm('Are you sure you want to reverse this adjustment? This action cannot be undone.')) {
+        function deleteAdjustment(adjustmentId) {
+            if (confirm(`Delete adjustment #${adjustmentId}? This cannot be undone.`)) {
                 $.ajax({
-                    url: `/adjustments/api/${adjustmentId}/reverse`,
+                    url: `/adjustments/api/${adjustmentId}/delete`,
                     method: 'POST',
                     success: function(response) {
                         if (response.success) {
-                            alert('Adjustment reversed successfully.');
+                            alert('Adjustment deleted.');
                             applyFilters();
                         } else {
-                            alert('Failed to reverse adjustment: ' + response.error);
+                            alert('Failed to delete adjustment: ' + response.error);
                         }
                     },
                     error: function(xhr, status, error) {
                         // Parse the JSON response from 400/500 errors
-                        let errorMessage = 'Error reversing adjustment';
+                        let errorMessage = 'Error deleting adjustment';
                         if (xhr.responseJSON && xhr.responseJSON.error) {
                             errorMessage = xhr.responseJSON.error;
                         } else if (xhr.responseText) {
@@ -388,7 +384,7 @@ block content
                                 errorMessage = error || errorMessage;
                             }
                         }
-                        alert('Failed to reverse adjustment: ' + errorMessage);
+                        alert('Failed to delete adjustment: ' + errorMessage);
                     }
                 });
             }

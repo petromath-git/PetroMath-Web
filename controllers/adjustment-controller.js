@@ -384,57 +384,20 @@ module.exports = {
         }
     },
 
-    // POST /adjustments/:adjustmentId/reverse - Reverse an adjustment
-    reverseAdjustment: async (req, res, next) => {
+    // POST /adjustments/api/:adjustmentId/delete - Delete an adjustment
+    // (the GL trigger on t_adjustments queues the reversal of any posting)
+    deleteAdjustmentAPI: async (req, res, next) => {
         try {
             const adjustmentId = req.params.adjustmentId;
-            const userName = req.user.User_Name;
 
-            // Check if adjustment can be reversed
-            const canModify = await adjustmentDao.canModifyAdjustment(adjustmentId);
-            if (!canModify.canModify) {
-                req.flash('error', canModify.reason);
-                return res.redirect('/adjustments');
+            const adjustment = await adjustmentDao.getAdjustmentById(adjustmentId);
+            if (!adjustment || adjustment.location_code !== req.user.location_code) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Adjustment not found'
+                });
             }
 
-            // Get original adjustment details
-            const originalAdjustment = await adjustmentDao.getAdjustmentById(adjustmentId);
-            if (!originalAdjustment) {
-                req.flash('error', 'Adjustment not found');
-                return res.redirect('/adjustments');
-            }
-
-            // Start transaction-like process
-            try {
-                // Step 1: Mark original as REVERSED
-                await adjustmentDao.reverseAdjustment(adjustmentId, userName);
-                
-                // Step 2: Create reversal entry
-                const reversalEntry = await adjustmentDao.createReversalEntry(originalAdjustment, userName);
-
-                req.flash('success', `Adjustment #${adjustmentId} reversed successfully. Reversal entry #${reversalEntry.adjustment_id} created.`);
-                res.redirect('/adjustments');
-
-            } catch (error) {
-                console.error('Error during reversal process:', error);
-                req.flash('error', 'Failed to complete reversal process: ' + error.message);
-                res.redirect('/adjustments');
-            }
-
-        } catch (error) {
-            console.error('Error in reverseAdjustment:', error);
-            req.flash('error', 'Failed to reverse adjustment: ' + error.message);
-            res.redirect('/adjustments');
-        }
-    },
-
-    // POST /adjustments/api/:adjustmentId/reverse - AJAX version for reversal
-    reverseAdjustmentAPI: async (req, res, next) => {
-        try {
-            const adjustmentId = req.params.adjustmentId;
-            const userName = req.user.User_Name;
-
-            // Check if adjustment can be reversed
             const canModify = await adjustmentDao.canModifyAdjustment(adjustmentId);
             if (!canModify.canModify) {
                 return res.status(400).json({
@@ -443,30 +406,19 @@ module.exports = {
                 });
             }
 
-            // Get original adjustment details
-            const originalAdjustment = await adjustmentDao.getAdjustmentById(adjustmentId);
-            if (!originalAdjustment) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Adjustment not found'
-                });
-            }
-
-            // Perform reversal
-            await adjustmentDao.reverseAdjustment(adjustmentId, userName);
-            const reversalEntry = await adjustmentDao.createReversalEntry(originalAdjustment, userName);
+            await adjustmentDao.deleteAdjustment(adjustmentId);
+            console.log(`Adjustment #${adjustmentId} deleted by ${req.user.User_Name}:`, JSON.stringify(adjustment));
 
             res.json({
                 success: true,
-                message: `Adjustment reversed successfully. Reversal entry #${reversalEntry.adjustment_id} created.`,
-                reversalId: reversalEntry.adjustment_id
+                message: `Adjustment #${adjustmentId} deleted.`
             });
 
         } catch (error) {
-            console.error('Error in reverseAdjustmentAPI:', error);
+            console.error('Error in deleteAdjustmentAPI:', error);
             res.status(500).json({
                 success: false,
-                error: 'Failed to reverse adjustment: ' + error.message
+                error: 'Failed to delete adjustment: ' + error.message
             });
         }
     }
