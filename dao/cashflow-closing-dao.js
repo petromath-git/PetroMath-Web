@@ -137,7 +137,8 @@ module.exports = {
 
         const options = await db.sequelize.query(`
             SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name,
-                   ah.requires_digital_vendor_link AS requiresDigitalVendor
+                   ah.requires_digital_vendor_link AS requiresDigitalVendor,
+                   ah.requires_credit_customer_link AS requiresCustomer
             FROM m_account_heads ah
             INNER JOIN m_ledger_rules mlr
                 ON  mlr.location_code = ah.location_code
@@ -151,8 +152,13 @@ module.exports = {
 
         const transactions = await db.sequelize.query(`
             SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag,
-                   tct.digital_vendor_id AS digitalVendorId
+                   tct.digital_vendor_id AS digitalVendorId,
+                   tr.treceipt_id AS originReceiptId
             FROM t_cashflow_transaction tct
+            LEFT JOIN t_receipts tr
+                ON  tct.source_table = 't_receipts'
+                AND tr.treceipt_id = tct.source_id
+                AND tr.origin_cashflow_id = tct.cashflow_id
             LEFT JOIN m_ledger_rules mlr
                 ON  mlr.location_code = :location
                 AND mlr.external_id   = tct.account_head_id
@@ -175,6 +181,83 @@ module.exports = {
             WHERE account_head_id IN (:accountHeadIds) AND requires_digital_vendor_link = 'Y'
         `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
         return rows.map(r => r.account_head_id);
+    },
+    // Which of the given Account Heads must carry a credit customer
+    // (m_account_heads.requires_credit_customer_link='Y', i.e. "Cash Receipt") -
+    // such lines become t_receipts rows, never free-text cashflow lines.
+    getAccountHeadsRequiringCustomerLink: async (accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return [];
+        const rows = await db.sequelize.query(`
+            SELECT account_head_id
+            FROM m_account_heads
+            WHERE account_head_id IN (:accountHeadIds) AND requires_credit_customer_link = 'Y'
+        `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return rows.map(r => r.account_head_id);
+    },
+    // Active, non-digital credit customers of a location, for the Day Close
+    // Cash Receipt picker and for validating what it posts.
+    findCashReceiptCustomers: (locationCode) => {
+        return db.sequelize.query(`
+            SELECT creditlist_id, Company_Name
+            FROM m_credit_list
+            WHERE location_code = :locationCode
+              AND type = 'Credit'
+              AND COALESCE(card_flag, 'N') <> 'Y'
+              AND (effective_end_date IS NULL OR effective_end_date >= CURDATE())
+            ORDER BY Company_Name
+        `, { replacements: { locationCode }, type: Sequelize.QueryTypes.SELECT });
+    },
+    // Creates Cash credit receipts entered on a DRAFT Day Close, dated on the
+    // Day Close and tagged with origin_cashflow_id, then regenerates the Day
+    // Close so they show up as its linked "Cash Receipt" lines. A row may
+    // replace an old free-text Cash Receipt line (replacesTxnId), which is
+    // removed in the same transaction.
+    createDayCloseReceipts: async (cashflow, rows, username) => {
+        await db.sequelize.transaction(async (t) => {
+            for (const row of rows) {
+                await db.sequelize.query(`
+                    INSERT INTO t_receipts
+                        (receipt_no, creditlist_id, receipt_type, amount, notes, receipt_date,
+                         location_code, origin_cashflow_id, created_by, updated_by)
+                    SELECT 0, :creditlistId, 'Cash', :amount, :notes, tcc.cashflow_date,
+                           tcc.location_code, tcc.cashflow_id, :username, :username
+                    FROM t_cashflow_closing tcc
+                    WHERE tcc.cashflow_id = :cashflowId
+                `, {
+                    replacements: {
+                        creditlistId: row.creditlistId,
+                        amount: row.amount,
+                        notes: row.notes || null,
+                        cashflowId: cashflow.cashflowId,
+                        username
+                    },
+                    transaction: t
+                });
+                if (row.replacesTxnId) {
+                    await db.sequelize.query(`
+                        DELETE FROM t_cashflow_transaction
+                        WHERE transaction_id = :txnId AND cashflow_id = :cashflowId
+                          AND COALESCE(calc_flag, 'N') <> 'Y'
+                    `, { replacements: { txnId: row.replacesTxnId, cashflowId: cashflow.cashflowId }, transaction: t });
+                }
+            }
+        });
+        await db.sequelize.query('CALL generate_cashflow(:cashflowId)', { replacements: { cashflowId: cashflow.cashflowId } });
+    },
+    findDayCloseReceipt: (receiptId) => {
+        return db.sequelize.query(`
+            SELECT treceipt_id, origin_cashflow_id, location_code, recon_match_id, manual_recon_flag
+            FROM t_receipts WHERE treceipt_id = :receiptId
+        `, { replacements: { receiptId }, type: Sequelize.QueryTypes.SELECT })
+            .then(rows => rows[0] || null);
+    },
+    // Removes a receipt entered from a DRAFT Day Close, then regenerates the
+    // Day Close so its linked line disappears too.
+    deleteDayCloseReceipt: async (receiptId, cashflowId) => {
+        await db.sequelize.query(`
+            DELETE FROM t_receipts WHERE treceipt_id = :receiptId AND origin_cashflow_id = :cashflowId
+        `, { replacements: { receiptId, cashflowId } });
+        await db.sequelize.query('CALL generate_cashflow(:cashflowId)', { replacements: { cashflowId } });
     },
     triggerGenerateCashflow : (cashflowId) => {
         const cashflowTxn = db.sequelize.query('CALL generate_cashflow(' + cashflowId + ');', null, { raw: true });

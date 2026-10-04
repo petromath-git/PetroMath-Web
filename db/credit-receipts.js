@@ -31,6 +31,11 @@ module.exports = function (sequelize, DataTypes) {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      // Day Close this receipt was entered from; deleted together with it
+      origin_cashflow_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       receipt_date_fmt: {
         type: DataTypes.DATE
       },

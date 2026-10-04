@@ -144,7 +144,8 @@ module.exports = {
     saveCashflowTxnData: async (req, res, next) => {
         const txnData = req.body;
         if (txnData && txnData.length > 0) {
-            const validationError = await validateDigitalVendorRows(txnData, req.user.location_code);
+            const validationError = await validateDigitalVendorRows(txnData, req.user.location_code)
+                || await validateNoFreeTextCashReceipts(txnData);
             if (validationError) {
                 return res.status(400).send({error: validationError});
             }
@@ -159,6 +160,72 @@ module.exports = {
             } else {
                 res.status(500).send({error: result.error});
             }
+        }
+    },
+    // Cash Receipt lines entered on a DRAFT Day Close: each becomes a Cash
+    // credit receipt for the chosen customer (dated on the Day Close), which
+    // generate_cashflow then turns into the linked "Cash Receipt" line.
+    saveDayCloseReceipts: async (req, res, next) => {
+        try {
+            const { cashflowId, receipts } = req.body || {};
+            const cashflow = await cashflowDao.findCashflow(req.user.location_code, cashflowId);
+            if (!cashflow) {
+                return res.status(403).send({error: 'Unauthorized: this Day Close belongs to another location.'});
+            }
+            if (cashflow.status === 'CLOSED') {
+                return res.status(400).send({error: 'This Day Close is already closed.'});
+            }
+            if (!Array.isArray(receipts) || receipts.length === 0) {
+                return res.status(400).send({error: 'No cash receipts to save.'});
+            }
+
+            const customers = await cashflowDao.findCashReceiptCustomers(req.user.location_code);
+            const customerIds = new Set(customers.map(c => String(c.creditlist_id)));
+            const rows = [];
+            for (const r of receipts) {
+                const amount = Math.round((parseFloat(r.amount) || 0) * 100) / 100;
+                if (!r.creditlist_id || !customerIds.has(String(r.creditlist_id))) {
+                    return res.status(400).send({error: 'Please select a valid customer for every Cash Receipt line.'});
+                }
+                if (!(amount > 0)) {
+                    return res.status(400).send({error: 'Cash Receipt amount must be greater than zero.'});
+                }
+                rows.push({
+                    creditlistId: parseInt(r.creditlist_id, 10),
+                    amount,
+                    notes: r.notes ? String(r.notes).trim().substring(0, 500) : null,
+                    replacesTxnId: parseInt(r.replaces_txn_id, 10) || null
+                });
+            }
+
+            await cashflowDao.createDayCloseReceipts(cashflow, rows, req.user.User_Name);
+            res.status(200).send({message: 'Saved ' + rows.length + ' cash receipt(s) to the customer ledger.'});
+        } catch (err) {
+            console.error('Error saving Day Close cash receipts:', err);
+            const dbErr = err && (err.original || err.parent);
+            const message = dbErr && dbErr.sqlState === '45000' ? dbErr.sqlMessage : 'Error while saving the cash receipts.';
+            res.status(500).send({error: message});
+        }
+    },
+    // Deletes a cash receipt that was entered from this (DRAFT) Day Close.
+    deleteDayCloseReceipt: async (req, res, next) => {
+        try {
+            const receipt = await cashflowDao.findDayCloseReceipt(req.query.id);
+            if (!receipt || !receipt.origin_cashflow_id || receipt.location_code !== req.user.location_code) {
+                return res.status(404).send({error: 'Receipt not found or not entered from Day Close.'});
+            }
+            const cashflow = await cashflowDao.findCashflow(req.user.location_code, receipt.origin_cashflow_id);
+            if (!cashflow || cashflow.status === 'CLOSED') {
+                return res.status(400).send({error: 'This Day Close is closed; reopen it to remove the receipt.'});
+            }
+            if (receipt.recon_match_id || Number(receipt.manual_recon_flag) === 1) {
+                return res.status(400).send({error: 'Cannot delete: this receipt is already bank-reconciled. Remove the reconciliation first.'});
+            }
+            await cashflowDao.deleteDayCloseReceipt(receipt.treceipt_id, receipt.origin_cashflow_id);
+            res.status(200).send({message: 'Cash receipt deleted.'});
+        } catch (err) {
+            console.error('Error deleting Day Close cash receipt:', err);
+            res.status(500).send({error: 'Error while deleting the cash receipt.'});
         }
     },
     saveCashflowDenomsData: (req, res, next) => {
@@ -222,7 +289,10 @@ module.exports = {
         res.status(200).send({message: 'The cashflow closing is deleted successfully.'});
     } catch (error) {
         console.error('Error deleting cashflow:', error);
-        res.status(500).send({error: 'Error while deleting the record.'});
+        // SIGNAL SQLSTATE '45000' from delete_cashflow carries a user-facing message
+        const dbErr = error && (error.original || error.parent);
+        const message = dbErr && dbErr.sqlState === '45000' ? dbErr.sqlMessage : 'Error while deleting the record.';
+        res.status(500).send({error: message});
     }
 },
     closeData: async (req, res, next) => {
@@ -331,7 +401,8 @@ function collectCreditAndDebits(result) {
         amount: t.amount,
         type: t.type,
         calcFlag: t.calcFlag,
-        digitalVendorId: t.digitalVendorId
+        digitalVendorId: t.digitalVendorId,
+        originReceiptId: t.originReceiptId
     }));
     return { data: creditOrDebits, options: result.options || [] };
 }
@@ -347,7 +418,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
         getClosingDataForCashflow(req.query.id, locationCode), // Add this new promise
         locationConfig.getLocationConfigValue(locationCode, 'SHOW_CASHFLOW_DENOMINATIONS', 'Y'),
         locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt),
-        adjustmentsDao.getDigitalVendors(locationCode)
+        adjustmentsDao.getDigitalVendors(locationCode),
+        cashflowDao.findCashReceiptCustomers(locationCode)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
@@ -367,7 +439,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             shiftClosings: values[4].value || [], // Add the closing data
             showCashFlowDenominations: values[5].value === 'Y',
             maxCashFlowRows: Number(values[6].value),
-            digitalVendorList: values[7].value || []
+            digitalVendorList: values[7].value || [],
+            cashReceiptCustomers: values[8].value || []
         });
     });
 }
@@ -439,6 +512,23 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
             req.body.cashflow_toDate_hiddenValue, req.user, res, next,
             {error: message});
     });
+}
+
+// A Cash Receipt (Account Head with requires_credit_customer_link='Y') must be
+// entered with a customer, via /save-cashflow-receipts, so it lands in the
+// customer's ledger. Rejects a free-text line carrying an amount - the gap that
+// let PAC's 27-Sep-2026 Rs 1,20,000 payment reach Day Close but not the ledger.
+async function validateNoFreeTextCashReceipts(txnData) {
+    const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
+    const customerHeadIds = new Set(await cashflowDao.getAccountHeadsRequiringCustomerLink(accountHeadIds));
+    if (customerHeadIds.size === 0) return null;
+
+    for (const row of txnData) {
+        if (customerHeadIds.has(parseInt(row.account_head_id, 10)) && (parseFloat(row.amount) || 0) > 0) {
+            return '"' + row.type + '" must be entered with a customer.';
+        }
+    }
+    return null;
 }
 
 // Server-side backstop for the client-side "required" toggle on the digital-vendor

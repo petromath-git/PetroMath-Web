@@ -31,6 +31,19 @@ function getReceiptDateLimits(backdateDays) {
     };
 }
 
+// CASH_RECEIPTS_ONLY_IN_DAYCLOSE='Y': customer cash payments are entered from
+// Day Close (Cash Receipt line + customer), not here. Only applies where Day
+// Close is in use (CASHFLOW_ENABLED), so cash can always be recorded somewhere.
+async function isCashOnlyInDayClose(locationCode) {
+    const [onlyInDayClose, cashflowEnabled] = await Promise.all([
+        locationConfig.getLocationConfigValue(locationCode, 'CASH_RECEIPTS_ONLY_IN_DAYCLOSE', 'N'),
+        locationConfig.getLocationConfigValue(locationCode, 'CASHFLOW_ENABLED', 'false')
+    ]);
+    return onlyInDayClose === 'Y' && String(cashflowEnabled).toLowerCase() === 'true';
+}
+
+const CASH_ONLY_IN_DAYCLOSE_MSG = 'Cash receipts are entered from Day Close at this location (Cash Receipt line with the customer).';
+
 module.exports = {
 
     // Create credit receipt - one at a time
@@ -60,6 +73,13 @@ module.exports = {
                     'error',
                     `Receipt date must be between ${dateFormat(minAllowedDate, 'yyyy-mm-dd')} and ${dateFormat(today, 'yyyy-mm-dd')}.`
                 );
+                res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
+                    '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
+                return;
+            }
+
+            if (req.body.cr_receiptType_0 === 'Cash' && await isCashOnlyInDayClose(locationCode)) {
+                req.flash('error', CASH_ONLY_IN_DAYCLOSE_MSG);
                 res.redirect('/creditreceipts?receipts_fromDate=' + req.body.receipts_fromDate_hiddenValue +
                     '&receipts_toDate=' + req.body.receipts_toDate_hiddenValue);
                 return;
@@ -120,12 +140,13 @@ module.exports = {
             ));
             const { backdateDays, minAllowedDate } = getReceiptDateLimits(configuredBackdateDays);
 
-            const [receiptResult, activeCreditResult, suspenseResult,receiptTypes, creditTypes] = await Promise.all([
+            const [receiptResult, activeCreditResult, suspenseResult,receiptTypes, creditTypes, cashOnlyInDayClose] = await Promise.all([
                 CreditReceiptsDao.findCreditReceipts(locationCode, fromDate, toDate),
                 txnController.creditCompanyDataPromise(locationCode),  // active credit companies
                 txnController.suspenseDataPromise(locationCode),
                 lookupDao.getLookupByType('CREDIT_RECEIPT_TYPE', locationCode),
-                lookupDao.getCustomerTypes(locationCode)
+                lookupDao.getCustomerTypes(locationCode),
+                isCashOnlyInDayClose(locationCode)
             ]);
 
             
@@ -236,8 +257,9 @@ module.exports = {
                         config: config.APP_CONFIGS,
                         receiptTypes: receiptTypes.map(rt => ({ 
                             label: rt.description, 
-                            allow_manual_entry: rt.attribute1 === 'Y'
+                            allow_manual_entry: rt.attribute1 === 'Y' && !(cashOnlyInDayClose && rt.description === 'Cash')
                         })),
+                        cashOnlyInDayClose: cashOnlyInDayClose,
                         creditTypes: creditTypes.map(ct => ct.description),
                         hasMultipleCreditTypes: creditTypes.length > 1,
                         defaultCreditType: creditTypes.length > 0 ? creditTypes[0].description : null, 
@@ -262,7 +284,13 @@ module.exports = {
     
 
     // Update credit receipt
-    updateReceipts: (req, res) => {
+    updateReceipts: async (req, res) => {
+        if (req.body.receipt_type === 'Cash' && await isCashOnlyInDayClose(req.user.location_code)) {
+            const existing = await CreditReceiptsDao.findTypeById(req.params.id);
+            if (!existing || existing.receipt_type !== 'Cash') {
+                return res.status(400).send({ error: CASH_ONLY_IN_DAYCLOSE_MSG });
+            }
+        }
         CreditReceiptsDao.update({
             treceipt_id: req.params.id,
             receipt_no: req.body.receipt_no,

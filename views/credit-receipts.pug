@@ -451,6 +451,8 @@ block content
                                             each val in receiptTypes
                                                 if val.allow_manual_entry
                                                     option(value=val.label)= val.label
+                                    if cashOnlyInDayClose
+                                        small.form-text.text-muted Cash receipts are entered from Day Close (Cash Receipt line with the customer).
                             
                             .col-md-6
                                 .form-group

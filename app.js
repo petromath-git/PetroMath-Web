@@ -1422,6 +1422,15 @@ app.post('/save-cashflow-txns', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowTxnData(req, res, next);
 });
 
+// Day Close Cash Receipt lines -> customer credit receipts
+app.post('/save-cashflow-receipts', isLoginEnsured, function (req, res, next) {
+    cashflowController.saveDayCloseReceipts(req, res, next);
+});
+
+app.delete('/remove-cashflow-receipt', isLoginEnsured, function (req, res, next) {
+    cashflowController.deleteDayCloseReceipt(req, res, next);
+});
+
 app.post('/save-cashflow-denoms', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowDenomsData(req, res, next);
 });

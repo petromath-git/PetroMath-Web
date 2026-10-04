@@ -114,6 +114,7 @@ block content
                         a.btn.btn-primary(id='credit-add-new' onclick='showAddedRow(\'cashflow-credit\')')
                             span.oi.oi-plus
                             span.d-md-none &nbsp;Add InFlow
+                    small.text-muted.d-block.mt-2 Cash Receipt: select the customer &mdash; on Save it is posted to the customer's ledger as a credit receipt.
     div.row
         div.col-12
             div.card
@@ -154,10 +155,12 @@ block content
             a.btn.btn-outline-secondary(href='/cashflowhome') Back to Day Close
 
     input(type='hidden' id='cashflow-debit-rowcnt_hiddenValue' value=debitRowCnt)
+    input(type='hidden' id='cashflow-credit-rowcnt_hiddenValue' value=rowCnt)
     script.
         document.addEventListener('DOMContentLoaded', function() {
             calculateCashflowDebitTotal();
             calculateCashflowCreditTotal();
             initCashflowVendorPickers('cashflow-debit-', parseInt(document.getElementById('cashflow-debit-rowcnt_hiddenValue').value, 10));
+            initCashflowVendorPickers('cashflow-credit-', parseInt(document.getElementById('cashflow-credit-rowcnt_hiddenValue').value, 10));
         });
 
