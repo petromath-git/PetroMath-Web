@@ -203,6 +203,16 @@ module.exports = {
         return rows[0] ? rows[0].golive : null;
     },
 
+    // Date (YYYY-MM-DD) of the location's first shift, or null if none yet.
+    // Opening balances belong on the day before this date.
+    getFirstShiftDate: async function (locationCode) {
+        const rows = await db.sequelize.query(`
+            SELECT DATE_FORMAT(DATE(MIN(closing_date)), '%Y-%m-%d') AS first_shift
+            FROM t_closing WHERE location_code = :locationCode
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        return rows[0] ? rows[0].first_shift : null;
+    },
+
     
 // Check if a location is active and get service tier
 isLocationActive: async function (locationCode) {

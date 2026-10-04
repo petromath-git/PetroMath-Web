@@ -210,6 +210,9 @@ module.exports = {
 
                     const currentDate = moment().format('YYYY-MM-DD');
                     const currentYear = moment().year();
+                    // Opening balances go on the day before the first shift (null before any shift)
+                    const firstShift = await locationDao.getFirstShiftDate(locationCode);
+                    const openingBalanceDate = firstShift ? moment(firstShift).subtract(1, 'day').format('YYYY-MM-DD') : null;
                     const currentMonth = moment().month() + 1; // moment months are 0-based, convert to 1-based
                     
                     res.render('adjustments', {
@@ -218,6 +221,7 @@ module.exports = {
                         currentDate,
                         currentYear,
                         currentMonth,
+                        openingBalanceDate,
                         canEdit: adjustmentDao.DELETE_ROLES.includes(req.user.Role),
                         ...processedData,
                         messages: req.flash()
@@ -388,6 +392,35 @@ async function validateAdjustmentData(data, locationCode) {
         return { isValid: false, message: 'Adjustment date cannot be in the future' };
     }
 
+    const adjDate = String(data.adjustment_date).slice(0, 10);
+
+    // Go-live rules (the DB triggers in golive-date-guard.sql enforce the same):
+    // - Opening Balance Entry (type 201) before the first shift must be dated the
+    //   day before it; that date is exempt from the backdate limit so a customer
+    //   found weeks later can still get a correctly dated opening balance.
+    // - Anything else may not be dated before go-live.
+    if (String(data.adjustment_type) === '201') {
+        const firstShift = await locationDao.getFirstShiftDate(locationCode);
+        if (firstShift && adjDate < firstShift) {
+            const openingDate = moment(firstShift).subtract(1, 'day').format('YYYY-MM-DD');
+            if (adjDate !== openingDate) {
+                return {
+                    isValid: false,
+                    message: `Opening balances must be dated ${moment(openingDate).format('DD-MMM-YYYY')}, the day before this location's PetroMath go-live (${moment(firstShift).format('DD-MMM-YYYY')}).`
+                };
+            }
+            return { isValid: true, message: null };
+        }
+    } else {
+        const goLiveDate = await locationDao.getGoLiveDate(locationCode);
+        if (goLiveDate && adjDate < goLiveDate) {
+            return {
+                isValid: false,
+                message: `Adjustment date is before this location's PetroMath go-live date (${moment(goLiveDate).format('DD-MMM-YYYY')}). Use an Opening Balance Entry for balances before go-live.`
+            };
+        }
+    }
+
     // Check backdate limit from config
     const maxBackdateDays = Number(await locationConfig.getLocationConfigValue(
         locationCode,
@@ -398,21 +431,9 @@ async function validateAdjustmentData(data, locationCode) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const daysDiff = Math.floor((todayStart - adjustmentDate) / (1000 * 60 * 60 * 24));
-    
+
     if (daysDiff > maxBackdateDays) {
         return { isValid: false, message: `Cannot create adjustments older than ${maxBackdateDays} days` };
-    }
-
-    // Nothing but an Opening Balance Entry (type 201) may be dated before go-live
-    // (first shift); a DB trigger enforces the same rule.
-    if (String(data.adjustment_type) !== '201') {
-        const goLiveDate = await locationDao.getGoLiveDate(locationCode);
-        if (goLiveDate && String(data.adjustment_date) < goLiveDate) {
-            return {
-                isValid: false,
-                message: `Adjustment date is before this location's PetroMath go-live date (${moment(goLiveDate).format('DD-MMM-YYYY')}). Use an Opening Balance Entry for balances before go-live.`
-            };
-        }
     }
 
     return { isValid: true, message: null };
