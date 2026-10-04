@@ -5,76 +5,8 @@ const locationConfig = require('../utils/location-config');
 
 module.exports = {
 
-    // GET /adjustments - Display the adjustment entry page
-    getAdjustmentEntryPage: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const currentDate = moment().format('YYYY-MM-DD');
-
-            // Fetch all required data in parallel
-            const [
-                adjustmentTypes,
-                customerList,
-                digitalVendorList,
-                supplierList,
-                bankList,
-                expenseList                
-            ] = await Promise.all([
-                adjustmentDao.getAdjustmentTypes(),
-                adjustmentDao.getCustomers(locationCode),
-                adjustmentDao.getDigitalVendors(locationCode),
-                adjustmentDao.getSuppliers(locationCode),
-                adjustmentDao.getBankAccounts(locationCode),
-                adjustmentDao.getExpenseCategories()               
-            ]);
-
-            // Process data for frontend
-            const processedData = {
-                adjustmentTypes: adjustmentTypes.map(type => ({
-                    lookup_id: type.lookup_id,
-                    description: type.description
-                })),
-                customerList: customerList.map(customer => ({
-                    creditlist_id: customer.creditlist_id,
-                    Company_Name: customer.Company_Name,
-                    ledger_name: customer.ledger_name
-                })),
-                digitalVendorList: digitalVendorList.map(vendor => ({
-                    creditlist_id: vendor.creditlist_id,
-                    Company_Name: vendor.Company_Name,
-                    ledger_name: vendor.ledger_name
-                })),
-                supplierList: supplierList.map(supplier => ({
-                    supplier_id: supplier.supplier_id,
-                    supplier_name: supplier.supplier_name,
-                    supplier_short_name: supplier.supplier_short_name
-                })),
-                bankList: bankList.map(bank => ({
-                    bank_id: bank.bank_id,
-                    bank_name: bank.bank_name,
-                    account_nickname: bank.account_nickname,
-                    ledger_name: bank.ledger_name
-                })),
-                expenseList: expenseList.map(expense => ({
-                    expense_id: expense.lookup_id,
-                    expense_name: expense.description
-                }))
-            };
-
-            res.render('adjustments-entry', {
-                title: 'Credit/Debit Adjustment Entry',
-                user: req.user,
-                currentDate,
-                ...processedData,
-                messages: req.flash()
-            });
-
-        } catch (error) {
-            console.error('Error in getAdjustmentEntryPage:', error);
-            req.flash('error', 'Failed to load adjustment entry page: ' + error.message);
-            res.redirect('/adjustments');
-        }
-    },
+    // GET /adjustments/new - entry form now lives on the main Adjustments page
+    getAdjustmentEntryPage: (req, res) => res.redirect('/adjustments'),
 
     // POST /adjustments - Save adjustment entry
     saveAdjustment: async (req, res, next) => {
@@ -116,7 +48,7 @@ module.exports = {
         } catch (error) {
             console.error('Error in saveAdjustment:', error);
             req.flash('error', 'Failed to save adjustment: ' + error.message);
-            res.redirect('/adjustments/new'); 
+            res.redirect('/adjustments');
         }
     },
 
@@ -285,6 +217,8 @@ module.exports = {
                         currentDate,
                         currentYear,
                         currentMonth,
+                        canEdit: adjustmentDao.DELETE_ROLES.includes(req.user.Role),
+                        canDeleteOpening: adjustmentDao.OPENING_BALANCE_DELETE_ROLES.includes(req.user.Role),
                         ...processedData,
                         messages: req.flash()
                     });
@@ -295,39 +229,6 @@ module.exports = {
                 res.redirect('/home');
             }
         },
-    // GET /adjustments/list - Display adjustments list
-    getAdjustmentList: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const fromDate = req.query.fromDate || moment().subtract(30, 'days').format('YYYY-MM-DD');
-            const toDate = req.query.toDate || moment().format('YYYY-MM-DD');
-
-            const filters = {
-                locationCode,
-                fromDate,
-                toDate,
-                adjustmentType: req.query.adjustmentType || null,
-                externalSource: req.query.externalSource || null,
-                status: req.query.status || 'ACTIVE'
-            };
-
-            const adjustmentsList = await adjustmentDao.getAdjustmentsList(filters);
-
-            res.render('adjustments-list', {
-                title: 'Adjustments History',
-                user: req.user,
-                adjustmentsList,
-                filters,
-                messages: req.flash()
-            });
-
-        } catch (error) {
-            console.error('Error in getAdjustmentList:', error);
-            req.flash('error', 'Failed to load adjustments list: ' + error.message);
-            res.redirect('/home');
-        }
-    },
-
     // POST /adjustments/api/list - Get adjustments list with filters (AJAX)
     getAdjustmentListAPI: async (req, res, next) => {
         try {
@@ -339,8 +240,9 @@ module.exports = {
                 toDate: req.body.toDate,
                 adjustmentType: req.body.adjustmentType || null,
                 externalSource: req.body.externalSource || null,
-                status: req.body.status || 'ACTIVE',
-                limit: req.body.limit || 100
+                search: (req.body.search || '').trim() || null,
+                deleted: req.body.view === 'deleted',
+                limit: req.body.limit || 200
             };
 
             const adjustmentsList = await adjustmentDao.getAdjustmentsList(filters);
@@ -384,42 +286,59 @@ module.exports = {
         }
     },
 
-    // POST /adjustments/api/:adjustmentId/delete - Delete an adjustment
-    // (the GL trigger on t_adjustments queues the reversal of any posting)
+    // POST /adjustments/api/:adjustmentId/delete - Delete an adjustment.
+    // The row is archived to t_adjustments_deleted first so it can be restored;
+    // the GL trigger on t_adjustments queues the reversal of any posting.
     deleteAdjustmentAPI: async (req, res, next) => {
         try {
             const adjustmentId = req.params.adjustmentId;
 
             const adjustment = await adjustmentDao.getAdjustmentById(adjustmentId);
             if (!adjustment || adjustment.location_code !== req.user.location_code) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Adjustment not found'
-                });
+                return res.status(404).json({ success: false, error: 'Adjustment not found' });
             }
 
-            const canModify = await adjustmentDao.canModifyAdjustment(adjustmentId);
+            const canModify = await adjustmentDao.canModifyAdjustment(adjustmentId, req.user.Role);
             if (!canModify.canModify) {
-                return res.status(400).json({
-                    success: false,
-                    error: canModify.reason
-                });
+                return res.status(400).json({ success: false, error: canModify.reason });
             }
 
-            await adjustmentDao.deleteAdjustment(adjustmentId);
-            console.log(`Adjustment #${adjustmentId} deleted by ${req.user.User_Name}:`, JSON.stringify(adjustment));
+            const reason = (req.body.reason || '').trim().slice(0, 500);
+            if (!reason) {
+                return res.status(400).json({ success: false, error: 'Please give a reason for deleting' });
+            }
 
-            res.json({
-                success: true,
-                message: `Adjustment #${adjustmentId} deleted.`
-            });
+            await adjustmentDao.archiveAndDeleteAdjustment(adjustmentId, req.user.User_Name, reason);
+
+            res.json({ success: true, message: `Adjustment #${adjustmentId} deleted.` });
 
         } catch (error) {
             console.error('Error in deleteAdjustmentAPI:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to delete adjustment: ' + error.message
-            });
+            res.status(500).json({ success: false, error: 'Failed to delete adjustment: ' + error.message });
+        }
+    },
+
+    // POST /adjustments/api/:adjustmentId/restore - Undo a delete
+    restoreAdjustmentAPI: async (req, res, next) => {
+        try {
+            const adjustmentId = req.params.adjustmentId;
+
+            if (!adjustmentDao.DELETE_ROLES.includes(req.user.Role)) {
+                return res.status(403).json({ success: false, error: 'You do not have permission to restore adjustments' });
+            }
+
+            const archived = await adjustmentDao.getDeletedAdjustmentById(adjustmentId);
+            if (!archived || archived.location_code !== req.user.location_code) {
+                return res.status(404).json({ success: false, error: 'Deleted adjustment not found' });
+            }
+
+            await adjustmentDao.restoreAdjustment(adjustmentId, req.user.User_Name);
+
+            res.json({ success: true, message: `Adjustment #${adjustmentId} restored.` });
+
+        } catch (error) {
+            console.error('Error in restoreAdjustmentAPI:', error);
+            res.status(500).json({ success: false, error: 'Failed to restore adjustment: ' + error.message });
         }
     }
 };
