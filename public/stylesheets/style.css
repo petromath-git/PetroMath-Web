@@ -3250,3 +3250,20 @@ tr.d-md-none,
     max-width: 100%;
   }
 }
+
+@media (max-width: 768px) {
+  /* Smart Fill (Reading tab) is a desktop shortcut; the JS shows it once two
+     nozzles are added by clearing its inline style, hence !important */
+  .closing-page #smart-reading-section {
+    display: none !important;
+  }
+
+  /* Credit and Expense cards alternate colour so each bill stands out while
+     scrolling. Counted only among cards actually shown: unused rows
+     (d-md-none) and rows hidden by the credit search are skipped. */
+  .closing-page #credit-table tr.credit-summary-row:nth-child(even of tr.credit-summary-row:not(.d-md-none):not([style*="display: none"])),
+  .closing-page #exp-table tr[id^="exp-table-row-"]:nth-child(even of tr[id^="exp-table-row-"]:not(.d-md-none)) {
+    background: #eaf2fb;
+    border-color: #b9cfe8;
+  }
+}
