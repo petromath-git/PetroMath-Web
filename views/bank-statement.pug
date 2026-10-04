@@ -231,7 +231,7 @@ block content
                                 if allowBankReclassify === 'true'
                                     td
                                 td
-                                    input.form-control.form-control-sm(type='date' name='trans_date_0' id='trans_date_0' max=currentDate required)
+                                    input.form-control.form-control-sm(type='date' name='trans_date_0' id='trans_date_0' min=goLiveDate max=currentDate required)
                                 if accountList && accountList.length > 1
                                     td
                                         select.form-control.form-control-sm(name='bank_id_0' id='bank_id_0' onchange='loadLedgersForNewRow()' required)
@@ -308,6 +308,7 @@ block content
 
     script.
         const currentDate = '#{currentDate}';
+        const goLiveDate = '#{goLiveDate || ''}';
         let transactionRowCounter = 1;
         const accountList = !{JSON.stringify(accountList || [])};
         const showAccountColumn = accountList && accountList.length > 1;
@@ -499,7 +500,7 @@ block content
             newRow.innerHTML = `
                 ${allowBankReclassify ? '<td></td>' : ''}
                 <td>
-                    <input class="form-control form-control-sm" type="date" name="trans_date_${transactionRowCounter}" id="trans_date_${transactionRowCounter}" max="${currentDate}" required>
+                    <input class="form-control form-control-sm" type="date" name="trans_date_${transactionRowCounter}" id="trans_date_${transactionRowCounter}" min="${goLiveDate}" max="${currentDate}" required>
                 </td>
                 ${accountCell}
                 <td>
