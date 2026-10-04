@@ -2,6 +2,7 @@
 const adjustmentDao = require('../dao/adjustments-dao');
 const moment = require('moment');
 const locationConfig = require('../utils/location-config');
+const locationDao = require('../dao/location-dao');
 
 module.exports = {
 
@@ -400,6 +401,18 @@ async function validateAdjustmentData(data, locationCode) {
     
     if (daysDiff > maxBackdateDays) {
         return { isValid: false, message: `Cannot create adjustments older than ${maxBackdateDays} days` };
+    }
+
+    // Nothing but an Opening Balance Entry (type 201) may be dated before go-live
+    // (first shift); a DB trigger enforces the same rule.
+    if (String(data.adjustment_type) !== '201') {
+        const goLiveDate = await locationDao.getGoLiveDate(locationCode);
+        if (goLiveDate && String(data.adjustment_date) < goLiveDate) {
+            return {
+                isValid: false,
+                message: `Adjustment date is before this location's PetroMath go-live date (${moment(goLiveDate).format('DD-MMM-YYYY')}). Use an Opening Balance Entry for balances before go-live.`
+            };
+        }
     }
 
     return { isValid: true, message: null };
