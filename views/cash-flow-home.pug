@@ -31,7 +31,7 @@ block content
                     small.text-muted.d-block.mt-2 No day close exists yet for this location — pick the first day to close.
 
     //- ── Day Close History ──
-    div.card
+    div.card.cashflow-page
         div.card-header.d-flex.flex-wrap.justify-content-between.align-items-center
             strong.my-1 Day Close History
             form.form-inline.my-1(method='GET' action='/cashflowhome' id='cashflowhome')
@@ -47,7 +47,7 @@ block content
                         thead.thead-light
                             tr
                                 th Date
-                                th Day
+                                th.d-none.d-sm-table-cell Day
                                 th Status
                                 th.text-right.d-none.d-md-table-cell Inflow
                                 th.text-right.d-none.d-md-table-cell Outflow
@@ -57,7 +57,7 @@ block content
                             each val in cashflowValues
                                 tr(id=`cashflow-record-${val.cashflowId}`)
                                     td.text-nowrap= val.date
-                                    td= val.weekday
+                                    td.d-none.d-sm-table-cell= val.weekday
                                     td
                                         if val.status === 'CLOSED'
                                             span.badge.badge-success Closed
@@ -75,20 +75,20 @@ block content
                                         if val.status === 'CLOSED'
                                             a.btn.btn-sm.btn-outline-secondary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='View day close')
                                                 span.oi.oi-eye
-                                                span &nbsp;View
+                                                span.d-none.d-sm-inline &nbsp;View
                                             if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC')
                                                 button.btn.btn-sm.btn-outline-warning.mr-1.my-1(onClick=`reopenCashflow(${val.cashflowId})`, title='Reopen as draft')
                                                     span.oi.oi-action-undo
-                                                    span &nbsp;Reopen
+                                                    span.d-none.d-sm-inline &nbsp;Reopen
                                             a.btn.btn-sm.btn-outline-danger.my-1(href='/reports-dsr?date=' + val.isoDate, title='Daily Sales Report', aria-label='Daily Sales Report')
                                                 i.bi.bi-file-earmark-pdf-fill
                                         else
                                             a.btn.btn-sm.btn-primary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='Continue day close')
                                                 span.oi.oi-pencil
-                                                span &nbsp;Continue
+                                                span.d-none.d-sm-inline &nbsp;Continue
                                             if(user.isAdmin)
                                                 button.btn.btn-sm.btn-outline-danger.my-1(onClick=`deleteCashflow(${val.cashflowId})`, title='Delete draft')
                                                     span.oi.oi-trash
-                                                    span &nbsp;Delete
+                                                    span.d-none.d-sm-inline &nbsp;Delete
             else
                 p.text-muted.text-center.my-4 No day closes in this date range.
