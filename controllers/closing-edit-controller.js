@@ -168,6 +168,7 @@ module.exports = {
                 .then((values) => {
                     res.render('edit-draft-closing', {
                         user: req.user,
+                        mobileReady: true,
                         showExShortBreakdown: showExShortBreakdown === 'Y',
                         config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                         currentDate: utils.currentDate(),

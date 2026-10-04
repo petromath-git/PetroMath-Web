@@ -124,6 +124,7 @@ module.exports = {
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
+                            mobileReady: true,
                             showExShortBreakdown: showExShortBreakdown === 'Y',
                             config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                             cashiers: values[0].value.cashiers,
