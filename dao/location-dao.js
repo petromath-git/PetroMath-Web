@@ -188,13 +188,17 @@ module.exports = {
         return await lookupDao.getOilCompanies();
     },
 
-    // Go-live date (YYYY-MM-DD) = earliest m_location.start_date; null if unset.
+    // Go-live date (YYYY-MM-DD) = date of the first shift; falls back to
+    // m_location.start_date when no shift exists yet; null if neither.
     // Mirrors the get_location_golive_date() SQL function used by the guard triggers.
     getGoLiveDate: async function (locationCode) {
         const rows = await db.sequelize.query(`
-            SELECT DATE_FORMAT(MIN(DATE(start_date)), '%Y-%m-%d') AS golive
-            FROM m_location
-            WHERE location_code = :locationCode AND start_date > '1971-01-01'
+            SELECT COALESCE(
+                (SELECT DATE_FORMAT(DATE(MIN(closing_date)), '%Y-%m-%d')
+                 FROM t_closing WHERE location_code = :locationCode),
+                (SELECT DATE_FORMAT(MIN(DATE(start_date)), '%Y-%m-%d')
+                 FROM m_location WHERE location_code = :locationCode AND start_date > '1971-01-01')
+            ) AS golive
         `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
         return rows[0] ? rows[0].golive : null;
     },
