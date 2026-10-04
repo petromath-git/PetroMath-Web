@@ -36,14 +36,14 @@ router.post('/api/list', isLoginEnsured, function (req, res, next) {
     adjustmentController.getAdjustmentListAPI(req, res, next);
 });
 
-// Route to reverse an adjustment (admin only)
-router.post('/:adjustmentId/reverse', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    adjustmentController.reverseAdjustment(req, res, next);
+// API endpoint to delete an adjustment (admin only)
+router.post('/api/:adjustmentId/delete', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    adjustmentController.deleteAdjustmentAPI(req, res, next);
 });
 
-// API endpoint for AJAX reversal
-router.post('/api/:adjustmentId/reverse', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    adjustmentController.reverseAdjustmentAPI(req, res, next);
+// API endpoint to restore a deleted adjustment (admin only)
+router.post('/api/:adjustmentId/restore', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    adjustmentController.restoreAdjustmentAPI(req, res, next);
 });
 
 // Route to view specific adjustment details
