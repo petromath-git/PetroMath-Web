@@ -34,7 +34,7 @@ block content
                                     input.form-control(type='text' id='reference_no' name='reference_no' placeholder='Optional tracking number')
                                 div.col-md-6
                                     label(for='adjustment_type') Adjustment Type *
-                                    select.form-control(id='adjustment_type' name='adjustment_type' required)
+                                    select.form-control(id='adjustment_type' name='adjustment_type' required onchange="applyOpeningBalanceDate('')")
                                         option(value='') Select adjustment type
                                         if adjustmentTypes
                                             each type in adjustmentTypes
@@ -79,7 +79,7 @@ block content
                     input.form-control(type='date' id='adjustment_date_mobile' name='adjustment_date' value=currentDate max=currentDate required)
                 div.form-group
                     label(for='adjustment_type_mobile') Adjustment Type *
-                    select.form-control(id='adjustment_type_mobile' name='adjustment_type' required)
+                    select.form-control(id='adjustment_type_mobile' name='adjustment_type' required onchange="applyOpeningBalanceDate('_mobile')")
                         option(value='') Select type
                         if adjustmentTypes
                             each type in adjustmentTypes
@@ -211,6 +211,20 @@ block content
 
         const canEdit = !{JSON.stringify(!!canEdit)};
         const OPENING_BALANCE_TYPE = '201';
+        const openingBalanceDate = !{JSON.stringify(openingBalanceDate || null)};
+
+        // Opening balances belong on the day before go-live: fill that date in
+        function applyOpeningBalanceDate(suffix) {
+            const type = document.getElementById('adjustment_type' + suffix).value;
+            const dateInput = document.getElementById('adjustment_date' + suffix);
+            if (type === OPENING_BALANCE_TYPE && openingBalanceDate) {
+                dateInput.value = openingBalanceDate;
+                dateInput.readOnly = true;
+            } else if (dateInput.readOnly) {
+                dateInput.readOnly = false;
+                dateInput.value = !{JSON.stringify(currentDate)};
+            }
+        }
 
         // Server date data
         const serverDate = new Date('!{currentDate}');
