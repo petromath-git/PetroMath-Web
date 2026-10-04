@@ -218,7 +218,6 @@ module.exports = {
                         currentYear,
                         currentMonth,
                         canEdit: adjustmentDao.DELETE_ROLES.includes(req.user.Role),
-                        canDeleteOpening: adjustmentDao.OPENING_BALANCE_DELETE_ROLES.includes(req.user.Role),
                         ...processedData,
                         messages: req.flash()
                     });

@@ -210,7 +210,6 @@ block content
         const expenseListData = !{JSON.stringify(expenseList || [])};
 
         const canEdit = !{JSON.stringify(!!canEdit)};
-        const canDeleteOpening = !{JSON.stringify(!!canDeleteOpening)};
         const OPENING_BALANCE_TYPE = '201';
 
         // Server date data
@@ -473,9 +472,6 @@ block content
             if (!canEdit) return '<span class="text-muted small">-</span>';
             if (adj.source_table) return '<span class="text-muted small" title="Created automatically - change it from its source screen">Auto</span>';
             if (adj.recon_match_id || adj.manual_recon_flag) return '<span class="text-muted small" title="Bank-reconciled - remove the reconciliation first">Reconciled</span>';
-            if (String(adj.adjustment_type) === OPENING_BALANCE_TYPE && !canDeleteOpening) {
-                return '<span class="text-muted small" title="Only a PowerUser or SuperUser can delete opening balances">Locked</span>';
-            }
             return `<button class="btn btn-outline-danger btn-sm" onclick="deleteAdjustment(${adj.adjustment_id}, '${adj.adjustment_type}')" title="Delete this adjustment">
                         <i class="bi bi-trash"></i></button>`;
         }
