@@ -7,11 +7,8 @@ const Lookup = db.lookup;
 const { Sequelize, Op } = require("sequelize");
 const locationConfig = require('../utils/location-config');
 
-// adjustment_type of "Opening Balance Entry" (m_lookup ADJUSTMENT_TYPE)
-const OPENING_BALANCE_TYPE = '201';
-// Roles that may delete/restore adjustments; opening balances need a senior role
+// Roles that may delete/restore adjustments
 const DELETE_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
-const OPENING_BALANCE_DELETE_ROLES = ['PowerUser', 'SuperUser'];
 
 // Backtick-quoted, comma-separated column list of t_adjustments, read once
 let adjustmentColumns = null;
@@ -30,7 +27,6 @@ async function getAdjustmentColumns() {
 module.exports = {
 
     DELETE_ROLES,
-    OPENING_BALANCE_DELETE_ROLES,
 
     
     // Save new adjustment entry
@@ -408,10 +404,6 @@ module.exports = {
 
             if (!DELETE_ROLES.includes(role)) {
                 return { canModify: false, reason: 'You do not have permission to delete adjustments' };
-            }
-
-            if (adjustment.adjustment_type === OPENING_BALANCE_TYPE && !OPENING_BALANCE_DELETE_ROLES.includes(role)) {
-                return { canModify: false, reason: 'Opening balance entries can only be deleted by a PowerUser or SuperUser' };
             }
 
             if (adjustment.status !== 'ACTIVE') {
