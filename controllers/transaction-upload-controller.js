@@ -4,6 +4,7 @@ const { debugLog } = require('../utils/debug-logger');
 const { isPdfFile, parsePdfStatementToData, PdfPasswordError } = require('../utils/pdf-statement-parsers');
 const { decryptIfProtected } = require('../utils/statement-decrypt');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
+const locationDao = require('../dao/location-dao');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -438,6 +439,14 @@ function normalizeYmd(dateStr) {
 
 
 // NEW: Helper function to format date as DD-MM-YYYY
+// YYYY-MM-DD -> DD-Mon-YYYY (e.g. 07-Sep-2026)
+function formatDateDMonY(ymd) {
+    if (!ymd) return null;
+    const [y, m, d] = ymd.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${d}-${months[Number(m) - 1]}-${y}`;
+}
+
 function formatDateForDisplay(dateStr) {
     if (!dateStr) return '';
     
@@ -953,6 +962,31 @@ previewTransactions: async (req, res) => {
             });
         }
 
+        // Drop lines dated before the location's go-live: those payments are already
+        // in the opening balances (a DB trigger also rejects them as a backstop).
+        const goLiveDate = await locationDao.getGoLiveDate(locationCode);
+        let excludedBeforeGoLive = 0;
+        const goLiveDisplay = formatDateDMonY(goLiveDate);
+        if (goLiveDate && transactions.length > 0) {
+            const before = transactions.length;
+            for (let i = transactions.length - 1; i >= 0; i--) {
+                if (transactions[i].txn_date < goLiveDate) transactions.splice(i, 1);
+            }
+            excludedBeforeGoLive = before - transactions.length;
+
+            if (excludedBeforeGoLive > 0) {
+                await debugLog(locationCode, `Excluded ${excludedBeforeGoLive} transaction(s) dated before go-live ${goLiveDate}`);
+            }
+            if (before > 0 && transactions.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: `All ${before} transaction(s) in this statement are dated before this location's PetroMath go-live date (${goLiveDisplay}). ` +
+                           `Payments before go-live are already covered by the opening balances, so nothing was imported.`,
+                    errorType: 'BEFORE_GO_LIVE'
+                });
+            }
+        }
+
         if (transactions.length === 0) {
             return res.json({
                 success: false,
@@ -1024,6 +1058,8 @@ previewTransactions: async (req, res) => {
                 total: transactions.length,
                 duplicates: duplicates.length,
                 excluded_today: excludedTodayCount.length,
+                excluded_before_golive: excludedBeforeGoLive,
+                golive_date: goLiveDisplay,
                 yesterday_date: yesterdayStr,
                 last_uploaded_date: lastUploadedDate,
                 earliest_upload_date: earliestUploadDate,

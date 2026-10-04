@@ -5,6 +5,24 @@ const dateFormat = require('dateformat');
 const { debugLog } = require('../utils/debug-logger');
 const { isPdfFile, parsePdfStatementToData, PdfPasswordError } = require('../utils/pdf-statement-parsers');
 const { decryptIfProtected } = require('../utils/statement-decrypt');
+const locationDao = require('../dao/location-dao');
+
+// DD-MM-YYYY or YYYY-MM-DD -> YYYY-MM-DD (null if unrecognised)
+function toYmd(dateStr) {
+    const s = String(dateStr || '').trim().slice(0, 10);
+    if (/^d{4}-d{2}-d{2}$/.test(s)) return s;
+    const m = /^(d{2})[-/](d{2})[-/](d{4})$/.exec(s);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+
+// Error text when a date is before the location's go-live (first shift), else null
+async function beforeGoLiveError(locationCode, dateStr) {
+    const goLive = await locationDao.getGoLiveDate(locationCode);
+    const ymd = toYmd(dateStr);
+    if (!goLive || !ymd || ymd >= goLive) return null;
+    return `${moment(ymd).format('DD-MMM-YYYY')} is before this location's PetroMath go-live date (${moment(goLive).format('DD-MMM-YYYY')}). ` +
+           `Bank entries before go-live are already covered by the opening balances.`;
+}
 
 module.exports = {
     /**
@@ -171,7 +189,10 @@ module.exports = {
             });
             
             // PHASE 2: Mark unmatched bank transactions
+            const goLiveDate = await locationDao.getGoLiveDate(locationCode);
             bankTransactions.forEach(bankTxn => {
+                const txnYmd = toYmd(bankTxn.txn_date);
+                bankTxn.beforeGoLive = !!(goLiveDate && txnYmd && txnYmd < goLiveDate);
                 // If this bank transaction was matched in Phase 1, mark it as matched
                 if (matchedBankIds.has(bankTxn.actual_stmt_id)) {
                     bankTxn.isUnmatched = false;
@@ -283,6 +304,9 @@ bulkAddEntries: async (req, res) => {
             const entry = entries[i];
             
             try {
+                const goLiveError = await beforeGoLiveError(locationCode, entry.trans_date);
+                if (goLiveError) throw new Error(goLiveError);
+
                 const credit = parseFloat(entry.credit_amount) || 0;
                 const debit = parseFloat(entry.debit_amount) || 0;
                 
@@ -457,6 +481,11 @@ bulkAddEntries: async (req, res) => {
                 });
             }
             
+            const goLiveError = await beforeGoLiveError(locationCode, trans_date);
+            if (goLiveError) {
+                return res.status(400).json({ success: false, error: goLiveError });
+            }
+
             // Prepare transaction data
             const transactionData = {
                 trans_date: trans_date,
