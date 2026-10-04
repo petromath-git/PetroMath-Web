@@ -1489,7 +1489,7 @@ function applyCreditBillDateConstraints() {
 
     const systemDate = (typeof currentSystemDate !== 'undefined' && currentSystemDate)
         ? currentSystemDate
-        : new Date().toISOString().slice(0, 10);
+        : toLocalDateStr(new Date());
 
     dateInputs.forEach((inputEl) => {
         const closing = inputEl.getAttribute('data-closing-date');
@@ -1509,10 +1509,20 @@ function applyCreditBillDateConstraints() {
     });
 }
 
+// Format from local date parts, not toISOString(): that converts to UTC, and in
+// IST local midnight is the previous day in UTC, which shifted the whole
+// credit-bill-date window one day back.
+function toLocalDateStr(d) {
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+}
+
 function addDays(yyyyMmDd, days) {
     const d = new Date(yyyyMmDd + 'T00:00:00');
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateStr(d);
 }
 
 
