@@ -3,6 +3,27 @@ const Product = db.product;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 
+// Tables that reference m_product.product_id. Any row here means the product
+// has been used and must not be deleted.
+const PRODUCT_REF_TABLES = [
+    ['t_credits',                'credit sales'],
+    ['t_credits_cancelled',      'cancelled credit sales'],
+    ['t_cashsales',              'cash sales'],
+    ['t_cashsales_cancelled',    'cancelled cash sales'],
+    ['t_2toil',                  '2T oil entries'],
+    ['t_testing',                'testing entries'],
+    ['t_lubes_inv_lines',        'lube purchase invoice lines'],
+    ['t_tank_invoice_dtl',       'fuel purchase invoice lines'],
+    ['t_lubes_stock_adjustment', 'stock adjustments'],
+    ['t_day_bill_items',         'day bill items'],
+    ['t_bowser_cashsales',       'bowser cash sales'],
+    ['t_bowser_credits',         'bowser credit sales'],
+    ['t_closing_intercompany',   'intercompany entries'],
+    ['r_product_open_bal',       'opening stock balances'],
+    ['m_bowser',                 'bowsers'],
+    ['m_creditlist_vehicles',    'customer vehicles']
+];
+
 module.exports = {
     findPumpLinkedProductNames: async (locationCode) => {
         const rows = await db.sequelize.query(`
@@ -231,25 +252,7 @@ findPumpProducts: async (locationCode) => {
     // product_id; pump/tank config is matched by name (m_pump/m_tank.product_code),
     // so a name link only blocks when this is the sole product carrying that name.
     getDeleteBlockers: async (productId, locationCode, productName) => {
-        const idRefs = [
-            ['t_credits',                'credit sales'],
-            ['t_credits_cancelled',      'cancelled credit sales'],
-            ['t_cashsales',              'cash sales'],
-            ['t_cashsales_cancelled',    'cancelled cash sales'],
-            ['t_2toil',                  '2T oil entries'],
-            ['t_testing',                'testing entries'],
-            ['t_lubes_inv_lines',        'lube purchase invoice lines'],
-            ['t_tank_invoice_dtl',       'fuel purchase invoice lines'],
-            ['t_lubes_stock_adjustment', 'stock adjustments'],
-            ['t_day_bill_items',         'day bill items'],
-            ['t_bowser_cashsales',       'bowser cash sales'],
-            ['t_bowser_credits',         'bowser credit sales'],
-            ['t_closing_intercompany',   'intercompany entries'],
-            ['r_product_open_bal',       'opening stock balances'],
-            ['m_bowser',                 'bowsers'],
-            ['m_creditlist_vehicles',    'customer vehicles']
-        ];
-        const sql = idRefs
+        const sql = PRODUCT_REF_TABLES
             .map(([table, label]) => `SELECT '${label}' AS label, COUNT(*) AS cnt FROM ${table} WHERE product_id = :productId`)
             .join(' UNION ALL ');
         const rows = await db.sequelize.query(sql, {
@@ -274,6 +277,31 @@ findPumpProducts: async (locationCode) => {
             if (Number(link.tanks) > 0) blockers.push({ label: 'tanks', count: Number(link.tanks) });
         }
         return blockers;
+    },
+
+    // Product ids at the location that pass the same rules as getDeleteBlockers,
+    // in one round trip for the list page (each ref table is scanned once, not
+    // once per product). getDeleteBlockers stays the authoritative check on delete.
+    findDeletableProductIds: async (locationCode) => {
+        const usedSql = PRODUCT_REF_TABLES
+            .map(([table]) => `SELECT product_id FROM ${table} WHERE product_id IN (SELECT product_id FROM m_product WHERE location_code = :locationCode)`)
+            .join(' UNION ');
+        const rows = await db.sequelize.query(`
+            SELECT p.product_id
+            FROM m_product p
+            LEFT JOIN (${usedSql}) used ON used.product_id = p.product_id
+            WHERE p.location_code = :locationCode
+              AND used.product_id IS NULL
+              AND (
+                    (SELECT COUNT(*) FROM m_product s WHERE s.location_code = p.location_code AND s.product_name = p.product_name) > 1
+                    OR (    NOT EXISTS (SELECT 1 FROM m_pump mp WHERE mp.location_code = p.location_code AND mp.product_code = p.product_name)
+                        AND NOT EXISTS (SELECT 1 FROM m_tank mt WHERE mt.location_code = p.location_code AND mt.product_code = p.product_name))
+                  )
+        `, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return new Set(rows.map(r => Number(r.product_id)));
     },
 
     // Caller must check getDeleteBlockers first. Removes config-only rows that
