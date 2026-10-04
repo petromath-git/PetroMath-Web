@@ -392,6 +392,7 @@ block content
                 <strong>${data.summary.total} transactions</strong> loaded successfully.
                 ${duplicateCount > 0 ? `<br><i class="bi bi-exclamation-triangle text-warning me-2"></i><strong>${duplicateCount} duplicates</strong> detected and will be skipped.` : ''}
                 ${data.summary.excluded_today > 0 ? `<br><i class="bi bi-info-circle me-2"></i>${data.summary.excluded_today} today's transactions excluded.` : ''}
+                ${data.summary.excluded_before_golive > 0 ? `<br><i class="bi bi-info-circle me-2"></i>${data.summary.excluded_before_golive} transaction(s) dated before your PetroMath start date (${data.summary.golive_date}) were skipped — those are already in the opening balances.` : ''}
             `;
             document.getElementById('step2-summary').innerHTML = summaryHtml;
             document.getElementById('step2-summary').style.display = 'block';
