@@ -3,6 +3,27 @@ const Product = db.product;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 
+// Tables that reference m_product.product_id. Any row here means the product
+// has been used and must not be deleted.
+const PRODUCT_REF_TABLES = [
+    ['t_credits',                'credit sales'],
+    ['t_credits_cancelled',      'cancelled credit sales'],
+    ['t_cashsales',              'cash sales'],
+    ['t_cashsales_cancelled',    'cancelled cash sales'],
+    ['t_2toil',                  '2T oil entries'],
+    ['t_testing',                'testing entries'],
+    ['t_lubes_inv_lines',        'lube purchase invoice lines'],
+    ['t_tank_invoice_dtl',       'fuel purchase invoice lines'],
+    ['t_lubes_stock_adjustment', 'stock adjustments'],
+    ['t_day_bill_items',         'day bill items'],
+    ['t_bowser_cashsales',       'bowser cash sales'],
+    ['t_bowser_credits',         'bowser credit sales'],
+    ['t_closing_intercompany',   'intercompany entries'],
+    ['r_product_open_bal',       'opening stock balances'],
+    ['m_bowser',                 'bowsers'],
+    ['m_creditlist_vehicles',    'customer vehicles']
+];
+
 module.exports = {
     findPumpLinkedProductNames: async (locationCode) => {
         const rows = await db.sequelize.query(`
@@ -223,6 +244,83 @@ findPumpProducts: async (locationCode) => {
             where: {
                 product_id: product.product_id
             }
+        });
+    },
+
+    // Returns [{ label, count }] for everything that stops a product from being
+    // deleted. Empty array = safe to delete. Transaction tables are matched by
+    // product_id; pump/tank config is matched by name (m_pump/m_tank.product_code),
+    // so a name link only blocks when this is the sole product carrying that name.
+    getDeleteBlockers: async (productId, locationCode, productName) => {
+        const sql = PRODUCT_REF_TABLES
+            .map(([table, label]) => `SELECT '${label}' AS label, COUNT(*) AS cnt FROM ${table} WHERE product_id = :productId`)
+            .join(' UNION ALL ');
+        const rows = await db.sequelize.query(sql, {
+            replacements: { productId },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        const blockers = rows
+            .filter(r => Number(r.cnt) > 0)
+            .map(r => ({ label: r.label, count: Number(r.cnt) }));
+
+        const [link] = await db.sequelize.query(`
+            SELECT
+                (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_code = :productName) AS pumps,
+                (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_code = :productName) AS tanks,
+                (SELECT COUNT(*) FROM m_product WHERE location_code = :locationCode AND product_name = :productName) AS same_name
+        `, {
+            replacements: { locationCode, productName },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        if (Number(link.same_name) <= 1) {
+            if (Number(link.pumps) > 0) blockers.push({ label: 'nozzles (pump configuration)', count: Number(link.pumps) });
+            if (Number(link.tanks) > 0) blockers.push({ label: 'tanks', count: Number(link.tanks) });
+        }
+        return blockers;
+    },
+
+    // Product ids at the location that pass the same rules as getDeleteBlockers,
+    // in one round trip for the list page (each ref table is scanned once, not
+    // once per product). getDeleteBlockers stays the authoritative check on delete.
+    findDeletableProductIds: async (locationCode) => {
+        const usedSql = PRODUCT_REF_TABLES
+            .map(([table]) => `SELECT product_id FROM ${table} WHERE product_id IN (SELECT product_id FROM m_product WHERE location_code = :locationCode)`)
+            .join(' UNION ');
+        const rows = await db.sequelize.query(`
+            SELECT p.product_id
+            FROM m_product p
+            LEFT JOIN (${usedSql}) used ON used.product_id = p.product_id
+            WHERE p.location_code = :locationCode
+              AND used.product_id IS NULL
+              AND (
+                    (SELECT COUNT(*) FROM m_product s WHERE s.location_code = p.location_code AND s.product_name = p.product_name) > 1
+                    OR (    NOT EXISTS (SELECT 1 FROM m_pump mp WHERE mp.location_code = p.location_code AND mp.product_code = p.product_name)
+                        AND NOT EXISTS (SELECT 1 FROM m_tank mt WHERE mt.location_code = p.location_code AND mt.product_code = p.product_name))
+                  )
+        `, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return new Set(rows.map(r => Number(r.product_id)));
+    },
+
+    // Caller must check getDeleteBlockers first. Removes config-only rows that
+    // point at the product, keeps a DELETE snapshot in m_product_h, then deletes.
+    deleteProduct: (productId, deletedBy) => {
+        return db.sequelize.transaction(async (t) => {
+            const opts = { replacements: { productId, deletedBy }, transaction: t };
+            await db.sequelize.query(`DELETE FROM gl_product_ledger_map WHERE product_id = :productId`, opts);
+            await db.sequelize.query(`DELETE FROM t_invoice_product_map WHERE product_id = :productId`, opts);
+            await db.sequelize.query(`
+                INSERT INTO m_product_h (product_id, product_name, location_code, qty, unit, price,
+                    created_by, updated_by, updation_date, creation_date, ledger_name,
+                    cgst_percent, sgst_percent, sku_name, sku_number, hsn_code, rgb_color, operation_type)
+                SELECT product_id, product_name, location_code, qty, unit, price,
+                    created_by, :deletedBy, NOW(), creation_date, ledger_name,
+                    cgst_percent, sgst_percent, sku_name, sku_number, hsn_code, rgb_color, 'DELETE'
+                FROM m_product WHERE product_id = :productId
+            `, opts);
+            await db.sequelize.query(`DELETE FROM m_product WHERE product_id = :productId`, opts);
         });
     },
 
