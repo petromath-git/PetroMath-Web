@@ -80,6 +80,9 @@ html
       // Vertical Sidebar
       nav.sidebar#sidebar
         .sidebar-header(class=(APP_VERSION === 'canary' ? 'canary-instance' : ''))
+          //- Phones: the open sidebar covers the whole screen, so it needs its own close
+          button.sidebar-close#sidebarClose(type="button" aria-label="Close menu")
+            i.bi.bi-x-lg
           a.sidebar-logo(href="/") PetroMath
           .sidebar-user
             | Logged in as #{user.Person_Name}
@@ -202,10 +205,13 @@ html
       .main-content#mainContent
         .top-bar
           .d-flex.align-items-center
-            button.sidebar-toggle#sidebarToggle(type="button")
+            //- On phones the tile home replaces the sidebar, so the toggle hides
+            //- wherever the Home button shows (CSS)
+            - var hasMobileHome = user.Role !== 'Cashier' && user.Role !== 'Customer'
+            button.sidebar-toggle#sidebarToggle(type="button" aria-label="Menu" class=(hasMobileHome ? 'has-mobile-home' : undefined))
               i.bi.bi-list
             //- Phones only (CSS): back to the tile home page
-            if user.Role !== 'Cashier' && user.Role !== 'Customer'
+            if hasMobileHome
               a.mobile-home-btn(href="/m" aria-label="Home" title="Home")
                 i.bi.bi-grid-fill
             .breadcrumb-nav Dashboard > #{title}
@@ -259,6 +265,13 @@ html
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
         
+        const sidebarClose = document.getElementById('sidebarClose');
+        if (sidebarClose && sidebar) {
+          sidebarClose.addEventListener('click', function() {
+            sidebar.classList.remove('show');
+          });
+        }
+
         if (sidebarToggle && sidebar && mainContent) {
           sidebarToggle.addEventListener('click', function() {
             if (window.innerWidth <= 768) {

@@ -1309,10 +1309,33 @@ body {
 }
 
 .sidebar-header {
+  position: relative;
   padding: 20px;
   background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
+}
+
+.sidebar-close {
+  display: none;
+}
+@media (max-width: 768px) {
+  .sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.08);
+    color: #212529;
+    font-size: 20px;
+    cursor: pointer;
+  }
 }
 
 .sidebar-header.canary-instance {
@@ -1469,6 +1492,10 @@ body {
   .mobile-home-btn:hover, .mobile-home-btn:focus {
     color: #212529;
     text-decoration: none;
+  }
+  /* Tiles + search on /m cover every menu item, so no hamburger on phones */
+  .sidebar-toggle.has-mobile-home {
+    display: none;
   }
   /* Keep the top bar inside the phone width: the name is in the sidebar
      header anyway, and a long page title truncates instead of overflowing */
