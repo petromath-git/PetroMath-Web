@@ -63,7 +63,15 @@ html
   if (closingData && closingData.closingStatus === 'CLOSED')
     - isFreezedRecord = true;
 
-  body(class=(mobileReady ? 'mobile-ready' : undefined) onload='populateSummaryFn(' + isFreezedRecord +');')
+  //- Roles that get the tile home (/m) instead of the sidebar on phones
+  - var hasMobileHome = user && user.Role !== 'Cashier' && user.Role !== 'Customer'
+  - var bodyClasses = []
+  if mobileReady
+    - bodyClasses.push('mobile-ready')
+  if isPhone && hasMobileHome
+    - bodyClasses.push('phone-nav')
+
+  body(class=(bodyClasses.length ? bodyClasses.join(' ') : undefined) onload='populateSummaryFn(' + isFreezedRecord +');')
 
     if isPreviewing && previewMeta
       .preview-mode-banner
@@ -207,7 +215,6 @@ html
           .d-flex.align-items-center
             //- On phones the tile home replaces the sidebar, so the toggle hides
             //- wherever the Home button shows (CSS)
-            - var hasMobileHome = user.Role !== 'Cashier' && user.Role !== 'Customer'
             button.sidebar-toggle#sidebarToggle(type="button" aria-label="Menu" class=(hasMobileHome ? 'has-mobile-home' : undefined))
               i.bi.bi-list
             //- Phones only (CSS): back to the tile home page

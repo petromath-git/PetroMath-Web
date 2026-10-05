@@ -1476,6 +1476,46 @@ body {
 .mobile-home-btn {
   display: none;
 }
+
+/* body.phone-nav: phone detected server-side (layout.pug). Needed because
+   pages without the viewport tag render at desktop width on a phone, so the
+   max-width media queries below never match there. On every page: no
+   sidebar, Home button instead. */
+body.phone-nav .sidebar,
+body.phone-nav .sidebar-toggle.has-mobile-home {
+  display: none !important;
+}
+body.phone-nav .main-content {
+  margin-left: 0 !important;
+}
+body.phone-nav .mobile-home-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  margin-right: 12px;
+  border-radius: 4px;
+  background: #f4d03f;
+  color: #212529;
+  font-size: 18px;
+}
+/* Desktop-width pages are shrunk to ~40% on a phone: draw the bar bigger
+   so the Home button stays a real tap target */
+body.phone-nav:not(.mobile-ready) .mobile-home-btn {
+  width: 96px;
+  height: 84px;
+  margin-right: 24px;
+  border-radius: 10px;
+  font-size: 44px;
+}
+body.phone-nav:not(.mobile-ready) .breadcrumb-nav {
+  font-size: 28px;
+}
+body.phone-nav:not(.mobile-ready) .logout-btn {
+  font-size: 26px;
+  padding: 14px 24px;
+}
 @media (max-width: 768px) {
   .mobile-home-btn {
     display: inline-flex;

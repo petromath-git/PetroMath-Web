@@ -63,14 +63,10 @@ function buildMobileMenuGroups(menuDetails) {
         .map((g, i) => Object.assign(g, GROUP_TONES[i % GROUP_TONES.length]));
 }
 
-function userHasUrl(menuDetails, url) {
-    return (menuDetails || []).some(m => m.url_path === url);
-}
-
 // Phones get the tile home; tablets/desktops keep the existing landing page.
 function isPhone(req) {
     const ua = (req.headers && req.headers['user-agent']) || '';
     return /Mobi|Android.+Mobile|iPhone|iPod/i.test(ua);
 }
 
-module.exports = { buildMobileMenuGroups, userHasUrl, isPhone };
+module.exports = { buildMobileMenuGroups, isPhone };

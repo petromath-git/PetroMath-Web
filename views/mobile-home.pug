@@ -19,15 +19,6 @@ block content
     .mhome-section.expanded .mhome-more { display: none; }
     .mhome-more { border-style: dashed; border-color: #b8bfc8; background: #fafbfc; justify-content: center; font-family: inherit; }
     .mhome-more .count { font-size: 18px; font-weight: 800; }
-    .mhome-shift { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: #212529; color: #fff; text-decoration: none; }
-    .mhome-shift:hover, .mhome-shift:focus { color: #fff; text-decoration: none; background: #343a40; }
-    .mhome-shift .mhome-chip { background: #f4d03f; color: #212529; }
-    .mhome-shift-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
-    .mhome-shift-text strong { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .mhome-shift-text small { color: #c9ced4; font-size: 13px; }
-    .mhome-shift-cta { flex-shrink: 0; background: #f4d03f; color: #212529; font-weight: 800; font-size: 14px; padding: 8px 12px; border-radius: 10px; }
-    .mhome-noshift { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid #e3e6ea; background: #fff; color: #4b5563; font-size: 14px; }
-    .mhome-noshift a { flex-shrink: 0; font-weight: 700; padding: 8px 12px; border-radius: 10px; background: #f4d03f; color: #212529; text-decoration: none; }
     .mhome-results { display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #e3e6ea; background: #fff; overflow: hidden; }
     .mhome-result { min-height: 60px; padding: 8px 14px; border-bottom: 1px solid #eef0f3; display: flex; align-items: center; gap: 12px; color: #1f2328; text-decoration: none; }
     .mhome-result:hover, .mhome-result:focus { color: #1f2328; text-decoration: none; background: #f8f9fa; }
@@ -59,26 +50,6 @@ block content
       .mhome-empty#mhomeEmpty(hidden) No screen matches.
 
     #mhomeBrowse.mhome
-      if canOpenShifts
-        section.mhome-section
-          .mhome-section-title Open shifts
-          if openShifts.length
-            each s in openShifts
-              a.mhome-shift(href=`/edit-draft-closing?closingId=${s.closingId}`)
-                span.mhome-chip
-                  i.bi.bi-fuel-pump(aria-hidden="true")
-                span.mhome-shift-text
-                  strong= s.cashierName
-                  small Draft · #{s.closingDate}
-                span.mhome-shift-cta Continue
-          else
-            .mhome-noshift
-              span No open shift right now.
-              if canCreateShift
-                a(href="/new-closing") Start shift
-              else
-                a(href="/home") View shifts
-
       each g in menuGroups
         - var many = g.items.length > 4
         section.mhome-section
