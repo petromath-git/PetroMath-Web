@@ -1449,6 +1449,42 @@ body {
   margin: 0;
 }
 
+/* Tile home (/m) shortcut — only on phones, next to the hamburger */
+.mobile-home-btn {
+  display: none;
+}
+@media (max-width: 768px) {
+  .mobile-home-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 36px;
+    margin-right: 12px;
+    border-radius: 4px;
+    background: #f4d03f;
+    color: #212529;
+    font-size: 18px;
+  }
+  .mobile-home-btn:hover, .mobile-home-btn:focus {
+    color: #212529;
+    text-decoration: none;
+  }
+  /* Keep the top bar inside the phone width: the name is in the sidebar
+     header anyway, and a long page title truncates instead of overflowing */
+  body.mobile-ready .top-bar .user-info {
+    display: none;
+  }
+  body.mobile-ready .top-bar > .d-flex {
+    min-width: 0;
+  }
+  body.mobile-ready .breadcrumb-nav {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .top-bar-actions {
   display: flex;
   align-items: center;

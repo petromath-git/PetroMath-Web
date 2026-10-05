@@ -204,6 +204,10 @@ html
           .d-flex.align-items-center
             button.sidebar-toggle#sidebarToggle(type="button")
               i.bi.bi-list
+            //- Phones only (CSS): back to the tile home page
+            if user.Role !== 'Cashier' && user.Role !== 'Customer'
+              a.mobile-home-btn(href="/m" aria-label="Home" title="Home")
+                i.bi.bi-grid-fill
             .breadcrumb-nav Dashboard > #{title}
           
           .top-bar-actions
