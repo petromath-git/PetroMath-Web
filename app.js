@@ -249,6 +249,13 @@ const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
 const mobileHomeRoutes = require('./routes/mobile-home-routes');
 const { isPhone } = require('./utils/mobile-menu');
+// layout.pug uses this for phone navigation on every page, including pages
+// without the viewport tag (those render at desktop width, so CSS width
+// media queries never match on them)
+app.use(function (req, res, next) {
+    res.locals.isPhone = isPhone(req);
+    next();
+});
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
 const tankRoutes = require('./routes/tank-routes');
 const billsRoutes = require('./routes/bills-routes');
