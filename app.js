@@ -247,6 +247,8 @@ const pumpTankRoutes = require('./routes/pump-tank-routes');
 const lookupAdminRoutes = require('./routes/lookup-admin-routes');
 const devTrackerRoutes = require('./routes/dev-tracker-routes');
 const systemHealthRoutes = require('./routes/system-health-routes');
+const mobileHomeRoutes = require('./routes/mobile-home-routes');
+const { isPhone } = require('./utils/mobile-menu');
 const transactionCorrectionsRoutes = require('./routes/transaction-corrections-routes');
 const tankRoutes = require('./routes/tank-routes');
 const billsRoutes = require('./routes/bills-routes');
@@ -518,6 +520,7 @@ app.use('/adjustments', adjustmentRoutes);
 app.use('/products', productsRoutes);
 app.use('/dev-tracker', devTrackerRoutes);
 app.use('/system-health', systemHealthRoutes);
+app.use('/m', mobileHomeRoutes);
 app.use('/api/transaction-corrections', transactionCorrectionsRoutes);
 app.use('/tank-master', tankRoutes);
 app.use('/bills', billsRoutes);
@@ -716,7 +719,7 @@ app.post('/login', webLoginLimiter, function(req, res, next) {
                 return res.redirect('/home-customer');
                         }
                 else{
-                    return res.redirect('/home');}
+                    return res.redirect(isPhone(req) ? '/m' : '/home');}
         });
     })(req, res, next);
 });
@@ -732,7 +735,7 @@ app.get('/', function (req, res) {
     if (req.user.Role === 'Cashier') {
         return res.redirect('/dsm-entry');
     }
-    res.redirect('/home');
+    res.redirect(isPhone(req) ? '/m' : '/home');
 });
 
 
@@ -1823,7 +1826,7 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         
         // If user has only one location, redirect to home
         if (userLocations.length <= 1) {
-            return res.redirect('/home');
+            return res.redirect(isPhone(req) ? '/m' : '/home');
         }
         
         // Regular users see only their accessible locations
@@ -1895,7 +1898,7 @@ app.post('/select-location', isLoginEnsured, async function (req, res) {
         console.log(`User ${req.user.User_Name} switched to location ${selectedLocationCode} with role ${newRole}`);
 
         // Redirect to home or dashboard after selecting the location
-        res.redirect('/home');
+        res.redirect(isPhone(req) ? '/m' : '/home');
     } catch (error) {
         console.error("Error processing location selection:", error);
         res.status(500).send("An error occurred while processing your request.");
