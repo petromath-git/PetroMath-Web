@@ -410,6 +410,21 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
             },
         });
     },
+    // Open (DRAFT) shifts for the phone home page's "continue" cards.
+    getDraftClosingsForHome: (locationCode) => {
+        return db.sequelize.query(`
+            SELECT c.closing_id, c.closing_date, p.Person_Name AS cashier_name
+            FROM t_closing c
+            LEFT JOIN m_persons p ON p.Person_id = c.cashier_id
+            WHERE c.location_code = :locationCode
+              AND c.closing_status = 'DRAFT'
+            ORDER BY c.closing_date DESC, c.closing_id DESC
+            LIMIT 5
+        `, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
     getClosingDetails: (closingId) => {
         return TxnClosing.findByPk(closingId,
             {
