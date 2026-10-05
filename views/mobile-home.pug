@@ -3,6 +3,12 @@ extends layout
 block content
   style.
     .mhome { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 24px; }
+    .mhome-who { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .mhome-who-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+    .mhome-who-text strong { font-size: 16px; color: #1f2328; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mhome-who-text span { font-size: 13px; font-weight: 600; color: #4b5563; }
+    .mhome-switch { flex-shrink: 0; height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid #d5d9df; background: #fff; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #1f2328; text-decoration: none; }
+    .mhome-switch:hover, .mhome-switch:focus { color: #1f2328; text-decoration: none; border-color: #b8bfc8; }
     .mhome-search { position: relative; }
     .mhome-search .bi { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #5b6470; font-size: 18px; pointer-events: none; }
     .mhome-search input { width: 100%; height: 50px; border: 1px solid #d5d9df; border-radius: 14px; padding: 0 14px 0 44px; font-size: 16px; background: #fff; }
@@ -33,6 +39,22 @@ block content
     }
 
   .mhome
+    //- Phones have no sidebar, so who/where (and the location switcher) live here
+    .mhome-who
+      .mhome-who-text
+        strong= user.Person_Name
+        span
+          i.bi.bi-geo-alt(aria-hidden="true")
+          |  #{user.location_code}
+      if user.hasMultipleLocations
+        a.mhome-switch(href="/select-location")
+          i.bi.bi-arrow-left-right(aria-hidden="true")
+          | Switch location
+      if user.Role === 'SuperUser' && !isPreviewing
+        a.mhome-switch(href="/preview-as")
+          i.bi.bi-eye(aria-hidden="true")
+          | Preview as
+
     .mhome-search
       i.bi.bi-search(aria-hidden="true")
       input#mhomeSearch(type="search" placeholder="Search screens…" aria-label="Search screens" autocomplete="off")
