@@ -4,8 +4,9 @@ html
     title PetroMath:#{title}
     - var mobileReadyPages = ['Cashier Shift', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
     //- mobileReady: set by controllers whose page has its own phone layout (shift closing)
-    if mobileReadyPages.includes(title) || mobileReady
-      meta(name="viewport" content="width=device-width, initial-scale=1.0")   
+    - var hasViewport = mobileReadyPages.includes(title) || mobileReady
+    if hasViewport
+      meta(name="viewport" content="width=device-width, initial-scale=1.0")
     link(rel='stylesheet', href=`/stylesheets/style.css?v=${CACHE_BUST}`)        
     link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
     link(rel="stylesheet",href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
@@ -70,6 +71,9 @@ html
     - bodyClasses.push('mobile-ready')
   if isPhone && hasMobileHome
     - bodyClasses.push('phone-nav')
+  //- Viewport tag present: the page lays out at phone width (vs shrunk desktop)
+  if hasViewport
+    - bodyClasses.push('has-viewport')
 
   body(class=(bodyClasses.length ? bodyClasses.join(' ') : undefined) onload='populateSummaryFn(' + isFreezedRecord +');')
 

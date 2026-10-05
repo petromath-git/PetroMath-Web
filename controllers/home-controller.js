@@ -736,6 +736,7 @@ const getHomeData = async (req, res, next) => {
             res.render('home', {
                 title: 'Cashier Shift',
                 user: req.user,
+                mobileReady: true,
                 config: config.APP_CONFIGS,
                 closingValues: values[0].value,
                 currentDate: utils.currentDate(),

@@ -1500,19 +1500,19 @@ body.phone-nav .mobile-home-btn {
   color: #212529;
   font-size: 18px;
 }
-/* Desktop-width pages are shrunk to ~40% on a phone: draw the bar bigger
+/* Pages without the viewport tag are shrunk to ~40% on a phone: draw the bar bigger
    so the Home button stays a real tap target */
-body.phone-nav:not(.mobile-ready) .mobile-home-btn {
+body.phone-nav:not(.has-viewport) .mobile-home-btn {
   width: 96px;
   height: 84px;
   margin-right: 24px;
   border-radius: 10px;
   font-size: 44px;
 }
-body.phone-nav:not(.mobile-ready) .breadcrumb-nav {
+body.phone-nav:not(.has-viewport) .breadcrumb-nav {
   font-size: 28px;
 }
-body.phone-nav:not(.mobile-ready) .logout-btn {
+body.phone-nav:not(.has-viewport) .logout-btn {
   font-size: 26px;
   padding: 14px 24px;
 }
@@ -1539,13 +1539,13 @@ body.phone-nav:not(.mobile-ready) .logout-btn {
   }
   /* Keep the top bar inside the phone width: the name is in the sidebar
      header anyway, and a long page title truncates instead of overflowing */
-  body.mobile-ready .top-bar .user-info {
+  body.has-viewport .top-bar .user-info {
     display: none;
   }
-  body.mobile-ready .top-bar > .d-flex {
+  body.has-viewport .top-bar > .d-flex {
     min-width: 0;
   }
-  body.mobile-ready .breadcrumb-nav {
+  body.has-viewport .breadcrumb-nav {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
