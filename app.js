@@ -950,6 +950,7 @@ app.get('/reports', isLoginEnsured, function (req, res, next) {
                     res.render('reports', {
                         title: 'Reports',
                         user: req.user,
+                        mobileReady: true,
                         credits: credits,
                         enableCreditExcelDownload: enableCreditExcelDownload === 'Y'
                     });
@@ -996,6 +997,7 @@ app.get('/reports-credit-ledger', isLoginEnsured, function (req, res, next) {
                     res.render('reports-credit-ledger', {
                         title: 'Reports',
                         user: req.user,
+                        mobileReady: true,
                         credits: credits,
                         enableCreditExcelDownload: enableCreditExcelDownload === 'Y'
                     });

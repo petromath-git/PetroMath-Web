@@ -2,7 +2,7 @@ extends layout
 
 block content
     
-    form(method='POST' action='/reports-creditsummary')
+    form.report-filters(method='POST' action='/reports-creditsummary')
 
         script.
             function exportCreditSummaryExcel() {
@@ -69,7 +69,7 @@ block content
                 var result = "<div class='card' style='margin-bottom: 10px;'>";
                 result += "<div class='card-header text-center font-weight-bold' >" + tabletitle + "</div>";
                 result += "<div class='card-body " + tableWidthClass + "' style='padding-bottom: 10px;'>";
-                result += "<table class='table table-bordered table-sm' style='width: 100%; border: 1px solid #000;'>";
+                result += "<table class='table table-bordered table-sm credit-summary-table' style='width: 100%; border: 1px solid #000;'>";
 
                 // Build headers (exclude internal flags that start with _)
                 if (array.length > 0 && typeof array[0] === 'object') {
@@ -107,7 +107,7 @@ block content
                         }
                     }
                     
-                    result += "<tr>";
+                    result += array[i]._isOverdue ? "<tr class='overdue'>" : "<tr>";
                     Object.keys(array[i]).forEach(key => {
                         // Skip internal flags
                         if (key.startsWith('_')) {
@@ -137,9 +137,9 @@ block content
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
                             }).format(dataValue);
-                            result += "<td class='" + rowClass + " " + alignment + "' style='" + cellStyle + "'>" + printedValue + "</td>";
+                            result += "<td class='" + rowClass + " " + alignment + "' style='" + cellStyle + "' data-label='" + key + "'>" + printedValue + "</td>";
                         } else {
-                            result += "<td class='" + rowClass + " " + alignment + "' style='" + cellStyle + "'>" + dataValue + "</td>";
+                            result += "<td class='" + rowClass + " " + alignment + "' style='" + cellStyle + "' data-label='" + key + "'>" + dataValue + "</td>";
                         }
                     });
                     result += "</tr>";
@@ -155,13 +155,13 @@ block content
 
         table.center
             tr              
-                td Date:
-                td
+                td.rf-label Date:
+                td.rf-field
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate max=currentDate format="dd/mm/yyyy" required)
-                td &nbsp;
+                td.rf-gap &nbsp;
                 include report-print-download.pug
                 if enableCreditExcelDownload
-                    td
+                    td.rf-btn
                         button.btn.btn-success.mr-2(type='button', onClick='exportCreditSummaryExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
                             i.bi.bi-file-earmark-spreadsheet
     div &nbsp;
