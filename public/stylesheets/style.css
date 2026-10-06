@@ -3380,8 +3380,10 @@ tr.d-md-none,
    this stylesheet, and everything below is "screen" only (the PDF prints as
    print media about 754px wide, which a bare max-width: 768px would match). */
 @media screen and (max-width: 768px) {
-  /* Credit Statement / Credit Ledger: each transaction is a labelled card;
-     cells with nothing in them (e.g. Credit on a bill) are skipped */
+  /* Credit Statement / Credit Ledger: each transaction is a labelled card.
+     Every field has a fixed slot (below) so it sits in the same place on
+     every card; an empty field (e.g. Credit on a bill) leaves its slot blank,
+     and a row with nothing in it collapses (no row gap, spacing is on cells) */
   body.mobile-ready table.credit-stmt-table,
   body.mobile-ready table.credit-stmt-table > tbody {
     display: block;
@@ -3394,8 +3396,8 @@ tr.d-md-none,
   body.mobile-ready table.credit-stmt-table > tbody > tr {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.35rem 0.75rem;
-    padding: 0.6rem 0.75rem;
+    gap: 0 0.75rem;
+    padding: 0.6rem 0.75rem 0.25rem;
     margin-bottom: 0.6rem;
     border: 1px solid #dee2e6;
     border-radius: 0.5rem;
@@ -3406,10 +3408,23 @@ tr.d-md-none,
     min-width: 0;
     border: 0 !important;
     padding: 0 !important;
+    margin-bottom: 0.35rem;
     font-size: 0.9rem !important;
     text-align: left !important;
     overflow-wrap: anywhere;
   }
+  body.mobile-ready table.credit-stmt-table td[data-label="Date"] { grid-area: 1 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Particulars"] { grid-area: 1 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Product"] { grid-area: 2 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Vehicle"] { grid-area: 2 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Qty"] { grid-area: 3 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Price"] { grid-area: 3 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Discount"] { grid-area: 4 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Debit"] { grid-area: 5 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Credit"] { grid-area: 5 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Balance"] { grid-area: 6 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Narration"] { grid-area: 7 / 1 / auto / -1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Odometer"] { grid-area: 8 / 1; } /* optional, so last */
   body.mobile-ready table.credit-stmt-table > tbody > tr > td:empty {
     display: none;
   }
@@ -3422,6 +3437,11 @@ tr.d-md-none,
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: #6c757d;
+  }
+  /* Alternate transaction cards banded; Opening / Closing / Total lines not counted */
+  body.mobile-ready table.credit-stmt-table > tbody > tr:nth-child(even of tr:not(.stmt-balance-row):not(.stmt-total-row)) {
+    background: #eaf2fb;
+    border-color: #b9cfe8;
   }
   body.mobile-ready table.credit-stmt-table td.stmt-wide {
     grid-column: 1 / -1;
@@ -3453,8 +3473,8 @@ tr.d-md-none,
     white-space: nowrap;
   }
 
-  /* Credit Balance: one card per customer, overdue cards red, and the column
-     headers become tap-to-sort buttons (same sortCreditSummary handler) */
+  /* Credit Balance: one card per customer, alternate cards banded, overdue
+     cards red; the header row is replaced by the Sort by control (.cs-sort) */
   body.mobile-ready #creditsummary-table-container > .card {
     border: 0;
   }
@@ -3471,22 +3491,44 @@ tr.d-md-none,
     width: 100% !important;
     border: 0 !important;
   }
-  body.mobile-ready table.credit-summary-table > thead > tr {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-bottom: 0.75rem;
+  body.mobile-ready table.credit-summary-table > thead {
+    display: none !important;
   }
-  body.mobile-ready table.credit-summary-table > thead th {
-    padding: 0.3rem 0.7rem !important;
-    border: 1px solid #ced4da !important;
-    border-radius: 1rem;
-    background: #f8f9fa;
-    font-size: 0.8rem !important;
+  /* !important: the element carries an inline display:none for desktop / PDF */
+  body.mobile-ready .cs-sort {
+    display: flex !important;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+  }
+  body.mobile-ready .cs-sort label {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready .cs-sort select {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 40px;
+    border-radius: 0.5rem;
+    font-size: 16px;
+  }
+  body.mobile-ready .cs-sort .btn {
+    flex: 0 0 auto;
+    height: 40px;
+    border: 1px solid #ced4da;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: #343a40;
+    font-size: 0.85rem;
     white-space: nowrap;
   }
-  body.mobile-ready table.credit-summary-table > thead th:first-child {
-    display: none; /* S.no */
+  body.mobile-ready .cs-sort .btn i {
+    color: #007bff;
   }
   body.mobile-ready table.credit-summary-table > tbody > tr {
     display: grid;
@@ -3497,6 +3539,10 @@ tr.d-md-none,
     border: 1px solid #dee2e6;
     border-radius: 0.5rem;
     background: #fff;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr:nth-child(even) {
+    background: #eaf2fb;
+    border-color: #b9cfe8;
   }
   body.mobile-ready table.credit-summary-table > tbody > tr.overdue {
     background: #ffcccc;
