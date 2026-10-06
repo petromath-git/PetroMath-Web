@@ -1821,7 +1821,13 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         
         // SuperUsers always get access to all locations (backward compatibility)
         if (req.user.Role === 'SuperUser') {
-            const availableLocations = await LocationDao.findActiveLocations();
+            const activeLocations = await LocationDao.findActiveLocations();
+            const availableLocations = activeLocations.map(loc => ({
+                location_code: loc.location_code,
+                location_name: loc.location_name,
+                company_name: loc.company_name,
+                place: loc.place
+            }));
             return res.render('select-location', {
                 title: 'Select Location',
                 locations: availableLocations,
@@ -1842,10 +1848,12 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         const availableLocations = userLocations.map(loc => ({
             location_code: loc.location_code,
             location_name: loc.location_name,
+            company_name: loc.company_name,
+            place: loc.place,
             role: loc.role,
             access_type: loc.access_type,
             source: loc.source
-        }));
+        })).sort((a, b) => a.location_name.localeCompare(b.location_name));
 
         // Render the select-location view with the available locations
         res.render('select-location', {
@@ -1858,6 +1866,22 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
     } catch (error) {
         console.error("Error fetching user locations:", error);
         res.status(500).send("An error occurred while fetching locations.");
+    }
+});
+
+// Fetched by the Select Location tiles after render so the page isn't held up by the activity scan
+app.get('/select-location/usage', isLoginEnsured, async function (req, res) {
+    try {
+        let rows = await LocationDao.getLastStaffActivity();
+        if (req.user.Role !== 'SuperUser') {
+            const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(req.user.Person_id);
+            const allowed = new Set(userLocations.map(loc => loc.location_code));
+            rows = rows.filter(row => allowed.has(row.location_code));
+        }
+        res.json(rows);
+    } catch (error) {
+        console.error("Error fetching location usage:", error);
+        res.status(500).json([]);
     }
 });
 

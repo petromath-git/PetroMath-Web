@@ -52,6 +52,7 @@ block content
                             th(scope="col") #
                             th(scope="col") Code
                             th(scope="col") Name
+                            th(scope="col") Place
                             th(scope="col") Company
                             th(scope="col") Phone
                             th(scope="col") GST
@@ -69,8 +70,17 @@ block content
                                     input.form-control.form-control-sm(
                                         type="text", 
                                         id=`location-name-${index}`, 
-                                        value=location.location_name, 
+                                        value=location.location_name,
                                         readonly
+                                    )
+                                td(scope="row")
+                                    input.form-control.form-control-sm(
+                                        type="text",
+                                        id=`location-place-${index}`,
+                                        value=location.place || '',
+                                        readonly,
+                                        maxlength="100",
+                                        placeholder="Town"
                                     )
                                 td(scope="row")
                                     input.form-control.form-control-sm(
@@ -195,6 +205,18 @@ block content
                                             )
                                     .col-12
                                         .location-detail
+                                            small.text-muted Place
+                                            input.mobile-input.fw-bold(
+                                                type="text",
+                                                id=`mobile-place-${index}`,
+                                                value=location.place || '',
+                                                readonly,
+                                                maxlength="100",
+                                                placeholder="Town",
+                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
+                                            )
+                                    .col-12
+                                        .location-detail
                                             small.text-muted GST Number
                                             input.mobile-input.fw-bold(
                                                 type="text",
@@ -266,6 +288,10 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Location Name *
                                 input.form-control(type="text", name="location_name", required, maxlength="300")
+                            .col-md-6.mb-3
+                                label.form-label Place
+                                    small.text-muted.ml-1 (town shown on Select Location)
+                                input.form-control(type="text", name="place", maxlength="100", placeholder="e.g. Kunnathur")
                             .col-md-6.mb-3
                                 label.form-label Company Name *
                                 select.form-control(name="company_name", required)
@@ -484,6 +510,7 @@ block content
         function saveLocation(index, locationId) {
             const updateData = {
                 location_name: document.getElementById(`location-name-${index}`).value,
+                place: document.getElementById(`location-place-${index}`).value,
                 company_name: document.getElementById(`location-company-${index}`).value,
                 phone: document.getElementById(`location-phone-${index}`).value,
                 gst_number: document.getElementById(`location-gst-${index}`).value,
@@ -517,6 +544,7 @@ block content
         function saveLocationMobile(index, locationId) {
             const updateData = {
                 location_name: document.getElementById(`mobile-location-card-${index}`).querySelector('.location-info strong').textContent,
+                place: document.getElementById(`mobile-place-${index}`).value,
                 company_name: document.getElementById(`mobile-company-${index}`).value,
                 phone: document.getElementById(`mobile-phone-${index}`).value,
                 gst_number: document.getElementById(`mobile-gst-${index}`).value,
