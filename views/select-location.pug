@@ -59,6 +59,14 @@ block content
         .ls-code { background: #e9ecef; border-radius: 6px; padding: 0 6px; font-weight: 600; font-size: .72rem; color: #495057; }
         .ls-tag { background: #f4d03f; border-radius: 6px; padding: 0 6px; font-weight: 600; font-size: .72rem; color: #343a40; }
 
+        .ls-usage { font-size: .75rem; color: #6c757d; margin-top: 3px; min-height: 1.1em; }
+        .ls-usage::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+                            margin-right: 5px; vertical-align: middle; background: transparent; }
+        .ls-usage.fresh::before { background: #28a745; }
+        .ls-usage.stale::before { background: #f0ad4e; }
+        .ls-usage.idle::before { background: #dc3545; }
+        .ls-usage.idle { color: #c82333; }
+
         .ls-empty { display: none; text-align: center; color: rgba(255,255,255,.7); padding: 48px 0; }
         .ls-footer { text-align: center; margin-top: 28px; }
 
@@ -129,6 +137,7 @@ block content
                                     span.ls-code= location.location_code
                                     if isCurrent
                                         span.ls-tag Current
+                                div.ls-usage
 
                 div.ls-empty#lsEmpty
                     i.bi.bi-search(style='font-size: 2rem;')
@@ -219,6 +228,30 @@ block content
                 list.unshift(tile.dataset.code);
                 try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (err) {}
             });
+
+            // Staff usage (SuperUser/PowerUser visits excluded server-side), loaded after render
+            function usageLabel(row) {
+                var m = row.minutes_ago;
+                if (m === null || m === undefined) return { text: 'No staff activity yet', cls: 'idle' };
+                if (m < 1) return { text: 'Staff active just now', cls: 'fresh' };
+                if (m < 60) return { text: 'Staff active ' + m + ' min ago', cls: 'fresh' };
+                if (m < 1440) return { text: 'Staff active ' + Math.floor(m / 60) + ' h ago', cls: 'fresh' };
+                var days = Math.floor(m / 1440);
+                if (days < 7) return { text: 'Staff active ' + (days === 1 ? 'yesterday' : days + ' days ago'), cls: 'stale' };
+                return { text: 'Staff last active ' + row.last_used_date, cls: 'idle' };
+            }
+            fetch('/select-location/usage', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (rows) {
+                    rows.forEach(function (row) {
+                        var label = usageLabel(row);
+                        document.querySelectorAll('.ls-tile[data-code="' + row.location_code + '"] .ls-usage').forEach(function (el) {
+                            el.textContent = label.text;
+                            el.className = 'ls-usage ' + label.cls;
+                        });
+                    });
+                })
+                .catch(function () {});
 
             applyFilter();
             // Don't pop the on-screen keyboard on phones

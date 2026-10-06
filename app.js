@@ -1869,6 +1869,22 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
     }
 });
 
+// Fetched by the Select Location tiles after render so the page isn't held up by the activity scan
+app.get('/select-location/usage', isLoginEnsured, async function (req, res) {
+    try {
+        let rows = await LocationDao.getLastStaffActivity();
+        if (req.user.Role !== 'SuperUser') {
+            const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(req.user.Person_id);
+            const allowed = new Set(userLocations.map(loc => loc.location_code));
+            rows = rows.filter(row => allowed.has(row.location_code));
+        }
+        res.json(rows);
+    } catch (error) {
+        console.error("Error fetching location usage:", error);
+        res.status(500).json([]);
+    }
+});
+
 app.post('/select-location', isLoginEnsured, async function (req, res) {
     try {
         const personId = req.user.Person_id;
