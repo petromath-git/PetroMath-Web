@@ -3370,3 +3370,478 @@ tr.d-md-none,
     border-color: #b9cfe8;
   }
 }
+
+/* ===== CREDIT REPORTS — MOBILE =====
+   Credit Statement (reports.pug), Credit Ledger (reports-credit-ledger.pug)
+   and Credit Balance (reports-creditsummary.pug). On screen these render with
+   mobileReady (viewport tag + body.mobile-ready). Their PDFs are generated from
+   the same pug and must keep the desktop layout, which holds three ways: the
+   PDF render doesn't pass mobileReady, Puppeteer's setContent() never loads
+   this stylesheet, and everything below is "screen" only (the PDF prints as
+   print media about 754px wide, which a bare max-width: 768px would match). */
+@media screen and (max-width: 768px) {
+  /* Credit Statement / Credit Ledger: each transaction is a labelled card.
+     Every field has a fixed slot (below) so it sits in the same place on
+     every card; an empty field (e.g. Credit on a bill) leaves its slot blank,
+     and a row with nothing in it collapses (no row gap, spacing is on cells) */
+  body.mobile-ready table.credit-stmt-table,
+  body.mobile-ready table.credit-stmt-table > tbody {
+    display: block;
+    width: 100%;
+    border: 0 !important;
+  }
+  body.mobile-ready table.credit-stmt-table > thead {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 0.75rem;
+    padding: 0.6rem 0.75rem 0.25rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0.35rem;
+    font-size: 0.9rem !important;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  body.mobile-ready table.credit-stmt-table td[data-label="Date"] { grid-area: 1 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Particulars"] { grid-area: 1 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Product"] { grid-area: 2 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Vehicle"] { grid-area: 2 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Qty"] { grid-area: 3 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Price"] { grid-area: 3 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Discount"] { grid-area: 4 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Debit"] { grid-area: 5 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Credit"] { grid-area: 5 / 2; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Balance"] { grid-area: 6 / 1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Narration"] { grid-area: 7 / 1 / auto / -1; }
+  body.mobile-ready table.credit-stmt-table td[data-label="Odometer"] { grid-area: 8 / 1; } /* optional, so last */
+  /* No running balance on phone cards (Opening / Closing lines still show it) */
+  body.mobile-ready table.credit-stmt-table td[data-label="Balance"] {
+    display: none;
+  }
+  /* Cards start collapsed to Date + amount; tapping one adds card-open and
+     shows the full card (views/mixins/report-cards-mobile.pug) */
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row) {
+    position: relative;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row)::after {
+    content: "";
+    position: absolute;
+    top: 1.05rem;
+    right: 0.9rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid #adb5bd;
+    border-bottom: 2px solid #adb5bd;
+    transform: rotate(45deg);
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row).card-open::after {
+    top: 1.3rem;
+    transform: rotate(-135deg);
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Date"],
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Debit"]:not(:empty),
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Credit"]:not(:empty) {
+    display: block;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Debit"],
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Credit"] {
+    grid-area: 1 / 2;
+    font-weight: 600;
+    text-align: right !important;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td::before {
+    content: none !important;
+  }
+  /* Receipts / credit adjustments in green (rows with a Credit amount) */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-credit > td {
+    color: #28a745;
+    font-weight: 600;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr > td:empty {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table td[data-label]::before,
+  body.mobile-ready table.credit-summary-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  /* Alternate transaction cards banded; Opening / Closing / Total lines not counted */
+  body.mobile-ready table.credit-stmt-table > tbody > tr:nth-child(even of tr:not(.stmt-balance-row):not(.stmt-total-row)) {
+    background: #eaf2fb;
+    border-color: #b9cfe8;
+  }
+  body.mobile-ready table.credit-stmt-table td.stmt-wide {
+    grid-column: 1 / -1;
+  }
+  /* Opening / Closing Balance: one line, label left, amount right */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row > td:not(.font-weight-bold) {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row > td.text-right {
+    text-align: right !important;
+  }
+  /* Ledger totals: "Total" heading, then Debit and Credit */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-total-row > td:not([data-label]):not(.text-left) {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-total-row > td.text-left {
+    grid-column: 1 / -1;
+  }
+  /* Vehicle breakup: small tables, scroll sideways if needed */
+  body.mobile-ready table.vehicle-breakup-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Credit Balance: one card per customer, overdue cards red; the header row
+     is replaced by the Sort by control (.cs-sort) */
+  body.mobile-ready #creditsummary-table-container > .card {
+    border: 0;
+  }
+  body.mobile-ready #creditsummary-table-container .card-header {
+    display: none;
+  }
+  body.mobile-ready #creditsummary-table-container .card-body {
+    padding: 0 !important;
+  }
+  body.mobile-ready table.credit-summary-table,
+  body.mobile-ready table.credit-summary-table > thead,
+  body.mobile-ready table.credit-summary-table > tbody {
+    display: block;
+    width: 100% !important;
+    border: 0 !important;
+  }
+  body.mobile-ready table.credit-summary-table > thead {
+    display: none !important;
+  }
+  /* !important: the element carries an inline display:none for desktop / PDF */
+  body.mobile-ready .cs-sort {
+    display: flex !important;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+  }
+  body.mobile-ready .cs-sort label {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready .cs-sort select {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 40px;
+    border-radius: 0.5rem;
+    font-size: 16px;
+  }
+  body.mobile-ready .cs-sort .btn {
+    flex: 0 0 auto;
+    height: 40px;
+    border: 1px solid #ced4da;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: #343a40;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  body.mobile-ready .cs-sort .btn i {
+    color: #007bff;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr.overdue {
+    background: #ffcccc;
+    border-color: #f5a3a3;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
+    text-align: left !important;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="S.no"] {
+    display: none;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Credit Customer"] {
+    grid-column: 1 / -1;
+    font-size: 1rem !important;
+    font-weight: 600;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Credit Customer"]::before {
+    content: none;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Balance"] {
+    font-size: 1rem !important;
+    font-weight: 600;
+  }
+}
+
+/* ===== REPORT FILTERS — MOBILE (views/mixins/report-filters-mobile.pug) =====
+   Reusable phone layout for a report's form.report-filters: period buttons,
+   From / To side by side, searchable customer, a full-width "Show report"
+   button with labelled PDF / Print / Excel under it, and once a report is
+   showing, the whole panel collapses to a one-line summary with Edit.
+   Desktop keeps the one-line filter bar: the phone-only pieces are hidden
+   below and everything else is inside the screen-only media query. PDFs hide
+   the whole filter form and never load this stylesheet. */
+.rf-mobile,
+.rf-label-mobile {
+  display: none;
+}
+
+@media screen and (max-width: 768px) {
+  body.mobile-ready .report-filters {
+    padding: 0.9rem;
+    border: 1px solid #e3e6ea;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+  body.mobile-ready .report-filters .rf-head {
+    display: block;
+  }
+  body.mobile-ready .report-filters .rf-title,
+  body.mobile-ready .report-filters table.center td.rf-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready .report-filters .rf-title {
+    margin-bottom: 0.45rem;
+  }
+
+  /* Period buttons: wrap onto a second line rather than hide any */
+  body.mobile-ready .report-filters .rf-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  body.mobile-ready .report-filters .rf-chip {
+    flex: 0 0 auto;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid #ced4da;
+    border-radius: 999px;
+    background: #fff;
+    color: #343a40;
+    font-size: 0.82rem;
+  }
+  body.mobile-ready .report-filters .rf-chip:focus {
+    outline: none;
+  }
+  body.mobile-ready .report-filters .rf-chip:focus-visible {
+    outline: 2px solid #80bdff;
+    outline-offset: 2px;
+  }
+  body.mobile-ready .report-filters .rf-chip.active {
+    border-color: #007bff;
+    background: #007bff;
+    color: #fff;
+  }
+  body.mobile-ready .report-filters .rf-period {
+    margin-top: 0.6rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* The existing filter cells, re-flowed */
+  body.mobile-ready .report-filters table.center,
+  body.mobile-ready .report-filters table.center > tbody {
+    display: block;
+    width: 100%;
+    margin: 0;
+  }
+  body.mobile-ready .report-filters table.center tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+  }
+  body.mobile-ready .report-filters table.center td {
+    display: block;
+    order: 5;
+    padding: 0;
+    border: 0;
+  }
+  /* !important: updateDateRange() sets inline display on the date cells */
+  body.mobile-ready .report-filters table.center td.rf-gap,
+  body.mobile-ready .report-filters table.center td.rf-range {
+    display: none !important;
+  }
+  body.mobile-ready .report-filters table.center td.rf-label {
+    flex: 0 0 100%;
+    margin-top: 0.75rem;
+  }
+  body.mobile-ready .report-filters table.center td.rf-field {
+    flex: 0 0 100%;
+  }
+  /* From and To side by side: both labels, then both fields */
+  body.mobile-ready .report-filters table.center td.rf-from,
+  body.mobile-ready .report-filters table.center td.rf-to {
+    flex: 0 0 calc(50% - 0.25rem);
+  }
+  body.mobile-ready .report-filters table.center td.rf-label.rf-from { order: 1; }
+  body.mobile-ready .report-filters table.center td.rf-label.rf-to { order: 2; }
+  body.mobile-ready .report-filters table.center td.rf-field.rf-from { order: 3; }
+  body.mobile-ready .report-filters table.center td.rf-field.rf-to { order: 4; }
+
+  body.mobile-ready .report-filters .form-control {
+    height: 44px;
+    border-radius: 0.5rem;
+    font-size: 16px; /* stops iOS zooming on focus */
+  }
+  body.mobile-ready .report-filters .select2-container .select2-selection--single {
+    height: 44px;
+    border-color: #ced4da;
+    border-radius: 0.5rem;
+  }
+  body.mobile-ready .report-filters .select2-container .select2-selection--single .select2-selection__rendered {
+    padding-left: 0.75rem;
+    line-height: 42px;
+    font-size: 16px;
+  }
+  body.mobile-ready .report-filters .select2-container .select2-selection--single .select2-selection__arrow {
+    height: 42px;
+  }
+  /* The open list is attached to <body>, outside the form */
+  body.mobile-ready .select2-dropdown .select2-search__field {
+    padding: 0.5rem;
+    border-radius: 0.4rem;
+    font-size: 16px; /* stops iOS zooming on focus */
+  }
+  body.mobile-ready .select2-dropdown .select2-results__option {
+    padding: 0.65rem 0.75rem;
+  }
+
+  /* Buttons: "Show report" full width, then PDF / Print / Excel side by side */
+  body.mobile-ready .report-filters table.center td.rf-btn {
+    order: 11;
+    flex: 1 1 0;
+    margin-top: 0.3rem;
+  }
+  body.mobile-ready .report-filters table.center td.rf-go {
+    order: 10;
+    flex: 0 0 100%;
+    margin-top: 1rem;
+  }
+  body.mobile-ready .report-filters td.rf-btn .btn {
+    width: 100%;
+    margin: 0 !important;
+    padding: 0.55rem 0.4rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  body.mobile-ready .report-filters td.rf-btn:not(.rf-go) .btn {
+    border: 1px solid #ced4da;
+    background: #fff;
+    color: #343a40;
+  }
+  body.mobile-ready .report-filters td.rf-btn:not(.rf-go) .btn i {
+    color: #007bff;
+  }
+  body.mobile-ready .report-filters td.rf-go .btn {
+    padding: 0.7rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  body.mobile-ready .report-filters .rf-label-desktop {
+    display: none;
+  }
+  body.mobile-ready .report-filters .rf-label-mobile {
+    display: inline;
+  }
+
+  /* After a report loads: summary line + Edit, with PDF / Print / Excel */
+  body.mobile-ready .report-filters.rf-collapsed .rf-head,
+  body.mobile-ready .report-filters.rf-collapsed table.center td:not(.rf-btn),
+  body.mobile-ready .report-filters.rf-collapsed table.center td.rf-go {
+    display: none !important;
+  }
+  body.mobile-ready .report-filters.rf-collapsed .rf-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+  body.mobile-ready .report-filters .rf-summary-text {
+    min-width: 0;
+  }
+  body.mobile-ready .report-filters .rf-summary-main {
+    font-size: 1rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  body.mobile-ready .report-filters .rf-summary-sub {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+  body.mobile-ready .report-filters .rf-edit {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid #ced4da;
+    border-radius: 999px;
+    background: #fff;
+    color: #007bff;
+    font-size: 0.85rem;
+  }
+  body.mobile-ready .report-filters.rf-collapsed table.center td.rf-btn {
+    margin-top: 0;
+  }
+
+  /* "No Transactions": hidden until a report has been run, then centred */
+  body.mobile-ready .report-empty {
+    justify-content: center;
+    margin: 1.5rem 0 0;
+    padding: 1.25rem;
+    border-radius: 0.75rem;
+    color: #6c757d;
+  }
+  body.mobile-ready .report-empty.report-not-run {
+    display: none;
+  }
+}

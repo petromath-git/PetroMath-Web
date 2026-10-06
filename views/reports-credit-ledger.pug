@@ -1,7 +1,10 @@
 extends layout
+include mixins/report-filters-mobile
+include mixins/report-cards-mobile
 
 block content
-    form(method='POST' action='/reports-credit-ledger')
+    form.report-filters(method='POST' action='/reports-credit-ledger')
+        +reportFiltersMobile({ hasRange: true, hasResults: typeof creditstmt !== 'undefined' })
         script.
             function exportLedgerExcel() {
                 const form = document.createElement('form');
@@ -28,25 +31,25 @@ block content
             }
         table.center
             tr
-                td Date Range:
-                td
+                td.rf-label.rf-range Date Range:
+                td.rf-field.rf-range
                     select#dateRange.form-control(onchange="updateDateRange()")
                         option(value='this_month') This Month
                         option(value='last_month') Last Month
                         option(value='this_financial_year') This Financial Year
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom', selected=true) Custom Date
-                td &nbsp;                   
-                td#fromDateLabel From Date:
-                td
+                td.rf-gap &nbsp;                   
+                td.rf-label.rf-from#fromDateLabel From Date:
+                td.rf-field.rf-from
                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;                   
-                td#toDateLabel To Date:
-                td
+                td.rf-gap &nbsp;                   
+                td.rf-label.rf-to#toDateLabel To Date:
+                td.rf-field.rf-to
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;
-                td Company Name:
-                td
+                td.rf-gap &nbsp;
+                td.rf-label Company Name:
+                td.rf-field
                     select#company_id.form-control(name='company_id')
                         if credits
                             option(value=-1, selected=company_id === -1 ? true : undefined) All
@@ -54,9 +57,10 @@ block content
                                 option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 include report-print-download.pug
                 if enableCreditExcelDownload
-                    td
+                    td.rf-btn
                         button.btn.btn-success.mr-2(type='button', onClick='exportLedgerExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
                             i.bi.bi-file-earmark-spreadsheet
+                            span.rf-label-mobile  Excel
     div &nbsp;
     div
         if creditstmt && creditstmt.length > 0
@@ -93,7 +97,7 @@ block content
                                     div(style="text-align: right; margin-bottom: 4px;")
                                         span(style="display: inline-block; width: 80px; text-align: right; padding-right: 10px;") Closing:
                                         span(style="color: #495057;font-weight: 600;")= displayBalance(closingbalance)
-                        table.table.table-bordered.border.table-sm
+                        table.table.table-bordered.border.table-sm.credit-stmt-table
                             thead(class="thead-light")
                                 tr
                                     th.text-center Date                        
@@ -105,7 +109,7 @@ block content
                                     th.text-center Narration
                             tbody
                                 if(cidparam != -1)
-                                    tr
+                                    tr.stmt-balance-row
                                         td &nbsp;
                                         td.text-left.font-weight-bold Opening Balance
                                         td &nbsp;
@@ -114,25 +118,25 @@ block content
                                         if showBalance
                                             td &nbsp;
                                 each val in creditstmt
-                                    tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
-                                        td.text-center(scope="row")= val.Date                            
-                                        td.text-left(scope="row")= val.Particulars                                                        
-                                        td.text-right(scope="row") #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
-                                        td.text-right(scope="row") #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
+                                    tr(class=[val.price === null ? 'font-weight-bold text-success' : '', val.Credit != null ? 'stmt-credit' : ''])
+                                        td.text-center(scope="row" data-label='Date')= val.Date                            
+                                        td.text-left(scope="row" data-label='Particulars')= val.Particulars                                                        
+                                        td.text-right(scope="row" data-label='Debit') #{val.Debit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Debit) : ''}
+                                        td.text-right(scope="row" data-label='Credit') #{val.Credit !== null ? new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val.Credit) : ''}
                                         if showBalance
-                                            td.text-right(scope="row")= val.Balance !== null ? displayBalance(val.Balance) : ''
-                                        td(scope="row")= val.Narration                                                        
+                                            td.text-right(scope="row" data-label='Balance')= val.Balance !== null ? displayBalance(val.Balance) : ''
+                                        td.stmt-wide(scope="row" data-label='Narration')= val.Narration                                                        
                                 if(totalDebits > 0 || totalCredits > 0)
-                                    tr.bg-light.font-weight-bold
+                                    tr.bg-light.font-weight-bold.stmt-total-row
                                         td &nbsp;
                                         td.text-left Total
-                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
-                                        td.text-right #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
+                                        td.text-right(data-label='Debit') #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
+                                        td.text-right(data-label='Credit') #{new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
                                         if showBalance
                                             td &nbsp;
                                         td &nbsp;
                                 if(cidparam != -1)
-                                    tr
+                                    tr.stmt-balance-row
                                         td &nbsp;
                                         td.text-left.font-weight-bold Closing Balance
                                         td &nbsp;
@@ -144,8 +148,9 @@ block content
                         div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                
         else
             div.row &nbsp;
-            div.row.bg-light No Transactions.  
+            div.row.bg-light.report-empty(class=(typeof creditstmt === 'undefined' ? 'report-not-run' : undefined)) No Transactions.  
 
         // Include the overlay
         include overlay.pug
+        +reportCardsMobile('table.credit-stmt-table > tbody > tr')
 
