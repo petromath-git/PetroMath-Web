@@ -1823,7 +1823,13 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         
         // SuperUsers always get access to all locations (backward compatibility)
         if (req.user.Role === 'SuperUser') {
-            const availableLocations = await LocationDao.findActiveLocations();
+            const activeLocations = await LocationDao.findActiveLocations();
+            const availableLocations = activeLocations.map(loc => ({
+                location_code: loc.location_code,
+                location_name: loc.location_name,
+                company_name: loc.company_name,
+                place: loc.place
+            }));
             return res.render('select-location', {
                 title: 'Select Location',
                 locations: availableLocations,
@@ -1844,10 +1850,12 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
         const availableLocations = userLocations.map(loc => ({
             location_code: loc.location_code,
             location_name: loc.location_name,
+            company_name: loc.company_name,
+            place: loc.place,
             role: loc.role,
             access_type: loc.access_type,
             source: loc.source
-        }));
+        })).sort((a, b) => a.location_name.localeCompare(b.location_name));
 
         // Render the select-location view with the available locations
         res.render('select-location', {

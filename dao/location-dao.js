@@ -12,7 +12,7 @@ module.exports = {
         // Sort by: active first (effective_end_date DESC to put 9999-12-31 first), 
         // then by start_date ASC
             const locations = await Location.findAll({
-            attributes: ['location_id', 'location_code', 'location_name', 'address', 
+            attributes: ['location_id', 'location_code', 'location_name', 'address', 'place',
                        'company_name', 'gst_number', 'phone', 'start_date', 
                        'effective_end_date', 'created_by', 'updated_by', 
                        'creation_date', 'updation_date'],
@@ -85,6 +85,7 @@ module.exports = {
                 location_code: locationData.location_code,
                 location_name: locationData.location_name,
                 address: locationData.address,
+                place: locationData.place || null,
                 company_name: locationData.company_name,
                 gst_number: locationData.gst_number || null,
                 phone: locationData.phone,
@@ -106,6 +107,7 @@ module.exports = {
             const result = await Location.update({
                 location_name: locationData.location_name,
                 address: locationData.address,
+                place: locationData.place,
                 company_name: locationData.company_name,
                 gst_number: locationData.gst_number || null,
                 phone: locationData.phone,

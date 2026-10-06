@@ -8,42 +8,219 @@ block content
         .alert { display: none !important; }
         nav { display: none !important; }
         footer { display: none !important; }
-    
-    div.location-container
-        div.container-fluid.h-100.d-flex.align-items-center.justify-content-center
-            div.row.w-100.justify-content-center
-                div.col-11.col-sm-8.col-md-6.col-lg-4.col-xl-3
-                    // App-style header similar to login
-                    div.text-center.mb-4
-                        div.app-logo.mb-3
-                            i.bi.bi-geo-alt-fill.text-white(style="font-size: 1.6rem;")
-                        h2.app-title.mb-1.text-white PetroMath
-                        p.app-subtitle.text-white Select Your Location
-                    
-                    // Location selector card
-                    div.location-card.shadow-lg
-                        div.card-header.text-center.py-3
-                            h4.mb-0.text-primary Choose Location
-                        
-                        div.card-body.p-4
-                            form(method='POST' action='/select-location')
-                                div.form-group.mb-4
-                                    label.form-label.text-muted.fw-bold Location:
-                                    select.form-control.form-control-lg(name='location', id='location', required)
-                                        each location in locations
-                                            option(value=location.location_code, selected=location.location_code === selectedLocation) #{location.location_name}
-                                
-                                div.row.g-2
-                                    div.col-6
-                                        button.btn.btn-success.btn-lg.w-100.location-btn(type='submit') 
-                                            i.bi.bi-check.me-1
-                                            span.d-none.d-sm-inline Set Location
-                                            span.d-inline.d-sm-none Set
-                                    div.col-6
-                                        button.btn.btn-outline-secondary.btn-lg.w-100(type='button', onclick="window.location.href='/home'") 
-                                            i.bi.bi-x.me-1
-                                            span Cancel
-                    
-                    // Footer
-                    div.text-center.mt-4
-                        small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.
+
+        /* The shared .location-container centres a single card; this page scrolls a grid instead */
+        .location-container.ls-page { display: block; overflow-y: auto; padding: 0 0 24px; }
+        .ls-wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+
+        .ls-header { display: flex; align-items: center; gap: 12px; padding: 20px 0 12px; }
+        .ls-header .app-logo { width: 48px; height: 48px; border-radius: 14px; margin: 0; flex-shrink: 0; }
+        .ls-header h2 { color: #fff; font-size: 1.35rem; font-weight: 700; margin: 0; }
+        .ls-header p { color: rgba(255,255,255,.7); font-size: .85rem; margin: 0; }
+        .ls-cancel { margin-left: auto; color: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.3);
+                     border-radius: 10px; padding: 6px 14px; font-size: .9rem; background: transparent; }
+        .ls-cancel:hover { color: #fff; border-color: #fff; text-decoration: none; }
+
+        /* Search + filters stay visible while the grid scrolls */
+        .ls-toolbar { position: sticky; top: 0; z-index: 5; padding: 10px 0 12px;
+                      background: linear-gradient(#2b3035 85%, rgba(43,48,53,0)); }
+        .ls-search { position: relative; }
+        .ls-search i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+        .ls-search input { width: 100%; height: 48px; border-radius: 12px; border: 2px solid #e1e5e9;
+                           padding: 0 44px; font-size: 16px; background: #fff; color: #333; }
+        .ls-search input:focus { outline: none; border-color: #f4d03f; box-shadow: 0 0 0 .15rem rgba(244,208,63,.25); }
+        .ls-search .ls-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+                               border: 0; background: transparent; color: #6c757d; font-size: 1.2rem; display: none; }
+        .ls-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+        .ls-chip { border: 1px solid rgba(255,255,255,.3); background: transparent; color: rgba(255,255,255,.85);
+                   border-radius: 999px; padding: 4px 14px; font-size: .85rem; }
+        .ls-chip.active { background: #f4d03f; border-color: #f4d03f; color: #343a40; font-weight: 600; }
+        .ls-count { margin-left: auto; color: rgba(255,255,255,.6); font-size: .85rem; }
+
+        .ls-section-title { color: rgba(255,255,255,.6); font-size: .75rem; letter-spacing: .08em;
+                            text-transform: uppercase; margin: 8px 0; }
+        .ls-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+        .ls-grid + .ls-section-title { margin-top: 20px; }
+
+        .ls-tile { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; text-align: left;
+                   background: #fff; border: 2px solid transparent; border-radius: 14px; padding: 12px 14px;
+                   color: #343a40; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+        .ls-tile:hover, .ls-tile:focus { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3);
+                                         border-color: #f4d03f; outline: none; }
+        .ls-tile.current { border-color: #f4d03f; background: #fffbea; }
+        .ls-logo { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; background: #f8f9fa;
+                   display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .ls-logo img { width: 38px; height: 38px; object-fit: contain; }
+        .ls-logo span { font-weight: 700; font-size: .8rem; color: #6c757d; }
+        .ls-info { min-width: 0; flex: 1; }
+        .ls-name { font-weight: 600; font-size: .92rem; line-height: 1.25;
+                   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .ls-meta { font-size: .8rem; color: #6c757d; margin-top: 3px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .ls-code { background: #e9ecef; border-radius: 6px; padding: 0 6px; font-weight: 600; font-size: .72rem; color: #495057; }
+        .ls-tag { background: #f4d03f; border-radius: 6px; padding: 0 6px; font-weight: 600; font-size: .72rem; color: #343a40; }
+
+        .ls-empty { display: none; text-align: center; color: rgba(255,255,255,.7); padding: 48px 0; }
+        .ls-footer { text-align: center; margin-top: 28px; }
+
+        @media (max-width: 576px) {
+            .ls-grid { grid-template-columns: 1fr; gap: 8px; }
+            .ls-tile { min-height: 64px; padding: 10px 12px; }
+            .ls-header { padding-top: 14px; }
+        }
+
+    - const knownLogos = ['IOCL', 'BPCL', 'HPCL']
+    - const companies = [...new Set(locations.map(l => (l.company_name || '').toUpperCase()).filter(c => c))].sort()
+
+    div.location-container.ls-page
+        div.ls-wrap
+            div.ls-header
+                div.app-logo
+                    i.bi.bi-geo-alt-fill(style="font-size: 1.3rem;")
+                div
+                    h2 Select Location
+                    p PetroMath
+                a.ls-cancel(href='/home')
+                    i.bi.bi-x.me-1
+                    | Cancel
+
+            div.ls-toolbar
+                div.ls-search
+                    i.bi.bi-search
+                    input#lsSearch(type='search', placeholder='Search by name, place or code…', autocomplete='off', aria-label='Search locations')
+                    button.ls-clear#lsClear(type='button', aria-label='Clear search')
+                        i.bi.bi-x-circle
+                div.ls-filters
+                    if companies.length > 1
+                        button.ls-chip.active(type='button', data-company='') All
+                        each company in companies
+                            button.ls-chip(type='button', data-company=company)= company
+                    span.ls-count#lsCount #{locations.length} locations
+
+            form#lsForm(method='POST' action='/select-location')
+                div.ls-section-title#lsRecentTitle(style='display:none') Recent
+                div.ls-grid#lsRecent(style='display:none')
+
+                div.ls-section-title#lsAllTitle(style='display:none') All locations
+                div.ls-grid#lsGrid
+                    each location in locations
+                        - const company = (location.company_name || '').toUpperCase()
+                        - const isCurrent = location.location_code === selectedLocation
+                        button.ls-tile(
+                            type='submit',
+                            name='location',
+                            value=location.location_code,
+                            class=isCurrent ? 'current' : '',
+                            data-code=location.location_code,
+                            data-company=company,
+                            data-search=[location.location_name, location.location_code, location.place, company].filter(Boolean).join(' ').toLowerCase()
+                        )
+                            div.ls-logo
+                                if knownLogos.includes(company)
+                                    img(src=`/images/company-logos/${company}.png`, alt=company)
+                                else
+                                    span= company ? company.slice(0, 4) : location.location_code.slice(0, 3)
+                            div.ls-info
+                                div.ls-name(title=location.location_name)= location.location_name
+                                div.ls-meta
+                                    if location.place
+                                        span
+                                            i.bi.bi-geo-alt.me-1
+                                            | #{location.place}
+                                    span.ls-code= location.location_code
+                                    if isCurrent
+                                        span.ls-tag Current
+
+                div.ls-empty#lsEmpty
+                    i.bi.bi-search(style='font-size: 2rem;')
+                    p.mt-2 No locations match your search
+
+            div.ls-footer
+                small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.
+
+    script.
+        (function () {
+            var RECENT_KEY = 'pm_recent_locations';
+            var RECENT_MAX = 4;
+            var search = document.getElementById('lsSearch');
+            var clearBtn = document.getElementById('lsClear');
+            var grid = document.getElementById('lsGrid');
+            var tiles = Array.prototype.slice.call(grid.querySelectorAll('.ls-tile'));
+            var countEl = document.getElementById('lsCount');
+            var emptyEl = document.getElementById('lsEmpty');
+            var recentGrid = document.getElementById('lsRecent');
+            var recentTitle = document.getElementById('lsRecentTitle');
+            var allTitle = document.getElementById('lsAllTitle');
+            var chips = Array.prototype.slice.call(document.querySelectorAll('.ls-chip'));
+            var activeCompany = '';
+
+            function readRecent() {
+                try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; }
+            }
+
+            // Recent picks only earn a row once the list is long enough to need it
+            var recent = readRecent();
+            if (tiles.length > 8 && recent.length) {
+                recent.forEach(function (code) {
+                    var tile = tiles.find(function (t) { return t.dataset.code === code; });
+                    if (tile) recentGrid.appendChild(tile.cloneNode(true));
+                });
+            }
+            var hasRecent = recentGrid.children.length > 0;
+
+            function applyFilter() {
+                var term = search.value.trim().toLowerCase();
+                var filtering = term !== '' || activeCompany !== '';
+                var visible = 0;
+                tiles.forEach(function (tile) {
+                    var match = (!term || tile.dataset.search.indexOf(term) !== -1) &&
+                                (!activeCompany || tile.dataset.company === activeCompany);
+                    tile.style.display = match ? '' : 'none';
+                    if (match) visible++;
+                });
+                var showRecent = hasRecent && !filtering;
+                recentGrid.style.display = showRecent ? '' : 'none';
+                recentTitle.style.display = showRecent ? '' : 'none';
+                allTitle.style.display = showRecent ? '' : 'none';
+                clearBtn.style.display = term ? 'block' : 'none';
+                emptyEl.style.display = visible ? 'none' : 'block';
+                countEl.textContent = filtering ? (visible + ' of ' + tiles.length + ' locations') : (tiles.length + ' locations');
+                return visible;
+            }
+
+            search.addEventListener('input', applyFilter);
+            clearBtn.addEventListener('click', function () { search.value = ''; applyFilter(); search.focus(); });
+
+            // Enter picks the first match, so "type a few letters + Enter" is enough
+            search.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var first = tiles.find(function (t) { return t.style.display !== 'none'; });
+                    if (first) first.click();
+                } else if (e.key === 'Escape') {
+                    search.value = '';
+                    applyFilter();
+                }
+            });
+
+            chips.forEach(function (chip) {
+                chip.addEventListener('click', function () {
+                    chips.forEach(function (c) { c.classList.remove('active'); });
+                    chip.classList.add('active');
+                    activeCompany = chip.dataset.company;
+                    applyFilter();
+                });
+            });
+
+            // Remember the pick before the form posts
+            document.getElementById('lsForm').addEventListener('click', function (e) {
+                var tile = e.target.closest('.ls-tile');
+                if (!tile) return;
+                var list = readRecent().filter(function (c) { return c !== tile.dataset.code; });
+                list.unshift(tile.dataset.code);
+                try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (err) {}
+            });
+
+            applyFilter();
+            // Don't pop the on-screen keyboard on phones
+            if (window.matchMedia('(min-width: 769px)').matches) search.focus();
+        })();
