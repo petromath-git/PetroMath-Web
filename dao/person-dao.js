@@ -108,6 +108,8 @@ getUserAccessibleLocationsWithNames: async (personId) => {
                 'SuperUser' as role,
                 'Full Access' as access_type,
                 location_name,
+                company_name,
+                place,
                 (SELECT Person_Name FROM m_persons WHERE Person_id = :personId) as person_name,
                 :personId as person_id
             FROM m_location
@@ -130,6 +132,8 @@ getUserAccessibleLocationsWithNames: async (personId) => {
                 loc_access.role,
                 loc_access.access_type,
                 ml.location_name,
+                ml.company_name,
+                ml.place,
                 loc_access.person_name,
                 loc_access.person_id
             FROM (

@@ -54,7 +54,7 @@ module.exports = {
      */
     createLocation: async (req, res, next) => {
         try {
-            const { location_code, location_name, address, company_name,
+            const { location_code, location_name, address, place, company_name,
                     gst_number, oil_co_dealer_code, phone, start_date } = req.body;
 
             // Validate location code format
@@ -81,6 +81,7 @@ module.exports = {
                 location_code: location_code.toUpperCase().trim(),
                 location_name: location_name.toUpperCase().trim(),
                 address: address.toUpperCase().trim(),
+                place: place ? place.trim() : null,
                 company_name: company_name.toUpperCase().trim(),
                 gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
                 oil_co_dealer_code: oil_co_dealer_code ? oil_co_dealer_code.trim() : null,
@@ -105,7 +106,7 @@ module.exports = {
    updateLocation: async (req, res, next) => {
     try {
         const locationId = req.params.id;
-        const { location_name, company_name, gst_number, oil_co_dealer_code, phone, start_date } = req.body;
+        const { location_name, place, company_name, gst_number, oil_co_dealer_code, phone, start_date } = req.body;
 
         const existing = await locationDao.findById(locationId);
         if (!existing || !security.canAccessLocation(req.user, existing.location_code)) {
@@ -120,6 +121,8 @@ module.exports = {
         // Update location
         await locationDao.update(locationId, {
             location_name: location_name.toUpperCase().trim(),
+            // undefined (field not sent) leaves place unchanged; blank clears it
+            place: place === undefined ? undefined : (place.trim() || null),
             company_name: company_name.toUpperCase().trim(),
             gst_number: gst_number ? gst_number.toUpperCase().trim() : null,
             oil_co_dealer_code: oil_co_dealer_code ? oil_co_dealer_code.trim() : null,
