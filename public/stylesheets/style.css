@@ -3370,3 +3370,202 @@ tr.d-md-none,
     border-color: #b9cfe8;
   }
 }
+
+/* ===== CREDIT REPORTS — MOBILE =====
+   Credit Statement (reports.pug), Credit Ledger (reports-credit-ledger.pug)
+   and Credit Balance (reports-creditsummary.pug). On screen these render with
+   mobileReady (viewport tag + body.mobile-ready). Their PDFs are generated from
+   the same pug and must keep the desktop layout, which holds three ways: the
+   PDF render doesn't pass mobileReady, Puppeteer's setContent() never loads
+   this stylesheet, and everything below is "screen" only (the PDF prints as
+   print media about 754px wide, which a bare max-width: 768px would match). */
+@media screen and (max-width: 768px) {
+  /* Filters: one field per line, Go / PDF / Print / Excel in a row below */
+  body.mobile-ready .report-filters table.center,
+  body.mobile-ready .report-filters table.center > tbody {
+    display: block;
+    width: 100%;
+    margin: 0;
+  }
+  body.mobile-ready .report-filters table.center tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+  }
+  body.mobile-ready .report-filters table.center td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  body.mobile-ready .report-filters table.center td.rf-gap {
+    display: none;
+  }
+  body.mobile-ready .report-filters td.rf-label {
+    flex: 0 0 100%;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #495057;
+  }
+  body.mobile-ready .report-filters td.rf-field {
+    flex: 0 0 100%;
+  }
+  body.mobile-ready .report-filters td.rf-btn {
+    flex: 0 0 auto;
+    margin-top: 0.75rem;
+  }
+  body.mobile-ready .report-filters td.rf-btn .btn {
+    min-width: 3rem;
+    padding: 0.5rem 0.9rem;
+  }
+  body.mobile-ready .report-filters .form-control {
+    font-size: 16px; /* stops iOS zooming on focus */
+  }
+
+  /* Credit Statement / Credit Ledger: each transaction is a labelled card;
+     cells with nothing in them (e.g. Credit on a bill) are skipped */
+  body.mobile-ready table.credit-stmt-table,
+  body.mobile-ready table.credit-stmt-table > tbody {
+    display: block;
+    width: 100%;
+    border: 0 !important;
+  }
+  body.mobile-ready table.credit-stmt-table > thead {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr > td:empty {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table td[data-label]::before,
+  body.mobile-ready table.credit-summary-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready table.credit-stmt-table td.stmt-wide {
+    grid-column: 1 / -1;
+  }
+  /* Opening / Closing Balance: one line, label left, amount right */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row > td:not(.font-weight-bold) {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-balance-row > td.text-right {
+    text-align: right !important;
+  }
+  /* Ledger totals: "Total" heading, then Debit and Credit */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-total-row > td:not([data-label]):not(.text-left) {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-total-row > td.text-left {
+    grid-column: 1 / -1;
+  }
+  /* Vehicle breakup: small tables, scroll sideways if needed */
+  body.mobile-ready table.vehicle-breakup-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Credit Balance: one card per customer, overdue cards red, and the column
+     headers become tap-to-sort buttons (same sortCreditSummary handler) */
+  body.mobile-ready #creditsummary-table-container > .card {
+    border: 0;
+  }
+  body.mobile-ready #creditsummary-table-container .card-header {
+    display: none;
+  }
+  body.mobile-ready #creditsummary-table-container .card-body {
+    padding: 0 !important;
+  }
+  body.mobile-ready table.credit-summary-table,
+  body.mobile-ready table.credit-summary-table > thead,
+  body.mobile-ready table.credit-summary-table > tbody {
+    display: block;
+    width: 100% !important;
+    border: 0 !important;
+  }
+  body.mobile-ready table.credit-summary-table > thead > tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+  body.mobile-ready table.credit-summary-table > thead th {
+    padding: 0.3rem 0.7rem !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 1rem;
+    background: #f8f9fa;
+    font-size: 0.8rem !important;
+    white-space: nowrap;
+  }
+  body.mobile-ready table.credit-summary-table > thead th:first-child {
+    display: none; /* S.no */
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr.overdue {
+    background: #ffcccc;
+    border-color: #f5a3a3;
+  }
+  body.mobile-ready table.credit-summary-table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
+    text-align: left !important;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="S.no"] {
+    display: none;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Credit Customer"] {
+    grid-column: 1 / -1;
+    font-size: 1rem !important;
+    font-weight: 600;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Credit Customer"]::before {
+    content: none;
+  }
+  body.mobile-ready table.credit-summary-table td[data-label="Balance"] {
+    font-size: 1rem !important;
+    font-weight: 600;
+  }
+}
