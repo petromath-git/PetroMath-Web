@@ -4,7 +4,39 @@ const { Op } = require("sequelize");
 const lookupDao = require('./lookup-dao');
 const dateFormat = require("dateformat");
 
+// Last staff activity per location is a ~0.3s scan of t_user_activity_log,
+// so the Select Location page shares one result for a few minutes.
+const STAFF_ACTIVITY_TTL_MS = 5 * 60 * 1000;
+let staffActivityCache = { at: 0, rows: null };
+
 module.exports = {
+    // Last page opened at each active location by its own staff (SuperUser and
+    // PowerUser visits excluded, so support/admin access doesn't look like usage).
+    getLastStaffActivity: async function () {
+        if (staffActivityCache.rows && Date.now() - staffActivityCache.at < STAFF_ACTIVITY_TTL_MS) {
+            return staffActivityCache.rows;
+        }
+        const rows = await db.sequelize.query(`
+            SELECT t.location_code,
+                   TIMESTAMPDIFF(MINUTE, t.last_used, NOW()) AS minutes_ago,
+                   UPPER(DATE_FORMAT(t.last_used, '%d-%b-%Y')) AS last_used_date
+            FROM (
+                SELECT ml.location_code,
+                       (SELECT a.access_timestamp
+                        FROM t_user_activity_log a
+                        JOIN m_persons p ON p.Person_id = a.person_id
+                        WHERE a.location_code = ml.location_code
+                          AND p.Role NOT IN ('SuperUser', 'PowerUser')
+                        ORDER BY a.access_timestamp DESC
+                        LIMIT 1) AS last_used
+                FROM m_location ml
+                WHERE ml.start_date <= NOW() AND ml.effective_end_date > CURDATE()
+            ) t
+        `, { type: db.sequelize.QueryTypes.SELECT });
+        staffActivityCache = { at: Date.now(), rows };
+        return rows;
+    },
+
     // Method to fetch all locations from the database
    findAllLocations: async function () {
     try {
