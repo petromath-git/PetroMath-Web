@@ -3486,11 +3486,6 @@ tr.d-md-none,
     text-transform: uppercase;
     color: #6c757d;
   }
-  /* Alternate transaction cards banded; Opening / Closing / Total lines not counted */
-  body.mobile-ready table.credit-stmt-table > tbody > tr:nth-child(even of tr:not(.stmt-balance-row):not(.stmt-total-row)) {
-    background: #eaf2fb;
-    border-color: #b9cfe8;
-  }
   body.mobile-ready table.credit-stmt-table td.stmt-wide {
     grid-column: 1 / -1;
   }
