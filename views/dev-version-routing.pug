@@ -1,0 +1,116 @@
+extends layout
+include mixins/mixins
+
+block content
+    - const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    - const fmt = (d) => { if (!d) return '—'; const x = new Date(d); return String(x.getDate()).padStart(2,'0') + '-' + MON[x.getMonth()] + '-' + x.getFullYear() + ' ' + String(x.getHours()).padStart(2,'0') + ':' + String(x.getMinutes()).padStart(2,'0'); };
+    - const betaCount = locations.filter(l => l.app_version === 'canary').length;
+
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Beta Access (Version Routing)
+            span.badge.badge-warning.ml-2(style="font-size:0.85rem") BETA ONLY
+
+        .alert.alert-info.py-2.small.mb-3
+            i.bi.bi-info-circle-fill.mr-1
+            | Only users of locations marked
+            b  Beta ON
+            |  can log in to this beta app; everyone else is logged out with &ldquo;no access to the beta application&rdquo;.
+            | Changes take effect at the user's next login and are kept across the 4-hourly DB refresh.
+
+        .card.mb-3
+            .card-header.py-2.d-flex.justify-content-between.align-items-center
+                span.small.font-weight-bold
+                    | Locations (#{betaCount} on beta / #{locations.length} active)
+                input.form-control.form-control-sm#locFilter(type="text" placeholder="Filter…" style="max-width:220px")
+            .card-body.p-0
+                table.table.table-sm.table-hover.mb-0#routingTable
+                    thead.thead-light
+                        tr
+                            th Code
+                            th Location
+                            th Beta Access
+                            th Since
+                            th Until
+                            th Updated By
+                    tbody
+                        each loc in locations
+                            - const on = loc.app_version === 'canary';
+                            tr(data-search=(loc.location_code + ' ' + loc.location_name).toLowerCase())
+                                td.font-weight-bold= loc.location_code
+                                td= loc.location_name
+                                td
+                                    .custom-control.custom-switch
+                                        input.custom-control-input.beta-toggle(type="checkbox" id='sw_' + loc.location_code
+                                            data-loc=loc.location_code checked=on
+                                            disabled=(on && loc.location_code === user.location_code))
+                                        label.custom-control-label(for='sw_' + loc.location_code)
+                                            if on
+                                                span.badge.badge-success ON
+                                            else
+                                                span.badge.badge-secondary OFF
+                                td.small= on ? fmt(loc.effective_start_date) : '—'
+                                td.small= on ? (loc.effective_end_date ? fmt(loc.effective_end_date) : 'Open-ended') : '—'
+                                td.small= on ? (loc.updated_by || '—') : '—'
+
+        .card
+            .card-header.py-2
+                span.small.font-weight-bold Recent Changes (last 30)
+            .card-body.p-0
+                if audit.length
+                    table.table.table-sm.mb-0.small
+                        thead.thead-light
+                            tr
+                                th When
+                                th Location
+                                th Action
+                                th Version
+                                th End Date
+                                th By
+                        tbody
+                            each a in audit
+                                tr
+                                    td= fmt(a.change_date)
+                                    td= a.location_code
+                                    td= a.action_type
+                                    td= (a.old_app_version ? a.old_app_version + ' → ' : '') + (a.new_app_version || '—')
+                                    td= a.new_effective_end_date ? fmt(a.new_effective_end_date) : '—'
+                                    td= a.new_updated_by || '—'
+                else
+                    .p-2.small.text-muted No changes recorded.
+
+    script.
+        document.getElementById('locFilter').addEventListener('input', function() {
+            const q = this.value.trim().toLowerCase();
+            document.querySelectorAll('#routingTable tbody tr').forEach(function(tr) {
+                tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
+            });
+        });
+
+        document.querySelectorAll('.beta-toggle').forEach(function(sw) {
+            sw.addEventListener('change', async function() {
+                const loc = this.dataset.loc;
+                const enabled = this.checked;
+                const msg = enabled
+                    ? 'Give ' + loc + ' access to the beta app?'
+                    : 'Remove beta access for ' + loc + '?\nIts users will be logged out of beta at their next login.';
+                if (!confirm(msg)) { this.checked = !enabled; return; }
+
+                this.disabled = true;
+                try {
+                    const res = await fetch('/dev-version-routing/set', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location_code: loc, enabled: enabled })
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Update failed');
+                    location.reload();
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                    this.checked = !enabled;
+                    this.disabled = false;
+                }
+            });
+        });
