@@ -57,6 +57,13 @@ block content
                 renderCreditSummaryTable();
             }
 
+            // Sort by a column in a given direction (used by the phone sort control)
+            function sortCreditSummaryBy(key, ascending) {
+                sortColumn = null;            // sortCreditSummary then starts ascending
+                sortCreditSummary(key);
+                if (!ascending) sortCreditSummary(key);
+            }
+
             function renderCreditSummaryTable() {
                 document.getElementById('creditsummary-table-container').innerHTML =
                     renderTable(
@@ -153,7 +160,36 @@ block content
 
             document.addEventListener('DOMContentLoaded', function() {
                 renderCreditSummaryTable();
+                initCreditSummaryPhoneSort();
             });
+
+            // Phones: "Sort by [column] [direction]" replaces the tap-to-sort header row
+            function initCreditSummaryPhoneSort() {
+                var key = document.getElementById('csSortKey');
+                var dir = document.getElementById('csSortDir');
+                if (!key || !dir) return;
+                var ascending = true;
+                function showDirection() {
+                    var text = key.value === 'Credit Customer'
+                        ? (ascending ? 'A → Z' : 'Z → A')
+                        : (ascending ? 'Low → High' : 'High → Low');
+                    dir.innerHTML = '<i class="bi bi-sort-' + (ascending ? 'up' : 'down') + '"></i> ' + text;
+                    dir.disabled = !key.value;
+                }
+                function apply() {
+                    sortCreditSummaryBy(key.value || 'S.no', key.value ? ascending : true);
+                    showDirection();
+                }
+                key.addEventListener('change', function() {
+                    ascending = key.value === 'Credit Customer';   // names A-Z, amounts / days largest first
+                    apply();
+                });
+                dir.addEventListener('click', function() {
+                    ascending = !ascending;
+                    apply();
+                });
+                showDirection();
+            }
 
         table.center
             tr              
@@ -176,8 +212,19 @@ block content
         if creditsummary && creditsummary.length > 0                                      
             div.row
             div.col-md-12
-                div.row &nbsp;                
-                div(id="creditsummary-table-container") 
+                div.row &nbsp;
+                //- Phones only (style.css shows it): one sort control in place of the
+                //- header row. The inline display:none keeps it off desktop and PDFs.
+                div.cs-sort(style='display: none')
+                    label(for='csSortKey') Sort by
+                    select#csSortKey.form-control
+                        option(value='') Default order
+                        option(value='Balance') Balance
+                        option(value='Credit Customer') Customer
+                        option(value='Days Since Receipt') Days since receipt
+                        option(value='Last Receipt Amount') Last receipt amount
+                    button#csSortDir.btn(type='button')
+                div(id="creditsummary-table-container")
         else
             div.row &nbsp;
             div.row.bg-light.report-empty No records to display.
