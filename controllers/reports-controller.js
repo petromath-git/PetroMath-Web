@@ -267,6 +267,9 @@ module.exports = {
                       renderData ={
                         title: 'Reports',
                         user: req.user,
+                        // Phone layout for the on-screen statement/ledger only; the PDF
+                        // render stays exactly the desktop page
+                        mobileReady: caller == 'notpdf' && (route === 'reports' || route === 'reports-credit-ledger'),
                         fromClosingDate: fromDate,
                         toClosingDate: toDate,
                         formattedFromDate: formattedFromDate,
@@ -1005,6 +1008,7 @@ getCreditSummaryReport: async(req, res) => {
        res.render('reports-creditsummary', {
            title: 'Credit Summary Reports',
            user: req.user,
+           mobileReady: true,  // phone layout on screen only; the PDF branch below omits it
            toClosingDate: toDate,
            formattedtoDate: formattedtoDate,
            creditsummary: Creditsummarylist,
