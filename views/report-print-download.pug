@@ -2,8 +2,10 @@ td.rf-gap &nbsp;
 td.rf-gap 
     input(type="hidden" name="caller" value="notpdf")             
 td.rf-gap
-td.rf-btn
-    button.btn.btn-primary.mr-2(type='submit', id='goButton') Go
+td.rf-btn.rf-go
+    button.btn.btn-primary.mr-2(type='submit', id='goButton')
+        span.rf-label-desktop Go
+        span.rf-label-mobile Show report
 td.rf-btn                    
     button.btn.btn-success.mr-2(
         type='button'
@@ -13,6 +15,7 @@ td.rf-btn
         data-placement='top'
     )
         i.bi.bi-cloud-download
+        span.rf-label-mobile  PDF
 td.rf-btn                    
     button.btn.btn-info(
         type='button'
@@ -22,3 +25,4 @@ td.rf-btn
         data-placement='top'
     )
         i.bi.bi-printer
+        span.rf-label-mobile  Print

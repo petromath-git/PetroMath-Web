@@ -1,7 +1,9 @@
 extends layout
+include mixins/report-filters-mobile
 
 block content
     form.report-filters(method='POST' action='/reports-credit-ledger')
+        +reportFiltersMobile({ hasRange: true, hasResults: typeof creditstmt !== 'undefined' })
         script.
             function exportLedgerExcel() {
                 const form = document.createElement('form');
@@ -28,8 +30,8 @@ block content
             }
         table.center
             tr
-                td.rf-label Date Range:
-                td.rf-field
+                td.rf-label.rf-range Date Range:
+                td.rf-field.rf-range
                     select#dateRange.form-control(onchange="updateDateRange()")
                         option(value='this_month') This Month
                         option(value='last_month') Last Month
@@ -37,12 +39,12 @@ block content
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom', selected=true) Custom Date
                 td.rf-gap &nbsp;                   
-                td.rf-label#fromDateLabel From Date:
-                td.rf-field
+                td.rf-label.rf-from#fromDateLabel From Date:
+                td.rf-field.rf-from
                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td.rf-gap &nbsp;                   
-                td.rf-label#toDateLabel To Date:
-                td.rf-field
+                td.rf-label.rf-to#toDateLabel To Date:
+                td.rf-field.rf-to
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, format="dd/mm/yyyy", required)
                 td.rf-gap &nbsp;
                 td.rf-label Company Name:
@@ -57,6 +59,7 @@ block content
                     td.rf-btn
                         button.btn.btn-success.mr-2(type='button', onClick='exportLedgerExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
                             i.bi.bi-file-earmark-spreadsheet
+                            span.rf-label-mobile  Excel
     div &nbsp;
     div
         if creditstmt && creditstmt.length > 0
@@ -144,7 +147,7 @@ block content
                         div.col-12.text-center Any discrepencies in this report should be reported to the management within 2 days of the report being generated.                
         else
             div.row &nbsp;
-            div.row.bg-light No Transactions.  
+            div.row.bg-light.report-empty(class=(typeof creditstmt === 'undefined' ? 'report-not-run' : undefined)) No Transactions.  
 
         // Include the overlay
         include overlay.pug
