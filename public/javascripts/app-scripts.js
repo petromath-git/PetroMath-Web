@@ -1178,9 +1178,11 @@ function saveReadings() {
         
         if (!validationResult.allValid) {
             // Show all validation warnings
-            validationResult.invalidPumps.forEach(pump => {
-                showReadingValidationWarning(pump.pumpId, pump.message, 'danger');
-            });
+            if (!window.closingAutosaveQuiet) {
+                validationResult.invalidPumps.forEach(pump => {
+                    showReadingValidationWarning(pump.pumpId, pump.message, 'danger');
+                });
+            }
             
             // Create summary message
             let errorSummary = 'Cannot save readings. Please fix the following errors:\n\n';
@@ -1188,7 +1190,7 @@ function saveReadings() {
                 errorSummary += `• ${pump.pumpCode}: ${pump.message}\n`;
             });
             
-            alert(errorSummary);
+            saveAlert(errorSummary);
             resolve(false);
             return;
         }
@@ -1219,7 +1221,7 @@ function saveReadings() {
         
         // Smart validation: Only require reading time if actual readings were entered
         if (hasActualReadings && !closeReadingTime) {
-            alert('Please select a Reading Time before saving readings with actual values.');
+            saveAlert('Please select a Reading Time before saving readings with actual values.');
             resolve(false);
             return;
         }
@@ -1268,9 +1270,13 @@ function updateClosingWithReadingTime(closeReadingTime, user) {
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
                 if (xhr.status === 200) {
-                    const result = JSON.parse(xhr.responseText);
-                    debugLog('Closing reading time update response:', result);
-                    resolve(true);
+                    try {
+                        debugLog('Closing reading time update response:', JSON.parse(xhr.responseText));
+                        resolve(true);
+                    } catch (e) {
+                        console.error('Unexpected reading time update response:', xhr.responseText);
+                        resolve(false);
+                    }
                 } else {
                     console.error('Failed to update closing reading time:', xhr.responseText);
                     resolve(false);
@@ -1422,7 +1428,7 @@ function saveCreditSales() {
 
                     const creditParty = getCreditType(creditSaleTag, saleObjRowNum);
                     if (!creditParty) {
-                        alert(`Row ${parseInt(saleObjRowNum) + 1}: Please select a customer before saving.`);
+                        saveAlert(`Row ${parseInt(saleObjRowNum) + 1}: Please select a customer before saving.`);
                         hasValidationError = true;
                         return;
                     }
@@ -1563,21 +1569,21 @@ function saveDigitalSales() {
                     
                     // Validate vendor is selected
                     if (!hasVendor) {
-                        alert('Please select a vendor for all digital sales entries');
+                        saveAlert('Please select a vendor for all digital sales entries');
                         hasValidationError = true;
                         return;
                     }
                     
                     // Validate amount is entered and greater than 0
                     if (!hasAmount) {
-                        alert('Please enter an amount greater than 0 for all digital sales entries');
+                        saveAlert('Please enter an amount greater than 0 for all digital sales entries');
                         hasValidationError = true;
                         return;
                     }
                     
                     // Validate transaction date is provided
                     if (!hasDate) {
-                        alert('Please provide transaction date for all digital sales entries');
+                        saveAlert('Please provide transaction date for all digital sales entries');
                         hasValidationError = true;
                         return;
                     }
@@ -1677,25 +1683,25 @@ function saveCreditReceipts() {
                 if (hasCreditParty || hasAmount || hasDate || isExistingRecord) {
 
                     if (!hasCreditParty) {
-                        alert('Please select a Credit Party for all Collections entries');
+                        saveAlert('Please select a Credit Party for all Collections entries');
                         hasValidationError = true;
                         return;
                     }
 
                     if (typeField.value === 'Digital' && !vendorField.value) {
-                        alert('Please select a Digital Vendor for digital Collections entries');
+                        saveAlert('Please select a Digital Vendor for digital Collections entries');
                         hasValidationError = true;
                         return;
                     }
 
                     if (!hasAmount) {
-                        alert('Please enter an amount greater than 0 for all Collections entries');
+                        saveAlert('Please enter an amount greater than 0 for all Collections entries');
                         hasValidationError = true;
                         return;
                     }
 
                     if (!hasDate) {
-                        alert('Please provide a receipt date for all Collections entries');
+                        saveAlert('Please provide a receipt date for all Collections entries');
                         hasValidationError = true;
                         return;
                     }
@@ -1770,19 +1776,19 @@ function saveEmployeeAdvance() {
                 if (hasEmployee || hasAmount || hasDate || isExistingRecord) {
 
                     if (!hasEmployee) {
-                        alert('Please select an Employee for all Employee Advance entries');
+                        saveAlert('Please select an Employee for all Employee Advance entries');
                         hasValidationError = true;
                         return;
                     }
 
                     if (!hasAmount) {
-                        alert('Please enter an amount greater than 0 for all Employee Advance entries');
+                        saveAlert('Please enter an amount greater than 0 for all Employee Advance entries');
                         hasValidationError = true;
                         return;
                     }
 
                     if (!hasDate) {
-                        alert('Please provide a date for all Employee Advance entries');
+                        saveAlert('Please provide a date for all Employee Advance entries');
                         hasValidationError = true;
                         return;
                     }
@@ -1954,8 +1960,35 @@ function formDenoms(denomId, denomKey, denom, user) {
     };
 }
 
+// Validation messages inside the shift closing save functions. During an autosave
+// (closing-autosave.js) the user is mid-entry, so keep the message for the
+// autosave status line instead of interrupting with a popup.
+function saveAlert(message) {
+    if (window.closingAutosaveQuiet) {
+        window.closingAutosaveIssue = message;
+        return;
+    }
+    alert(message);
+}
+
+function parseAjaxResult(req) {
+    if (req.status == 200 || req.status == 500) {
+        try {
+            return JSON.parse(req.responseText);
+        } catch (e) {
+            // e.g. an expired session answers with the login page instead of JSON
+            return { error: 'Could not save - the server sent an unexpected response. Please refresh the page and try again.' };
+        }
+    }
+    return { error: 'Could not save - ' + (req.status ? 'server error (' + req.status + ')' : 'no network connection') + '. Please try again.' };
+}
+
 function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hiddenFieldsArr, idModelAttr) {
     return new Promise((resolve, reject) => {
+        // Captured now: the responses arrive after the autosave has finished its synchronous part
+        const quiet = !!window.closingAutosaveQuiet;
+        const loading = (className) => { if (!quiet) ajaxLoading(className); };
+
         // remove UI error messages
         undoInvokedValidation(currentTabId);
         undoShowStaticErrorMessage();
@@ -1964,17 +1997,19 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
         const ajaxInsertReq = new XMLHttpRequest();
         const ajaxUpdateReq = new XMLHttpRequest();
         let insertResult = 'No Action', updateResult = 'No Action'; // to store results of requests
+        // Settle only once every request sent has answered - resolving on the first reply
+        // let the next save start before new rows had their ids, so it re-inserted them
+        let pendingRequests = 0;
 
         debugLog("INSERT DATA LEN : " + newData.length + ", UPDATE LEN : " + updateData.length);
         if (newData && newData.length > 0) {
-            ajaxLoading('d-md-block');
+            pendingRequests++;
+            loading('d-md-block');
             ajaxInsertReq.onreadystatechange = function () {
                 if (ajaxInsertReq.readyState == 4) {
-                    debugLog("Insert response [status : " + ajaxUpdateReq.status + "] - " + ajaxInsertReq.responseText);
-                    if (ajaxInsertReq.status == 200 || ajaxInsertReq.status == 500) {
-                        insertResult = JSON.parse(ajaxInsertReq.responseText);
-                        attemptResult();
-                    }
+                    debugLog("Insert response [status : " + ajaxInsertReq.status + "] - " + ajaxInsertReq.responseText);
+                    insertResult = parseAjaxResult(ajaxInsertReq);
+                    attemptResult();
                 }
             };
             ajaxInsertReq.open("POST", url, true);
@@ -1982,14 +2017,13 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
             ajaxInsertReq.send(JSON.stringify(newData));
         }
         if (updateData && updateData.length > 0) {
-            ajaxLoading('d-md-block');
+            pendingRequests++;
+            loading('d-md-block');
             ajaxUpdateReq.onreadystatechange = function () {
                 if (ajaxUpdateReq.readyState == 4) {
                     debugLog("Update response [status : " + ajaxUpdateReq.status + "] - " + ajaxUpdateReq.responseText);
-                    if (ajaxUpdateReq.status == 200 || ajaxUpdateReq.status == 500) {
-                        updateResult = JSON.parse(ajaxUpdateReq.responseText);
-                        attemptResult();
-                    }
+                    updateResult = parseAjaxResult(ajaxUpdateReq);
+                    attemptResult();
                 }
             };
             ajaxUpdateReq.open("POST", url, true);
@@ -1998,17 +2032,27 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
         }
 
         function attemptResult() {
-            ajaxLoading('d-md-none');
-            // display only if both results are set
-            if (typeof insertResult !== 'No Action') {
+            if (--pendingRequests > 0) {
+                return;
+            }
+            loading('d-md-none');
+            if (insertResult !== 'No Action') {
                 updateIdsForUpsertSupport(insertResult, hiddenFieldsArr, idModelAttr);
             }
             if (insertResult.error || updateResult.error) {
-                showToastMessage(insertResult.error === undefined ? updateResult : insertResult, 7000);
+                const failed = insertResult.error === undefined ? updateResult : insertResult;
+                if (quiet) {
+                    window.closingAutosaveIssue = failed.error;
+                } else {
+                    showToastMessage(failed, 7000);
+                }
                 resolve(false);
             } else {
-                setSaveFunction(tabToActivate);
-                showToastMessage(insertResult.message === undefined ? updateResult : insertResult);
+                // An autosave must not move the "save on leaving this tab" marker to the next tab
+                if (!quiet) {
+                    setSaveFunction(tabToActivate);
+                    showToastMessage(insertResult.message === undefined ? updateResult : insertResult);
+                }
                 resolve(true);
             }
         }
