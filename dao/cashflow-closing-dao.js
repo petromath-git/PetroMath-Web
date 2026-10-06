@@ -265,7 +265,7 @@ module.exports = {
     },
     saveCashflowTxns: (data) => {
         const txns = CashFlowTxn.bulkCreate(data, {returning: true,
-            updateOnDuplicate: ["description", "type", "account_head_id", "digital_vendor_id", "amount", "updated_by", "updation_date"]});
+            updateOnDuplicate: ["description", "type", "account_head_id", "entry_type", "digital_vendor_id", "amount", "updated_by", "updation_date"]});
         return txns;
     },
     delete: (id) => {
