@@ -70,7 +70,19 @@ block content
         .ls-empty { display: none; text-align: center; color: rgba(255,255,255,.7); padding: 48px 0; }
         .ls-footer { text-align: center; margin-top: 28px; }
 
+        .compact .ls-toolbar { display: none; }
+        .compact .ls-wrap { max-width: 960px; min-height: 100vh; display: flex; flex-direction: column; }
+        .compact #lsForm { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 16px 0; }
+        .compact .ls-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+        .compact .ls-tile { width: 290px; min-height: 104px; padding: 18px; }
+        .compact .ls-logo { width: 56px; height: 56px; }
+        .compact .ls-logo img { width: 48px; height: 48px; }
+        .compact .ls-name { font-size: 1.02rem; }
+        .compact .ls-usage { font-size: .8rem; margin-top: 6px; }
+
         @media (max-width: 576px) {
+            .compact .ls-grid { gap: 10px; }
+            .compact .ls-tile { width: 100%; min-height: 88px; padding: 14px; }
             .ls-grid { grid-template-columns: 1fr; gap: 8px; }
             .ls-tile { min-height: 64px; padding: 10px 12px; }
             .ls-header { padding-top: 14px; }
@@ -79,7 +91,10 @@ block content
     - const knownLogos = ['IOCL', 'BPCL', 'HPCL']
     - const companies = [...new Set(locations.map(l => (l.company_name || '').toUpperCase()).filter(c => c))].sort()
 
-    div.location-container.ls-page
+    //- A short list (typically an owner with a few bunks) gets big centred cards and no search bar
+    - const compact = locations.length <= 8
+
+    div.location-container.ls-page(class=compact ? 'compact' : '')
         div.ls-wrap
             div.ls-header
                 div.app-logo
@@ -255,5 +270,5 @@ block content
 
             applyFilter();
             // Don't pop the on-screen keyboard on phones
-            if (window.matchMedia('(min-width: 769px)').matches) search.focus();
+            if (window.matchMedia('(min-width: 769px)').matches && search.offsetParent) search.focus();
         })();
