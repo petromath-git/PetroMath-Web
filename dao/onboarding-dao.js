@@ -62,6 +62,98 @@ module.exports = {
         );
     },
 
+    // Decides whether this onboarding may write to location `loc`:
+    //   linked   — loc is this onboarding's own location (safe re-run)
+    //   new      — nobody has loc yet; migrate may create it
+    //   conflict — loc belongs to another station / onboarding, or this
+    //              onboarding was already migrated under a different code
+    checkLocationCode: async (onboarding, loc) => {
+        if (onboarding.location_code) {
+            if (onboarding.location_code.toUpperCase() === loc) return { status: 'linked' };
+            return { status: 'conflict', error: `This onboarding was already migrated as ${onboarding.location_code}.` };
+        }
+        const [existing] = await db.sequelize.query(
+            'SELECT location_name FROM m_location WHERE location_code = :loc LIMIT 1',
+            { replacements: { loc }, type: QueryTypes.SELECT }
+        );
+        if (existing) {
+            return { status: 'conflict', error: `${loc} is already used by ${existing.location_name}. Choose another code.` };
+        }
+        const [claimed] = await db.sequelize.query(
+            'SELECT location_name FROM t_onboarding WHERE location_code = :loc AND id <> :id LIMIT 1',
+            { replacements: { loc, id: onboarding.id }, type: QueryTypes.SELECT }
+        );
+        if (claimed) {
+            return { status: 'conflict', error: `${loc} is already reserved by onboarding "${claimed.location_name}". Choose another code.` };
+        }
+        return { status: 'new' };
+    },
+
+    // Claims loc for this onboarding. Only succeeds while unlinked; the UNIQUE
+    // key on t_onboarding.location_code stops two onboardings claiming one code.
+    claimLocationCode: async (id, loc) => {
+        try {
+            const [, affected] = await db.sequelize.query(
+                'UPDATE t_onboarding SET location_code = :loc WHERE id = :id AND location_code IS NULL',
+                { replacements: { id, loc }, type: QueryTypes.UPDATE }
+            );
+            return affected === 1;
+        } catch (e) {
+            if (e.name === 'SequelizeUniqueConstraintError') return false;   // another onboarding got it first
+            throw e;
+        }
+    },
+
+    // Up to `limit` free 3–5 letter codes derived from the RO name, e.g.
+    // "Shankar Agencies" → SHA, SAG, SHN, SHAN. Skips codes used by any
+    // m_location row or reserved by another onboarding.
+    suggestLocationCodes: async (onboarding, name, limit = 4) => {
+        const takenRows = await db.sequelize.query(
+            `SELECT UPPER(location_code) AS code FROM m_location
+             UNION
+             SELECT UPPER(location_code) FROM t_onboarding WHERE location_code IS NOT NULL AND id <> :id`,
+            { replacements: { id: onboarding.id }, type: QueryTypes.SELECT }
+        );
+        const taken = new Set(takenRows.map(r => r.code));
+
+        // NOISE is always dropped; GENERIC (trade words) only used when nothing else is left
+        const NOISE = new Set(['SRI', 'SHRI', 'SREE', 'M', 'S', 'MS', 'THE', 'AND', 'CO', 'PVT', 'LTD', 'PRIVATE', 'LIMITED']);
+        const GENERIC = new Set(['AGENCY', 'AGENCIES', 'AGECIES', 'FUEL', 'FUELS', 'PETRO', 'PETROLEUM', 'PETROMART', 'PRODUCTS',
+            'TRADERS', 'TRADING', 'CORPORATION', 'CORP', 'FILLING', 'STATION', 'SERVICE', 'SERVICES', 'ENTERPRISES', 'BUNK', 'OIL', 'OILS']);
+        // Text after the first comma is usually the town ("SENTHIL ANDAVAR FUELS, SATTUR")
+        const words = (name || '').split(',')[0].toUpperCase().replace(/[^A-Z ]/g, ' ').split(/\s+/)
+            .filter(w => w && !NOISE.has(w));
+        const sig = words.filter(w => !GENERIC.has(w));
+        const w = sig.length >= 2 ? sig : (sig.length ? [sig[0], ...words.filter(x => x !== sig[0])] : words);
+        if (!w.length) return [];
+
+        const [a, b = '', c = ''] = w;
+        const consonants = a[0] + a.slice(1).replace(/[AEIOU]/g, '');
+        const bases = [
+            a.slice(0, 3),
+            b ? a[0] + b[0] + (c[0] || '') : '',
+            b ? a.slice(0, 2) + b[0] : '',
+            b ? a[0] + b.slice(0, 2) : '',
+            consonants.slice(0, 3),
+            a.slice(0, 4),
+            b ? a.slice(0, 3) + b[0] : '',
+        ].filter(s => s.length >= 3 && s.length <= 5);
+
+        const out = [];
+        const add = (s) => { if (out.length < limit && !taken.has(s) && !out.includes(s)) out.push(s); };
+        bases.forEach(add);
+        // Everything natural is taken → number the first one (SHA2, SHA3…)
+        for (let n = 2; out.length < limit && n <= 9 && bases[0]; n++) add(bases[0] + n);
+        return out;
+    },
+
+    releaseLocationCode: async (id, loc) => {
+        await db.sequelize.query(
+            'UPDATE t_onboarding SET location_code = NULL WHERE id = :id AND location_code = :loc',
+            { replacements: { id, loc }, type: QueryTypes.UPDATE }
+        );
+    },
+
     getRo: async (onboardingId) => {
         const [row] = await db.sequelize.query(
             'SELECT * FROM t_onboarding_ro WHERE onboarding_id = :onboardingId',

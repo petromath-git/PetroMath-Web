@@ -178,12 +178,44 @@ module.exports = {
         }
     },
 
+    checkLocationCode: async (req, res, next) => {
+        try {
+            const onboarding = await OnboardingDao.findById(req.params.id);
+            if (!onboarding) return res.status(404).json({ error: 'Not found' });
+            const loc = (req.query.code || '').trim().toUpperCase();
+            if (!loc) return res.json({ status: 'empty' });
+            res.json(await OnboardingDao.checkLocationCode(onboarding, loc));
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    suggestLocationCodes: async (req, res, next) => {
+        try {
+            const onboarding = await OnboardingDao.findById(req.params.id);
+            if (!onboarding) return res.status(404).json({ error: 'Not found' });
+            if (onboarding.location_code) return res.json({ codes: [] });   // already linked — nothing to choose
+            const ro = await OnboardingDao.getRo(onboarding.id);
+            const codes = await OnboardingDao.suggestLocationCodes(onboarding, ro.ro_name || onboarding.location_name);
+            res.json({ codes });
+        } catch (e) {
+            next(e);
+        }
+    },
+
     applyConfig: async (req, res, next) => {
         try {
             const { location_code, settings } = req.body;
             if (!location_code?.trim()) return res.status(400).json({ error: 'location_code is required' });
             if (!settings || typeof settings !== 'object') return res.status(400).json({ error: 'settings object is required' });
             const loc = location_code.trim().toUpperCase();
+            // Config only goes to this onboarding's own (already migrated) location —
+            // never to another station that happens to share the typed code.
+            const onboarding = await OnboardingDao.findById(req.params.id);
+            if (!onboarding) return res.status(404).json({ error: 'Not found' });
+            const check = await OnboardingDao.checkLocationCode(onboarding, loc);
+            if (check.status === 'conflict') return res.status(409).json({ error: check.error });
+            if (check.status === 'new') return res.status(409).json({ error: `Run Migration for ${loc} first, then apply config.` });
             const entries = Object.entries(settings).filter(([, v]) => v !== null && v !== '');
             if (!entries.length) return res.json({ inserted: 0 });
             for (const [name, value] of entries) {
