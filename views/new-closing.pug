@@ -44,6 +44,8 @@ block content
                         a.nav-link#employee_advance_tab(data-toggle="tab" href="#new_employee_advance" onclick=`calculateEmployeeAdvanceAndTrackMenu(this)`) Employee Advance
                 li.nav-item.col-md
                     a.nav-link#expenses_tab(data-toggle="tab" href="#new_expenses" onclick=`trackMenu(this)`) Expenses
+                li.nav-item.col-md
+                    a.nav-link#denoms_tab(data-toggle="tab" href="#new_denoms" onclick=`trackMenu(this)`) Cash Count
                 if bowserValues && bowserValues.length > 0
                     li.nav-item.col-md
                         a.nav-link#intercompany_tab(data-toggle="tab" href="#new_intercompany" onclick=`trackMenu(this)`) Intercompany
@@ -523,10 +525,10 @@ block content
                             div.col
                                 button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
 
-                // ----------------------- New expenses & denominations details ----------------------------
+                // ----------------------- New expenses details ----------------------------
                 div.tab-pane.container.fade#new_expenses
                     div.row
-                        div.col-6
+                        div.col
                             h5.sub-header Expenses
                             if expenseValues && expenseValues.length > 0
                                 div.table-responsive
@@ -554,8 +556,18 @@ block content
                                 div.row.bg-warning
                                     pre.text-danger= `Note: Master expense data is empty at backend.`
 
-                        div.col-6
-                            h5.sub-header Denominations
+                    div.row
+                        div.col &nbsp;
+                    div.row.closing-next(align="center")
+                        div.col
+                            button.btn.btn-primary(type="button", onClick=`trackMenuWithName('denoms_tab')`) Next &raquo;
+
+                // ----------------------- New cash count (denominations) details ----------------------------
+                div.tab-pane.container.fade#new_denoms
+                    div.row
+                        div.col-md-6.mx-auto
+                            h5.sub-header Cash Count
+                            p.text-muted.small Enter the number of notes and coins you are handing over.
                             div.table-responsive
                                 table.table
                                     tbody

@@ -1833,23 +1833,23 @@ function getCreditType(creditSaleTag, creditObjRowNum) {
     return document.getElementById(creditSaleTag + 'creditparty-' + creditObjRowNum).value;
 }
 
-function saveExpensesAndDenoms() {
+function saveExpensesTab() {
+    return saveTabWithValidation('new_expenses', 'expenses_tab', saveExpenses);
+}
+
+function saveDenomsTab() {
+    return saveTabWithValidation('new_denoms', 'denoms_tab', saveDenoms);
+}
+
+function saveTabWithValidation(currentDiv, currentTabId, saveFn) {
     return new Promise((resolve, reject) => {
-        const currentDiv = 'new_expenses';
-        const currentTabId = 'expenses_tab';
         validateDivTabPromise(currentDiv, currentTabId)
             .then((data) => {
                 if (data) {
-                    enableOtherTabs('expenses_tab');
-                    Promise.all([saveExpenses(), saveDenoms()]).then((values) => {
-                        if (values[0] && values[1]) {
-                            resolve(true);
-                        } else {
-                            resolve(false);
-                        }
-                    });
+                    enableOtherTabs(currentTabId);
+                    saveFn().then((saved) => resolve(!!saved));
                 } else {
-                    disableOtherTabs('expenses_tab');
+                    disableOtherTabs(currentTabId);
                     resolve(false);
                 }
             });
@@ -1861,7 +1861,7 @@ function saveExpenses() {
     return new Promise((resolve, reject) => {
         const expenseTag = 'exp-';
         const expenseRowTag = expenseTag + 'table-row-';
-        const tabToActivate = 'summary_tab';
+        const tabToActivate = 'expenses_tab';
         const currentTabId = 'new_expenses';
         const expenseObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + expenseRowTag + ']:not([type="hidden"])');
         let newExpenses = [], updateExpenses = [], newHiddenFieldsArr = [];
@@ -1913,8 +1913,8 @@ function formExpenses(texpenseId, expenseId, expenseNotes, expenseTag, rowNum, u
 function saveDenoms() {
     return new Promise((resolve, reject) => {
         const denomTag = 'denom-';
-        const tabToActivate = 'summary_tab';
-        const currentTabId = 'new_expenses';
+        const tabToActivate = 'denoms_tab';
+        const currentTabId = 'new_denoms';
         let denomObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + denomTag + ']:not([type="hidden"])');
         let newDenoms = [], updateDenoms = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
