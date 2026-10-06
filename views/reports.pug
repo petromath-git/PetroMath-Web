@@ -1,5 +1,6 @@
 extends layout
 include mixins/report-filters-mobile
+include mixins/report-cards-mobile
 
 block content
     form.report-filters(method='POST' action='/reports')
@@ -148,7 +149,7 @@ block content
                                         if showBalance
                                             td &nbsp;
                                 each val in creditstmt
-                                    tr(class=(val.price === null ? 'font-weight-bold text-success' : ''))
+                                    tr(class=[val.price === null ? 'font-weight-bold text-success' : '', val.Credit != null ? 'stmt-credit' : ''])
                                         td.text-center(scope="row" style="white-space: nowrap" data-label='Date')= val.Date
                                         td.text-left(scope="row" title=val.Particulars data-label='Particulars')= trimParticulars(val.Particulars)
                                         td.text-left(scope="row" data-label='Product')= val.Product
@@ -234,3 +235,4 @@ block content
 
         // Include the overlay
         include overlay.pug
+        +reportCardsMobile('table.credit-stmt-table > tbody > tr')

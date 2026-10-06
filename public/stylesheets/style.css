@@ -3425,6 +3425,54 @@ tr.d-md-none,
   body.mobile-ready table.credit-stmt-table td[data-label="Balance"] { grid-area: 6 / 1; }
   body.mobile-ready table.credit-stmt-table td[data-label="Narration"] { grid-area: 7 / 1 / auto / -1; }
   body.mobile-ready table.credit-stmt-table td[data-label="Odometer"] { grid-area: 8 / 1; } /* optional, so last */
+  /* No running balance on phone cards (Opening / Closing lines still show it) */
+  body.mobile-ready table.credit-stmt-table td[data-label="Balance"] {
+    display: none;
+  }
+  /* Cards start collapsed to Date + amount; tapping one adds card-open and
+     shows the full card (views/mixins/report-cards-mobile.pug) */
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row) {
+    position: relative;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row)::after {
+    content: "";
+    position: absolute;
+    top: 1.05rem;
+    right: 0.9rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid #adb5bd;
+    border-bottom: 2px solid #adb5bd;
+    transform: rotate(45deg);
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row).card-open::after {
+    top: 1.3rem;
+    transform: rotate(-135deg);
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td {
+    display: none;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Date"],
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Debit"]:not(:empty),
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Credit"]:not(:empty) {
+    display: block;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Debit"],
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td[data-label="Credit"] {
+    grid-area: 1 / 2;
+    font-weight: 600;
+    text-align: right !important;
+  }
+  body.mobile-ready table.credit-stmt-table > tbody > tr:not(.stmt-balance-row):not(.stmt-total-row):not(.card-open) > td::before {
+    content: none !important;
+  }
+  /* Receipts / credit adjustments in green (rows with a Credit amount) */
+  body.mobile-ready table.credit-stmt-table > tbody > tr.stmt-credit > td {
+    color: #28a745;
+    font-weight: 600;
+  }
   body.mobile-ready table.credit-stmt-table > tbody > tr > td:empty {
     display: none;
   }
@@ -3473,8 +3521,8 @@ tr.d-md-none,
     white-space: nowrap;
   }
 
-  /* Credit Balance: one card per customer, alternate cards banded, overdue
-     cards red; the header row is replaced by the Sort by control (.cs-sort) */
+  /* Credit Balance: one card per customer, overdue cards red; the header row
+     is replaced by the Sort by control (.cs-sort) */
   body.mobile-ready #creditsummary-table-container > .card {
     border: 0;
   }
@@ -3539,10 +3587,6 @@ tr.d-md-none,
     border: 1px solid #dee2e6;
     border-radius: 0.5rem;
     background: #fff;
-  }
-  body.mobile-ready table.credit-summary-table > tbody > tr:nth-child(even) {
-    background: #eaf2fb;
-    border-color: #b9cfe8;
   }
   body.mobile-ready table.credit-summary-table > tbody > tr.overdue {
     background: #ffcccc;
