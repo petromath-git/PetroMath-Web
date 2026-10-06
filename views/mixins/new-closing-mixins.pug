@@ -323,7 +323,7 @@ mixin addEmployeeAdvance(advanceRowNo, rowData)
                 if config.employeeAdvanceTxnTypes
                     each txnType in config.employeeAdvanceTxnTypes
                         option(value=txnType.id selected= rowData.txnType === txnType.id)= txnType.label
-        td.card-wide(data-label='Employee')
+        td(data-label='Employee')
             select.form-control(name=prefix + 'employee-' + advanceRowNo id=prefix + 'employee-' + advanceRowNo required)
                 option(value='') Select Employee
                 if employeeValues
@@ -450,6 +450,47 @@ mixin addCredits(creditRowNo, rowData)
             td
                 - var offMeterStyle = rowData.isLubeProduct ? '' : 'display:none'
                 input(type='checkbox' name=prefix + 'off-meter-' + creditRowNo id=prefix + 'off-meter-' + creditRowNo checked=(rowData.offMeterSale == 1) style=offMeterStyle)
+
+//- Phones: long dropdowns become search + dropdown (Select2): Lube Sales product
+//- and Collections credit party in their cards, product and credit party in the
+//- credit sale popup. Desktop keeps plain dropdowns (does nothing unless the phone
+//- media query matches). Selecting still fires the select's own onchange, since
+//- jQuery's trigger runs inline handlers.
+mixin closingMobileSearch()
+    script.
+        (function () {
+            if (!window.jQuery || !jQuery.fn.select2 || !window.matchMedia || !window.matchMedia('screen and (max-width: 768px)').matches) return;
+            var $ = jQuery;
+            var ROW_SELECTS = 'select[id^="cash-sale-product-"], select[id^="credit-receipts-creditparty-"]';
+            $(ROW_SELECTS).select2({ width: '100%' });
+
+            // Adding / deleting a row resets its selects through selectedIndex, which
+            // fires no change event: refresh the search box text whenever a row's
+            // class changes (that's how rows are shown and hidden).
+            var page = document.querySelector('.closing-page');
+            if (page && window.MutationObserver) {
+                new MutationObserver(function (mutations) {
+                    mutations.forEach(function (m) {
+                        if (m.target.tagName === 'TR' && m.target.id.indexOf('-table-row-') !== -1) {
+                            $(m.target).find(ROW_SELECTS).trigger('change.select2');
+                        }
+                    });
+                }).observe(page, { subtree: true, attributes: true, attributeFilter: ['class'] });
+            }
+
+            // Credit sale popup: the field elements are moved into the popup when it
+            // opens and back when it closes (credit-entry-modal.js), so attach the
+            // search once they're in place and remove it before they're moved back.
+            var POPUP_SELECTS = '#creditModalSlot-product select, #creditModalSlot-creditparty select';
+            $(document).on('shown.bs.modal', '#creditEntryModal', function () {
+                $(POPUP_SELECTS).select2({ width: '100%', dropdownParent: $('#creditEntryModal') });
+            });
+            $(document).on('hide.bs.modal', '#creditEntryModal', function () {
+                $(POPUP_SELECTS).each(function () {
+                    if ($(this).hasClass('select2-hidden-accessible')) $(this).select2('destroy');
+                });
+            });
+        })();
 
 //- Phones: the tab bar scrolls sideways (style.css, SHIFT CLOSING - MOBILE), so
 //- keep the active tab in view, and start each newly opened tab at its top since
