@@ -20,6 +20,8 @@ router.get('/hsn-suggestions', isLoggedIn, isSuperUser, ctrl.hsnSuggestions);   
 router.get('/:id',              isLoggedIn, isSuperUser, ctrl.adminDetail);
 router.patch('/:id/status',     isLoggedIn, isSuperUser, ctrl.adminUpdateStatus);
 router.patch('/:id/link',       isLoggedIn, isSuperUser, ctrl.adminSetLinkActive);
+router.get('/:id/check-location-code', isLoggedIn, isSuperUser, ctrl.checkLocationCode);
+router.get('/:id/suggest-location-codes', isLoggedIn, isSuperUser, ctrl.suggestLocationCodes);
 router.post('/:id/migrate',     isLoggedIn, isSuperUser, migrateCtrl.migrate);
 router.post('/:id/apply-config', isLoggedIn, isSuperUser, ctrl.applyConfig);
 
