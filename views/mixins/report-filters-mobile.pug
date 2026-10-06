@@ -1,0 +1,93 @@
+//- Phone layout for a report's filter form. Meant to be reused by every report:
+//- include this file, call +reportFiltersMobile(...) as the first thing inside
+//- form.report-filters, and give the filter cells the rf-* classes (see the
+//- credit reports). It drives the existing fields by id (dateRange,
+//- fromclosingDate, toclosingDate, company_id), so Go / generatePDF / Excel keep
+//- reading the same inputs.
+//- Desktop and PDFs are untouched: everything it adds is hidden outside
+//- "@media screen and (max-width: 768px)" in style.css (REPORT FILTERS - MOBILE),
+//- the script does nothing unless that query matches, and the PDF generator
+//- hides the whole filter form.
+//-   hasRange   - show the period buttons (false for as-of-date reports)
+//-   hasResults - the page is already showing a report: start collapsed to a
+//-                one-line summary with an Edit button
+mixin reportFiltersMobile(opts)
+    - var o = opts || {}
+    div.rf-mobile.rf-head
+        if o.hasRange
+            div.rf-title Period
+            div.rf-chips
+                each c in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This FY'], ['last_financial_year', 'Last FY'], ['custom', 'Custom']]
+                    button.rf-chip(type='button' data-range=c[0])= c[1]
+            div.rf-period
+    div.rf-mobile.rf-summary
+        div.rf-summary-text
+            div.rf-summary-main
+            div.rf-summary-sub
+        button.rf-edit(type='button')
+            i.bi.bi-pencil
+            |  Edit
+    script.
+        (function () {
+            var form = document.currentScript.closest('form');
+            if (!form || !window.matchMedia || !window.matchMedia('screen and (max-width: 768px)').matches) return;
+            // The filter fields come after this script in the form: wait for them
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+            else init();
+
+            function init() {
+                var hasResults = !{JSON.stringify(!!o.hasResults)};
+                var range = document.getElementById('dateRange');
+                var from = document.getElementById('fromclosingDate');
+                var to = document.getElementById('toclosingDate');
+                var company = document.getElementById('company_id');
+                var chips = form.querySelectorAll('.rf-chip');
+                var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+                function fmt(v) {
+                    if (!v) return '';
+                    var p = v.split('-');
+                    return p[2] + '-' + MONTHS[parseInt(p[1], 10) - 1] + '-' + p[0];
+                }
+                function periodText() {
+                    if (!from) return to && to.value ? 'As of ' + fmt(to.value) : '';
+                    if (from.value && to && to.value) return fmt(from.value) + '  →  ' + fmt(to.value);
+                    return 'Pick a period';
+                }
+                function refresh() {
+                    if (range) {
+                        chips.forEach(function (c) { c.classList.toggle('active', c.getAttribute('data-range') === range.value); });
+                        form.classList.toggle('rf-custom', range.value === 'custom');
+                    }
+                    var period = form.querySelector('.rf-period');
+                    if (period) period.textContent = periodText();
+                    var companyName = company && company.selectedIndex >= 0 ? company.options[company.selectedIndex].text : '';
+                    form.querySelector('.rf-summary-main').textContent = companyName || periodText();
+                    form.querySelector('.rf-summary-sub').textContent = companyName ? periodText() : '';
+                }
+
+                chips.forEach(function (chip) {
+                    chip.addEventListener('click', function () {
+                        var keepFrom = from.value, keepTo = to.value;
+                        range.value = chip.getAttribute('data-range');
+                        range.dispatchEvent(new Event('change'));   // runs updateDateRange()
+                        if (range.value === 'custom') {             // updateDateRange() blanks both dates
+                            from.value = keepFrom;
+                            to.value = keepTo;
+                        }
+                        refresh();
+                    });
+                });
+                [from, to, company].forEach(function (el) { if (el) el.addEventListener('change', refresh); });
+                form.querySelector('.rf-edit').addEventListener('click', function () {
+                    form.classList.remove('rf-collapsed');
+                });
+
+                // Customer search on phones (desktop keeps the plain dropdown)
+                if (company && window.jQuery && jQuery.fn.select2) {
+                    jQuery(company).select2({ width: '100%' }).on('change', refresh);
+                }
+                if (hasResults) form.classList.add('rf-collapsed');
+                refresh();
+            }
+        })();

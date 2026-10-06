@@ -1,8 +1,10 @@
 extends layout
+include mixins/report-filters-mobile
 
 block content
     
     form.report-filters(method='POST' action='/reports-creditsummary')
+        +reportFiltersMobile({ hasRange: false, hasResults: typeof creditsummary !== 'undefined' })
 
         script.
             function exportCreditSummaryExcel() {
@@ -164,6 +166,7 @@ block content
                     td.rf-btn
                         button.btn.btn-success.mr-2(type='button', onClick='exportCreditSummaryExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
                             i.bi.bi-file-earmark-spreadsheet
+                            span.rf-label-mobile  Excel
     div &nbsp;
     div
         div.row &nbsp;
@@ -177,7 +180,7 @@ block content
                 div(id="creditsummary-table-container") 
         else
             div.row &nbsp;
-            div.row.bg-light No records to display.
+            div.row.bg-light.report-empty No records to display.
 
     // Include the overlay
     include overlay.pug                           
