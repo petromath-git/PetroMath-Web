@@ -124,6 +124,7 @@ module.exports = {
                     .then((values) => {
                         res.render('new-closing', {
                             user: req.user,
+                            mobileReady: true,
                             showExShortBreakdown: showExShortBreakdown === 'Y',
                             config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                             cashiers: values[0].value.cashiers,
@@ -735,6 +736,7 @@ const getHomeData = async (req, res, next) => {
             res.render('home', {
                 title: 'Cashier Shift',
                 user: req.user,
+                mobileReady: true,
                 config: config.APP_CONFIGS,
                 closingValues: values[0].value,
                 currentDate: utils.currentDate(),

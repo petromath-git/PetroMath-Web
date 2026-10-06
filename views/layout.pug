@@ -3,8 +3,10 @@ html
   head
     title PetroMath:#{title}
     - var mobileReadyPages = ['Cashier Shift', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
-    if mobileReadyPages.includes(title)
-      meta(name="viewport" content="width=device-width, initial-scale=1.0")   
+    //- mobileReady: set by controllers whose page has its own phone layout (shift closing)
+    - var hasViewport = mobileReadyPages.includes(title) || mobileReady
+    if hasViewport
+      meta(name="viewport" content="width=device-width, initial-scale=1.0")
     link(rel='stylesheet', href=`/stylesheets/style.css?v=${CACHE_BUST}`)        
     link(rel='stylesheet', href='https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css')
     link(rel="stylesheet",href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
@@ -62,7 +64,18 @@ html
   if (closingData && closingData.closingStatus === 'CLOSED')
     - isFreezedRecord = true;
 
-  body(onload='populateSummaryFn(' + isFreezedRecord +');')
+  //- Roles that get the tile home (/m) instead of the sidebar on phones
+  - var hasMobileHome = user && user.Role !== 'Cashier' && user.Role !== 'Customer'
+  - var bodyClasses = []
+  if mobileReady
+    - bodyClasses.push('mobile-ready')
+  if isPhone && hasMobileHome
+    - bodyClasses.push('phone-nav')
+  //- Viewport tag present: the page lays out at phone width (vs shrunk desktop)
+  if hasViewport
+    - bodyClasses.push('has-viewport')
+
+  body(class=(bodyClasses.length ? bodyClasses.join(' ') : undefined) onload='populateSummaryFn(' + isFreezedRecord +');')
 
     if isPreviewing && previewMeta
       .preview-mode-banner
@@ -79,6 +92,9 @@ html
       // Vertical Sidebar
       nav.sidebar#sidebar
         .sidebar-header(class=(APP_VERSION === 'canary' ? 'canary-instance' : ''))
+          //- Phones: the open sidebar covers the whole screen, so it needs its own close
+          button.sidebar-close#sidebarClose(type="button" aria-label="Close menu")
+            i.bi.bi-x-lg
           a.sidebar-logo(href="/") PetroMath
           .sidebar-user
             | Logged in as #{user.Person_Name}
@@ -201,8 +217,14 @@ html
       .main-content#mainContent
         .top-bar
           .d-flex.align-items-center
-            button.sidebar-toggle#sidebarToggle(type="button")
+            //- On phones the tile home replaces the sidebar, so the toggle hides
+            //- wherever the Home button shows (CSS)
+            button.sidebar-toggle#sidebarToggle(type="button" aria-label="Menu" class=(hasMobileHome ? 'has-mobile-home' : undefined))
               i.bi.bi-list
+            //- Phones only (CSS): back to the tile home page
+            if hasMobileHome
+              a.mobile-home-btn(href="/m" aria-label="Home" title="Home")
+                i.bi.bi-grid-fill
             .breadcrumb-nav Dashboard > #{title}
           
           .top-bar-actions
@@ -254,6 +276,13 @@ html
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
         
+        const sidebarClose = document.getElementById('sidebarClose');
+        if (sidebarClose && sidebar) {
+          sidebarClose.addEventListener('click', function() {
+            sidebar.classList.remove('show');
+          });
+        }
+
         if (sidebarToggle && sidebar && mainContent) {
           sidebarToggle.addEventListener('click', function() {
             if (window.innerWidth <= 768) {

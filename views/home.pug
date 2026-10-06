@@ -53,14 +53,88 @@ block content
             padding: 8px 12px !important;
             font-weight: 500;
         }
-        
+
+        /* ---- Phone layout (sl- = shift list). Desktop keeps the table. ---- */
+        .sl-phone-top, .sl-range { display: none; }
+        @media (max-width: 768px) {
+            .sl-phone-top { display: block; margin-bottom: 12px; }
+            .sl-desktop-only { display: none; }
+            .sl-new-btn {
+                width: 100%; height: 50px; border: 0; border-radius: 12px;
+                background: #f4d03f; color: #212529; font-size: 16px; font-weight: 700;
+                display: flex; align-items: center; justify-content: center; gap: 8px;
+            }
+            .sl-new-btn:active { background: #e6c12f; }
+            .sl-note {
+                padding: 12px 14px; border-radius: 12px; background: #fff4e5;
+                color: #8a4b00; font-size: 14px; font-weight: 600;
+            }
+
+            /* Filter: collapsed by default (script below), header shows the period */
+            .sl-filter-title { display: none; }
+            .sl-range { display: inline; font-weight: 600; }
+            .filter-header { border-radius: 12px; }
+            .card.mb-3 { border-radius: 12px; overflow: hidden; margin-bottom: 12px !important; }
+
+            .sl-list { padding: 0; }
+            .sl-cards .sl-card {
+                background: #fff; border: 1px solid #e3e6ea; border-left: 4px solid #9aa3ad;
+                border-radius: 12px; box-shadow: none; padding: 0; margin-bottom: 10px; transform: none;
+            }
+            .sl-cards .sl-card:hover { transform: none; box-shadow: none; }
+            .sl-cards .sl-card.draft { border-left-color: #f4b400; }
+            .sl-cards .sl-card.closed { border-left-color: #2e9d5b; }
+            .sl-card-main { display: block; padding: 12px 14px 10px; color: #1f2328; text-decoration: none; }
+            .sl-card-main:hover, .sl-card-main:focus { color: #1f2328; text-decoration: none; }
+            .sl-card-main:active { background: #f6f7f9; }
+            .sl-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+            .sl-cashier { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .sl-status { flex-shrink: 0; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; background: #eef0f3; color: #3f4652; }
+            .sl-status-draft { background: #fef3c7; color: #8a4b00; }
+            .sl-status-closed { background: #dcfce7; color: #166534; }
+            .sl-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; font-size: 13px; color: #5b6470; }
+            .sl-open { font-weight: 700; color: #1d4ed8; display: inline-flex; align-items: center; gap: 2px; }
+            .sl-qty { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+            .sl-chip { font-size: 13px; font-weight: 700; color: #1f2328; background: #f1f3f5; border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
+            .sl-chip-label { font-weight: 600; color: #5b6470; margin-right: 4px; }
+            .sl-card-foot {
+                display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+                border-top: 1px solid #eef0f3; font-size: 14px;
+            }
+            .sl-exshort { flex-grow: 1; font-weight: 700; }
+            .sl-exshort a { color: inherit; }
+            .sl-action { flex-shrink: 0; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5d9df; background: #fff; font-size: 14px; font-weight: 600; }
+            .sl-action-delete { color: #b42318; }
+            .sl-action-reopen { color: #8a4b00; }
+            .sl-empty { margin: 0; padding: 24px 14px; border-radius: 12px; justify-content: center; color: #5b6470; }
+        }
+
+    - var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    - var fmtDate = function (s) { var p = String(s || '').split('-'); return p.length === 3 ? p[2] + '-' + MONTHS[parseInt(p[1], 10) - 1] + '-' + p[0] : (s || ''); }
+    - var fmtQty = function (n) { return parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    - var canAddNew = canCreateShiftClosing && draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
+
+    //- Phones only: the main action sits at the top instead of below the list
+    if canCreateShiftClosing
+        .sl-phone-top
+            if canAddNew
+                button.sl-new-btn(type='button' onclick='getNewClosingPage()')
+                    i.bi.bi-plus-lg
+                    | New shift closing
+            else if draftDaysCnt > 0
+                .sl-note Drafts have been open too long. Close them to add a new shift.
+            else
+                .sl-note Max #{maxAllowedDrafts} drafts reached. Close one to add a new shift.
+
     // Collapsible Filter Section - Desktop & Mobile
     .card.mb-3
         .card-header.filter-header(style='cursor: pointer; background-color: #f8f9fa;' onclick='toggleFilters()')
             .d-flex.justify-content-between.align-items-center
-                h6.mb-0 
+                h6.mb-0
                     i.bi.bi-funnel.me-2
-                    | Cashier Shift Filters
+                    span.sl-filter-title Cashier Shift Filters
+                    //- Phones: the filter starts collapsed, so show the period instead
+                    span.sl-range #{fmtDate(fromClosingDate)} to #{fmtDate(toClosingDate)}
                 i#filter-toggle-icon.bi.bi-chevron-down
         .filter-content.collapse.show#filterContent
             .card-body
@@ -123,9 +197,9 @@ block content
                                     i.bi.bi-search.me-2
                                     | Go
 
-    div &nbsp;             
-    
-    div.container-fluid
+    div.sl-desktop-only &nbsp;
+
+    div.container-fluid.sl-list
         if closingValues && closingValues.length > 0
             // Reverted back to simple table.table (like original)
             .table-responsive
@@ -270,96 +344,74 @@ block content
                                 td -
 
             // Mobile cards layout - ONLY visible on mobile
-            .mobile-cards-container(style="display: none;")
+            //- Phones only (CSS): one compact card per shift; tap the card to open it
+            .mobile-cards-container.sl-cards(style="display: none;")
                 each val in closingValues
                     - var canReopenShift = !val.cashflowId || val.cashflowStatus === 'DRAFT'
-                    - var statusClass = val.closingStatus === 'DRAFT' ? 'draft' : 'closed'
-                    .closing-card(class=statusClass)
-                        .card-header-mobile
-                            .card-id-title ##{val.closingId}
-                            .card-status-badge(class=val.closingStatus === 'DRAFT' ? 'status-draft' : 'status-closed')= val.closingStatus
+                    - var isDraft = val.closingStatus === 'DRAFT'
+                    - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'PowerUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
+                    - var showDelete = isDraft && user.isAdmin
+                    - var showReopen = !isDraft && canReopen && canReopenShift
+                    - var exShort = parseFloat(val.expenseData || 0)
+                    //- Same quantities as the desktop columns, zero ones left out
+                    - var qty = []
+                    if productColumns && productColumns.length > 0
+                        each column in productColumns
+                            - qty.push({ label: column.label, value: val[column.key] })
+                            if showTestingSummary === 'Y' && column.type === 'pump'
+                                - qty.push({ label: column.label + ' (T)', value: val['test_' + column.key] })
+                    else
+                        - qty = [{ label: 'MS', value: val.msData }, { label: 'HSD', value: val.hsdData }, { label: 'XMS', value: val.xmsData }, { label: '2T Loose', value: val.l2tData }]
+                    - qty = qty.filter(function (q) { return parseFloat(q.value || 0) > 0; })
 
-                        .card-row
-                            .card-label Date
-                            .card-value= val.closingDate
-
-                        .card-row
-                            .card-label Cashier
-                            .card-value= val.cashierName
-
-                        if productColumns && productColumns.length > 0
-                            each column in productColumns
-                                - var productValue = parseFloat(val[column.key] || 0)
-                                if productValue > 0
-                                    .card-row
-                                        .card-label= column.label
-                                        .card-value
-                                            span.product-value= productValue.toFixed(2)
-                                if showTestingSummary === 'Y' && column.type === 'pump'
-                                    - var testValue = parseFloat(val['test_' + column.key] || 0)
-                                    if testValue > 0
-                                        .card-row
-                                            .card-label= column.label + ' (T)'
-                                            .card-value
-                                                span.product-value= testValue.toFixed(2)
-                        else
-                            - var msVal = parseFloat(val.msData || 0)
-                            if msVal > 0
-                                .card-row
-                                    .card-label MS
-                                    .card-value
-                                        span.product-value= msVal.toFixed(2)
-                            - var hsdVal = parseFloat(val.hsdData || 0)
-                            if hsdVal > 0
-                                .card-row
-                                    .card-label HSD
-                                    .card-value
-                                        span.product-value= hsdVal.toFixed(2)
-                            - var xmsVal = parseFloat(val.xmsData || 0)
-                            if xmsVal > 0
-                                .card-row
-                                    .card-label XMS
-                                    .card-value
-                                        span.product-value= xmsVal.toFixed(2)
-                            - var l2tVal = parseFloat(val.l2tData || 0)
-                            if l2tVal > 0
-                                .card-row
-                                    .card-label 2T Loose
-                                    .card-value
-                                        span.product-value= l2tVal.toFixed(2)
-
-                        if val.expenseData && val.expenseData != 0
-                            .card-row
-                                .card-label Short/Excess
-                                .card-value
-                                    +exShortBreakdownLink(`showExShortBreakdown(${val.closingId});`)
-                                        if val.expenseData > 0
-                                            strong.text-success= '+' + parseFloat(val.expenseData).toFixed(2)
-                                        else
-                                            strong.text-danger= parseFloat(val.expenseData).toFixed(2)
-
-                        .card-actions
-                            if val.closingStatus === 'DRAFT'
-                                a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) Edit
-                                if user.isAdmin
-                                    button.action-btn.btn-delete(onClick=`deleteClosing(${val.closingId})`) Delete
-                            else
-                                a.action-btn.btn-edit(href=`/edit-draft-closing?closingId=${val.closingId}`) View
-                                - var canReopen = (user.Role === 'SuperUser') || (user.Role === 'PowerUser') || (user.Role === 'Admin' && allowShiftReopen === 'Y')
-                                if canReopen && canReopenShift
-                                    button.action-btn.btn-reopen(onClick=`reopenShift(${val.closingId})`) Reopen
+                    .sl-card.closing-card(class=isDraft ? 'draft' : 'closed')
+                        a.sl-card-main(href=`/edit-draft-closing?closingId=${val.closingId}` aria-label=`${isDraft ? 'Edit' : 'View'} shift ${val.closingId} of ${val.cashierName}`)
+                            .sl-card-top
+                                span.sl-cashier= val.cashierName
+                                if isDraft
+                                    span.sl-status.sl-status-draft Draft
+                                else if val.closingStatus === 'CLOSED'
+                                    span.sl-status.sl-status-closed Closed
+                                else
+                                    span.sl-status= val.closingStatus
+                            .sl-meta
+                                span #{val.closingDate} · ##{val.closingId}
+                                span.sl-open
+                                    | #{isDraft ? 'Edit' : 'View'}
+                                    i.bi.bi-chevron-right
+                            if qty.length
+                                .sl-qty
+                                    each q in qty
+                                        span.sl-chip
+                                            span.sl-chip-label= q.label
+                                            | #{fmtQty(q.value)}
+                        if exShort !== 0 || showDelete || showReopen
+                            .sl-card-foot
+                                if exShort !== 0
+                                    span.sl-exshort(class=exShort > 0 ? 'text-success' : 'text-danger')
+                                        +exShortBreakdownLink(`showExShortBreakdown(${val.closingId});`)
+                                            | #{exShort > 0 ? 'Excess' : 'Shortage'} #{Math.abs(exShort).toFixed(2)}
+                                else
+                                    span.sl-exshort
+                                if showDelete
+                                    button.sl-action.sl-action-delete(type='button' onClick=`deleteClosing(${val.closingId})`) Delete
+                                if showReopen
+                                    button.sl-action.sl-action-reopen(type='button' onClick=`reopenShift(${val.closingId})`) Reopen
         else
-            div.row.bg-light No records to display.
+            div.row.bg-light.sl-empty No records to display.
 
+        //- On phones this is hidden and the button at the top is used instead;
+        //- the form stays in the page because that button submits it
         if canCreateShiftClosing
-            if draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
-                form(method='GET' action='/new-closing' id='get-new-closing')
-                    button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
-            else if draftDaysCnt > 0
-                pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
-            else
-                pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{maxAllowedDrafts} allowed drafts are met.
-            .mb-4 
+            .sl-desktop-only
+                if draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
+                    form(method='GET' action='/new-closing' id='get-new-closing')
+                        button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
+                else if draftDaysCnt > 0
+                    pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
+                else
+                    pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{maxAllowedDrafts} allowed drafts are met.
+                .mb-4
 
         if deadlineMessage && deadlineMessage.length > 0
             .deadline-section
@@ -380,6 +432,12 @@ block content
         script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)
 
     script.
+        // Phones: start with the filter collapsed so the shifts come first
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            var fc = document.getElementById('filterContent');
+            if (fc && fc.classList.contains('show')) toggleFilters();
+        }
+
         // Toggle filter collapse
         function toggleFilters() {
             const filterContent = document.getElementById('filterContent');

@@ -761,16 +761,18 @@ ajax-loading image changes - end
 }
 
 
-/* URGENT: Hide placeholder rows on mobile to prevent freezing */
+/* URGENT: Hide placeholder rows on mobile to prevent freezing.
+   Skipped on body.mobile-ready pages (shift closing), which hide unused rows
+   properly and have their own phone layout at the end of this file. */
 @media (max-width: 768px) {
   /* Hide all but first 5 placeholder rows in tables */
-  .table tbody tr:nth-child(n+6) {
+  :where(body:not(.mobile-ready)) .table tbody tr:nth-child(n+6) {
     display: none !important;
   }
-  
+
   /* Also hide any empty rows that might be placeholders */
-  .table tbody tr:empty,
-  .table tbody tr:has(td:empty) {
+  :where(body:not(.mobile-ready)) .table tbody tr:empty,
+  :where(body:not(.mobile-ready)) .table tbody tr:has(td:empty) {
     display: none !important;
   }
 }
@@ -779,7 +781,7 @@ ajax-loading image changes - end
 /* Optimize mobile performance for edit-draft-closing */
 @media (max-width: 768px) {
   /* Prevent expensive table reflows */
-  .table {
+  :where(body:not(.mobile-ready)) .table {
     table-layout: fixed !important;
     width: auto !important;
     transform: translateZ(0); /* Hardware acceleration */
@@ -1307,10 +1309,33 @@ body {
 }
 
 .sidebar-header {
+  position: relative;
   padding: 20px;
   background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: center;
+}
+
+.sidebar-close {
+  display: none;
+}
+@media (max-width: 768px) {
+  .sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.08);
+    color: #212529;
+    font-size: 20px;
+    cursor: pointer;
+  }
 }
 
 .sidebar-header.canary-instance {
@@ -1445,6 +1470,86 @@ body {
   color: #6c757d;
   font-size: 14px;
   margin: 0;
+}
+
+/* Tile home (/m) shortcut — only on phones, next to the hamburger */
+.mobile-home-btn {
+  display: none;
+}
+
+/* body.phone-nav: phone detected server-side (layout.pug). Needed because
+   pages without the viewport tag render at desktop width on a phone, so the
+   max-width media queries below never match there. On every page: no
+   sidebar, Home button instead. */
+body.phone-nav .sidebar,
+body.phone-nav .sidebar-toggle.has-mobile-home {
+  display: none !important;
+}
+body.phone-nav .main-content {
+  margin-left: 0 !important;
+}
+body.phone-nav .mobile-home-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  margin-right: 12px;
+  border-radius: 4px;
+  background: #f4d03f;
+  color: #212529;
+  font-size: 18px;
+}
+/* Pages without the viewport tag are shrunk to ~40% on a phone: draw the bar bigger
+   so the Home button stays a real tap target */
+body.phone-nav:not(.has-viewport) .mobile-home-btn {
+  width: 96px;
+  height: 84px;
+  margin-right: 24px;
+  border-radius: 10px;
+  font-size: 44px;
+}
+body.phone-nav:not(.has-viewport) .breadcrumb-nav {
+  font-size: 28px;
+}
+body.phone-nav:not(.has-viewport) .logout-btn {
+  font-size: 26px;
+  padding: 14px 24px;
+}
+@media (max-width: 768px) {
+  .mobile-home-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 36px;
+    margin-right: 12px;
+    border-radius: 4px;
+    background: #f4d03f;
+    color: #212529;
+    font-size: 18px;
+  }
+  .mobile-home-btn:hover, .mobile-home-btn:focus {
+    color: #212529;
+    text-decoration: none;
+  }
+  /* Tiles + search on /m cover every menu item, so no hamburger on phones */
+  .sidebar-toggle.has-mobile-home {
+    display: none;
+  }
+  /* Keep the top bar inside the phone width: the name is in the sidebar
+     header anyway, and a long page title truncates instead of overflowing */
+  body.has-viewport .top-bar .user-info {
+    display: none;
+  }
+  body.has-viewport .top-bar > .d-flex {
+    min-width: 0;
+  }
+  body.has-viewport .breadcrumb-nav {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .top-bar-actions {
@@ -1794,9 +1899,9 @@ body {
 
 /* ===== BILLS CREATE PAGE MOBILE STYLES ===== */
 
-/* Hide desktop table on mobile for bills */
+/* Hide desktop table on mobile for bills (not on body.mobile-ready pages) */
 @media (max-width: 768px) {
-  .table-responsive {
+  :where(body:not(.mobile-ready)) .table-responsive {
     display: none !important;
   }
   
@@ -2993,5 +3098,275 @@ tr.d-md-none,
     border-top: 1px solid #dee2e6;
     padding: 0.75rem 0;
     margin: 0 -15px;
+  }
+}
+
+/* ===== SHIFT CLOSING (new-closing.pug, edit-draft-closing.pug) — MOBILE =====
+   These pages render with mobileReady, which adds the viewport meta tag and
+   body.mobile-ready (layout.pug). Without the viewport tag phones lay the page
+   out at desktop width and none of the rules below apply. The older global
+   rules that hide every .table-responsive, cap tables at 5 rows and force
+   table-layout:fixed skip body.mobile-ready.
+   Entry rows are targeted by id, never by an added class: the JS marks an
+   unused row with className === 'd-md-none' (exact match) and resets a used
+   row's className to ''. */
+
+/* Inside these pages "d-md-none" only ever means "not in use": unused entry
+   rows, nozzles not added to the shift, and the Closing/Attendance panes for
+   non-admins. Only rows and nozzles without it are saved, so on a phone
+   anything typed into one of them would be silently dropped. */
+.closing-page .d-md-none {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  body.mobile-ready {
+    padding: 0;
+    zoom: 1 !important; /* the per-location desktopZoom applies below 1600px */
+  }
+
+  /* Tabs: one row that scrolls sideways and stays at the top */
+  .closing-page .nav-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: #fff;
+    margin: 0 -15px;
+    padding: 0 8px;
+  }
+  .closing-page .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .closing-page .nav-tabs .nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0;
+  }
+  .closing-page .nav-tabs .nav-link {
+    font-size: 14px !important;
+    padding: 12px 14px !important;
+    white-space: nowrap;
+  }
+
+  /* 16px stops iOS zooming into a field on focus */
+  .closing-page .form-control,
+  #creditEntryModal .form-control {
+    font-size: 16px;
+  }
+  .closing-page .table {
+    table-layout: auto;
+    width: 100%;
+  }
+  .closing-page .table th,
+  .closing-page .table td {
+    padding: 0.4rem;
+  }
+
+  /* Closing tab: header fields two per row, product rates two per row */
+  .closing-page #new_closing > .row:not(.closing-next) > .col {
+    flex: 0 0 50%;
+    max-width: 50%;
+    margin-bottom: 0.75rem;
+  }
+  .closing-page #new_closing > #gasoline-prices > .col {
+    flex: 0 0 calc(50% - 20px);
+    max-width: calc(50% - 20px);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Reading tab: nozzle cards two per row (one per row on narrow phones) */
+  .closing-page #new_readings [id$="_sub_header"] {
+    flex: 0 0 50%;
+    max-width: 50%;
+    padding: 0 6px !important;
+    margin-bottom: 0.75rem;
+  }
+
+  /* 2T, Expenses / Denominations: stack the side-by-side halves */
+  .closing-page #sales_2t > .row > .col-6,
+  .closing-page #new_expenses > .row > .col-6 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 1rem;
+  }
+
+  /* Entry tables: each row becomes a card, each cell labelled from its
+     data-label. Scoped to table.mobile-card-table because populateSummary()
+     copies each entry table's classes onto its Summary wrapper div.
+     Rows hidden by the JS with an inline display:none (credit detail rows,
+     search filtering) stay hidden: no !important here. */
+  .closing-page table.mobile-card-table,
+  .closing-page table.mobile-card-table > thead,
+  .closing-page table.mobile-card-table > tbody {
+    display: block;
+    width: 100%;
+  }
+  .closing-page table.mobile-card-table > thead > tr:first-child {
+    display: none !important;
+  }
+  .closing-page table.mobile-card-table tr[id*="-table-row-"],
+  .closing-page table.mobile-card-table tr.credit-summary-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row dense;
+    gap: 0.5rem 0.75rem;
+    position: relative;
+    padding: 2rem 0.75rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+  }
+  .closing-page table.mobile-card-table tr[id*="-table-row-"] > td,
+  .closing-page table.mobile-card-table tr.credit-summary-row > td {
+    display: block;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+  .closing-page table.mobile-card-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  .closing-page table.mobile-card-table td.card-wide {
+    grid-column: 1 / -1;
+  }
+  .closing-page table.mobile-card-table td.card-remove {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+  }
+  .closing-page table.mobile-card-table td.card-remove .close {
+    font-size: 1.75rem;
+    padding: 0 0.5rem;
+  }
+  .closing-page table.mobile-card-table td.card-remove .btn {
+    font-size: 1.15rem;
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Total rows: right-aligned "Total [amount]" */
+  .closing-page table.mobile-card-table tr:not([id]) {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-top: 2px solid #dee2e6;
+  }
+  .closing-page table.mobile-card-table tr:not([id]) > td {
+    display: block;
+    border: 0;
+    padding: 0;
+  }
+  .closing-page table.mobile-card-table tr:not([id]) > td:empty {
+    display: none;
+  }
+  .closing-page table.mobile-card-table tr:not([id]) .form-control {
+    max-width: 10rem;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  /* Summary: sections full width, nozzles two per row, wide tables scroll
+     inside their section. The section scrolls, not the .table-responsive
+     wrapper: populateSummary() replaces that wrapper's class list. */
+  .closing-page #summary-div .row > [class*="col-"] {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 0.75rem;
+    overflow-x: auto;
+  }
+  .closing-page #summary-div #v-pump-readings .row > [id$="_sub_header"] {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+  .closing-page #summary-div .table-sm {
+    white-space: nowrap;
+  }
+
+  /* Next / Save / CLOSE stay reachable without scrolling to the bottom */
+  .closing-page .closing-next {
+    position: sticky;
+    bottom: 0;
+    z-index: 15;
+    background: #fff;
+    border-top: 1px solid #dee2e6;
+    padding: 0.6rem 0;
+  }
+  .closing-page .closing-next .btn {
+    width: 100%;
+    padding: 0.6rem;
+    font-size: 1rem;
+  }
+
+  /* Credit sale add/edit popup: full screen, buttons pinned at the bottom */
+  #creditEntryModal .modal-dialog {
+    max-width: none;
+    min-height: 100%;
+    margin: 0;
+  }
+  #creditEntryModal .modal-content {
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+  #creditEntryModal .modal-body .row > .col-md-3 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+  /* Vehicle search (Select2) matches the other fields' height */
+  #creditEntryModal .select2-container .select2-selection--single {
+    height: calc(1.5em + 0.75rem + 2px);
+    font-size: 16px;
+  }
+  #creditEntryModal .select2-container .select2-selection--single .select2-selection__rendered {
+    line-height: calc(1.5em + 0.75rem);
+  }
+  #creditEntryModal .select2-container .select2-selection--single .select2-selection__arrow {
+    height: 100%;
+  }
+  #creditEntryModal .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: #fff;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .closing-page #new_closing > .row:not(.closing-next) > .col,
+  .closing-page #new_readings [id$="_sub_header"] {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Smart Fill (Reading tab) is a desktop shortcut; the JS shows it once two
+     nozzles are added by clearing its inline style, hence !important */
+  .closing-page #smart-reading-section {
+    display: none !important;
+  }
+
+  /* Credit and Expense cards alternate colour so each bill stands out while
+     scrolling. Counted only among cards actually shown: unused rows
+     (d-md-none) and rows hidden by the credit search are skipped. */
+  .closing-page #credit-table tr.credit-summary-row:nth-child(even of tr.credit-summary-row:not(.d-md-none):not([style*="display: none"])),
+  .closing-page #exp-table tr[id^="exp-table-row-"]:nth-child(even of tr[id^="exp-table-row-"]:not(.d-md-none)) {
+    background: #eaf2fb;
+    border-color: #b9cfe8;
   }
 }
