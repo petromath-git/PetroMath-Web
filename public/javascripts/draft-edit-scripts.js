@@ -242,6 +242,7 @@ function getSaveFunction(clickedTab) {
             case 'reading_tab':
             case 'sales_2t_tab':
             case 'expenses_tab':
+            case 'denoms_tab':
             case 'summary_tab':
             case 'decantheader_tab':
             case 'decantlines_tab':
@@ -277,7 +278,10 @@ function getSaveFunction(clickedTab) {
                 saveFunctionName = 'saveEmployeeAdvance';
                 break;
             case 'expenses_tab':
-                saveFunctionName = 'saveExpensesAndDenoms';
+                saveFunctionName = 'saveExpensesTab';
+                break;
+            case 'denoms_tab':
+                saveFunctionName = 'saveDenomsTab';
                 break;
             case 'summary_tab':
                 saveFunctionName = 'NoSaveClick';   // dummy value
@@ -338,10 +342,12 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('credit_receipts_tab'));
             disableLink(document.getElementById('employee_advance_tab'));
             disableLink(document.getElementById('expenses_tab'));
+            disableLink(document.getElementById('denoms_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
             break;
         case 'expenses_tab':
+        case 'denoms_tab':
             disableLink(document.getElementById('closing_tab'));
             disableLink(document.getElementById('reading_tab'));
             disableLink(document.getElementById('sales_2t_tab'));
@@ -350,6 +356,8 @@ function disableOtherTabs(tabName) {
             disableLink(document.getElementById('digital_sales_tab'));
             disableLink(document.getElementById('credit_receipts_tab'));
             disableLink(document.getElementById('employee_advance_tab'));
+            if (tabName === 'expenses_tab') disableLink(document.getElementById('denoms_tab'));
+            if (tabName === 'denoms_tab') disableLink(document.getElementById('expenses_tab'));
             disableLink(document.getElementById('summary_tab'));
             disableLink(document.getElementById('attendance_tab'));
             break;
@@ -371,10 +379,12 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('credit_receipts_tab'));
             enableLink(document.getElementById('employee_advance_tab'));
             enableLink(document.getElementById('expenses_tab'));
+            enableLink(document.getElementById('denoms_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
             break;
         case 'expenses_tab':
+        case 'denoms_tab':
             enableLink(document.getElementById('closing_tab'));
             enableLink(document.getElementById('reading_tab'));
             enableLink(document.getElementById('sales_2t_tab'));
@@ -383,6 +393,8 @@ function enableOtherTabs(tabName) {
             enableLink(document.getElementById('digital_sales_tab'));
             enableLink(document.getElementById('credit_receipts_tab'));
             enableLink(document.getElementById('employee_advance_tab'));
+            enableLink(document.getElementById('expenses_tab'));
+            enableLink(document.getElementById('denoms_tab'));
             enableLink(document.getElementById('summary_tab'));
             enableLink(document.getElementById('attendance_tab'));
             break;
