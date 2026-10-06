@@ -332,6 +332,8 @@ function populateSummaryFn(isFreezedRecord) {
 }
 
 function disableOtherTabs(tabName) {
+    // A failed background autosave (closing-autosave.js) must not lock the user out of other tabs
+    if (window.closingAutosaveQuiet) return;
     switch(tabName) {
         case 'closing_tab':
             disableLink(document.getElementById('reading_tab'));

@@ -12,10 +12,13 @@ function validateDivTab(divId, tabId) {
         requiredObjs.forEach((obj) => {
             const grandPaObj = obj.parentElement.parentElement;
             if (!obj.validity.valid && !grandPaObj.className.includes('d-md-none')) {
+                isValid = false;
+                // Shift closing autosave (closing-autosave.js) only checks - it must not
+                // highlight fields or move focus while the user is still typing
+                if (window.closingAutosaveQuiet) return;
                 obj.className = "form-control is-invalid";
                 let msg = '\n' + obj.id + ' Is A Required Field..';
                 obj.focus();
-                isValid = false;
             }
         });
     }
