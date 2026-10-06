@@ -10,6 +10,7 @@ ALTER TABLE t_onboarding
 -- Backfill onboardings already migrated before this column existed, so a
 -- re-run on them isn't blocked. Each row is guarded by id AND name, so a
 -- mismatched id on another environment updates nothing.
+UPDATE t_onboarding SET location_code = 'AND'  WHERE id = 1  AND location_name = 'Andavar Agencies - Kunnathur';  -- RO name "Sri Andavar and co"
 UPDATE t_onboarding SET location_code = 'GAC2' WHERE id = 5  AND location_name = 'Ashok - Gounder Agencies';
 UPDATE t_onboarding SET location_code = 'BAF'  WHERE id = 7  AND location_name = 'Balaa Fuels';
 UPDATE t_onboarding SET location_code = 'PAC'  WHERE id = 9  AND location_name = 'Pariyur corporation';
