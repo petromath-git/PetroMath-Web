@@ -1,0 +1,19 @@
+//- Phones: report rows shown as cards (see style.css, CREDIT REPORTS - MOBILE)
+//- start collapsed to a one-line summary; tapping a card toggles its details
+//- by adding / removing "card-open". Rows marked stmt-balance-row or
+//- stmt-total-row aren't cards and are left alone.
+//- Desktop and PDFs are untouched: the script does nothing unless
+//- "screen and (max-width: 768px)" matches, and the class only has styles
+//- inside that query.
+//-   rowSelector - the card rows, e.g. 'table.credit-stmt-table > tbody > tr'
+mixin reportCardsMobile(rowSelector)
+    script.
+        (function () {
+            if (!window.matchMedia || !window.matchMedia('screen and (max-width: 768px)').matches) return;
+            var rowSelector = !{JSON.stringify(rowSelector)};
+            document.addEventListener('click', function (e) {
+                var row = e.target.closest(rowSelector);
+                if (!row || row.classList.contains('stmt-balance-row') || row.classList.contains('stmt-total-row')) return;
+                row.classList.toggle('card-open');
+            });
+        })();
