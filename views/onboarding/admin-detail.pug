@@ -305,8 +305,12 @@ block content
                     .form-row
                         .form-group.col-md-6
                             label.font-weight-bold(for="migrateLocCode") Location Code
-                            input.form-control#migrateLocCode(type="text" placeholder="e.g. JOVENI001" autocomplete="off")
-                            small.form-text.text-muted 3–5 chars. Must be unique across all locations.
+                            input.form-control#migrateLocCode(type="text" placeholder="e.g. JOVENI001" autocomplete="off" value=onboarding.location_code || '' readonly=!!onboarding.location_code)
+                            if onboarding.location_code
+                                small.form-text.text-success#locCodeStatus ✓ Linked to #{onboarding.location_code} — re-running only adds what's missing.
+                            else
+                                small.form-text.text-muted#locCodeStatus 3–5 chars. Must be unique across all locations.
+                                #locCodeSuggest.mt-1.small(style="display:none")
                         .form-group.col-md-6
                             label.font-weight-bold(for="migrateTemplateLocCode") Template Location
                             input.form-control#migrateTemplateLocCode(type="text" placeholder="e.g. MUE or SFS" autocomplete="off")
@@ -582,7 +586,73 @@ block content
             }
         }
 
+        // ── Location code availability (taken by another station → block) ──────
+        var locCodeTaken = false;
+        (function() {
+            var input = document.getElementById('migrateLocCode');
+            if (input.readOnly) return;   // already linked to this onboarding
+            var statusEl = document.getElementById('locCodeStatus');
+            var btnRun = document.getElementById('btnRunMigrate');
+            var timer = null, seq = 0;
+            input.addEventListener('input', function() {
+                clearTimeout(timer);
+                var code = input.value.trim();
+                locCodeTaken = false;
+                btnRun.disabled = false;
+                if (!code) { statusEl.className = 'form-text text-muted'; statusEl.textContent = '3–5 chars. Must be unique across all locations.'; return; }
+                statusEl.className = 'form-text text-muted';
+                statusEl.textContent = 'Checking…';
+                timer = setTimeout(async function() {
+                    var mySeq = ++seq;
+                    try {
+                        var r = await fetch('/admin/onboarding/' + OB_ID + '/check-location-code?code=' + encodeURIComponent(code));
+                        var d = await r.json();
+                        if (mySeq !== seq) return;   // a newer keystroke superseded this check
+                        if (d.status === 'conflict') {
+                            locCodeTaken = true;
+                            btnRun.disabled = true;
+                            statusEl.className = 'form-text text-danger font-weight-bold';
+                            statusEl.textContent = '✗ ' + d.error;
+                        } else {
+                            statusEl.className = 'form-text text-success';
+                            statusEl.textContent = '✓ ' + code.toUpperCase() + ' is available.';
+                        }
+                    } catch (e) {
+                        if (mySeq !== seq) return;
+                        statusEl.className = 'form-text text-warning';
+                        statusEl.textContent = 'Could not check availability — the server will still refuse a taken code.';
+                    }
+                }, 400);
+            });
+
+            // Suggested free codes from the RO name — click one to fill + re-check it
+            var suggestLoaded = false;
+            $('#migrateModal').on('show.bs.modal', function() {
+                if (suggestLoaded || input.readOnly) return;
+                suggestLoaded = true;
+                fetch('/admin/onboarding/' + OB_ID + '/suggest-location-codes')
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (!d.codes || !d.codes.length) return;
+                        var box = document.getElementById('locCodeSuggest');
+                        box.innerHTML = '<span class="text-muted mr-1">Suggested (free):</span>' + d.codes.map(function(c) {
+                            return '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 mr-1 loc-suggest" data-code="' + c + '">' + c + '</button>';
+                        }).join('');
+                        box.style.display = '';
+                        box.querySelectorAll('.loc-suggest').forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                if (input.readOnly) return;
+                                input.value = btn.dataset.code;
+                                input.dispatchEvent(new Event('input'));   // free at load time, but re-check
+                            });
+                        });
+                    })
+                    .catch(function() {});   // suggestions are optional
+            });
+        })();
+
         document.getElementById('btnRunMigrate').addEventListener('click', async function() {
+            if (locCodeTaken) { alert('That location code is already in use. Choose another.'); return; }
             var locCode = document.getElementById('migrateLocCode').value.trim();
             var templateLoc = document.getElementById('migrateTemplateLocCode').value.trim();
             if (!locCode) { alert('Enter the PetroMath location code.'); return; }
@@ -614,6 +684,15 @@ block content
                         var errHtml = hasErrors ? '<br><small class="text-danger">' + row.errors.join('<br>') + '</small>' : '';
                         listEl.innerHTML += '<li class="list-group-item py-2 ' + cls + '">' + icon + ' <strong>' + row.section + '</strong>: ' + detail + errHtml + '</li>';
                     });
+                    if (data.ok) {
+                        // Code is now linked to this onboarding — lock it for re-runs / Apply Config
+                        var locInput = document.getElementById('migrateLocCode');
+                        locInput.value = locCode.toUpperCase();
+                        locInput.readOnly = true;
+                        var st = document.getElementById('locCodeStatus');
+                        st.className = 'form-text text-success';
+                        st.textContent = '✓ Linked to ' + locInput.value + ' — re-running only adds what\'s missing.';
+                    }
                 } else {
                     listEl.innerHTML = '<li class="list-group-item list-group-item-danger">' + (data.error || 'Migration failed') + '</li>';
                 }

@@ -55,9 +55,18 @@ module.exports = {
             const { location_code, template_location, skip_supplier_ids } = req.body;
             if (!location_code?.trim()) return res.status(400).json({ error: 'location_code is required' });
             if (!template_location?.trim()) return res.status(400).json({ error: 'template_location is required' });
-            const loc = location_code.trim();
-            const tmpl = template_location.trim();
+            const loc = location_code.trim().toUpperCase();
+            const tmpl = template_location.trim().toUpperCase();
             const skipSupplierIds = new Set((skip_supplier_ids || []).map(Number));
+
+            // Refuse a code that belongs to another station — every step below
+            // "skips existing rows", so without this a clash would silently add
+            // this RO's pumps/tanks/customers to that station's masters.
+            const check = await OnboardingDao.checkLocationCode(onboarding, loc);
+            if (check.status === 'conflict') return res.status(409).json({ error: check.error });
+            if (check.status === 'new' && !(await OnboardingDao.claimLocationCode(onboarding.id, loc))) {
+                return res.status(409).json({ error: `Could not reserve ${loc} — it may have just been taken. Reload and try again.` });
+            }
 
             const data = await OnboardingDao.getAllData(onboarding.id);
             const ro = data.ro;
@@ -73,7 +82,7 @@ module.exports = {
                     'SELECT location_id FROM m_location WHERE location_code = :loc', { loc }
                 );
                 if (exists) {
-                    results.push({ section: 'Location (m_location)', inserted: 0, skipped: 1, errors: ['Already exists — skipped'] });
+                    results.push({ section: 'Location (m_location)', inserted: 0, skipped: 1, errors: ['Already exists (re-run) — skipped'] });
                 } else {
                     try {
                         await insertRow(
@@ -91,7 +100,11 @@ module.exports = {
                         // Trigger auto-seeds: expenses, CashFlow lookups, oil company supplier + SAP bank
                         results.push({ section: 'Location (m_location)', inserted: 1, skipped: 0, errors: [] });
                     } catch (e) {
-                        results.push({ section: 'Location (m_location)', inserted: 0, skipped: 0, errors: [e.message] });
+                        // No location row → nothing below has anywhere to go. Stop, and free
+                        // the code if this run claimed it so a corrected retry isn't blocked.
+                        if (check.status === 'new') await OnboardingDao.releaseLocationCode(onboarding.id, loc);
+                        results.push({ section: 'Location (m_location)', inserted: 0, skipped: 0, errors: [e.message, 'Migration stopped — nothing else was inserted.'] });
+                        return res.json({ ok: false, results });
                     }
                 }
             }
