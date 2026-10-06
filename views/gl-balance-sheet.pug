@@ -24,6 +24,9 @@ block content
                 button.btn.btn-primary.btn-sm(type="submit") View
 
         - const fmt = (n) => Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
+        //- FY starts 1-Apr: Jan–Mar dates belong to the FY that began the previous year
+        - const asOfYear = parseInt(asOfDate.substring(0,4), 10)
+        - const fyStartDate = (parseInt(asOfDate.substring(5,7), 10) >= 4 ? asOfYear : asOfYear - 1) + '-04-01'
 
         if isBalanced
             .alert.alert-success.py-2.mb-2
@@ -49,7 +52,7 @@ block content
                                 each row in g.rows
                                     tr
                                         td.pl-4
-                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + asOfDate.substring(0,4) + '-04-01&to_date=' + asOfDate)= row.ledger_name
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fyStartDate + '&to_date=' + asOfDate)= row.ledger_name
                                         td.text-right.small= fmt(row.amount)
                                 tr.group-subtotal
                                     td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
@@ -71,7 +74,7 @@ block content
                                 each row in g.rows
                                     tr
                                         td.pl-4
-                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + asOfDate.substring(0,4) + '-04-01&to_date=' + asOfDate)= row.ledger_name
+                                            a(href='/gl/ledger?ledger_id=' + row.ledger_id + '&from_date=' + fyStartDate + '&to_date=' + asOfDate)= row.ledger_name
                                         td.text-right.small= fmt(row.amount)
                                 tr.group-subtotal
                                     td.text-right.font-weight-bold.text-muted.small #{g.group_name} Total
