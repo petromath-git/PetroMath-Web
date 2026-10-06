@@ -382,6 +382,9 @@ function formCashFlowTxn(txnId, prefix, rowNum, user) {
         'description': document.getElementById(prefix + 'remarks-' + rowNum).value,
         'type': typeObj.options[typeObj.selectedIndex].text,
         'account_head_id': typeObj.value,
+        // Side the row was entered on - the head itself may be BOTH, which
+        // leaves entry_type NULL and hides the row from Day Close and the DSR.
+        'entry_type': prefix === 'cashflow-debit-' ? 'DEBIT' : 'CREDIT',
         'digital_vendor_id': digitalVendorId,
         'amount': document.getElementById(prefix + 'amt-' + rowNum).value,
         'calcFlag': 'N',
