@@ -2,9 +2,10 @@ extends ../layout
 include ../mixins/mixins
 
 block content
-    .container-fluid.py-4
+    include _admin-mobile
+    .container-fluid.py-4.ob-admin
 
-        .d-flex.justify-content-between.align-items-center.mb-4
+        .d-flex.justify-content-between.align-items-center.flex-wrap.mb-4(style="gap:8px")
             h4.mb-0 Onboarding
             button.btn.btn-primary(data-toggle="modal" data-target="#modalNewOnboarding") + New Onboarding
 
@@ -13,7 +14,7 @@ block content
         else
             .card.shadow-sm
                 .table-responsive
-                    table.table.table-hover.mb-0
+                    table.table.table-hover.mb-0.ob-stack
                         thead.thead-light
                             tr
                                 th Location Name
@@ -24,17 +25,18 @@ block content
                         tbody
                             each ob in onboardings
                                 tr
-                                    td
+                                    td.ob-card-title
                                         strong= ob.location_name
-                                    td
-                                        if ob.status === 'setup_done'
-                                            span.badge.badge-success Setup Done
-                                        else
-                                            span.badge.badge-warning.text-dark Active
-                                        if ob.link_active === 'N'
-                                            span.badge.badge-danger.ml-1 Link Deactivated
-                                    td= ob.created_at ? new Date(ob.created_at).toLocaleDateString('en-IN') : ''
-                                    td
+                                    td(data-label="Status")
+                                        span
+                                            if ob.status === 'setup_done'
+                                                span.badge.badge-success Setup Done
+                                            else
+                                                span.badge.badge-warning.text-dark Active
+                                            if ob.link_active === 'N'
+                                                span.badge.badge-danger.ml-1 Link Deactivated
+                                    td(data-label="Created")= ob.created_display
+                                    td(data-label="URL")
                                         .input-group.input-group-sm
                                             input.form-control.form-control-sm.onboard-url(
                                                 type="text"
@@ -48,7 +50,7 @@ block content
                                                     data-token=ob.token
                                                     title="Copy URL"
                                                 ) Copy
-                                    td
+                                    td.text-right.text-md-left
                                         a.btn.btn-sm.btn-outline-primary(href=`/admin/onboarding/${ob.id}`) View
 
     //- New Onboarding Modal
