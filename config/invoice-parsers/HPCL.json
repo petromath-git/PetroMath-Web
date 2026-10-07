@@ -1,7 +1,72 @@
 {
   "supplier": "HPCL",
-  "dateFormats": ["DD-MMM-YYYY", "DD/MM/YYYY", "DD-MM-YYYY"],
-  "header": {},
-  "lines": { "fields": {} },
-  "total_amount": {}
+  "dateFormats": ["DD/MM/YYYY", "DD-MM-YYYY", "DD-MMM-YYYY"],
+  "header": {
+    "invoice_number": {
+      "keyword": "VIDE: INVOICE",
+      "strategy": "value_after_keyword",
+      "pattern": "\\d{8,}"
+    },
+    "invoice_date": {
+      "keyword": "DATE",
+      "strategy": "value_on_prev_line",
+      "pattern": "\\d{2}/\\d{2}/\\d{4}",
+      "exact_match": true
+    },
+    "truck_number": {
+      "keyword": "VEHICLE NO.",
+      "strategy": "value_on_prev_line",
+      "pattern": "[A-Z0-9]{6,12}",
+      "exact_match": true
+    },
+    "delivery_doc_no": {
+      "keyword": "LOAD NO.",
+      "strategy": "value_on_prev_line",
+      "pattern": "\\d+",
+      "exact_match": true
+    }
+  },
+  "lines": {
+    "mode": "ordered_zip",
+    "count_from": "qty_rate",
+    "numeric_fields": ["quantity", "rate_per_kl", "total_line_amount", "vat_pct", "vat_amount", "additional_vat_amount", "sslf_amount", "density"],
+    "divide": { "quantity": 1000 },
+    "fields": {
+      "product_name": {
+        "pattern": "^(.+)\\n\\d{7}\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?L[\\d,]+\\.\\d+$",
+        "flags": "gm"
+      },
+      "qty_rate": {
+        "pattern": "^\\d{7}(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)L([\\d,]+\\.\\d+)$",
+        "flags": "gm",
+        "groups": ["quantity", "rate_per_kl"]
+      },
+      "total_line_amount": {
+        "pattern": "^\\d{7}[\\d,.]+L[\\d,]+\\.\\d+\\n/KL\\n([\\d,]+(?:\\.\\d+)?)$",
+        "flags": "gm"
+      },
+      "vat": {
+        "pattern": "^IN A/R VAT %\\n(\\d+(?:\\.\\d+)?)%([\\d,]+(?:\\.\\d+)?)$",
+        "flags": "gm",
+        "groups": ["vat_pct", "vat_amount"]
+      },
+      "additional_vat_amount": {
+        "pattern": "^Additional Tax\\n[\\d,.]+\\n/KL\\n([\\d,]+(?:\\.\\d+)?)$",
+        "flags": "gm"
+      },
+      "sslf_amount": {
+        "pattern": "^SSLF Recovery\\n[\\d,.]+\\n/KL\\n([\\d,]+(?:\\.\\d+)?)$",
+        "flags": "gm"
+      },
+      "density": {
+        "pattern": "^.*?(\\d{3}\\.\\d)\\d{2}\\.\\d$",
+        "flags": "gm"
+      }
+    }
+  },
+  "total_amount": {
+    "keyword": "Total Value",
+    "strategy": "value_before_keyword",
+    "pattern": "[\\d,]+\\.?\\d*"
+  }
 }

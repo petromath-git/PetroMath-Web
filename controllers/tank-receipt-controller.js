@@ -181,6 +181,8 @@ module.exports = {
                     charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
                 if (l.delivery_charge != null)
                     charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
+                if (l.sslf_amount != null)
+                    charges.push({ charge_type: 'SSLF_RECOVERY', charge_pct: null, charge_amount: l.sslf_amount });
                 return { ...l, charges, qty_unit: result.qty_unit || 'KL' };
             });
 
@@ -239,6 +241,8 @@ module.exports = {
                     charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
                 if (l.delivery_charge != null)
                     charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
+                if (l.sslf_amount != null)
+                    charges.push({ charge_type: 'SSLF_RECOVERY', charge_pct: null, charge_amount: l.sslf_amount });
                 return {
                     product_id: Number(l.product_id),
                     product_name: l.product_name || null,

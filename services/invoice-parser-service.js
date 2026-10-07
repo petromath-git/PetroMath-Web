@@ -400,7 +400,12 @@ async function parseInvoice(pdfBuffer, companyName) {
     const lines = getLines(rawText);
 
     const header = parseHeaderFields(lines, config.header || {}, config.dateFormats || []);
-    const productLines = config.lines ? parseProductLines(lines, config.lines, config.dateFormats || []) : [];
+    let productLines = [];
+    if (config.lines && config.lines.mode === 'ordered_zip') {
+        productLines = parseProductLinesOrderedZip(rawText, config.lines);
+    } else if (config.lines) {
+        productLines = parseProductLines(lines, config.lines, config.dateFormats || []);
+    }
     const totalAmount = parseTotalAmount(lines, config.total_amount);
 
     if (totalAmount) header.total_invoice_amount = totalAmount;
@@ -431,7 +436,7 @@ function applyOcrFixes(text, fixes) {
 }
 
 function parseProductLinesOrderedZip(rawText, linesConfig) {
-    const { ocr_fixes, fields, count_from, numeric_fields = [], abs_fields = [] } = linesConfig;
+    const { ocr_fixes, fields, count_from, numeric_fields = [], abs_fields = [], divide = {} } = linesConfig;
     const fixed = applyOcrFixes(rawText, ocr_fixes);
     const normalised = fixed.split('\n').map(l => l.trim()).join('\n');
 
@@ -459,6 +464,8 @@ function parseProductLinesOrderedZip(rawText, linesConfig) {
             if (rec[key] == null) continue;
             let val = cleanNumber(rec[key]);
             if (abs_fields.includes(key) && val != null) val = Math.abs(val);
+            // e.g. HPCL prints qty in litres while rate is per KL → divide: { quantity: 1000 }
+            if (divide[key] && val != null) val = Math.round((val / divide[key]) * 1000) / 1000;
             rec[key] = val;
         }
 
