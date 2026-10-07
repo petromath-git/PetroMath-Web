@@ -78,7 +78,7 @@ block content
                                 if e.is_protected
                                     span.badge.badge-secondary.ml-2 System
                                 .small.text-muted
-                                    | Default #{e.default_amt == null ? '-' : e.default_amt} · Used in #{e.usage_count} shift entr#{e.usage_count === 1 ? 'y' : 'ies'}
+                                    | Default #{e.default_amt == null ? '-' : e.default_amt} · #{e.usage_count === 0 ? 'Not used yet' : `Used in ${e.usage_count} shift entr${e.usage_count === 1 ? 'y' : 'ies'}`}
                             .text-nowrap
                                 +expenseActions(e)
             else
@@ -114,6 +114,8 @@ block content
         }
         .expenses-container { padding-top: 15px; }
         @media (min-width: 992px) { .expenses-header-sticky { margin-left: 260px; } }
+        /* Phones: a sticky header would sit under the top bar; keep it in the flow */
+        @media (max-width: 991px) { .expenses-header-sticky { position: static; box-shadow: none; } }
 
     script.
         (function() {

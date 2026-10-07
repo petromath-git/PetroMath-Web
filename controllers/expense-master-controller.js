@@ -29,6 +29,7 @@ module.exports = {
             res.render('expense-master', {
                 title: 'Cashier Expenses',
                 user: req.user,
+                mobileReady: true,   // viewport tag + body.mobile-ready: page has its own phone (card) layout
                 expenses: expenses.map(e => ({
                     ...e,
                     usage_count: Number(e.usage_count),
