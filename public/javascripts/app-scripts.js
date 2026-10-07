@@ -1971,16 +1971,17 @@ function saveAlert(message) {
     alert(message);
 }
 
-function parseAjaxResult(req) {
+function parseAjaxResult(req, action) {
+    const failed = 'Could not ' + (action || 'save') + ' - ';
     if (req.status == 200 || req.status == 500) {
         try {
             return JSON.parse(req.responseText);
         } catch (e) {
             // e.g. an expired session answers with the login page instead of JSON
-            return { error: 'Could not save - the server sent an unexpected response. Please refresh the page and try again.' };
+            return { error: failed + 'the server sent an unexpected response. Please refresh the page and try again.' };
         }
     }
-    return { error: 'Could not save - ' + (req.status ? 'server error (' + req.status + ')' : 'no network connection') + '. Please try again.' };
+    return { error: failed + (req.status ? 'server error (' + req.status + ')' : 'no network connection') + '. Please try again.' };
 }
 
 function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hiddenFieldsArr, idModelAttr) {
@@ -2074,7 +2075,9 @@ function deleteAjax(url, data, elementId, classValue) {
             xhttp.onreadystatechange = function () {
                 if (this.readyState == 4) {
                     ajaxLoading('d-md-none');
-                    const result = JSON.parse(xhttp.responseText);
+                    // Always settles - on the shift closing page deletes wait in the save queue
+                    // (closing-autosave.js), so a hang here would block every later save
+                    const result = parseAjaxResult(xhttp, 'delete');
                     showToastMessage(result);
                     if (!result.error) {     // Post action on success
                         postDeleteAction(elementId, classValue);

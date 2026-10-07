@@ -96,11 +96,48 @@ function handleAddCreditRowClick() {
     openCreditRowModal(rowNo, true);
 }
 
+// Values of an existing row when its popup opened, so closing the popup without Save puts
+// them back. Without this, Cancel kept the edits and they were saved on the next save/autosave.
+function snapshotCreditRow(rowNo) {
+    var row = document.getElementById('credit-table-row-' + rowNo);
+    var snapshot = [];
+    if (!row) return snapshot;
+    row.querySelectorAll('input, select, textarea').forEach(function (el) {
+        if (!el.id || /_hiddenId$/.test(el.id)) return;
+        snapshot.push({ id: el.id, value: el.value, checked: el.checked });
+    });
+    return snapshot;
+}
+
+function restoreCreditRowSnapshot(rowNo, snapshot) {
+    if (!snapshot || !snapshot.length) return;
+    var byId = {};
+    snapshot.forEach(function (s) { byId[s.id] = s; });
+    var party = document.getElementById('credit-creditparty-' + rowNo);
+    var vehicle = document.getElementById('credit-vehicle-' + rowNo);
+    // Customer first: changing it rebuilds the vehicle list the original vehicle must be chosen from
+    if (party && byId[party.id] && party.value !== byId[party.id].value) {
+        party.value = byId[party.id].value;
+        if (typeof updateCreditAndLoadVehicles === 'function') updateCreditAndLoadVehicles(party, 'credit-', rowNo);
+    }
+    snapshot.forEach(function (s) {
+        var el = document.getElementById(s.id);
+        if (!el || el === party) return;
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = s.checked;
+        el.value = s.value;
+    });
+    // Refresh Select2 displays without running the fields' change handlers again
+    [party, vehicle, document.getElementById('credit-product-' + rowNo)].forEach(function (el) {
+        if (el && window.jQuery && $(el).data('select2')) $(el).trigger('change.select2');
+    });
+}
+
 function openCreditRowModal(rowNo, isNew) {
     creditModalState.rowNo = rowNo;
     creditModalState.isNew = !!isNew;
     creditModalState.savedThisSession = false;
     creditModalState.deleteRequested = false;
+    creditModalState.snapshot = isNew ? null : snapshotCreditRow(rowNo);
 
     var titleEl = document.getElementById('creditEntryModalTitleText');
     if (titleEl) titleEl.textContent = isNew ? 'Add Credit Sale' : 'Edit Credit Sale';
@@ -197,6 +234,10 @@ $(document).on('hidden.bs.modal', '#creditEntryModal', function () {
         // Closed (X / Close / Esc) without saving a newly added row - discard it.
         performCreditRowDelete(rowNo);
     } else {
+        if (!creditModalState.isNew && !creditModalState.savedThisSession) {
+            // Closed without Save while editing an existing row - undo the edits
+            restoreCreditRowSnapshot(rowNo, creditModalState.snapshot);
+        }
         refreshCreditSummaryRow(rowNo);
         calculateCreditTotal();
     }
@@ -205,6 +246,7 @@ $(document).on('hidden.bs.modal', '#creditEntryModal', function () {
     creditModalState.isNew = false;
     creditModalState.savedThisSession = false;
     creditModalState.deleteRequested = false;
+    creditModalState.snapshot = null;
 });
 
 function refreshCreditSummaryRow(rowNo) {

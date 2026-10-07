@@ -34,6 +34,10 @@
         'saveCreditSales', 'saveDigitalSales', 'saveCreditReceipts', 'saveEmployeeAdvance',
         'saveExpensesTab', 'saveDenomsTab', 'saveIntercompany'
     ];
+    // Row deletes read the row's saved id when clicked. Queued behind any running save, so a
+    // row deleted while its insert is still on the way is deleted from the DB once it has an id
+    // (otherwise it vanishes from the screen but the insert lands and the row comes back).
+    const ROW_DELETES = ['hideRow', 'hideAndDeleteReadingPump', 'hideAndDeleteTestingRow'];
 
     const originals = {};       // save function name -> unwrapped function
     const editSeq = {};         // save function name -> sequence number of its latest edit
@@ -77,6 +81,54 @@
             wrapped.closingAutosaveWrapped = true;
             window[fn] = wrapped;
         });
+
+        ROW_DELETES.forEach((fn) => {
+            const original = window[fn];
+            if (typeof original !== 'function' || original.closingAutosaveWrapped) return;
+            const wrapped = function () {
+                const self = this, args = arguments;
+                return runExclusive(() => original.apply(self, args));
+            };
+            wrapped.closingAutosaveWrapped = true;
+            window[fn] = wrapped;
+        });
+
+        // CLOSE (freeze): finish any pending or running save first, and don't freeze over
+        // entries that could not be saved
+        const finish = window.finishClosing;
+        if (typeof finish === 'function' && !finish.closingAutosaveWrapped) {
+            const wrapped = function () {
+                const self = this, args = arguments;
+                clearTimeout(timer);
+                return flush()
+                    .then(() => runExclusive(() => true))
+                    .then(() => {
+                        if (dirtyFunctions().length) {
+                            alert('Some entries are not saved yet' +
+                                (lastBlockedIssue ? ': ' + lastBlockedIssue : '.') +
+                                '\n\nPlease correct them before closing the shift.');
+                            return;
+                        }
+                        return finish.apply(self, args);
+                    });
+            };
+            wrapped.closingAutosaveWrapped = true;
+            window.finishClosing = wrapped;
+        }
+    }
+
+    // A calculated field (e.g. lube sale amount = qty x price) is only recalculated when the
+    // cursor leaves the field the user is typing in. Run that field's change handler before
+    // saving so qty and amount are saved together. The synthetic event is untrusted, so it is
+    // not counted as a new edit, and the browser still fires the real change on leaving.
+    function commitFocusedField(fn) {
+        const el = document.activeElement;
+        if (!el || !/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.type === 'hidden') return;
+        if (saveFunctionFor(el) !== fn) return;
+        // The browser's own change event still comes when the cursor leaves - with this value it
+        // is not a new edit (it would otherwise trigger an extra save, e.g. after CLOSE)
+        el.closingAutosaveCommitted = el.value;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
     // ── Tracking edits ────────────────────────────────────────────
@@ -124,6 +176,7 @@
         return runExclusive(() => {
             // A Next / tab click may have saved it while this was queued
             if (!isDirty(fn) || !originals[fn]) return true;
+            commitFocusedField(fn);
             const startSeq = seq;
             window.closingAutosaveQuiet = true;
             window.closingAutosaveIssue = null;
@@ -230,7 +283,13 @@
     function onNativeEdit(e) {
         // Only real user input - code that fills fields or fires change itself is not an edit
         if (e.isTrusted === false) return;
-        onUserEdit(e.target);
+        const el = e.target;
+        if (el && el.closingAutosaveCommitted !== undefined) {
+            const unchanged = e.type === 'change' && el.closingAutosaveCommitted === el.value;
+            delete el.closingAutosaveCommitted;
+            if (unchanged) return;
+        }
+        onUserEdit(el);
     }
 
     function init() {
@@ -260,7 +319,9 @@
         window.closingAutosave = {
             flush: flush,
             pending: dirtyFunctions,
-            idle: () => runExclusive(() => true)
+            idle: () => runExclusive(() => true),
+            // For edits that are not typing, e.g. removing a row that is only saved as a whole set
+            markEdited: (el) => onUserEdit(el)
         };
     }
 
