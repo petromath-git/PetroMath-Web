@@ -1,0 +1,216 @@
+extends layout
+include mixins/mixins
+
+//- Cashier expense master (m_expense). Row data lives in data-* attributes
+//- (not JSON in <script>) so expense names are always HTML-escaped.
+mixin expenseActions(e)
+    button.btn.btn-primary.btn-sm.mr-1.edit-expense-btn(type="button" title="Edit"
+        data-id=e.expense_id data-name=e.expense_name data-amt=(e.default_amt == null ? '' : e.default_amt)
+        data-usage=e.usage_count data-protected=(e.is_protected ? '1' : '0'))
+        i.bi.bi-pencil
+    if !e.is_protected && e.usage_count === 0
+        button.btn.btn-danger.btn-sm.delete-expense-btn(type="button" title="Delete" data-id=e.expense_id data-name=e.expense_name)
+            i.bi.bi-trash
+
+block content
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .expenses-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col
+                    h4.mb-0.text-primary Cashier Expenses
+                    small.text-muted Expenses the cashier picks in shift closing (#{user.location_code})
+                .col-auto
+                    button.btn.btn-success.btn-sm#addExpenseBtn(type="button")
+                        i.bi.bi-plus-circle
+                        span.ml-1 Add Expense
+
+    .container-fluid.expenses-container
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(type="text" placeholder="Search expenses…" autocomplete="off")
+
+        p.small.text-muted.mb-2
+            | An expense can be deleted only if it has never been used in a shift.
+            | #[strong Others], #[strong Suspense] and #[strong Self] are used by shift closing, so they can't be renamed or deleted.
+
+        //- Desktop table
+        .d-none.d-lg-block
+            table.table.table-hover.table-striped.table-sm#expensesTable
+                thead.thead-dark
+                    tr
+                        th Expense
+                        th.text-right Default Amount
+                        th.text-right Used in Shifts
+                        th(style="width:110px") Actions
+                tbody
+                    if expenses.length
+                        each e in expenses
+                            tr.expense-row
+                                td
+                                    = e.expense_name
+                                    if e.is_protected
+                                        span.badge.badge-secondary.ml-2(title="Used by shift closing") System
+                                td.text-right= e.default_amt == null ? '-' : e.default_amt
+                                td.text-right= e.usage_count
+                                td
+                                    +expenseActions(e)
+                    else
+                        tr
+                            td.text-center(colspan="4") No expenses set up for this location yet.
+
+        //- Mobile cards
+        .d-block.d-lg-none
+            if expenses.length
+                each e in expenses
+                    .card.mb-2.expense-row
+                        .card-body.py-2.px-3.d-flex.justify-content-between.align-items-center
+                            div
+                                strong= e.expense_name
+                                if e.is_protected
+                                    span.badge.badge-secondary.ml-2 System
+                                .small.text-muted
+                                    | Default #{e.default_amt == null ? '-' : e.default_amt} · Used in #{e.usage_count} shift entr#{e.usage_count === 1 ? 'y' : 'ies'}
+                            .text-nowrap
+                                +expenseActions(e)
+            else
+                .alert.alert-info.text-center No expenses set up for this location yet.
+
+    //- Add / Edit modal
+    .modal.fade#expenseModal(tabindex="-1" role="dialog" aria-labelledby="expenseModalLabel" aria-hidden="true")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#expenseModalLabel Add Expense
+                    button.close(type="button" data-dismiss="modal" aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    form#expenseForm(novalidate)
+                        input#expenseId(type="hidden")
+                        .form-group
+                            label.font-weight-bold(for="expenseName") Expense Name *
+                            input.form-control#expenseName(type="text" maxlength=maxNameLength required autocomplete="off")
+                            small.form-text.text-muted#nameHelp
+                        .form-group.mb-0
+                            label.font-weight-bold(for="expenseAmt") Default Amount
+                            input.form-control#expenseAmt(type="number" min=minDefaultAmt max=maxDefaultAmt step="1" inputmode="numeric")
+                            small.form-text.text-muted Filled in automatically when the cashier picks this expense. Whole number, #{minDefaultAmt}–#{maxDefaultAmt}. Leave blank for 0.
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-primary#saveExpenseBtn(type="button") Save
+
+    style.
+        .expenses-header-sticky {
+            position: sticky; top: 0; z-index: 1020; background: white;
+            border-bottom: 2px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .expenses-container { padding-top: 15px; }
+        @media (min-width: 992px) { .expenses-header-sticky { margin-left: 260px; } }
+
+    script.
+        (function() {
+            var MIN_AMT = #{minDefaultAmt}, MAX_AMT = #{maxDefaultAmt};
+            var editing = null;   // { id, name, usage, protected } while editing
+
+            function showMessage(message, type) {
+                var alertEl = document.getElementById('messageAlert');
+                alertEl.className = 'alert alert-' + type + ' alert-dismissible fade show';
+                document.getElementById('messageText').textContent = message;
+                alertEl.style.display = 'block';
+                window.scrollTo(0, 0);
+            }
+
+            function openModal(data) {
+                editing = data;
+                var nameInput = document.getElementById('expenseName');
+                var help = document.getElementById('nameHelp');
+                document.getElementById('expenseModalLabel').textContent = data ? 'Edit Expense' : 'Add Expense';
+                document.getElementById('expenseId').value = data ? data.id : '';
+                nameInput.value = data ? data.name : '';
+                document.getElementById('expenseAmt').value = data ? data.amt : '';
+                nameInput.readOnly = !!(data && data.protected);
+                if (data && data.protected) help.textContent = 'Used by shift closing, so the name is locked. You can still change the default amount.';
+                else if (data && data.usage > 0) help.textContent = 'Used in ' + data.usage + ' shift entries. Renaming changes the name shown on those past shifts too.';
+                else help.textContent = '';
+                $('#expenseModal').modal('show');
+            }
+
+            document.getElementById('addExpenseBtn').addEventListener('click', function() { openModal(null); });
+
+            document.querySelectorAll('.edit-expense-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    openModal({
+                        id: btn.dataset.id,
+                        name: btn.dataset.name,
+                        amt: btn.dataset.amt,
+                        usage: parseInt(btn.dataset.usage, 10) || 0,
+                        protected: btn.dataset.protected === '1'
+                    });
+                });
+            });
+
+            document.getElementById('saveExpenseBtn').addEventListener('click', async function() {
+                var name = document.getElementById('expenseName').value.trim();
+                var amtRaw = document.getElementById('expenseAmt').value.trim();
+                if (!name) { alert('Enter the expense name.'); return; }
+                var amt = amtRaw === '' ? 0 : Number(amtRaw);
+                if (!Number.isInteger(amt) || amt < MIN_AMT || amt > MAX_AMT) {
+                    alert('Default amount must be a whole number between ' + MIN_AMT + ' and ' + MAX_AMT + '.');
+                    return;
+                }
+                if (editing && editing.usage > 0 && name !== editing.name &&
+                    !confirm('"' + editing.name + '" is used in ' + editing.usage + ' shift entries.\n\nRenaming it to "' + name + '" will also change the name shown on those past shifts. Continue?')) {
+                    return;
+                }
+                var btn = this;
+                btn.disabled = true;
+                try {
+                    var r = await fetch(editing ? '/expense-master/api/' + editing.id : '/expense-master/api', {
+                        method: editing ? 'PUT' : 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ expense_name: name, default_amt: amtRaw })
+                    });
+                    var data = await r.json();
+                    if (!data.success) throw new Error(data.error || 'Save failed');
+                    $('#expenseModal').modal('hide');
+                    showMessage(editing ? 'Expense updated.' : 'Expense added.', 'success');
+                    setTimeout(function() { location.reload(); }, 700);
+                } catch (e) {
+                    alert(e.message);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+
+            document.querySelectorAll('.delete-expense-btn').forEach(function(btn) {
+                btn.addEventListener('click', async function() {
+                    if (!confirm('Delete expense "' + btn.dataset.name + '"? This cannot be undone.')) return;
+                    btn.disabled = true;
+                    try {
+                        var r = await fetch('/expense-master/api/' + btn.dataset.id, { method: 'DELETE' });
+                        var data = await r.json();
+                        if (!data.success) throw new Error(data.error || 'Delete failed');
+                        showMessage('Expense deleted.', 'success');
+                        setTimeout(function() { location.reload(); }, 700);
+                    } catch (e) {
+                        showMessage(e.message, 'danger');
+                        btn.disabled = false;
+                    }
+                });
+            });
+
+            document.getElementById('searchInput').addEventListener('input', function() {
+                var term = this.value.toLowerCase();
+                document.querySelectorAll('.expense-row').forEach(function(row) {
+                    row.style.display = row.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+                });
+            });
+        })();
