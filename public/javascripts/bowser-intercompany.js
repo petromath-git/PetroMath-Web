@@ -46,12 +46,19 @@
             </td>
             <td>
                 <button class="btn btn-sm btn-outline-danger" type="button"
-                    onclick="this.closest('tr').remove()">
+                    onclick="removeIntercompanyRow(this)">
                     &times;
                 </button>
             </td>
         `;
         tbody.appendChild(tr);
+    };
+
+    // The whole set is saved each time, so removing a row is an edit for autosave to pick up
+    window.removeIntercompanyRow = function (btn) {
+        const tbody = btn.closest('tbody');
+        btn.closest('tr').remove();
+        if (window.closingAutosave && tbody) window.closingAutosave.markEdited(tbody);
     };
 
     window.onBowserChange = function (sel) {
@@ -67,8 +74,11 @@
 
     window.saveIntercompany = function () {
         const closingId = getClosingId();
+        // Autosave (closing-autosave.js) runs this quietly: report problems on its status line, not in popups
+        const quiet = !!window.closingAutosaveQuiet;
+        const report = (msg) => { if (quiet) { window.closingAutosaveIssue = msg; } else { alert(msg); } };
         if (!closingId) {
-            alert('Please save the Closing tab first before saving intercompany entries.');
+            report('Please save the Closing tab first before saving intercompany entries.');
             return Promise.resolve(false);
         }
 
@@ -93,15 +103,15 @@
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                showToastIfAvailable(data.message || 'Intercompany entries saved.');
+                if (!quiet) showToastIfAvailable(data.message || 'Intercompany entries saved.');
                 return true;
             } else {
-                alert(data.error || 'Error saving intercompany entries.');
+                report(data.error || 'Error saving intercompany entries.');
                 return false;
             }
         })
         .catch(() => {
-            alert('Network error saving intercompany entries.');
+            report('Network error saving intercompany entries.');
             return false;
         });
     };
