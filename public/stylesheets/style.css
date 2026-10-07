@@ -1779,6 +1779,12 @@ body.phone-nav:not(.has-viewport) .logout-btn {
     border: 2px solid #e1e5e9;
   }
   
+  /* dropdowns: the 14px vertical padding above clips their text inside the fixed 48px */
+  .adjustment-date-filter-mobile select.form-control {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
   .adjustment-date-filter-mobile .form-control:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
@@ -3882,7 +3888,7 @@ tr.d-md-none,
     min-width: 0;
     padding: 0 !important;
     border: 0 !important;
-    font-size: 0.9rem;
+    font-size: 0.9rem !important; /* beats the global .table-sm td 11px phone rule */
     text-align: left !important;
     overflow-wrap: anywhere;
   }
@@ -3898,7 +3904,7 @@ tr.d-md-none,
   body.mobile-ready table.m-stack td.m-title {
     order: -1;
     grid-column: 1 / -1;
-    font-size: 1rem;
+    font-size: 1rem !important;
     font-weight: 600;
   }
   body.mobile-ready table.m-stack td.m-wide {
