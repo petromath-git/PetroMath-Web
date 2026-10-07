@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -45,7 +46,7 @@ block content
         
         // Desktop table view
         .table-responsive
-            table.table.table-hover.table-striped.m-stack(id="customers-master-table")
+            table.table.table-hover.table-striped.m-stack.m-collapse(id="customers-master-table")
                 thead.thead-dark.sticky-top
                     tr
                         th #
@@ -69,7 +70,7 @@ block content
                                 if customerTypes && customerTypes.length > 1
                                     td(data-label="Type")= val.type || '-'
                                 td(data-label="Short Name")= val.short_name || '-'
-                                td(data-label="Phone")= val.phoneno || '-'
+                                td.m-summary(data-label="Phone")= val.phoneno || '-'
                                 td.m-wide(data-label="Address")= val.address || '-'
                                 td(data-label="GST")= val.gst || '-'
                                 td(data-label="Remittance Bank")= val.bank_name || '-'
@@ -124,8 +125,11 @@ block content
                                             )
                                                 i.bi.bi-trash
                     else
-                        tr
+                        tr.m-static
                             td.text-center.m-wide(colspan="9") No customers found
+
+    //- phones: cards start collapsed to name + phone; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     // Login Info Modal
     .modal.fade#loginInfoModal(tabindex="-1", role="dialog")

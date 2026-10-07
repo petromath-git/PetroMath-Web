@@ -1,5 +1,6 @@
 extends ../layout
 include ../mixins/mixins
+include ../mixins/card-toggle-mobile
 
 mixin detailSection(colId, label, open)
     .card.mb-1
@@ -132,7 +133,7 @@ block content
 
             +detailSection("colNozzles", `Nozzles (${formData.nozzles.length})`)
                 if formData.nozzles.length
-                    table.table.table-sm.mb-0.m-stack
+                    table.table.table-sm.mb-0.m-stack.m-collapse
                         thead.thead-light
                             tr
                                 th Nozzle Name
@@ -146,7 +147,7 @@ block content
                                     td.m-title= n.nozzle_name || '—'
                                     td(data-label="Product")= n.nozzle_product || '—'
                                     td(data-label="DU Make")= n.du_make || '—'
-                                    td(data-label="Tank")= n.tank_connected || '—'
+                                    td.m-summary(data-label="Tank")= n.tank_connected || '—'
                                     td(data-label="Next Stamping")= n.next_stamping_date || '—'
                 else
                     p.text-muted.mb-0 No entries
@@ -171,7 +172,7 @@ block content
             +detailSection("colBanks", `Banks (${formData.banks.length})`)
                 if formData.banks.length
                     .table-responsive
-                        table.table.table-sm.mb-0.m-stack
+                        table.table.table-sm.mb-0.m-stack.m-collapse
                             thead.thead-light
                                 tr
                                     th Bank Name
@@ -186,7 +187,7 @@ block content
                                 each b in formData.banks
                                     tr
                                         td.m-title= b.bank_name || '—'
-                                        td(data-label="Short Name")= b.short_name || '—'
+                                        td.m-summary(data-label="Short Name")= b.short_name || '—'
                                         td(data-label="Branch")= b.branch || '—'
                                         td(data-label="Account Name")= b.account_name || '—'
                                         td(data-label="Last 4")= b.account_last4 || '—'
@@ -212,7 +213,7 @@ block content
             +detailSection("colCustomers", `Customers (${formData.customers.length})`)
                 if formData.customers.length
                     .table-responsive
-                        table.table.table-sm.mb-0.m-stack
+                        table.table.table-sm.mb-0.m-stack.m-collapse
                             thead.thead-light
                                 tr
                                     th Name
@@ -227,7 +228,7 @@ block content
                                         td(data-label="GSTIN")= c.gstin || '—'
                                         td(data-label="Owner")= c.owner_name || '—'
                                         td(data-label="Owner Mobile")= c.owner_mobile || '—'
-                                        td(data-label="Type")= c.customer_type || '—'
+                                        td.m-summary(data-label="Type")= c.customer_type || '—'
                 else
                     p.text-muted.mb-0 No entries
 
@@ -283,6 +284,9 @@ block content
                     p.text-muted.mt-1.mb-0(style="font-size:11px") HSN suggestions load from historical data when you click an HSN field.
                 else
                     p.text-muted.mb-0 No products to edit
+
+    //- phones: nozzle / bank / customer cards start collapsed; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     //- ── Migrate to PetroMath Modal ────────────────────────────────────────────
     #migrateModal.modal.fade(tabindex="-1" role="dialog" aria-labelledby="migrateModalLabel" aria-hidden="true")
