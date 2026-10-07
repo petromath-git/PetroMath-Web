@@ -1,5 +1,6 @@
 extends ../layout
 include ../mixins/mixins
+include ../mixins/card-toggle-mobile
 
 block content
     include _admin-mobile
@@ -14,7 +15,7 @@ block content
         else
             .card.shadow-sm
                 .table-responsive
-                    table.table.table-hover.mb-0.m-stack
+                    table.table.table-hover.mb-0.m-stack.m-collapse
                         thead.thead-light
                             tr
                                 th Location Name
@@ -27,7 +28,7 @@ block content
                                 tr
                                     td.m-title
                                         strong= ob.location_name
-                                    td(data-label="Status")
+                                    td.m-summary(data-label="Status")
                                         span
                                             if ob.status === 'setup_done'
                                                 span.badge.badge-success Setup Done
@@ -52,6 +53,9 @@ block content
                                                 ) Copy
                                     td.m-actions
                                         a.btn.btn-sm.btn-outline-primary(href=`/admin/onboarding/${ob.id}`) View
+
+    //- phones: cards start collapsed to name + status; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     //- New Onboarding Modal
     #modalNewOnboarding.modal.fade(tabindex="-1" role="dialog")

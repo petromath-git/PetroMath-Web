@@ -1,0 +1,18 @@
+//- Phones: tapping a card toggles "card-open" (collapsed ↔ full card). Same idea
+//- as report-cards-mobile.pug, but generic: pass the selector for the cards,
+//- e.g. 'table.m-collapse > tbody > tr:not(.m-static)' for .m-stack tables
+//- (styles in style.css, COLLAPSIBLE CARDS) or a page's own card class.
+//- Taps on buttons, links and form fields inside a card do their own job and
+//- don't toggle it. Does nothing on desktop.
+//-   cardSelector - CSS selector matching one card element
+mixin cardToggleMobile(cardSelector)
+    script.
+        (function () {
+            if (!window.matchMedia || !window.matchMedia('screen and (max-width: 767px)').matches) return;
+            var cardSelector = !{JSON.stringify(cardSelector)};
+            document.addEventListener('click', function (e) {
+                if (e.target.closest('a, button, input, select, textarea, label')) return;
+                var card = e.target.closest(cardSelector);
+                if (card) card.classList.toggle('card-open');
+            });
+        })();
