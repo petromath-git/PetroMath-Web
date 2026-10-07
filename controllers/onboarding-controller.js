@@ -111,10 +111,14 @@ module.exports = {
     // ── Admin ──────────────────────────────────────────────────────────────────
     adminList: async (req, res, next) => {
         try {
-            const onboardings = await OnboardingDao.findAll();
+            const onboardings = (await OnboardingDao.findAll()).map(ob => ({
+                ...ob,
+                created_display: formatDateForDisplay(ob.created_at),
+            }));
             res.render('onboarding/admin-list', {
                 title: 'Onboarding',
                 user: req.user,
+                mobileReady: true,   // viewport tag + body.mobile-ready; tables stack via _admin-mobile
                 onboardings,
                 baseUrl: `${req.protocol}://${req.get('host')}`,
             });
@@ -148,6 +152,7 @@ module.exports = {
             res.render('onboarding/admin-detail', {
                 title: `Onboarding – ${onboarding.location_name}`,
                 user: req.user,
+                mobileReady: true,   // viewport tag + body.mobile-ready; tables stack via _admin-mobile
                 onboarding,
                 formData,
                 baseUrl: `${req.protocol}://${req.get('host')}`,
