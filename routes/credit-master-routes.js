@@ -39,9 +39,10 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
             'DISABLE_CUSTOMER_MASTER'
         );
         
-        res.render('credits', { 
-            title: 'Customer Master', 
-            user: req.user, 
+        res.render('credits', {
+            title: 'Customer Master',
+            user: req.user,
+            mobileReady: true,   // viewport tag + body.mobile-ready; table stacks into cards (m-stack)
             credits: credits,
             customerTypes: customerTypes,
             banks: banks, 
@@ -177,6 +178,8 @@ router.get('/enable', [isLoginEnsured, security.hasPermission('DISABLE_CUSTOMER_
             res.render('enable_credit', {
                 title: 'Disabled Credits',
                 user: req.user,
+                mobileReady: true,   // page already has its own phone card view
+
                 users: data
             });
         })

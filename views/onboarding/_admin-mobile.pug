@@ -1,30 +1,9 @@
-//- Phone layout shared by the onboarding admin pages (list + detail). The pages
-//- render with mobileReady, so phones lay them out at real width.
-//- .ob-stack: below 768px each table row becomes a card and every cell shows its
-//- data-label beside the value (same idea as the public form's .ob-table).
+//- Phone tweaks for the onboarding admin pages (list + detail), which render
+//- with mobileReady. Their tables stack via the shared .m-stack class in
+//- style.css; this only covers what's specific to these pages.
 style.
     @media (max-width: 767px) {
         .ob-admin.container-fluid { padding-left: 10px; padding-right: 10px; }
-        .ob-stack thead { display: none; }
-        .ob-stack, .ob-stack tbody, .ob-stack tr, .ob-stack td { display: block; width: 100%; }
-        .ob-stack tbody tr {
-            display: flex; flex-direction: column;
-            border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 10px;
-            background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.05);
-        }
-        .ob-stack td {
-            display: flex; align-items: center; gap: 8px;
-            border: none !important; border-bottom: 1px solid #f0f0f0 !important;
-            padding: 7px 12px; word-break: break-word;
-        }
-        .ob-stack td:last-child { border-bottom: none !important; }
-        .ob-stack td[data-label]::before {
-            content: attr(data-label);
-            flex: 0 0 105px; font-size: 11px; font-weight: 600; color: #888;
-        }
-        .ob-stack td > .input-group, .ob-stack td > .form-control { flex: 1; min-width: 0; }
-        /* the row's name heads the card even when it isn't the first column */
-        .ob-stack td.ob-card-title { order: -1; font-size: 15px; font-weight: 600; background: #f8f9fa; border-radius: 8px 8px 0 0; }
         /* inputs at 16px so iOS doesn't zoom in on focus */
         .ob-admin input.form-control, .ob-admin select.form-control, .ob-admin textarea.form-control,
         .modal input.form-control, .modal textarea.form-control { font-size: 16px; }
