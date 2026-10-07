@@ -31,7 +31,7 @@ block content
                     li.nav-item.col-md
                         a.nav-link#sales_2t_tab(data-toggle="tab" href="#sales_2t" onclick=`trackMenu(this)`) 2T Sales
                 li.nav-item.col-md
-                    a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Lube Sales
+                    a.nav-link#cash_sales_tab(data-toggle="tab" href="#new_cash_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'cash-sale-')`) Cash Sales
                 li.nav-item.col-md
                     a.nav-link#credit_sales_tab(data-toggle="tab" href="#new_credit_sales" onclick=`cashSaleOrCreditUpdateProductTypePrices(this, 'credit-')`) Credit Sales
                 li.nav-item.col-md
@@ -308,7 +308,7 @@ block content
                         div.col &nbsp;
                     div.row
                         div.col(align="center")
-                            button.btn.btn-info(type="button", onClick="showAddedRow('cash-sale')") Add Lube sales
+                            button.btn.btn-info(type="button", onClick="showAddedRow('cash-sale')") Add Cash Sale
 
                     div.row
                         div.col &nbsp;
@@ -649,7 +649,7 @@ block content
                                 div.row
                                     // Summary: Cash sales
                                     div.col-6#v-cash-sale
-                                        h6.sub-header Lube Sales
+                                        h6.sub-header Cash Sales
                                         div.table-responsive#vis-cash-sale-table
                                             table.table.table-sm
                                                 thead.thead-light
