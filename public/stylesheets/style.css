@@ -3845,3 +3845,83 @@ tr.d-md-none,
     display: none;
   }
 }
+
+/* ===== STACKED TABLES — MOBILE (any body.mobile-ready page) =====
+   Add class "m-stack" to a table and data-label="…" to its cells: on phones
+   each row becomes a card in two columns, label above value, matching the
+   report cards above. Opt-in per cell:
+     td.m-title    the row's name — heads the card, full width, no label
+     td.m-wide     full-width cell (address, long text, inputs)
+     td.m-actions  buttons — bottom of the card, right-aligned
+     .m-hide       not shown on phones (e.g. a "#" serial column)
+   Cells with no data-label show no label. Desktop is untouched. */
+@media screen and (max-width: 767px) {
+  body.mobile-ready table.m-stack,
+  body.mobile-ready table.m-stack > tbody {
+    display: block;
+    width: 100% !important;
+    border: 0 !important;
+  }
+  body.mobile-ready table.m-stack > thead {
+    display: none !important;
+  }
+  /* row display is left to this stylesheet so JS filters (style.display='') still work */
+  body.mobile-ready table.m-stack > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem 0.75rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr > td,
+  body.mobile-ready table.m-stack > tbody > tr > th {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    font-size: 0.9rem;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  body.mobile-ready table.m-stack td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready table.m-stack td.m-title {
+    order: -1;
+    grid-column: 1 / -1;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  body.mobile-ready table.m-stack td.m-wide {
+    grid-column: 1 / -1;
+  }
+  body.mobile-ready table.m-stack td.m-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    padding-top: 0.4rem !important;
+    border-top: 1px solid #f0f0f0 !important;
+  }
+  body.mobile-ready table.m-stack td.m-actions .btn {
+    margin: 0 !important;
+    min-width: 40px;
+    min-height: 36px;
+  }
+  body.mobile-ready table.m-stack .m-hide {
+    display: none !important;
+  }
+  body.mobile-ready table.m-stack td .form-control {
+    font-size: 16px; /* stops iOS zooming on focus */
+  }
+}

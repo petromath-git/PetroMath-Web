@@ -14,7 +14,7 @@ block content
         else
             .card.shadow-sm
                 .table-responsive
-                    table.table.table-hover.mb-0.ob-stack
+                    table.table.table-hover.mb-0.m-stack
                         thead.thead-light
                             tr
                                 th Location Name
@@ -25,7 +25,7 @@ block content
                         tbody
                             each ob in onboardings
                                 tr
-                                    td.ob-card-title
+                                    td.m-title
                                         strong= ob.location_name
                                     td(data-label="Status")
                                         span
@@ -36,7 +36,7 @@ block content
                                             if ob.link_active === 'N'
                                                 span.badge.badge-danger.ml-1 Link Deactivated
                                     td(data-label="Created")= ob.created_display
-                                    td(data-label="URL")
+                                    td.m-wide(data-label="URL")
                                         .input-group.input-group-sm
                                             input.form-control.form-control-sm.onboard-url(
                                                 type="text"
@@ -50,7 +50,7 @@ block content
                                                     data-token=ob.token
                                                     title="Copy URL"
                                                 ) Copy
-                                    td.text-right.text-md-left
+                                    td.m-actions
                                         a.btn.btn-sm.btn-outline-primary(href=`/admin/onboarding/${ob.id}`) View
 
     //- New Onboarding Modal
