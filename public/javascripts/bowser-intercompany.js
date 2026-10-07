@@ -46,12 +46,19 @@
             </td>
             <td>
                 <button class="btn btn-sm btn-outline-danger" type="button"
-                    onclick="this.closest('tr').remove()">
+                    onclick="removeIntercompanyRow(this)">
                     &times;
                 </button>
             </td>
         `;
         tbody.appendChild(tr);
+    };
+
+    // The whole set is saved each time, so removing a row is an edit for autosave to pick up
+    window.removeIntercompanyRow = function (btn) {
+        const tbody = btn.closest('tbody');
+        btn.closest('tr').remove();
+        if (window.closingAutosave && tbody) window.closingAutosave.markEdited(tbody);
     };
 
     window.onBowserChange = function (sel) {
