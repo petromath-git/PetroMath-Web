@@ -358,17 +358,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     supplierSelect.addEventListener('change', () => { chosenFormat = null; renderHelp(); });
 
-    // ── Supplier list filtered by invoice date (unchanged behaviour) ────────
+    // ── Supplier list filtered by invoice date ──────────────────────────────
+    // Earliest date is the location's go-live (first shift). On or after
+    // go-live a supplier's start date doesn't hide it (suppliers are often
+    // added after their first invoices); its end date still does.
     let allSuppliers = [];
     function filterSuppliersByDate(dateStr) {
-        if (!dateStr || !allSuppliers.length) return;
-        const selectedDate = new Date(dateStr);
+        if (!dateStr) return;
+        if (D.goLiveDate && dateStr < D.goLiveDate) {
+            const [y, m, d] = D.goLiveDate.split('-');
+            const mon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][parseInt(m, 10) - 1];
+            showErrors([`Invoice date is before this location's PetroMath go-live (${d}-${mon}-${y}). Stock before go-live is covered by opening balances.`]);
+            return;
+        }
+        showErrors([]);
+        if (!allSuppliers.length) return;
+        const ymd = dateStr.slice(0, 10);
         const current = supplierSelect.value;
         while (supplierSelect.options.length > 1) supplierSelect.remove(1);
         allSuppliers.forEach(s => {
-            const start = s.effective_start_date ? new Date(s.effective_start_date) : null;
-            const end = s.effective_end_date ? new Date(s.effective_end_date) : null;
-            if ((!start || selectedDate >= start) && (!end || selectedDate <= end)) {
+            const start = s.effective_start_date ? String(s.effective_start_date).slice(0, 10) : null;
+            const end = s.effective_end_date ? String(s.effective_end_date).slice(0, 10) : null;
+            const startOk = !start || ymd >= start || (D.goLiveDate && ymd >= D.goLiveDate);
+            if (startOk && (!end || ymd <= end)) {
                 const o = document.createElement('option');
                 o.value = s.supplier_id; o.text = s.supplier_name;
                 if (String(current) === String(s.supplier_id)) o.selected = true;
