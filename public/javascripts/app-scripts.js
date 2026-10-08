@@ -1497,9 +1497,29 @@ function applyCreditBillDateConstraints() {
         ? currentSystemDate
         : toLocalDateStr(new Date());
 
+    // Follow the closing Date field: data-closing-date is rendered as today on
+    // New Closing and as the saved date on Edit Draft, so a closing back-dated
+    // in the form (e.g. 01-Oct entered on 08-Oct) was stuck on the old window.
+    const cashierDateEl = document.getElementById('cashierDate');
+    const formClosing = cashierDateEl && cashierDateEl.value ? cashierDateEl.value : null;
+
     dateInputs.forEach((inputEl) => {
-        const closing = inputEl.getAttribute('data-closing-date');
+        const rendered = inputEl.getAttribute('data-closing-date');
+        const closing = formClosing || rendered;
         if (!closing) return;
+
+        if (rendered && rendered !== closing) {
+            // A bill date still sitting on the old closing date was only ever
+            // that default — move it with the closing date.
+            if (inputEl.value === rendered) {
+                inputEl.value = closing;
+                const rowMatch = (inputEl.id || '').match(/^credit-bill-date-(\d+)$/);
+                if (rowMatch && typeof refreshCreditSummaryRow === 'function') {
+                    refreshCreditSummaryRow(rowMatch[1]);
+                }
+            }
+            inputEl.setAttribute('data-closing-date', closing);
+        }
 
         const prev = addDays(closing, -1);
         const next = addDays(closing, 1);
@@ -3255,12 +3275,16 @@ function showAddedCreditReceiptsRow() {
     applyCreditBillDateConstraints();
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-        applyCreditBillDateConstraints();
-    });
-} else {
+function initCreditBillDateConstraints() {
     applyCreditBillDateConstraints();
+    const cashierDateEl = document.getElementById('cashierDate');
+    if (cashierDateEl) cashierDateEl.addEventListener('change', applyCreditBillDateConstraints);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCreditBillDateConstraints);
+} else {
+    initCreditBillDateConstraints();
 }
 
 // Optional: Validate that selected vehicle belongs to selected credit party
