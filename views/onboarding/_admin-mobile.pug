@@ -1,0 +1,10 @@
+//- Phone tweaks for the onboarding admin pages (list + detail), which render
+//- with mobileReady. Their tables stack via the shared .m-stack class in
+//- style.css; this only covers what's specific to these pages.
+style.
+    @media (max-width: 767px) {
+        .ob-admin.container-fluid { padding-left: 10px; padding-right: 10px; }
+        /* inputs at 16px so iOS doesn't zoom in on focus */
+        .ob-admin input.form-control, .ob-admin select.form-control, .ob-admin textarea.form-control,
+        .modal input.form-control, .modal textarea.form-control { font-size: 16px; }
+    }

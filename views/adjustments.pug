@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     style.
@@ -9,6 +10,18 @@ block content
         .adj-history-table thead th { position: sticky; top: 0; background: #f1f3f5; z-index: 1; }
         .adj-history-scroll { max-height: 65vh; overflow: auto; }
         .adj-source { font-size: 0.75em; color: #6c757d; display: block; }
+        /* phones: the collapsed card's right side — amount with Dr/Cr, date under it */
+        .adj-sum-amt { font-family: 'Courier New', monospace; font-weight: 700; white-space: nowrap; }
+        .adj-sum-amt.cr { color: #28a745; }
+        @media (max-width: 767px) {
+            .adj-history-scroll { max-height: none; overflow: visible; }
+            .adj-history-table td.adj-desc, .adj-history-table td.adj-party { min-width: 0; }
+            .adj-history-table td { white-space: normal; }
+            #summaryFooter .text-right { text-align: left !important; }
+            /* open card: show Type / Created By (desktop-only columns), drop the summary copy of the amount */
+            .adj-history-table tr.card-open > td.d-none { display: block !important; }
+            .adj-history-table tr.card-open > td.m-summary { display: none !important; }
+        }
 
     div.d-flex.justify-content-between.align-items-center.mb-3
         h4.mb-0 Adjustments
@@ -181,7 +194,7 @@ block content
             |  to put one back exactly as it was.
 
         div.adj-history-scroll.table-responsive#adjustmentsTableContainer(style='display: none;')
-            table.table.table-sm.table-hover.adj-history-table.mb-0
+            table.table.table-sm.table-hover.adj-history-table.mb-0.m-stack.m-collapse
                 thead#adjustmentsTableHead
                 tbody#adjustmentsTableBody
 
@@ -200,6 +213,9 @@ block content
                         span.font-weight-bold#totalDebits  ₹0.00
                         |  | Total Credits:
                         span.font-weight-bold#totalCredits  ₹0.00
+
+    //- phones: history cards start collapsed to party + amount; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     script.
         const adjustmentTypesData = !{JSON.stringify(adjustmentTypes || [])};
@@ -459,19 +475,23 @@ block content
                 const ref = adj.reference_no ? `<span class="adj-source">Ref: ${esc(adj.reference_no)}</span>` : '';
                 tbody.append(`
                     <tr>
-                        <td>${formatDate(adj.adjustment_date)}</td>
-                        <td class="adj-party">${esc(adj.party_name || '-')}
+                        <td class="m-summary d-md-none">${debitAmount
+                            ? `<span class="adj-sum-amt">₹${formatAmount(debitAmount)} Dr</span>`
+                            : `<span class="adj-sum-amt cr">₹${formatAmount(creditAmount)} Cr</span>`}
+                            <span class="adj-source">${formatDate(adj.adjustment_date)}</span></td>
+                        <td data-label="Date">${formatDate(adj.adjustment_date)}</td>
+                        <td class="adj-party m-title">${esc(adj.party_name || '-')}
                             <span class="adj-source">${SOURCE_LABELS[(adj.external_source || '').toUpperCase()] || esc(adj.external_source || '')}</span></td>
-                        <td class="d-none d-md-table-cell">
+                        <td class="d-none d-md-table-cell" data-label="Type">
                             <span class="badge badge-info">${esc(getAdjustmentTypeName(adj.adjustment_type))}</span></td>
-                        <td class="adj-desc">${esc(adj.description)}${ref}</td>
-                        <td class="amount-column">${debitAmount ? formatAmount(debitAmount) : '-'}</td>
-                        <td class="amount-column">${creditAmount ? formatAmount(creditAmount) : '-'}</td>
+                        <td class="adj-desc m-wide" data-label="Description">${esc(adj.description)}${ref}</td>
+                        <td class="amount-column" data-label="Debit (₹)">${debitAmount ? formatAmount(debitAmount) : '-'}</td>
+                        <td class="amount-column" data-label="Credit (₹)">${creditAmount ? formatAmount(creditAmount) : '-'}</td>
                         ${deleted
-                            ? `<td class="d-none d-md-table-cell">${esc(adj.deleted_by)}<span class="adj-source">${formatDate(adj.deleted_date)}</span></td>
-                               <td class="adj-desc">${esc(adj.delete_reason || '-')}</td>`
-                            : `<td class="d-none d-md-table-cell">${esc(adj.created_by || '')}</td>`}
-                        <td class="text-center">${deleted ? getRestoreButton(adj) : getDeleteButton(adj)}</td>
+                            ? `<td class="d-none d-md-table-cell" data-label="Deleted By / On">${esc(adj.deleted_by)}<span class="adj-source">${formatDate(adj.deleted_date)}</span></td>
+                               <td class="adj-desc m-wide" data-label="Reason">${esc(adj.delete_reason || '-')}</td>`
+                            : `<td class="d-none d-md-table-cell" data-label="Created By">${esc(adj.created_by || '')}</td>`}
+                        <td class="text-center m-actions">${deleted ? getRestoreButton(adj) : getDeleteButton(adj)}</td>
                     </tr>`);
             });
 

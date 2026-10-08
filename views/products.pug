@@ -1,5 +1,6 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -107,146 +108,55 @@ block content
                                             )
                                                 i.bi.bi-trash
 
-        // Mobile cards view
+        // Mobile cards view — plain text (editing happens in the modal), so
+        // nothing has a minimum width to push the card past a phone screen
         .mobile-cards-view.d-block.d-lg-none
-            .row
-                each val, index in products
-                    - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
-                    .col-12.mb-3
-                        .card.product-card.shadow-sm(id=`mobile-product-card-${index}`)
-                            .card-header.d-flex.justify-content-between.align-items-center
-                                .product-name
-                                    input.mobile-input.fw-bold.text-uppercase(
-                                        type="text",
-                                        id=`mobile-product-name-${index}`,
-                                        value=val.name,
-                                        readonly,
-                                        title=val.can_edit_name ? '' : 'Product name cannot be edited because it is linked to pump configuration',
-                                        style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
-                                    )
-                                    if user.Role === 'SuperUser' && val.is_tank_product
-                                        |  
-                                        span.badge.badge-success.ml-2 Tank
-                                .product-actions
-                                    button.btn.btn-primary.btn-sm(
-                                        type="button", 
-                                        onclick=`openEditProductModal(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
-                                    )
-                                        i.bi.bi-pencil
-                                    if val.can_delete
-                                        button.btn.btn-outline-danger.btn-sm.ml-1(
-                                            type="button",
-                                            title="Delete product (never used)",
-                                            onclick=`deleteProduct(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
-                                        )
-                                            i.bi.bi-trash
-                            .card-body.p-3
-                                .row.g-2
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted SKU Name
-                                            input.mobile-input.fw-bold(
-                                                type="text",
-                                                id=`mobile-sku-name-${index}`,
-                                                value=val.sku_name || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
-                                            )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted SKU Number
-                                            input.mobile-input.fw-bold(
-                                                type="text",
-                                                id=`mobile-sku-number-${index}`,
-                                                value=val.sku_number || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
-                                            )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted HSN Code
-                                            input.mobile-input.fw-bold(
-                                                type="text",
-                                                id=`mobile-hsn-code-${index}`,
-                                                value=val.hsn_code || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold;"
-                                            )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted Unit
-                                            input.mobile-input.fw-bold.text-uppercase(
-                                                type="text",
-                                                id=`mobile-unit-${index}`,
-                                                value=val.unit || 'N/A',
-                                                readonly,
-                                                style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
-                                            )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted Price
-                                            .input-group.input-group-sm
-                                                .input-group-prepend
-                                                    span.input-group-text.mobile-currency ₹
-                                                input.mobile-input.fw-bold.text-success(
-                                                    type="number",
-                                                    id=`mobile-price-${index}`,
-                                                    value=val.price,
-                                                    readonly,
-                                                    step="0.01",
-                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
-                                                )
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted CGST
-                                            .input-group.input-group-sm
-                                                input.mobile-input.fw-bold(
-                                                    type="number",
-                                                    id=`mobile-cgst-${index}`,
-                                                    value=val.cgst_percent,
-                                                    readonly,
-                                                    step="0.01",
-                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
-                                                )
-                                                .input-group-append
-                                                    span.input-group-text %
-                                    .col-6
-                                        .product-detail
-                                            small.text-muted SGST
-                                            .input-group.input-group-sm
-                                                input.mobile-input.fw-bold(
-                                                    type="number",
-                                                    id=`mobile-sgst-${index}`,
-                                                    value=val.sgst_percent,
-                                                    readonly,
-                                                    step="0.01",
-                                                    style="border: 1px solid #dee2e6; background: white; padding: 4px 8px; font-weight: bold;"
-                                                )
-                                                .input-group-append
-                                                    span.input-group-text %
-                                    if user.Role === 'SuperUser'
-                                        .col-6
-                                            .product-detail
-                                                .form-check
-                                                    input.form-check-input(
-                                                        type="checkbox",
-                                                        id=`mobile-is-tank-product-${index}`,
-                                                        checked=val.is_tank_product ? true : false,
-                                                        disabled
-                                                    )
-                                                    label.form-check-label(for=`mobile-is-tank-product-${index}`)
-                                                        strong Tank Product
-                                    .col-6
-                                        .product-detail
-                                            .form-check
-                                                input.form-check-input(
-                                                    type="checkbox",
-                                                    id=`mobile-is-lube-product-${index}`,
-                                                    checked=val.is_lube_product ? true : false,
-                                                    disabled
-                                                )
-                                                label.form-check-label(for=`mobile-is-lube-product-${index}`)
-                                                    strong Non-Fuel Product
+            each val, index in products
+                - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                .card.product-card.shadow-sm.mb-3(id=`mobile-product-card-${index}`)
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        .product-name(title=val.can_edit_name ? '' : 'Product name cannot be edited because it is linked to pump configuration')= val.name
+                        .product-summary.ml-auto.mr-2.text-nowrap ₹#{val.price}
+                        .product-actions.text-nowrap
+                            button.btn.btn-light.btn-sm(
+                                type="button",
+                                title="Edit",
+                                onclick=`openEditProductModal(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
+                            )
+                                i.bi.bi-pencil
+                            if val.can_delete
+                                button.btn.btn-danger.btn-sm.ml-1(
+                                    type="button",
+                                    title="Delete product (never used)",
+                                    onclick=`deleteProduct(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
+                                )
+                                    i.bi.bi-trash
+                    .card-body.product-fields
+                        .product-detail
+                            small Unit
+                            span= val.unit || '-'
+                        .product-detail
+                            small CGST / SGST
+                            span #{val.cgst_percent}% / #{val.sgst_percent}%
+                        .product-detail
+                            small HSN Code
+                            span= val.hsn_code || '-'
+                        if val.sku_name || val.sku_number
+                            .product-detail
+                                small SKU Name
+                                span= val.sku_name || '-'
+                            .product-detail
+                                small SKU Number
+                                span= val.sku_number || '-'
+                        if (user.Role === 'SuperUser' && val.is_tank_product) || val.is_lube_product
+                            .product-detail.product-detail-wide
+                                if user.Role === 'SuperUser' && val.is_tank_product
+                                    span.badge.badge-success.mr-1 Tank Product
+                                if val.is_lube_product
+                                    span.badge.badge-info Non-Fuel Product
+
+    //- phones: product cards start collapsed to name + price; tap to open
+    +cardToggleMobile('.product-card')
 
     // Add Product Modal
     .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
@@ -457,18 +367,58 @@ block content
         .product-name {
             font-size: 16px;
             font-weight: 600;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            margin-right: 8px;
         }
-        
+
+        /* phone card body: two columns, label above value */
+        .product-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 12px;
+            padding: 12px 16px;
+        }
         .product-detail {
-            margin-bottom: 8px;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            font-weight: 600;
         }
-        
+        .product-detail-wide {
+            grid-column: 1 / -1;
+        }
         .product-detail small {
             display: block;
             font-size: 11px;
+            font-weight: 600;
+            color: #6c757d;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 2px;
+        }
+
+        /* phones: cards collapsed to the header (name + price) until tapped */
+        .product-summary { font-weight: 600; }
+        @media (max-width: 767px) {
+            .product-card { cursor: pointer; }
+            .product-card .card-header { position: relative; padding-right: 2.4rem; }
+            .product-card .card-header::after {
+                content: ""; position: absolute; right: 0.95rem; top: 50%;
+                width: 0.5rem; height: 0.5rem; margin-top: -0.35rem;
+                border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg);
+            }
+            .product-card.card-open .card-header::after { margin-top: -0.1rem; transform: rotate(-135deg); }
+            .product-card:not(.card-open) .card-header { border-radius: 12px; }
+            .product-card:not(.card-open) .product-fields { display: none; }
+        }
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .products-header-sticky { position: static; box-shadow: none; }
+            /* title on one line, buttons under it */
+            .products-header-sticky .row > div { flex: 0 0 100%; max-width: 100%; text-align: left !important; }
+            .products-header-sticky .btn-group { margin-top: 8px; }
+            .products-container { padding-left: 10px; padding-right: 10px; }
+            .product-card:hover { transform: none; }
         }
         
         @media (max-width: 991.98px) {
@@ -503,25 +453,6 @@ block content
             z-index: 10;
         }
         
-        /* Mobile input styling */
-        .mobile-input:focus {
-            outline: none;
-            border-color: #007bff !important;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
-        }
-        
-        .mobile-input.editable {
-            border: 1px solid #007bff !important;
-            background: #f8f9fa !important;
-            padding: 4px 8px !important;
-            border-radius: 4px;
-        }
-        
-        .mobile-currency {
-            font-size: 12px;
-            padding: 4px 6px;
-        }
-
         .desktop-table-view .input-group-prepend {
             display: none;
         }

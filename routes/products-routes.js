@@ -61,6 +61,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
         res.render('products', {
             title: 'Products',
             user: req.user,
+            mobileReady: true,   // body.mobile-ready: drops the global phone hacks (50px body padding etc.)
             products: products,
             config: config.APP_CONFIGS,
             canEditProductName: canEditProductName,

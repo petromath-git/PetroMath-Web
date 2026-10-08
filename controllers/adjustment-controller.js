@@ -218,6 +218,7 @@ module.exports = {
                     res.render('adjustments', {
                         title: 'Adjustments',
                         user: req.user,
+                        mobileReady: true,   // viewport tag + body.mobile-ready: phone entry form + history cards
                         currentDate,
                         currentYear,
                         currentMonth,

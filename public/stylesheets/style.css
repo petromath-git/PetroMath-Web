@@ -1779,6 +1779,12 @@ body.phone-nav:not(.has-viewport) .logout-btn {
     border: 2px solid #e1e5e9;
   }
   
+  /* dropdowns: the 14px vertical padding above clips their text inside the fixed 48px */
+  .adjustment-date-filter-mobile select.form-control {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
   .adjustment-date-filter-mobile .form-control:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.25);
@@ -3843,5 +3849,133 @@ tr.d-md-none,
   }
   body.mobile-ready .report-empty.report-not-run {
     display: none;
+  }
+}
+
+/* ===== STACKED TABLES — MOBILE (any body.mobile-ready page) =====
+   Add class "m-stack" to a table and data-label="…" to its cells: on phones
+   each row becomes a card in two columns, label above value, matching the
+   report cards above. Opt-in per cell:
+     td.m-title    the row's name — heads the card, full width, no label
+     td.m-wide     full-width cell (address, long text, inputs)
+     td.m-actions  buttons — bottom of the card, right-aligned
+     .m-hide       not shown on phones (e.g. a "#" serial column)
+   Cells with no data-label show no label. Desktop is untouched. */
+@media screen and (max-width: 767px) {
+  body.mobile-ready table.m-stack,
+  body.mobile-ready table.m-stack > tbody {
+    display: block;
+    width: 100% !important;
+    border: 0 !important;
+  }
+  body.mobile-ready table.m-stack > thead {
+    display: none !important;
+  }
+  /* row display is left to this stylesheet so JS filters (style.display='') still work */
+  body.mobile-ready table.m-stack > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem 0.75rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr > td,
+  body.mobile-ready table.m-stack > tbody > tr > th {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    font-size: 0.9rem !important; /* beats the global .table-sm td 11px phone rule */
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  body.mobile-ready table.m-stack td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready table.m-stack td.m-title {
+    order: -1;
+    grid-column: 1 / -1;
+    font-size: 1rem !important;
+    font-weight: 600;
+  }
+  body.mobile-ready table.m-stack td.m-wide {
+    grid-column: 1 / -1;
+  }
+  body.mobile-ready table.m-stack td.m-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    padding-top: 0.4rem !important;
+    border-top: 1px solid #f0f0f0 !important;
+  }
+  body.mobile-ready table.m-stack td.m-actions .btn {
+    margin: 0 !important;
+    min-width: 40px;
+    min-height: 36px;
+  }
+  body.mobile-ready table.m-stack .m-hide {
+    display: none !important;
+  }
+  body.mobile-ready table.m-stack td .form-control {
+    font-size: 16px; /* stops iOS zooming on focus */
+  }
+}
+
+/* ===== COLLAPSIBLE CARDS — MOBILE (opt-in on top of .m-stack) =====
+   table.m-stack.m-collapse: on phones each card starts collapsed to one line —
+   the .m-title cell on the left and any .m-summary cell(s) on the right — and
+   tapping it toggles "card-open" to show everything (script:
+   views/mixins/card-toggle-mobile.pug). Rows marked .m-static (e.g. "No
+   records") are never collapsed. Buttons/links inside a card don't toggle it. */
+@media screen and (max-width: 767px) {
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static) {
+    position: relative;
+    padding-right: 2.25rem;
+    cursor: pointer;
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static)::after {
+    content: "";
+    position: absolute;
+    top: 1.05rem;
+    right: 0.9rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid #adb5bd;
+    border-bottom: 2px solid #adb5bd;
+    transform: rotate(45deg);
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr.card-open::after {
+    top: 1.3rem;
+    transform: rotate(-135deg);
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) > td:not(.m-title):not(.m-summary) {
+    display: none !important;
+  }
+  /* collapsed: title left (gets the spare width), summary right (only as wide as it needs) */
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) > td.m-title {
+    grid-column: 1 / 2;
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) > td.m-summary {
+    grid-column: 2 / 3;
+    max-width: 11rem;
+    text-align: right !important;
+  }
+  body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) > td.m-summary::before {
+    content: none;
   }
 }

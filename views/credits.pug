@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -11,9 +12,9 @@ block content
     .customers-header-sticky
         .container-fluid
             .row.align-items-center.py-3
-                .col
-                    h4.mb-0.text-primary Customer Master
-                .col-auto
+                .col-12.col-md
+                    h4.mb-2.mb-md-0.text-primary Customer Master
+                .col-12.col-md-auto.customers-header-buttons
                     if canAdd
                         button.btn.btn-success.btn-sm#addCustomerBtn(type="button", data-toggle="modal", data-target="#addCustomerModal")
                             i.bi.bi-plus-circle.me-1
@@ -45,7 +46,7 @@ block content
         
         // Desktop table view
         .table-responsive
-            table.table.table-hover.table-striped(id="customers-master-table")
+            table.table.table-hover.table-striped.m-stack.m-collapse(id="customers-master-table")
                 thead.thead-dark.sticky-top
                     tr
                         th #
@@ -64,16 +65,16 @@ block content
                     if credits && credits.length > 0
                         each val, index in credits
                             tr(data-customer-id=val.creditlist_id)
-                                td= index + 1
-                                td= val.Company_Name
+                                td.m-hide= index + 1
+                                td.m-title= val.Company_Name
                                 if customerTypes && customerTypes.length > 1
-                                    td= val.type || '-'
-                                td= val.short_name || '-'
-                                td= val.phoneno || '-'
-                                td= val.address || '-'
-                                td= val.gst || '-'
-                                td= val.bank_name || '-'
-                                td
+                                    td(data-label="Type")= val.type || '-'
+                                td(data-label="Short Name")= val.short_name || '-'
+                                td.m-summary(data-label="Phone")= val.phoneno || '-'
+                                td.m-wide(data-label="Address")= val.address || '-'
+                                td(data-label="GST")= val.gst || '-'
+                                td(data-label="Remittance Bank")= val.bank_name || '-'
+                                td.m-wide(data-label="Login")
                                     if val.username && val.username !== 'No Login Account' && val.username !== 'Error Loading'
                                         span.text-monospace.small= val.username
                                         if val.loginEnabled
@@ -101,7 +102,7 @@ block content
                                     else
                                         span.text-monospace.small= val.username || '-'
                                 if canEdit || canDisable
-                                    td
+                                    td.m-actions
                                         // Vehicle Management Link
                                         a.btn.btn-sm.btn-outline-info.me-1(
                                             href=`/vehicles/${val.creditlist_id}`,
@@ -124,8 +125,11 @@ block content
                                             )
                                                 i.bi.bi-trash
                     else
-                        tr
-                            td.text-center(colspan="9") No customers found
+                        tr.m-static
+                            td.text-center.m-wide(colspan="9") No customers found
+
+    //- phones: cards start collapsed to name + phone; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     // Login Info Modal
     .modal.fade#loginInfoModal(tabindex="-1", role="dialog")
@@ -268,6 +272,16 @@ block content
         }
         .text-uppercase {
             text-transform: uppercase;
+        }
+        /* gap between header buttons (their ms-2 is Bootstrap 5, a no-op on BS4) */
+        .customers-header-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+        .customers-header-buttons .btn { margin: 0 !important; }
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .customers-header-sticky { position: static; box-shadow: none; }
+            .customers-container { padding: 10px; }
+            /* the table card layout needs room; drop the scroll wrapper's clipping */
+            .customers-container .table-responsive { overflow: visible; }
         }
 
     // JavaScript

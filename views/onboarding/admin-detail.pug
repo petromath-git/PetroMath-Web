@@ -1,5 +1,6 @@
 extends ../layout
 include ../mixins/mixins
+include ../mixins/card-toggle-mobile
 
 mixin detailSection(colId, label, open)
     .card.mb-1
@@ -15,14 +16,15 @@ mixin detailSection(colId, label, open)
                 block
 
 block content
-    .container-fluid.py-4
+    include _admin-mobile
+    .container-fluid.py-4.ob-admin
 
-        //- Header
-        .d-flex.justify-content-between.align-items-center.mb-3
+        //- Header (wraps on phones: title row, then the buttons)
+        .d-flex.justify-content-between.align-items-center.flex-wrap.mb-3(style="gap:8px")
             div
-                a.text-muted.small(href="/admin/onboarding") ← All Onboardings
+                a.text-muted.small.d-block(href="/admin/onboarding") ← All Onboardings
                 h4.mb-0= onboarding.location_name
-            div
+            .d-flex.flex-wrap.align-items-center(style="gap:6px 0")
                 if onboarding.status === 'setup_done'
                     span.badge.badge-success.mr-2 Setup Done
                     button.btn.btn-sm.btn-outline-secondary.mr-1#btnMarkActive(type="button") Mark Active
@@ -38,11 +40,11 @@ block content
         //- URL card
         .card.shadow-sm.mb-3
             .card-body.py-2
-                .d-flex.align-items-center.flex-wrap
+                .d-flex.align-items-center.flex-wrap(style="gap:6px 0")
                     span.text-muted.mr-2.small Onboarding URL:
                     if onboarding.link_active === 'N'
                         span.badge.badge-danger.mr-2 Link Deactivated
-                    .input-group.input-group-sm
+                    .input-group.input-group-sm(style="min-width:0;flex:1 1 260px")
                         input.form-control#detailUrl(type="text" readonly value=`${baseUrl}/onboard/${onboarding.token}` style="font-size:12px;")
                         .input-group-append
                             button.btn.btn-outline-secondary#btnCopyDetail(type="button") Copy URL
@@ -131,7 +133,7 @@ block content
 
             +detailSection("colNozzles", `Nozzles (${formData.nozzles.length})`)
                 if formData.nozzles.length
-                    table.table.table-sm.mb-0
+                    table.table.table-sm.mb-0.m-stack.m-collapse
                         thead.thead-light
                             tr
                                 th Nozzle Name
@@ -142,11 +144,11 @@ block content
                         tbody
                             each n in formData.nozzles
                                 tr
-                                    td= n.nozzle_name || '—'
-                                    td= n.nozzle_product || '—'
-                                    td= n.du_make || '—'
-                                    td= n.tank_connected || '—'
-                                    td= n.next_stamping_date || '—'
+                                    td.m-title= n.nozzle_name || '—'
+                                    td(data-label="Product")= n.nozzle_product || '—'
+                                    td(data-label="DU Make")= n.du_make || '—'
+                                    td.m-summary(data-label="Tank")= n.tank_connected || '—'
+                                    td(data-label="Next Stamping")= n.next_stamping_date || '—'
                 else
                     p.text-muted.mb-0 No entries
 
@@ -170,7 +172,7 @@ block content
             +detailSection("colBanks", `Banks (${formData.banks.length})`)
                 if formData.banks.length
                     .table-responsive
-                        table.table.table-sm.mb-0
+                        table.table.table-sm.mb-0.m-stack.m-collapse
                             thead.thead-light
                                 tr
                                     th Bank Name
@@ -184,14 +186,14 @@ block content
                             tbody
                                 each b in formData.banks
                                     tr
-                                        td= b.bank_name || '—'
-                                        td= b.short_name || '—'
-                                        td= b.branch || '—'
-                                        td= b.account_name || '—'
-                                        td= b.account_last4 || '—'
-                                        td= b.account_number || '—'
-                                        td= b.ifsc_code || '—'
-                                        td= b.account_type || '—'
+                                        td.m-title= b.bank_name || '—'
+                                        td.m-summary(data-label="Short Name")= b.short_name || '—'
+                                        td(data-label="Branch")= b.branch || '—'
+                                        td(data-label="Account Name")= b.account_name || '—'
+                                        td(data-label="Last 4")= b.account_last4 || '—'
+                                        td(data-label="Account No.")= b.account_number || '—'
+                                        td(data-label="IFSC Code")= b.ifsc_code || '—'
+                                        td(data-label="Type")= b.account_type || '—'
                 else
                     p.text-muted.mb-0 No entries
 
@@ -211,7 +213,7 @@ block content
             +detailSection("colCustomers", `Customers (${formData.customers.length})`)
                 if formData.customers.length
                     .table-responsive
-                        table.table.table-sm.mb-0
+                        table.table.table-sm.mb-0.m-stack.m-collapse
                             thead.thead-light
                                 tr
                                     th Name
@@ -222,11 +224,11 @@ block content
                             tbody
                                 each c in formData.customers
                                     tr
-                                        td= c.customer_name || '—'
-                                        td= c.gstin || '—'
-                                        td= c.owner_name || '—'
-                                        td= c.owner_mobile || '—'
-                                        td= c.customer_type || '—'
+                                        td.m-title= c.customer_name || '—'
+                                        td(data-label="GSTIN")= c.gstin || '—'
+                                        td(data-label="Owner")= c.owner_name || '—'
+                                        td(data-label="Owner Mobile")= c.owner_mobile || '—'
+                                        td.m-summary(data-label="Type")= c.customer_type || '—'
                 else
                     p.text-muted.mb-0 No entries
 
@@ -249,7 +251,7 @@ block content
                 p.small.text-muted.mb-2 Edit HSN codes and GST% before migration. HSN suggestions are drawn from existing products across all locations.
                 if formData.metered_products.length || formData.lubes.length
                     .table-responsive
-                        table.table.table-sm.table-bordered.mb-0#taxEditTable
+                        table.table.table-sm.table-bordered.mb-0.m-stack#taxEditTable
                             thead.thead-light
                                 tr
                                     th Type
@@ -262,26 +264,29 @@ block content
                             tbody
                                 each p in formData.metered_products
                                     tr(data-tax-section="metered-products" data-tax-id=p.id)
-                                        td.small.text-muted Metered
-                                        td.small= p.short_name || '—'
-                                        td.small —
-                                        td: input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(p.hsn_code||'') placeholder="e.g. 27101290")
-                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(p.cgst_percent!=null?p.cgst_percent:'') placeholder="e.g. 9")
-                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(p.sgst_percent!=null?p.sgst_percent:'') placeholder="e.g. 9")
-                                        td: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
+                                        td.small.text-muted(data-label="Type") Metered
+                                        td.small.m-title= p.short_name || '—'
+                                        td.small.d-none.d-md-table-cell —
+                                        td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(p.hsn_code||'') placeholder="e.g. 27101290")
+                                        td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(p.cgst_percent!=null?p.cgst_percent:'') placeholder="e.g. 9")
+                                        td(data-label="SGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(p.sgst_percent!=null?p.sgst_percent:'') placeholder="e.g. 9")
+                                        td.m-actions: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
                                 each l in formData.lubes
                                     tr(data-tax-section="lubes" data-tax-id=l.id)
-                                        td.small.text-muted Lube
-                                        td.small= l.product_name || '—'
-                                        td.small= l.unit || '—'
-                                        td: input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(l.hsn_code||'') placeholder="e.g. 27101290")
-                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(l.cgst_percent!=null?l.cgst_percent:'') placeholder="e.g. 9")
-                                        td: input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(l.sgst_percent!=null?l.sgst_percent:'') placeholder="e.g. 9")
-                                        td: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
+                                        td.small.text-muted(data-label="Type") Lube
+                                        td.small.m-title= l.product_name || '—'
+                                        td.small(data-label="Unit")= l.unit || '—'
+                                        td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" list="hsnDatalist" class="tax-hsn" value=(l.hsn_code||'') placeholder="e.g. 27101290")
+                                        td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-cgst" value=(l.cgst_percent!=null?l.cgst_percent:'') placeholder="e.g. 9")
+                                        td(data-label="SGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" class="tax-sgst" value=(l.sgst_percent!=null?l.sgst_percent:'') placeholder="e.g. 9")
+                                        td.m-actions: button.btn.btn-outline-secondary.btn-sm(type="button" onclick=`saveTaxRow(this)`) Save
                     datalist#hsnDatalist
                     p.text-muted.mt-1.mb-0(style="font-size:11px") HSN suggestions load from historical data when you click an HSN field.
                 else
                     p.text-muted.mb-0 No products to edit
+
+    //- phones: nozzle / bank / customer cards start collapsed; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     //- ── Migrate to PetroMath Modal ────────────────────────────────────────────
     #migrateModal.modal.fade(tabindex="-1" role="dialog" aria-labelledby="migrateModalLabel" aria-hidden="true")
