@@ -738,8 +738,11 @@ uploadBankStatement: async (req, res) => {
                 debitAmount = txnType === 'debit' ? amount : 0;
                 creditAmount = txnType === 'credit' ? amount : 0;
             } else {
-                debitAmount = parseAmount(row[columnToIndex(template.debit_column)]);
-                creditAmount = parseAmount(row[columnToIndex(template.credit_column)]);
+                // Separate Dr/Cr columns: the column decides the side, so a
+                // sign in the cell is redundant (HPCL SAP shows credits as
+                // "-430,000"). Same rule as transaction-upload-controller.
+                debitAmount = Math.abs(parseAmount(row[columnToIndex(template.debit_column)]));
+                creditAmount = Math.abs(parseAmount(row[columnToIndex(template.credit_column)]));
             }
 
               // ===== SKIP TOTAL/SUMMARY ROWS =====
@@ -752,9 +755,16 @@ uploadBankStatement: async (req, res) => {
             // Skip rows with no amounts
             if (debitAmount === 0 && creditAmount === 0) continue;
 
+            // description_column may list several columns ("B,D,E" for HPCL),
+            // joined with spaces; a single letter behaves exactly as before.
+            const description = String(template.description_column || '').split(',')
+                .map(col => String(row[columnToIndex(col.trim())] || '').trim())
+                .filter(Boolean)
+                .join(' ');
+
             const txn = {
                 txn_date: txnDate,
-                description: row[columnToIndex(template.description_column)] || '',
+                description: description,
                 debit_amount: debitAmount,
                 credit_amount: creditAmount,
                 balance_amount: parseAmount(balanceRaw),
