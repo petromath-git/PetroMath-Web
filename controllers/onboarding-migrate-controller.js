@@ -215,6 +215,12 @@ module.exports = {
             }));
 
             // ── Step 6: Nozzles → m_pump + m_pump_tank ────────────────────────────
+            // The nozzle's product comes from its connected tank — the form no longer
+            // asks for it separately. nozzle_product is only a fallback for older
+            // submissions where no tank was picked.
+            const tankProductByCode = new Map(
+                (data.tanks || []).map(t => [code(t.tank_name), up(t.product_short_name)])
+            );
             results.push(await runSection('Nozzles', data.nozzles, async (n) => {
                 if (!n.nozzle_name) return 'skipped';
                 const exists = await selectOne(
@@ -225,11 +231,12 @@ module.exports = {
                 const stampingDue = n.next_stamping_date
                     ? new Date(n.next_stamping_date).toISOString().split('T')[0]
                     : '0000-00-00 00:00:00';
+                const product = tankProductByCode.get(code(n.tank_connected)) || up(n.nozzle_product) || '';
                 const pump_id = await insertRow(
                     `INSERT INTO m_pump (pump_code, pump_make, product_code, opening_reading, location_code,
                         effective_start_date, effective_end_date, current_stamping_date, Stamping_due, created_by, updated_by)
                      VALUES (:code, :make, :product, 0, :loc, CURDATE(), '9999-12-31', '0000-00-00 00:00:00', :stamping, 'onboarding', 'onboarding')`,
-                    { code: code(n.nozzle_name), make: up(n.du_make) || 'UNKNOWN', product: up(n.nozzle_product) || '', loc, stamping: stampingDue }
+                    { code: code(n.nozzle_name), make: up(n.du_make) || 'UNKNOWN', product, loc, stamping: stampingDue }
                 );
                 if (n.tank_connected) {
                     const tank = await selectOne(
@@ -323,7 +330,8 @@ module.exports = {
                         { replacements: { loc }, type: QueryTypes.SELECT }
                     );
 
-                    // 10a: Copy common heads missing by name (exclude any oil-company-specific heads)
+                    // 10a: Copy common heads missing by name (exclude any oil-company-specific heads,
+                    // and '2T Oil' — generate_cashflow only posts it for MC/MC2/MME/MUE)
                     // JOIN to gl_ledger_groups so gl_group_id is resolved by name for the new location
                     // requires_credit_customer_link carries the Day Close "Cash Receipt" customer picker
                     await db.sequelize.query(
@@ -343,7 +351,8 @@ module.exports = {
                          WHERE ah.location_code = :tmpl
                            AND ah.account_head_name NOT IN (
                                'IOCL LICENSE FEE RECOVERY', 'IOCL CHARGES',
-                               'BPCL LICENSE FEE RECOVERY', 'BPCL CHARGES'
+                               'BPCL LICENSE FEE RECOVERY', 'BPCL CHARGES',
+                               '2T Oil'
                            )
                            AND NOT EXISTS (
                                SELECT 1 FROM m_account_heads existing
