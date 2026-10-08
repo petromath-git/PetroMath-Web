@@ -947,7 +947,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
                 suppliers: suppliers,
                 invoiceValues: invoiceValues,
                 currentDate: utils.currentDate(),
-                messages: messagesOptional
+                messages: messagesOptional,
+                mobileReady: true   // viewport tag + body.mobile-ready: invoices stack into collapsible cards (m-stack)
             });
         })
         .catch(err => {
