@@ -72,7 +72,7 @@ block content
                     div.col-md-3.col-6
                         div.form-group
                             label(for='invoice_date') Invoice Date
-                            input#invoice_date.form-control(type='date' name='invoice_date' required disabled=closed
+                            input#invoice_date.form-control(type='date' name='invoice_date' required disabled=closed min=goLiveDate || undefined
                                 value=invoice ? dateFormat(invoice.invoice_date, 'yyyy-mm-dd') : dateFormat(new Date(), 'yyyy-mm-dd'))
                     div.col-md-3.col-12
                         div.form-group
@@ -248,7 +248,7 @@ block content
                 a.btn.btn-secondary(href='/lubes-invoice-home') Back to List
 
     //- Data for the screen script — JSON-encoded, with "<" escaped so no value can end the script tag
-    - const pageData = { closed: closed, isNew: isNew, isLegacy: isLegacy, products: products, lines: invoiceLines, invoice: invoice ? { lubes_hdr_id: inv.lubes_hdr_id, printed_total: inv.printed_total, round_off: inv.round_off, invoice_amount: inv.invoice_amount } : null, locationOmc: locationOmc, supplierFormats: supplierFormats, formatHelp: formatHelp, gstRates: gstRates, attachments: attachments, maxAttachments: maxAttachments, maxUploadMb: maxUploadMb };
+    - const pageData = { closed: closed, isNew: isNew, isLegacy: isLegacy, products: products, lines: invoiceLines, invoice: invoice ? { lubes_hdr_id: inv.lubes_hdr_id, printed_total: inv.printed_total, round_off: inv.round_off, invoice_amount: inv.invoice_amount } : null, locationOmc: locationOmc, supplierFormats: supplierFormats, formatHelp: formatHelp, gstRates: gstRates, attachments: attachments, maxAttachments: maxAttachments, maxUploadMb: maxUploadMb, goLiveDate: goLiveDate };
     script.
         window.PI_DATA = !{JSON.stringify(pageData).replace(/</g, '\\u003c')};
 
