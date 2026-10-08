@@ -114,6 +114,17 @@ block content
     - var fmtQty = function (n) { return parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     - var canAddNew = canCreateShiftClosing && draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
 
+    //- Old drafts usually fall outside the default date range, so name them here
+    mixin staleDraftList
+        ul.mb-0.mt-1
+            each d in (staleDrafts || [])
+                li
+                    a(href=`/edit-draft-closing?closingId=${d.closing_id}`) Shift ##{d.closing_id}
+                    |  — #{d.closing_date_fmt}#{d.cashier_name ? ' (' + d.cashier_name + ')' : ''}
+                    if user.isAdmin
+                        |  ·
+                        a.text-danger(href='#' onclick=`deleteClosing(${d.closing_id}); return false;`) Delete
+
     //- Phones only: the main action sits at the top instead of below the list
     if canCreateShiftClosing
         .sl-phone-top
@@ -122,7 +133,9 @@ block content
                     i.bi.bi-plus-lg
                     | New shift closing
             else if draftDaysCnt > 0
-                .sl-note Drafts have been open too long. Close them to add a new shift.
+                .sl-note
+                    | Drafts have been open too long. Close or delete them to add a new shift.
+                    +staleDraftList
             else
                 .sl-note Max #{maxAllowedDrafts} drafts reached. Close one to add a new shift.
 
@@ -408,7 +421,9 @@ block content
                     form(method='GET' action='/new-closing' id='get-new-closing')
                         button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
                 else if draftDaysCnt > 0
-                    pre.text-danger.bg-warning Note: Drafts are open for long. please close them to add new closing.
+                    .alert.alert-warning.text-danger
+                        div Note: These draft shifts are open for too long. Please close or delete them to add a new closing.
+                        +staleDraftList
                 else
                     pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{maxAllowedDrafts} allowed drafts are met.
                 .mb-4

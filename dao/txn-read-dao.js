@@ -390,6 +390,26 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
         });
     },
 
+    // Same cut-off as getDraftClosingsCountBeforeDays, but returns the shifts so the
+    // home screen can name them (they usually fall outside the default date range).
+    getDraftClosingsBeforeDays: (locationCode, noOfDays) => {
+        const cutoff = new Date(moment().subtract(noOfDays, 'days').startOf('day').valueOf());
+        return db.sequelize.query(`
+            SELECT c.closing_id,
+                   DATE_FORMAT(c.closing_date, '%d-%b-%Y') AS closing_date_fmt,
+                   p.Person_Name AS cashier_name
+            FROM t_closing c
+            LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
+            WHERE c.location_code = :locationCode
+              AND c.closing_status = 'DRAFT'
+              AND c.closing_date < :cutoff
+            ORDER BY c.closing_date, c.closing_id
+        `, {
+            replacements: { locationCode, cutoff },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
     getDeadlineWarningMessage: (locationCode) => {
         return TxnDeadlineViews.findAll({
             attributes: ['message', 'deadline_date'],
