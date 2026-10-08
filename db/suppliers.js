@@ -25,6 +25,12 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: true,
             comment: 'Supplier GSTIN for GST ITC claims'
         },
+        // Purchase-invoice help panel to show: IOCL | BPCL | HPCL | GENERIC; NULL = location's oil company
+        invoice_format: {
+            type: DataTypes.STRING(10),
+            allowNull: true,
+            field: 'invoice_format'
+        },
         remittance_bank_id: {
             type: DataTypes.INTEGER,
             allowNull: true,

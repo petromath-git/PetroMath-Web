@@ -90,6 +90,13 @@ module.exports = function(sequelize, DataTypes) {
             allowNull: false,
             defaultValue: 0,
             field: 'is_lube_product'
+        },
+        // Litres (or kg) per piece — learned from purchase invoice entry when the
+        // product name doesn't state its pack size. NULL = derive from the name.
+        pack_volume: {
+            type: DataTypes.DECIMAL(10, 3),
+            allowNull: true,
+            field: 'pack_volume'
         }
     }, {
         timestamps: false,

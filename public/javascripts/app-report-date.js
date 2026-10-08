@@ -160,18 +160,17 @@ function updateInvoiceDateRange() {
     if (fromDateHidden) fromDateHidden.value = fromDateInput.value;
     if (toDateHidden) toDateHidden.value = toDateInput.value;
 
-    if (dateRange === 'custom') {
-        // Show date inputs when 'Custom Date' is selected
-        fromDateInput.closest('td').style.display = 'table-cell';
-        toDateInput.closest('td').style.display = 'table-cell';
-        fromDateLabel.closest('td').style.display = 'table-cell';
-        toDateLabel.closest('td').style.display = 'table-cell';
+    // Date inputs show only for 'Custom Date'. Pages lay them out either in
+    // .custom-date-field wrappers (Purchases list) or in table cells.
+    const customFields = document.querySelectorAll('.custom-date-field');
+    if (customFields.length) {
+        customFields.forEach(el => { el.style.display = dateRange === 'custom' ? '' : 'none'; });
     } else {
-        // Hide date inputs for other selections
-        fromDateInput.closest('td').style.display = 'none';
-        toDateInput.closest('td').style.display = 'none';
-        fromDateLabel.closest('td').style.display = 'none';
-        toDateLabel.closest('td').style.display = 'none';
+        const show = dateRange === 'custom' ? 'table-cell' : 'none';
+        [fromDateInput, toDateInput, fromDateLabel, toDateLabel].forEach(el => {
+            const td = el && el.closest('td');
+            if (td) td.style.display = show;
+        });
     }
 }
 

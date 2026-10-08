@@ -1,0 +1,30 @@
+{
+    "format": "IOCL",
+    "title": "How to read your IndianOil (SERVO) invoice",
+    "subtitle": "Distributor invoice from the IOCL portal. Same layout for every SERVO distributor.",
+    "columns": ["SKU Name", "MRP", "Qty (Ltr or Kg)", "Qty.", "Unit", "Rate", "Net Total", "Disc", "Taxable Value", "GST %", "Net Amt"],
+    "rows": [
+        ["SERVO PRIDE 20W-40 - 20 X 1 L", "8500", {"text": "20", "mark": 2}, "1", "CAR", "5214.68", {"text": "5214.68", "mark": 3}, {"text": "220", "mark": 4}, "4994.68", "18", "5893.72"],
+        ["SERVO SCOOTOMATIC 4ST 10W-30 - 20 X 0.8 L", "9660", {"text": "32", "mark": 2}, "2", "CAR", "5555.56", {"text": "11111.13", "mark": 3}, {"text": "1920", "mark": 4}, "9191.13", "18", "10845.53"],
+        ["SERVO ZOOM 2T SUPREME - 210 L", "", {"text": "210", "mark": 2}, "1", "BRL", "61110.00", {"text": "61110.00", "mark": 3}, {"text": "0", "mark": 4}, "61110.00", "18", "72109.80"]
+    ],
+    "footer": [
+        {"label": "Total Cash Discount", "value": "0", "mark": 5},
+        {"label": "Net Amt. Payable", "value": "88849", "mark": 6}
+    ],
+    "steps": [
+        {"n": 2, "text": "Quantity: type the <b>Qty (Ltr or Kg)</b> number and choose <b>Litres</b>. PetroMath converts it to pieces (32 L of 800 ml = 40 pieces). If you counted the pieces yourself, choose <b>Pieces</b> instead."},
+        {"n": 3, "text": "Amount: type <b>Net Total</b> (the amount before discount)."},
+        {"n": 4, "text": "Discount: type <b>Disc</b>. Page 2 (Invoice Annexure) explains it, e.g. HO Promotional Disc."},
+        {"n": 5, "text": "Cash discount: type <b>Total Cash Discount</b> if it is not 0."},
+        {"n": 6, "text": "Printed total: type <b>Net Amt. Payable</b>. You can close the invoice only when it matches."}
+    ],
+    "hints": {
+        "qty": "IOCL: \"Qty (Ltr or Kg)\" → choose Litres",
+        "gross": "IOCL: \"Net Total\"",
+        "discount": "IOCL: \"Disc\"",
+        "cash_discount": "IOCL: \"Total Cash Discount\"",
+        "printed_total": "IOCL: \"Net Amt. Payable\"",
+        "tax_type": "IOCL distributor invoices are CGST + SGST"
+    }
+}

@@ -23,6 +23,11 @@ router.get('/:doc_id', isLoginEnsured, async (req, res) => {
 
         const doc = await DocumentStoreDao.findById(docId);
         if (!doc) return res.status(404).send('Document not found');
+        // Supplier invoice copies are commercial documents — only visible to
+        // users currently working in the location that owns them.
+        if (doc.entity_type === 'LUBE_INVOICE' && doc.location_code !== req.user.location_code) {
+            return res.status(404).send('Document not found');
+        }
 
         // ETag: doc_id is stable for a given file — a replacement creates a new doc_id
         const etag = `"doc-${doc.doc_id}"`;
