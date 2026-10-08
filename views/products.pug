@@ -113,19 +113,19 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             each val, index in products
                 - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
-                .card.product-card.shadow-sm.mb-3(id=`mobile-product-card-${index}`)
+                .card.product-card.m-card.m-collapsible.mb-2(id=`mobile-product-card-${index}`)
                     .card-header.d-flex.justify-content-between.align-items-center
                         .product-name(title=val.can_edit_name ? '' : 'Product name cannot be edited because it is linked to pump configuration')= val.name
                         .product-summary.ml-auto.mr-2.text-nowrap ₹#{val.price}
                         .product-actions.text-nowrap
-                            button.btn.btn-light.btn-sm(
+                            button.btn.btn-outline-primary.btn-sm(
                                 type="button",
                                 title="Edit",
                                 onclick=`openEditProductModal(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
                             )
                                 i.bi.bi-pencil
                             if val.can_delete
-                                button.btn.btn-danger.btn-sm.ml-1(
+                                button.btn.btn-outline-danger.btn-sm.ml-1(
                                     type="button",
                                     title="Delete product (never used)",
                                     onclick=`deleteProduct(JSON.parse(decodeURIComponent('${mobileProductPayload}')))`
@@ -156,7 +156,7 @@ block content
                                     span.badge.badge-info Non-Fuel Product
 
     //- phones: product cards start collapsed to name + price; tap to open
-    +cardToggleMobile('.product-card')
+    +cardToggleMobile('.m-card.m-collapsible')
 
     // Add Product Modal
     .modal.fade#addProductModal(tabindex="-1", role="dialog", aria-labelledby="addProductModalLabel", aria-hidden="true")
@@ -347,23 +347,7 @@ block content
             margin-left: 0.25rem !important;
         }
         
-        .product-card {
-            border-radius: 12px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .product-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-        }
-        
-        .product-card .card-header {
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            color: white;
-            border-radius: 12px 12px 0 0;
-            padding: 12px 16px;
-        }
-        
+        /* card look (white, labels, collapse) comes from style.css MOBILE CARDS (.m-card) */
         .product-name {
             font-size: 16px;
             font-weight: 600;
@@ -387,30 +371,7 @@ block content
         .product-detail-wide {
             grid-column: 1 / -1;
         }
-        .product-detail small {
-            display: block;
-            font-size: 11px;
-            font-weight: 600;
-            color: #6c757d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 2px;
-        }
-
-        /* phones: cards collapsed to the header (name + price) until tapped */
         .product-summary { font-weight: 600; }
-        @media (max-width: 767px) {
-            .product-card { cursor: pointer; }
-            .product-card .card-header { position: relative; padding-right: 2.4rem; }
-            .product-card .card-header::after {
-                content: ""; position: absolute; right: 0.95rem; top: 50%;
-                width: 0.5rem; height: 0.5rem; margin-top: -0.35rem;
-                border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg);
-            }
-            .product-card.card-open .card-header::after { margin-top: -0.1rem; transform: rotate(-135deg); }
-            .product-card:not(.card-open) .card-header { border-radius: 12px; }
-            .product-card:not(.card-open) .product-fields { display: none; }
-        }
         @media (max-width: 767px) {
             /* phones: header scrolls away (a sticky one would sit under the top bar) */
             .products-header-sticky { position: static; box-shadow: none; }
@@ -418,7 +379,6 @@ block content
             .products-header-sticky .row > div { flex: 0 0 100%; max-width: 100%; text-align: left !important; }
             .products-header-sticky .btn-group { margin-top: 8px; }
             .products-container { padding-left: 10px; padding-right: 10px; }
-            .product-card:hover { transform: none; }
         }
         
         @media (max-width: 991.98px) {

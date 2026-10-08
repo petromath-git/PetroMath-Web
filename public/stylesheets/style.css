@@ -3852,6 +3852,22 @@ tr.d-md-none,
   }
 }
 
+/* =====================================================================
+   MOBILE CARDS — the phone design system for list / master pages
+   ("convert this page to Mobile Cards"). Same look as Shift Closing and
+   the credit reports:
+     - page renders with mobileReady (viewport tag + body.mobile-ready)
+     - white card, thin grey border, rounded; record name heads the card
+     - fields in two columns, small grey UPPERCASE label above each value
+     - outline buttons at the bottom (or the header, for div cards)
+     - lists collapse to name + one key detail; tap to open
+     - desktop keeps its table
+   Two ways in:
+     tables → .m-stack (+ .m-collapse) below; rows become cards
+     div cards (.card > .card-header + .card-body) → .m-card, further down
+   Collapse script: views/mixins/card-toggle-mobile.pug
+   ===================================================================== */
+
 /* ===== STACKED TABLES — MOBILE (any body.mobile-ready page) =====
    Add class "m-stack" to a table and data-label="…" to its cells: on phones
    each row becomes a card in two columns, label above value, matching the
@@ -3977,5 +3993,91 @@ tr.d-md-none,
   }
   body.mobile-ready table.m-stack.m-collapse > tbody > tr:not(.m-static):not(.card-open) > td.m-summary::before {
     content: none;
+  }
+}
+
+/* ===== MOBILE CARDS — DIV CARDS (.m-card) =====
+   For pages that build their own .card > .card-header + .card-body list on
+   phones. Restyles them to the Mobile Cards look (see top of the m-stack
+   section). Add .m-collapsible to start them collapsed to the header on
+   phones; toggled by +cardToggleMobile('.m-card.m-collapsible').
+   .master-card is listed too: Pump & Tank Master builds its cards in
+   public/javascripts/pump-tank-master.js with that class only. */
+body.mobile-ready .m-card,
+body.mobile-ready .master-card {
+  border: 1px solid #dee2e6 !important;
+  border-radius: 0.5rem !important;
+  background: #fff;
+  box-shadow: none !important;
+  transform: none !important;
+}
+body.mobile-ready .m-card > .card-header,
+body.mobile-ready .master-card > .card-header {
+  position: relative;
+  background: #fff !important;
+  color: #212529 !important;
+  border-bottom: 1px solid #f0f0f0;
+  border-radius: 0.5rem 0.5rem 0 0 !important;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+/* titles in <strong> match the .m-stack card title weight */
+body.mobile-ready .m-card > .card-header strong,
+body.mobile-ready .master-card > .card-header strong {
+  font-weight: 600;
+}
+body.mobile-ready .m-card > .card-body,
+body.mobile-ready .master-card > .card-body {
+  padding: 0.65rem 0.75rem;
+  font-size: 0.9rem;
+}
+/* labels: small grey uppercase, above the value */
+body.mobile-ready .m-card > .card-body small,
+body.mobile-ready .master-card > .card-body small {
+  display: block;
+  margin-bottom: 0.1rem;
+  font-size: 0.68rem !important;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #6c757d !important;
+}
+@media screen and (max-width: 767px) {
+  body.mobile-ready .m-card.m-collapsible,
+  body.mobile-ready .master-card {
+    cursor: pointer;
+  }
+  body.mobile-ready .m-card.m-collapsible > .card-header,
+  body.mobile-ready .master-card > .card-header {
+    padding-right: 2.25rem;
+  }
+  body.mobile-ready .m-card.m-collapsible > .card-header::after,
+  body.mobile-ready .master-card > .card-header::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 0.9rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-top: -0.35rem;
+    border-right: 2px solid #adb5bd;
+    border-bottom: 2px solid #adb5bd;
+    transform: rotate(45deg);
+  }
+  body.mobile-ready .m-card.m-collapsible.card-open > .card-header::after,
+  body.mobile-ready .master-card.card-open > .card-header::after {
+    margin-top: -0.1rem;
+    transform: rotate(-135deg);
+  }
+  body.mobile-ready .m-card.m-collapsible:not(.card-open) > .card-header,
+  body.mobile-ready .master-card:not(.card-open) > .card-header {
+    border-bottom: 0;
+    border-radius: 0.5rem !important;
+  }
+  body.mobile-ready .m-card.m-collapsible:not(.card-open) > .card-body,
+  body.mobile-ready .master-card:not(.card-open) > .card-body {
+    display: none;
   }
 }
