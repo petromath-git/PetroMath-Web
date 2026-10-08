@@ -733,7 +733,7 @@ const getHomeData = async (req, res, next) => {
         Promise.allSettled([
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
-            getDraftsCountBeforeDays(locationCode, maxAllowedDraftDays + 1),
+            TxnReadDao.getDraftClosingsBeforeDays(locationCode, maxAllowedDraftDays + 1),
             getDeadlineWarningMessage(locationCode),
             getLocationProductColumns(locationCode),
             rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
@@ -748,7 +748,8 @@ const getHomeData = async (req, res, next) => {
                 fromClosingDate: closingQueryFromDate,
                 toClosingDate: closingQueryToDate,
                 draftsCnt: values[1].value,
-                draftDaysCnt: values[2].value,
+                draftDaysCnt: (values[2].value || []).length,
+                staleDrafts: values[2].value || [],
                 deadlineMessage: values[3].value,
                 productColumns: values[4].value,
                 canSearchClosings: values[5].value,
@@ -927,15 +928,6 @@ const getClosingDataByDate = (locationCode, closingQueryFromDate, closingQueryTo
 const getDraftsCount = (locationCode) => {
     return new Promise((resolve, reject) => {
         return TxnReadDao.getDraftClosingsCount(locationCode)
-            .then(data => {
-                resolve(data);
-            });
-    });
-}
-
-const getDraftsCountBeforeDays = (locationCode, noOfDays) => {
-    return new Promise((resolve, reject) => {
-        return TxnReadDao.getDraftClosingsCountBeforeDays(locationCode, noOfDays)
             .then(data => {
                 resolve(data);
             });
