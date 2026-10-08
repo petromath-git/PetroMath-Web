@@ -1,6 +1,5 @@
 // controllers/masters/pump-tank-controller.js
 const db = require('../db/db-connection');
-const personDao = require('../dao/person-dao');
 const { QueryTypes } = require('sequelize');
 
 
@@ -161,22 +160,13 @@ module.exports = {
     // Main page renderer - loads the tabbed interface
     renderPumpTankMaster: async (req, res, next) => {
         try {
-            const userPersonId = req.user.Person_id;
-            const userRole = req.user.Role;
-            
-            // Get user's accessible locations with names
-            const accessibleLocations = await personDao.getUserAccessibleLocationsWithNames(userPersonId);
-            
-            // Default to first accessible location or user's primary location
-            const defaultLocation = req.query.location_code || 
-                                  accessibleLocations[0]?.location_code || 
-                                  req.user.location_code;
-            
+            // Always the location the user is logged in to (no picker on this screen;
+            // pump-tank-routes.js also pins every API call to it)
             res.render('pump-tank-master', {
                 title: 'Pump & Tank Master',
                 user: req.user,
-                locations: accessibleLocations,
-                selectedLocation: defaultLocation
+                mobileReady: true,   // viewport tag + body.mobile-ready
+                selectedLocation: req.user.location_code
             });
             
         } catch (error) {
