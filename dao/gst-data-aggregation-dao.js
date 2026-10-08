@@ -440,7 +440,8 @@ getPurchaseData: async (locationCode, fromDate, toDate) => {
             SUM(COALESCE(lil.cgst_amount, lil.amount * COALESCE(mp.cgst_percent, 0) / 100)) as cgst_amount,
             SUM(COALESCE(lil.sgst_amount, lil.amount * COALESCE(mp.sgst_percent, 0) / 100)) as sgst_amount,
 
-            0 as igst_amount
+            -- IGST invoices (redesigned purchase screen, e.g. HPCL out-of-state warehouse)
+            SUM(COALESCE(lil.igst_amount, 0)) as igst_amount
         FROM t_lubes_inv_hdr lih
         JOIN t_lubes_inv_lines lil ON lih.lubes_hdr_id = lil.lubes_hdr_id
         JOIN m_supplier ms ON lih.supplier_id = ms.supplier_id

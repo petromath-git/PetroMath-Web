@@ -196,6 +196,15 @@ const lubeInvoiceUpload = multer({
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => file.mimetype === 'application/pdf' ? cb(null, true) : cb(new Error('Only PDF files are accepted'))
 });
+// Purchase invoice copy (photo/PDF) — kept in memory and stored in t_document_store.
+// 10 MB hard cap here; the per-location DOC_MAX_UPLOAD_MB limit and the
+// content checks (real file type, no scripts in PDFs) are in the controller.
+const lubeInvoiceAttachmentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, cb) => ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)
+        ? cb(null, true) : cb(new Error('Only JPG, PNG or PDF files can be attached'))
+});
 const supplierController = require("./controllers/supplier-controller");
 const closingSaveController = require("./controllers/closing-save-controller");
 const passwordResetController = require('./controllers/password-reset-controller');
@@ -1681,6 +1690,18 @@ app.get('/lubes-invoice/upload', isLoginEnsured, function(req, res, next) {
 });
 app.post('/lubes-invoice/parse-pdf', isLoginEnsured, lubeInvoiceUpload.single('lubeInvoicePdf'), function(req, res, next) {
     lubesInvoiceController.parseLubeInvoicePdf(req, res, next);
+});
+app.post('/lubes-invoice/:id/attachments', isLoginEnsured, function(req, res, next) {
+    lubeInvoiceAttachmentUpload.single('file')(req, res, function(err) {
+        if (err) {
+            const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (10 MB maximum).' : err.message;
+            return res.status(400).json({ success: false, message });
+        }
+        lubesInvoiceController.uploadAttachment(req, res, next);
+    });
+});
+app.post('/lubes-invoice/:id/attachments/:docId/remove', isLoginEnsured, function(req, res, next) {
+    lubesInvoiceController.removeAttachment(req, res, next);
 });
 app.post('/lubes-invoice/save-from-pdf', isLoginEnsured, function(req, res, next) {
     lubesInvoiceController.saveLubeInvoiceFromPdf(req, res, next);

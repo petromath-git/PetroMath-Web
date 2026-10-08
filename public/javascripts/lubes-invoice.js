@@ -1,524 +1,609 @@
-document.addEventListener('DOMContentLoaded', function() {
+/*
+ * Purchase invoice screen.
+ * The user types what is printed on the invoice; LubeInvoiceCalc
+ * (lube-invoice-calc.js, also used by the server on save) derives the rest.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    const D = window.PI_DATA;
+    const Calc = window.LubeInvoiceCalc;
+    const closed = D.closed;
+    const productById = new Map(D.products.map(p => [String(p.product_id), p]));
+
     const form = document.getElementById('lubesInvoiceForm');
-    const itemsTable = document.getElementById('invoice-items-table').getElementsByTagName('tbody')[0];
-    const addRowBtn = document.getElementById('add-row-btn');
-    const saveBtn = document.getElementById('save-btn');
-    const closeBtn = document.getElementById('close-btn');
-    const invoiceNumberInput = document.getElementById('invoice_number');
+    const tbody = document.querySelector('#invoice-items-table tbody');
     const supplierSelect = document.getElementById('supplier_id');
     const invoiceDateInput = document.getElementById('invoice_date');
     const cashDiscountInput = document.getElementById('cash_discount');
+    const printedTotalInput = document.getElementById('printed_total');
+    const totalLineDiscInput = document.getElementById('total_line_discount');
+    const saveBtn = document.getElementById('save-btn');
+    const closeBtn = document.getElementById('close-btn');
+    const errorsBox = document.getElementById('pi-errors');
 
-    // Store all suppliers with their effective dates
+    let lastResult = null;
+    let chosenFormat = null;   // set when the user picks an invoice type in the help panel
+
+    const fmt = v => (Math.round((parseFloat(v) || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function taxType() {
+        const r = form.querySelector('input[name="tax_type"]:checked');
+        return r ? r.value : 'CGST_SGST';
+    }
+    function discountMode() {
+        const r = form.querySelector('input[name="discount_mode"]:checked');
+        return r ? r.value : 'LINE';
+    }
+
+    // ── Rows ────────────────────────────────────────────────────────────────
+    function productOptions(selectedId) {
+        return '<option value="">Select product</option>' + D.products.map(p =>
+            `<option value="${p.product_id}"${String(p.product_id) === String(selectedId) ? ' selected' : ''}>${esc(p.product_name)}</option>`
+        ).join('');
+    }
+    function gstOptions(selected) {
+        return D.gstRates.map(r => `<option value="${r}"${Number(r) === Number(selected) ? ' selected' : ''}>${r}%</option>`).join('');
+    }
+
+    function addRow(line) {
+        line = line || {};
+        const tr = document.createElement('tr');
+        tr.className = 'pi-row';
+        // data-label / m-* classes: on phones each line is a card (style.css .m-stack)
+        tr.innerHTML = `
+            <td class="pi-idx m-hide"></td>
+            <td class="m-title">
+                <select class="form-control form-control-sm pi-product">${productOptions(line.product_id)}</select>
+                <div class="pi-warn pi-row-warn"></div>
+            </td>
+            <td class="m-wide" data-label="Quantity">
+                <div class="pi-qty-wrap">
+                    <input class="form-control form-control-sm pi-qty" type="number" step="0.001" min="0" value="${line.entered_qty != null && !isNaN(line.entered_qty) ? line.entered_qty : ''}">
+                    <select class="form-control form-control-sm pi-uom"></select>
+                </div>
+                <div class="pi-pack" style="display:none">
+                    <div class="input-group input-group-sm mt-1">
+                        <div class="input-group-prepend"><span class="input-group-text">1 piece =</span></div>
+                        <input class="form-control pi-packsize" type="number" step="0.001" min="0">
+                        <div class="input-group-append"><span class="input-group-text pi-pack-unit">L</span></div>
+                    </div>
+                </div>
+                <div class="pi-calc text-muted"></div>
+            </td>
+            <td data-label="Amount"><input class="form-control form-control-sm pi-gross" type="number" inputmode="decimal" step="0.01" min="0" value="${line.gross_amount != null ? line.gross_amount : ''}">
+                <div class="pi-free" style="display:none">Free stock (no charge)</div></td>
+            <td class="pi-col-disc" data-label="Discount"><input class="form-control form-control-sm pi-disc" type="number" inputmode="decimal" step="0.01" min="0" value="${line.discount_amount ? line.discount_amount : ''}">
+                <div class="pi-calc text-muted pi-disc-alloc"></div></td>
+            <td data-label="GST %"><select class="form-control form-control-sm pi-gst">${gstOptions(line.gst_pct)}</select></td>
+            <td class="pi-ro pi-taxable" data-label="Taxable"></td>
+            <td class="pi-ro pi-gstamt" data-label="GST"></td>
+            <td class="pi-ro font-weight-bold pi-amount" data-label="Total"></td>
+            ${closed ? '' : '<td class="m-actions"><button type="button" class="btn btn-sm btn-outline-danger pi-remove" title="Remove"><i class="bi bi-x-lg"></i><span class="d-md-none ml-1">Remove</span></button></td>'}`;
+        tbody.appendChild(tr);
+
+        tr._line = line;   // stored values (closed invoices display these as-is)
+        tr._mrp = line.mrp || 0;
+        tr._notes = line.notes || '';
+
+        const productSel = tr.querySelector('.pi-product');
+        const gstSel = tr.querySelector('.pi-gst');
+
+        // Legacy drafts can carry an impossible GST % (e.g. 180) — fall back to the product's
+        if (line.product_id && D.gstRates.indexOf(Number(line.gst_pct)) < 0) {
+            const p = productById.get(String(line.product_id));
+            if (p) gstSel.value = String(p.gst);
+            tr._badLegacyGst = line.gst_pct;
+        }
+
+        configureUom(tr, line.entered_uom);
+
+        if (closed) {
+            tr.querySelectorAll('input, select').forEach(el => { el.disabled = true; });
+        } else {
+            if (window.jQuery && jQuery.fn.select2) {
+                jQuery(productSel).select2({ width: '100%' }).on('select2:select', () => onProductChange(tr));
+            } else {
+                productSel.addEventListener('change', () => onProductChange(tr));
+            }
+            tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
+            tr.querySelector('.pi-uom').addEventListener('change', () => { updatePackPrompt(tr); recalc(); });
+            tr.querySelector('.pi-remove').addEventListener('click', () => {
+                if (tbody.querySelectorAll('tr.pi-row').length > 1) { tr.remove(); renumber(); recalc(); }
+            });
+        }
+        renumber();
+        return tr;
+    }
+
+    function renumber() {
+        tbody.querySelectorAll('tr.pi-row').forEach((tr, i) => { tr.querySelector('.pi-idx').textContent = i + 1; });
+    }
+
+    function onProductChange(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        if (p) tr.querySelector('.pi-gst').value = String(p.gst);
+        tr._badLegacyGst = null;
+        configureUom(tr, null);
+        recalc();
+    }
+
+    // Unit choices for the quantity box, by product:
+    //   counted in litres/kg (loose, barrels) → that unit only, no conversion
+    //   counted in pieces → Pieces, or Litres/Kg converted using the pack size
+    function configureUom(tr, preferred) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const uomSel = tr.querySelector('.pi-uom');
+        let opts;
+        if (!p) opts = [['PCS', 'Pieces']];
+        else if (p.measure === 'L') opts = [['LTR', 'Litres']];
+        else if (p.measure === 'KG') opts = [['KG', 'Kg']];
+        else opts = [['PCS', 'Pieces'], p.pack_measure === 'KG' ? ['KG', 'Kg'] : ['LTR', 'Litres']];
+        const current = preferred || uomSel.value;
+        uomSel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+        uomSel.value = opts.some(o => o[0] === current) ? current : opts[0][0];
+        uomSel.style.display = opts.length > 1 ? '' : 'none';
+        if (opts.length === 1 && p) {
+            tr.querySelector('.pi-calc').textContent = p.measure ? `in ${opts[0][1].toLowerCase()}` : '';
+        }
+        updatePackPrompt(tr);
+    }
+
+    // Litres chosen but the product name doesn't say its pack size — ask once
+    // (saved on the product, never asked again)
+    function updatePackPrompt(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const uom = tr.querySelector('.pi-uom').value;
+        const need = !closed && p && !p.measure && uom !== 'PCS' && !p.pack_size;
+        tr.querySelector('.pi-pack').style.display = need ? '' : 'none';
+        tr.querySelector('.pi-pack-unit').textContent = uom === 'KG' ? 'kg' : 'L';
+    }
+
+    function rowPackSize(tr, p) {
+        if (!p) return null;
+        if (p.pack_size) return p.pack_size;
+        const told = parseFloat(tr.querySelector('.pi-packsize').value);
+        return told > 0 ? told : null;
+    }
+
+    // Pieces (or product-unit qty) for a row, plus the line to show under the box
+    function rowQty(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const entered = parseFloat(tr.querySelector('.pi-qty').value);
+        const uom = tr.querySelector('.pi-uom').value;
+        if (!p || !(entered > 0)) return { qty: 0, note: '', warn: '' };
+        if (p.measure || uom === 'PCS') return { qty: entered, note: '', warn: '' };
+        const size = rowPackSize(tr, p);
+        if (!size) return { qty: 0, note: '', warn: `Tell us how many ${uom === 'KG' ? 'kg' : 'litres'} one piece is, or enter pieces.` };
+        const r = Calc.toPieces(entered, uom, size);
+        const unit = uom === 'KG' ? 'kg' : 'L';
+        const sizeLabel = size < 1 ? `${Math.round(size * 1000)} ${uom === 'KG' ? 'g' : 'ml'}` : `${size} ${unit}`;
+        return {
+            qty: r.qty,
+            note: `${entered} ${unit} ÷ ${sizeLabel} = <b>${r.qty} pieces</b>`,
+            warn: r.whole ? '' : `${entered} ${unit} is not a whole number of ${sizeLabel} pieces — check the quantity.`
+        };
+    }
+
+    // ── Calculation & display ───────────────────────────────────────────────
+    function recalc() {
+        const rows = [...tbody.querySelectorAll('tr.pi-row')];
+        const mode = discountMode();
+        document.getElementById('pi-disc-total-note') && (document.getElementById('pi-disc-total-note').style.display = mode === 'TOTAL' ? '' : 'none');
+        if (totalLineDiscInput) totalLineDiscInput.style.display = mode === 'TOTAL' ? '' : 'none';
+        rows.forEach(tr => {
+            const d = tr.querySelector('.pi-disc');
+            d.style.display = mode === 'TOTAL' ? 'none' : '';
+        });
+
+        const qtyInfo = rows.map(rowQty);
+        const input = {
+            tax_type: taxType(),
+            discount_mode: mode,
+            total_line_discount: totalLineDiscInput ? totalLineDiscInput.value : 0,
+            cash_discount: cashDiscountInput.value,
+            printed_total: printedTotalInput.value,
+            lines: rows.map((tr, i) => ({
+                qty: qtyInfo[i].qty,
+                gross: tr.querySelector('.pi-gross').value,
+                line_discount: tr.querySelector('.pi-disc').value,
+                gst_pct: tr.querySelector('.pi-gst').value
+            }))
+        };
+        const r = Calc.compute(input);
+        lastResult = r;
+
+        rows.forEach((tr, i) => {
+            const c = r.lines[i];
+            const p = productById.get(tr.querySelector('.pi-product').value);
+            const info = qtyInfo[i];
+            const calcEl = tr.querySelector('.pi-calc');
+            if (p && !p.measure) calcEl.innerHTML = info.note;
+
+            tr.querySelector('.pi-taxable').textContent = fmt(c.taxable_value);
+            tr.querySelector('.pi-gstamt').textContent = fmt(c.gst_amount);
+            tr.querySelector('.pi-amount').textContent = fmt(c.amount);
+            const grossEntered = tr.querySelector('.pi-gross').value !== '';
+            tr.querySelector('.pi-free').style.display = grossEntered && c.is_free && c.qty > 0 ? '' : 'none';
+            tr.querySelector('.pi-disc-alloc').innerHTML =
+                (mode === 'TOTAL' && c.discount_amount ? `est. ₹${fmt(c.discount_amount)}` : '') +
+                (c.cash_discount_amount ? `${mode === 'TOTAL' && c.discount_amount ? '<br>' : ''}cash disc. ₹${fmt(c.cash_discount_amount)}` : '');
+
+            const warns = [];
+            if (info.warn) warns.push(info.warn);
+            if (tr._badLegacyGst != null) warns.push(`Old entry had GST ${tr._badLegacyGst}% — changed to the product's ${tr.querySelector('.pi-gst').value}%. Check against the invoice.`);
+            if (p) {
+                if (Number(tr.querySelector('.pi-gst').value) !== Number(p.gst)) {
+                    warns.push(`GST differs from the product master (${p.gst}%). If the invoice is right, update the product's GST in Products so sales bills match.`);
+                }
+                if (!c.is_free && c.qty > 0) {
+                    const unitLabel = p.measure === 'L' ? 'litre' : p.measure === 'KG' ? 'kg' : 'piece';
+                    const w = Calc.priceWarning(c.cost_per_unit, p.price, unitLabel);
+                    if (w) warns.push(w);
+                }
+            }
+            tr.querySelector('.pi-row-warn').innerHTML = warns.map(w => `<div><i class="bi bi-exclamation-triangle mr-1"></i>${esc(w)}</div>`).join('');
+        });
+
+        renderTotals(r);
+    }
+
+    function renderTotals(r) {
+        const t = r.totals;
+        document.getElementById('t-gross').textContent = fmt(t.gross);
+        document.getElementById('t-disc').textContent = fmt(t.discount);
+        document.getElementById('t-taxable').textContent = fmt(t.taxable);
+        document.getElementById('t-gst-label').textContent = r.tax_type === 'IGST' ? 'IGST' : 'GST (CGST + SGST)';
+        document.getElementById('t-gst').textContent = fmt(t.gst);
+        document.getElementById('t-lines').textContent = fmt(t.lines_total);
+
+        const status = document.getElementById('t-status');
+        let canClose = false;
+        if (t.printed_total == null) {
+            status.className = 'pi-total-status text-muted';
+            status.textContent = 'Enter the total printed on the invoice to check your entry.';
+        } else if (t.matches) {
+            status.className = 'pi-total-status ok';
+            status.innerHTML = `<i class="bi bi-check-circle-fill mr-1"></i>Matches the invoice` + (t.round_off ? ` (round-off ₹${fmt(t.round_off)})` : '');
+            canClose = r.errors.length === 0;
+        } else {
+            status.className = 'pi-total-status bad';
+            status.innerHTML = `<i class="bi bi-x-circle-fill mr-1"></i>Differs from the invoice by ₹${fmt(Math.abs(t.diff))}. Check quantities, amounts, discounts and GST.`;
+        }
+        if (closeBtn) closeBtn.disabled = !canClose;
+    }
+
+    // Closed invoices: show exactly what was saved, never recompute
+    function renderClosed() {
+        const rows = [...tbody.querySelectorAll('tr.pi-row')];
+        let gross = 0, disc = 0, taxable = 0, gst = 0, amount = 0;
+        rows.forEach(tr => {
+            const l = tr._line;
+            const p = productById.get(String(l.product_id));
+            tr.querySelector('.pi-taxable').textContent = l.taxable_value != null ? fmt(l.taxable_value) : '';
+            tr.querySelector('.pi-gstamt').textContent = fmt(l.gst_amount);
+            tr.querySelector('.pi-amount').textContent = fmt(l.amount);
+            if (p && !p.measure && l.entered_uom && l.entered_uom !== 'PCS') {
+                tr.querySelector('.pi-calc').innerHTML = `= <b>${l.qty} pieces</b>`;
+            }
+            if (l.cash_discount_amount) tr.querySelector('.pi-disc-alloc').textContent = `cash disc. ₹${fmt(l.cash_discount_amount)}`;
+            gross += l.gross_amount || 0; disc += l.discount_amount || 0;
+            taxable += l.taxable_value || 0; gst += l.gst_amount || 0; amount += l.amount || 0;
+        });
+        document.getElementById('t-gross').textContent = fmt(gross);
+        document.getElementById('t-disc').textContent = fmt(disc);
+        document.getElementById('t-taxable').textContent = fmt(taxable);
+        document.getElementById('t-gst').textContent = fmt(gst);
+        document.getElementById('t-lines').textContent = fmt(amount);
+        const status = document.getElementById('t-status');
+        const inv = D.invoice || {};
+        if (inv.printed_total != null) {
+            status.className = 'pi-total-status ok';
+            status.textContent = 'Closed — matched the printed invoice' + (parseFloat(inv.round_off) ? ` (round-off ₹${fmt(inv.round_off)})` : '');
+        } else {
+            status.className = 'pi-total-status text-muted';
+            status.textContent = `Invoice amount saved: ₹${fmt(inv.invoice_amount)}`;
+        }
+    }
+
+    // ── Help panel (per oil company) ────────────────────────────────────────
+    const helpPanel = document.getElementById('pi-help');
+    const formatSel = document.getElementById('pi-format');
+
+    function currentFormat() {
+        if (chosenFormat) return chosenFormat;
+        const sid = supplierSelect.value;
+        return (sid && D.supplierFormats[sid]) || D.locationOmc || 'GENERIC';
+    }
+
+    function renderHelp() {
+        const f = currentFormat();
+        const h = D.formatHelp[f] || D.formatHelp.GENERIC;
+        if (!h) return;
+        document.querySelectorAll('[data-hint]').forEach(el => { el.textContent = (h.hints && h.hints[el.dataset.hint]) || ''; });
+        if (!helpPanel) return;
+        formatSel.value = f;
+        document.getElementById('pi-help-title').textContent = h.title;
+        document.getElementById('pi-help-subtitle').textContent = h.subtitle || '';
+        const cell = c => {
+            if (c && typeof c === 'object') return `<td class="pi-marked"><span class="pi-mark">${c.mark}</span>${esc(c.text)}</td>`;
+            return `<td>${esc(c)}</td>`;
+        };
+        document.getElementById('pi-help-sample').innerHTML =
+            `<thead class="thead-light"><tr>${h.columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>` +
+            `<tbody>${h.rows.map(r => `<tr>${r.map(cell).join('')}</tr>`).join('')}</tbody>`;
+        document.getElementById('pi-help-footer').innerHTML = (h.footer || []).map(f =>
+            `<div class="ml-3 mb-1"><span class="pi-mark">${f.mark}</span>${esc(f.label)}: <b>${esc(f.value)}</b></div>`).join('');
+        // Step text is our own config (allows <b>), not user data
+        document.getElementById('pi-help-steps').innerHTML = (h.steps || []).map(s =>
+            `<li><span class="pi-mark">${s.n}</span>${s.text}</li>`).join('');
+    }
+
+    // Help opens by itself on new invoices until the user hides it; only the
+    // user's own Hide/Show choice is remembered (per browser)
+    function setHelpOpen(open, remember) {
+        if (!helpPanel) return;
+        helpPanel.style.display = open ? '' : 'none';
+        if (remember) {
+            try { localStorage.setItem('pi-help-hidden', open ? '0' : '1'); } catch (e) { /* storage unavailable */ }
+        }
+    }
+
+    if (helpPanel) {
+        let hidden = false;
+        try { hidden = localStorage.getItem('pi-help-hidden') === '1'; } catch (e) { /* storage unavailable */ }
+        setHelpOpen(D.isNew && !hidden, false);
+        document.getElementById('pi-help-toggle').addEventListener('click', () => setHelpOpen(helpPanel.style.display === 'none', true));
+        document.getElementById('pi-help-close').addEventListener('click', () => setHelpOpen(false, true));
+        formatSel.addEventListener('change', () => { chosenFormat = formatSel.value; renderHelp(); });
+    }
+    supplierSelect.addEventListener('change', () => { chosenFormat = null; renderHelp(); });
+
+    // ── Supplier list filtered by invoice date (unchanged behaviour) ────────
     let allSuppliers = [];
-    
-    // Get product options HTML (used when adding new rows)
-    function getProductOptions() {
-        return products.map(product => {
-            const gst = (parseFloat(product.cgst_percent) || 0) + (parseFloat(product.sgst_percent) || 0);
-            return `<option value="${product.product_id}" data-unit="${product.unit}" data-gst="${gst}">
-                ${product.product_name}
-            </option>`;
-        }).join('');
-    }
-
-    // Fetch all suppliers with their effective dates
-    function fetchAllSuppliersWithDates() {
-        fetch('/lubes-invoice/suppliers-with-dates')
-            .then(response => {
-                if (!response.ok) {
-                    // Log the response for debugging
-                    response.text().then(text => {
-                        console.error('Error response:', text);
-                    });
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    allSuppliers = data.suppliers || [];
-                    
-                    // Initially filter suppliers based on the current invoice date
-                    if (invoiceDateInput && invoiceDateInput.value) {
-                        filterSuppliersByDate(invoiceDateInput.value);
-                    }
-                } else {
-                    console.error('Failed to fetch suppliers with dates:', data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching suppliers with dates:', error);
-                // Continue with the existing suppliers
-            });
-    }
-    
-    // Filter suppliers based on the selected date
     function filterSuppliersByDate(dateStr) {
-        if (!supplierSelect || !dateStr || allSuppliers.length === 0) return;
-        
+        if (!dateStr || !allSuppliers.length) return;
         const selectedDate = new Date(dateStr);
-        const currentSelectedValue = supplierSelect.value;
-        
-        // Save the current options to an array
-        const currentOptions = Array.from(supplierSelect.options).map(opt => ({
-            value: opt.value,
-            text: opt.text,
-            selected: opt.selected
-        }));
-        
-        // Clear current options (except the first one)
-        while (supplierSelect.options.length > 1) {
-            supplierSelect.remove(1);
-        }
-        
-        // Add suppliers active on the selected date
-        allSuppliers.forEach(supplier => {
-            const startDate = supplier.effective_start_date ? new Date(supplier.effective_start_date) : null;
-            const endDate = supplier.effective_end_date ? new Date(supplier.effective_end_date) : null;
-            
-            const isActive = 
-                (!startDate || selectedDate >= startDate) && 
-                (!endDate || selectedDate <= endDate);
-            
-            if (isActive) {
-                const option = document.createElement('option');
-                option.value = supplier.supplier_id;
-                option.text = supplier.supplier_name;
-                
-                // Keep selected value if it exists and is valid
-                if (currentSelectedValue && currentSelectedValue == supplier.supplier_id) {
-                    option.selected = true;
-                }
-                
-                supplierSelect.add(option);
+        const current = supplierSelect.value;
+        while (supplierSelect.options.length > 1) supplierSelect.remove(1);
+        allSuppliers.forEach(s => {
+            const start = s.effective_start_date ? new Date(s.effective_start_date) : null;
+            const end = s.effective_end_date ? new Date(s.effective_end_date) : null;
+            if ((!start || selectedDate >= start) && (!end || selectedDate <= end)) {
+                const o = document.createElement('option');
+                o.value = s.supplier_id; o.text = s.supplier_name;
+                if (String(current) === String(s.supplier_id)) o.selected = true;
+                supplierSelect.add(o);
             }
         });
-        
-        // If the previously selected supplier is no longer valid, clear the selection
-        if (currentSelectedValue && !Array.from(supplierSelect.options).some(opt => opt.value === currentSelectedValue)) {
+        if (current && supplierSelect.value !== String(current)) {
             supplierSelect.value = '';
-            
-            // Show a warning if a supplier was previously selected but is now filtered out
-            if (currentSelectedValue) {
-                alert('The previously selected supplier is not active on the selected invoice date.');
-            }
+            showErrors(['The selected supplier is not active on this invoice date.']);
         }
     }
-
-    // Function to fetch historical rate for a product
-    async function fetchHistoricalRate(productId, netRateInput) {
-        try {
-            const response = await fetch(`/lubes-invoice/historical-data?productId=${productId}`);
-            const data = await response.json();
-            
-            if (data.success && data.history && data.history.length > 0) {
-                // Get the most recent historical rate
-                const lastRate = data.history[0].net_rate;
-                
-                // Check if lastRate is a number and convert it if needed
-                const numericRate = parseFloat(lastRate) || 0;
-                
-                // Set as placeholder
-                netRateInput.placeholder = `Last: ${numericRate.toFixed(2)}`;
-                
-                // You could also set the value if you want to pre-fill it
-                // netRateInput.value = numericRate.toFixed(2);
-                // calculateAmount(netRateInput);
-            } else {
-                netRateInput.placeholder = "";
-            }
-        } catch (error) {
-            console.error("Error fetching historical data:", error);
-            netRateInput.placeholder = "";
-        }
+    if (!closed) {
+        fetch('/lubes-invoice/suppliers-with-dates')
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data && data.success) { allSuppliers = data.suppliers || []; filterSuppliersByDate(invoiceDateInput.value); }
+            })
+            .catch(() => { /* keep the server-rendered list */ });
+        invoiceDateInput.addEventListener('change', () => filterSuppliersByDate(invoiceDateInput.value));
     }
 
-    // Setup row events for a specific row
-    function setupRowEvents(row) {
-        const productSelect = row.querySelector('.product-select');
-        const unitCell = row.querySelector('.product-unit');
-        const mrpInput = row.querySelector('.mrp');
-        const netRateInput = row.querySelector('.net-rate');
-        const quantityInput = row.querySelector('.quantity');
-        const discountInput = row.querySelector('.discount');
-        const taxableValueInput = row.querySelector('.taxable-value');
-        const gstPctInput = row.querySelector('.gst-pct');
-        const gstAmountInput = row.querySelector('.gst-amount');
-        const amountInput = row.querySelector('.amount');
-        const removeBtn = row.querySelector('.remove-row');
-
-        // Update product details when product is selected
-        function updateProductDetails() {
-            const selectedOption = productSelect.options[productSelect.selectedIndex];
-
-            if (selectedOption.value) {
-                const unit = selectedOption.getAttribute('data-unit') || '';
-                unitCell.textContent = unit;
-
-                // Fetch historical rate when product is selected
-                fetchHistoricalRate(selectedOption.value, netRateInput);
-
-                // Prefill GST% from the product master, but only when this line doesn't
-                // already have one set (avoid clobbering a value loaded for an existing
-                // line, which should reflect the rate actually charged on that invoice)
-                if (gstPctInput && (!gstPctInput.value || parseFloat(gstPctInput.value) === 0)) {
-                    const gst = selectedOption.getAttribute('data-gst');
-                    if (gst !== null && gst !== '') {
-                        gstPctInput.value = parseFloat(gst).toFixed(2);
-                        calculateAmount();
-                    }
-                }
-            } else {
-                unitCell.textContent = '';
-                netRateInput.placeholder = "";
-            }
-        }
-
-        // Calculate taxable value, GST amount and net amount from rate, qty, discount and GST%
-        function calculateAmount() {
-            const rate = parseFloat(netRateInput.value) || 0;
-            const quantity = parseFloat(quantityInput.value) || 0;
-            const discount = parseFloat(discountInput.value) || 0;
-            const gstPct = parseFloat(gstPctInput.value) || 0;
-
-            const taxableValue = (rate * quantity) - discount;
-            const gstAmount = taxableValue * gstPct / 100;
-            const netAmount = taxableValue + gstAmount;
-
-            taxableValueInput.value = taxableValue.toFixed(2);
-            gstAmountInput.value = gstAmount.toFixed(2);
-            amountInput.value = netAmount.toFixed(2);
-
-            calculateTotal();
-        }
-
-        // Product select change event
-        if (productSelect) {
-            productSelect.addEventListener('change', updateProductDetails);
-
-            // Trigger update if a product is pre-selected
-            if (productSelect.value) {
-                updateProductDetails();
-            }
-        }
-
-        // Net Rate input event
-        if (netRateInput) {
-            netRateInput.addEventListener('input', calculateAmount);
-        }
-
-        // Quantity input event
-        if (quantityInput) {
-            quantityInput.addEventListener('input', calculateAmount);
-        }
-
-        // Discount input event
-        if (discountInput) {
-            discountInput.addEventListener('input', calculateAmount);
-        }
-
-        // GST% input event
-        if (gstPctInput) {
-            gstPctInput.addEventListener('input', calculateAmount);
-        }
-
-        // Remove row button
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function() {
-                if (itemsTable.rows.length > 1) {
-                    row.remove();
-                    renumberRows();
-                    calculateTotal();
-                }
-            });
-        }
+    // ── Save / Close ────────────────────────────────────────────────────────
+    function showErrors(list) {
+        if (!list || !list.length) { errorsBox.style.display = 'none'; return; }
+        errorsBox.innerHTML = '<ul class="mb-0 pl-3">' + list.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>';
+        errorsBox.style.display = '';
+        errorsBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // Add new row functionality
-    if (addRowBtn) {
-        addRowBtn.addEventListener('click', function() {
-            const newRow = document.createElement('tr');
-            const rowCount = itemsTable.rows.length;
-            
-            newRow.innerHTML = `
-                <td>${rowCount + 1}</td>
-                <td>
-                    <select class="form-control product-select" name="items[${rowCount}][product_id]" required>
-                        <option value="">Select Product</option>
-                        ${getProductOptions()}
-                    </select>
-                </td>
-                <td class="product-unit"></td>
-                <td>
-                    <input class="form-control mrp" type="number" name="items[${rowCount}][mrp]" step="0.01" min="0" required>
-                </td>
-                <td>
-                    <input class="form-control net-rate" type="number" name="items[${rowCount}][net_rate]" step="0.01" min="0" required>
-                </td>
-                <td>
-                    <input class="form-control quantity" type="number" name="items[${rowCount}][qty]" step="0.01" min="0.01" required>
-                </td>
-                <td>
-                    <input class="form-control discount" type="number" name="items[${rowCount}][discount_amount]" step="0.01" min="0" value="0.00">
-                </td>
-                <td>
-                    <input class="form-control taxable-value" type="number" name="items[${rowCount}][taxable_value]" value="0.00" readonly>
-                </td>
-                <td>
-                    <input class="form-control gst-pct" type="number" name="items[${rowCount}][gst_pct]" step="0.01" min="0" value="0.00">
-                </td>
-                <td>
-                    <input class="form-control gst-amount" type="number" name="items[${rowCount}][gst_amount]" value="0.00" readonly>
-                </td>
-                <td>
-                    <input class="form-control amount" type="number" name="items[${rowCount}][amount]" readonly>
-                </td>
-                <td>
-                    <input class="form-control notes" type="text" name="items[${rowCount}][notes]">
-                </td>
-                <td>
-                    <button type="button" class="btn btn-danger remove-row">Remove</button>
-                </td>
-            `;
-            
-            itemsTable.appendChild(newRow);
-            setupRowEvents(newRow);
+    function collect() {
+        const rows = [...tbody.querySelectorAll('tr.pi-row')];
+        const hdrIdEl = document.getElementById('lubes_hdr_id');
+        return {
+            lubes_hdr_id: hdrIdEl ? hdrIdEl.value : null,
+            invoice_number: document.getElementById('invoice_number').value,
+            invoice_date: invoiceDateInput.value,
+            supplier_id: supplierSelect.value,
+            tax_type: taxType(),
+            discount_mode: discountMode(),
+            total_line_discount: totalLineDiscInput ? totalLineDiscInput.value : '',
+            cash_discount: cashDiscountInput.value,
+            printed_total: printedTotalInput.value,
+            notes: document.getElementById('notes').value,
+            invoice_format: chosenFormat,
+            items: rows.filter(tr => tr.querySelector('.pi-product').value).map(tr => {
+                const p = productById.get(tr.querySelector('.pi-product').value);
+                return {
+                    product_id: tr.querySelector('.pi-product').value,
+                    entered_qty: tr.querySelector('.pi-qty').value,
+                    entered_uom: tr.querySelector('.pi-uom').value,
+                    pack_volume: p && !p.pack_size ? tr.querySelector('.pi-packsize').value : null,
+                    gross_amount: tr.querySelector('.pi-gross').value,
+                    discount_amount: discountMode() === 'TOTAL' ? 0 : tr.querySelector('.pi-disc').value,
+                    gst_pct: tr.querySelector('.pi-gst').value,
+                    mrp: tr._mrp,
+                    notes: tr._notes
+                };
+            })
+        };
+    }
+
+    function validateClient(data) {
+        const errs = [];
+        if (!data.invoice_number.trim()) errs.push('Enter the invoice number.');
+        if (!data.invoice_date) errs.push('Enter the invoice date.');
+        if (!data.supplier_id) errs.push('Select the supplier.');
+        if (!data.items.length) errs.push('Add at least one product.');
+        data.items.forEach((it, i) => {
+            const p = productById.get(String(it.product_id));
+            const name = p ? p.product_name : `Line ${i + 1}`;
+            if (!(parseFloat(it.entered_qty) > 0)) errs.push(`${name}: enter the quantity.`);
+            if (it.gross_amount === '' || parseFloat(it.gross_amount) < 0) errs.push(`${name}: enter the amount (0 for free stock).`);
         });
+        if (lastResult) errs.push(...lastResult.errors);
+        return errs;
     }
 
-    // Renumber rows after deletion
-    function renumberRows() {
-        const rows = itemsTable.querySelectorAll('tr');
-        rows.forEach((row, index) => {
-            row.cells[0].textContent = index + 1;
-            
-            // Update input names
-            const inputs = row.querySelectorAll('[name^="items["]');
-            inputs.forEach(input => {
-                const name = input.getAttribute('name');
-                const newName = name.replace(/items\[\d+\]/, `items[${index}]`);
-                input.setAttribute('name', newName);
-            });
+    async function save() {
+        const data = collect();
+        const errs = validateClient(data);
+        if (errs.length) { showErrors(errs); return null; }
+        showErrors([]);
+        const res = await fetch('/lubes-invoice/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
         });
+        const result = await res.json().catch(() => ({ success: false, message: 'Unexpected server response.' }));
+        if (!result.success) { showErrors(result.errors || [result.message || 'Failed to save invoice.']); return null; }
+        return result;
     }
 
-    // Calculate total invoice amount
-    function calculateTotal() {
-        const linesTotal = [...itemsTable.querySelectorAll('.amount')]
-            .reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
-        const cashDiscount = cashDiscountInput ? (parseFloat(cashDiscountInput.value) || 0) : 0;
-        const total = linesTotal - cashDiscount;
-
-        document.getElementById('invoice_amount').value = total.toFixed(2);
-
-        // Enable/disable close button based on total
-        if (closeBtn) {
-            closeBtn.disabled = total <= 0;
-        }
+    function setBusy(busy) {
+        [saveBtn, closeBtn].forEach(b => { if (b) b.disabled = busy || (b === closeBtn && !(lastResult && lastResult.totals.matches)); });
     }
 
-    // Cash discount input event
-    if (cashDiscountInput) {
-        cashDiscountInput.addEventListener('input', calculateTotal);
-    }
-
-    // Validate form before submission
-    function validateForm() {
-        // Validate invoice number
-        if (!invoiceNumberInput.value.trim()) {
-            alert('Please enter an invoice number');
-            invoiceNumberInput.focus();
-            return false;
-        }
-
-        // Validate supplier
-        if (!supplierSelect.value) {
-            alert('Please select a supplier');
-            supplierSelect.focus();
-            return false;
-        }
-
-        // Validate invoice date
-        if (!invoiceDateInput.value) {
-            alert('Please select an invoice date');
-            invoiceDateInput.focus();
-            return false;
-        }
-
-        // Validate items
-        const rows = itemsTable.querySelectorAll('tr');
-        if (rows.length === 0) {
-            alert('Please add at least one invoice item');
-            return false;
-        }
-
-        // Validate each row
-        let isValid = true;
-        rows.forEach((row, index) => {
-            const productSelect = row.querySelector('.product-select');
-            const mrpInput = row.querySelector('.mrp');
-            const netRateInput = row.querySelector('.net-rate');
-            const quantityInput = row.querySelector('.quantity');
-
-            if (!productSelect.value) {
-                alert(`Please select a product for row ${index + 1}`);
-                isValid = false;
-                return;
-            }
-
-            if (!mrpInput.value || parseFloat(mrpInput.value) < 0) {
-                alert(`Please enter a valid MRP for row ${index + 1}`);
-                isValid = false;
-                return;
-            }
-
-            if (!netRateInput.value || parseFloat(netRateInput.value) < 0) {
-                alert(`Please enter a valid net rate for row ${index + 1}`);
-                isValid = false;
-                return;
-            }
-
-            if (!quantityInput.value || parseFloat(quantityInput.value) <= 0) {
-                alert(`Please enter a valid quantity for row ${index + 1}`);
-                isValid = false;
-                return;
-            }
-        });
-
-        return isValid;
-    }
-
-    // Save invoice
     if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-            if (!validateForm()) return;
-            
-            const formData = new FormData(form);
-            const items = [];
-            
-            // Collect items from form
-            const rows = itemsTable.querySelectorAll('tr');
-            rows.forEach((row, index) => {
-                const productSelect = row.querySelector('.product-select');
-                const mrpInput = row.querySelector('.mrp');
-                const netRateInput = row.querySelector('.net-rate');
-                const quantityInput = row.querySelector('.quantity');
-                const discountInput = row.querySelector('.discount');
-                const taxableValueInput = row.querySelector('.taxable-value');
-                const gstPctInput = row.querySelector('.gst-pct');
-                const gstAmountInput = row.querySelector('.gst-amount');
-                const amountInput = row.querySelector('.amount');
-                const notesInput = row.querySelector('.notes');
+        saveBtn.addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                const result = await save();
+                if (result) window.location.href = `/lubes-invoice?id=${result.lubes_hdr_id}`;
+            } catch (e) {
+                showErrors(['Could not save — check your connection and try again.']);
+            } finally { setBusy(false); }
+        });
+    }
 
-                if (productSelect && productSelect.value) {
-                    // Split combined GST% (and amount) evenly into CGST/SGST for storage,
-                    // matching the accounting engine's expectation of an intra-state split
-                    const gstPct = gstPctInput ? (parseFloat(gstPctInput.value) || 0) : 0;
-                    const gstAmount = gstAmountInput ? (parseFloat(gstAmountInput.value) || 0) : 0;
-
-                    items.push({
-                        product_id: productSelect.value,
-                        mrp: mrpInput.value,
-                        net_rate: netRateInput.value,
-                        qty: quantityInput.value,
-                        discount_amount: discountInput ? discountInput.value : 0,
-                        taxable_value: taxableValueInput ? taxableValueInput.value : 0,
-                        cgst_pct: (gstPct / 2).toFixed(2),
-                        cgst_amount: (gstAmount / 2).toFixed(2),
-                        sgst_pct: (gstPct / 2).toFixed(2),
-                        sgst_amount: (gstAmount / 2).toFixed(2),
-                        amount: amountInput.value,
-                        notes: notesInput ? notesInput.value : ''
-                    });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', async () => {
+            if (!confirm('Close this invoice? Stock and accounts will use it, and it cannot be changed afterwards.')) return;
+            setBusy(true);
+            try {
+                const saved = await save();
+                if (!saved) return;
+                const res = await fetch(`/lubes-invoice/close?id=${saved.lubes_hdr_id}`, { headers: { Accept: 'application/json' } });
+                const result = await res.json().catch(() => ({ success: false }));
+                if (result.success) window.location.href = '/lubes-invoice-home';
+                else {
+                    showErrors([result.message || 'Failed to close invoice.']);
+                    // Saved as draft even though close failed — reload so the screen shows the saved state
+                    setTimeout(() => { window.location.href = `/lubes-invoice?id=${saved.lubes_hdr_id}`; }, 2500);
                 }
-            });
-            
-            // Convert FormData to object
-            const data = {};
-            for (const [key, value] of formData.entries()) {
-                data[key] = value;
+            } catch (e) {
+                showErrors(['Could not close — check your connection and try again.']);
+            } finally { setBusy(false); }
+        });
+    }
+
+    // ── Attachments ─────────────────────────────────────────────────────────
+    const attList = document.getElementById('pi-att-list');
+    let attachments = (D.attachments || []).slice();
+
+    function renderAttachments() {
+        if (!attList) return;
+        if (!attachments.length) {
+            attList.innerHTML = D.isNew ? '' : '<div class="small text-muted">No copy attached yet.</div>';
+        } else {
+            attList.innerHTML = attachments.map(a => `
+                <div class="pi-att">
+                    ${a.mime_type.indexOf('image/') === 0
+                        ? `<a href="${a.url}" target="_blank" rel="noopener"><img src="${a.url}" alt=""></a>`
+                        : `<a href="${a.url}" target="_blank" rel="noopener" class="h3 mb-0 text-danger"><i class="bi bi-file-earmark-pdf"></i></a>`}
+                    <a href="${a.url}" target="_blank" rel="noopener" class="small flex-grow-1">${esc(a.file_name)}</a>
+                    ${closed ? '' : `<button type="button" class="btn btn-sm btn-outline-danger pi-att-remove" data-id="${a.doc_id}" title="Remove"><i class="bi bi-trash"></i></button>`}
+                </div>`).join('');
+        }
+        const actions = document.getElementById('pi-att-actions');
+        if (actions) actions.style.display = attachments.length >= D.maxAttachments ? 'none' : '';
+    }
+
+    // Phone photos are shrunk and re-encoded in the browser before upload
+    // (also strips anything hidden in the original file)
+    function compressImage(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                const max = 1800;
+                const scale = Math.min(1, max / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not read the photo')), 'image/jpeg', 0.75);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a readable image.')); };
+            img.src = url;
+        });
+    }
+
+    async function uploadAttachment(file, source) {
+        const status = document.getElementById('pi-att-status');
+        const hdrId = document.getElementById('lubes_hdr_id').value;
+        try {
+            let blob = file, name = file.name || 'invoice';
+            if (file.type === 'application/pdf') {
+                if (file.size > D.maxUploadMb * 1024 * 1024) throw new Error(`PDF is larger than ${D.maxUploadMb} MB. Take a photo of the invoice instead — photos are shrunk automatically.`);
+            } else if (/^image\//.test(file.type)) {
+                status.textContent = 'Preparing photo…';
+                blob = await compressImage(file);
+                name = name.replace(/\.[^.]*$/, '') + '.jpg';
+            } else {
+                throw new Error('Only JPG, PNG or PDF files can be attached.');
             }
+            status.className = 'small mt-1 text-muted';
+            status.textContent = 'Uploading…';
+            const fd = new FormData();
+            fd.append('capture_source', source);
+            fd.append('file', blob, name);
+            const res = await fetch(`/lubes-invoice/${hdrId}/attachments`, { method: 'POST', body: fd });
+            const result = await res.json().catch(() => ({ success: false, message: 'Upload failed.' }));
+            if (!result.success) throw new Error(result.message || 'Upload failed.');
+            attachments.unshift(result.attachment);
+            renderAttachments();
+            status.className = 'small mt-1 text-success';
+            status.textContent = 'Attached.';
+        } catch (e) {
+            status.className = 'small mt-1 text-danger';
+            status.textContent = e.message;
+        }
+    }
 
-            // Ensure location_id is the numeric ID
-            data.location_id = document.querySelector('input[name="location_id"]').value;
-            data.location_code = userLocationCode;
-            data.items = items;
-            
-            // Send data to server
-            fetch('/lubes-invoice/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    alert(result.message || 'Invoice saved successfully');
-                    window.location.href = `/lubes-invoice?id=${result.lubes_hdr_id}`;
-                } else {
-                    alert(result.message || 'Failed to save invoice');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while saving the invoice');
-            });
+    if (document.getElementById('pi-att-upload-btn')) {
+        const fileInput = document.getElementById('pi-att-file');
+        const camInput = document.getElementById('pi-att-camera');
+        document.getElementById('pi-att-upload-btn').addEventListener('click', () => fileInput.click());
+        document.getElementById('pi-att-camera-btn').addEventListener('click', () => camInput.click());
+        fileInput.addEventListener('change', () => { if (fileInput.files[0]) uploadAttachment(fileInput.files[0], 'UPLOAD'); fileInput.value = ''; });
+        camInput.addEventListener('change', () => { if (camInput.files[0]) uploadAttachment(camInput.files[0], 'CAMERA'); camInput.value = ''; });
+    }
+    if (attList) {
+        attList.addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.pi-att-remove');
+            if (!btn || !confirm('Remove this attachment?')) return;
+            const hdrId = document.getElementById('lubes_hdr_id').value;
+            const res = await fetch(`/lubes-invoice/${hdrId}/attachments/${btn.dataset.id}/remove`, { method: 'POST' });
+            const result = await res.json().catch(() => ({ success: false }));
+            if (result.success) { attachments = attachments.filter(a => String(a.doc_id) !== btn.dataset.id); renderAttachments(); }
+            else alert(result.message || 'Could not remove the attachment.');
         });
     }
 
+    // ── Init ────────────────────────────────────────────────────────────────
+    (D.lines && D.lines.length ? D.lines : [{}]).forEach(addRow);
+    renderHelp();
+    renderAttachments();
 
-
-    // Close invoice
-if (closeBtn) {
-    closeBtn.addEventListener('click', function() {
-        const invoiceId = document.getElementById('lubes_hdr_id')?.value;
-        
-        if (!invoiceId) {
-            alert('No invoice selected to close');
-            return;
-        }
-
-        if (confirm('Are you sure you want to close this invoice? This action cannot be undone.')) {
-            fetch(`/lubes-invoice/close?id=${invoiceId}`, {
-                method: 'GET'
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    alert(result.message || 'Invoice closed successfully');
-                    window.location.href = '/lubes-invoice-home';
-                } else {
-                    alert(result.message || 'Failed to close invoice');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while closing the invoice');
-                // Redirect to home page even on error, after showing the alert
-                window.location.href = '/lubes-invoice-home';
-            });
-        }
-    });
-}
-
-    // Listen for date change events to update supplier list
-    if (invoiceDateInput) {
-        invoiceDateInput.addEventListener('change', function() {
-            filterSuppliersByDate(this.value);
-        });
+    if (closed) {
+        renderClosed();
+    } else {
+        document.getElementById('add-row-btn').addEventListener('click', () => { addRow({}); recalc(); });
+        [cashDiscountInput, printedTotalInput, totalLineDiscInput].forEach(el => el && el.addEventListener('input', recalc));
+        form.querySelectorAll('input[name="tax_type"], input[name="discount_mode"]').forEach(el => el.addEventListener('change', recalc));
+        recalc();
     }
-
-    // Initial setup for all rows
-    function setupAllRows() {
-        const rows = itemsTable.querySelectorAll('tr');
-        rows.forEach(row => setupRowEvents(row));
-        calculateTotal();
-    }
-
-    // Initialize when DOM is loaded
-    setupAllRows();
-    fetchAllSuppliersWithDates();
 });
