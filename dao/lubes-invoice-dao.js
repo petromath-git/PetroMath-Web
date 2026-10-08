@@ -104,8 +104,15 @@ module.exports = {
                 'cgst_amount',
                 'sgst_pct',
                 'sgst_amount',
+                'entered_qty',
+                'entered_uom',
+                'gross_amount',
+                'cash_discount_amount',
+                'igst_pct',
+                'igst_amount',
                 'notes'
-            ]
+            ],
+            order: [['lubes_line_id', 'ASC']]
         });
     },
 

@@ -43,6 +43,13 @@ module.exports = function(sequelize, DataTypes) {
         cgst_amount:          { field: 'cgst_amount',          type: DataTypes.DECIMAL(12,2), allowNull: true },
         sgst_pct:             { field: 'sgst_pct',             type: DataTypes.DECIMAL(5,2),  allowNull: true },
         sgst_amount:          { field: 'sgst_amount',          type: DataTypes.DECIMAL(12,2), allowNull: true },
+        // Redesigned entry screen; NULL on legacy rows
+        entered_qty:          { field: 'entered_qty',          type: DataTypes.DECIMAL(15,3), allowNull: true },
+        entered_uom:          { field: 'entered_uom',          type: DataTypes.STRING(5),     allowNull: true },
+        gross_amount:         { field: 'gross_amount',         type: DataTypes.DECIMAL(15,2), allowNull: true },
+        cash_discount_amount: { field: 'cash_discount_amount', type: DataTypes.DECIMAL(12,2), allowNull: true },
+        igst_pct:             { field: 'igst_pct',             type: DataTypes.DECIMAL(5,2),  allowNull: true },
+        igst_amount:          { field: 'igst_amount',          type: DataTypes.DECIMAL(12,2), allowNull: true },
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,

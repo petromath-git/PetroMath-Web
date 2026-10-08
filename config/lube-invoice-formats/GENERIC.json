@@ -1,0 +1,28 @@
+{
+    "format": "GENERIC",
+    "title": "How to enter a purchase invoice",
+    "subtitle": "For any supplier — copy the numbers as printed; PetroMath works out the rest.",
+    "columns": ["Item", "Qty", "Amount before discount", "Discount", "GST", "Total"],
+    "rows": [
+        ["Distilled Water 1 Ltr", {"text": "130", "mark": 2}, {"text": "1,501.89", "mark": 3}, {"text": "0.00", "mark": 4}, "0%", "1,501.89"]
+    ],
+    "footer": [
+        {"label": "Cash discount (if any)", "value": "0.00", "mark": 5},
+        {"label": "Invoice total", "value": "1,501.89", "mark": 6}
+    ],
+    "steps": [
+        {"n": 2, "text": "Quantity: the number of pieces you received. If the invoice shows litres, choose <b>Litres</b> and PetroMath converts."},
+        {"n": 3, "text": "Amount: the line amount <b>before</b> discount and GST."},
+        {"n": 4, "text": "Discount: the discount for that line, if any."},
+        {"n": 5, "text": "Cash discount: a discount given on the whole bill, if any."},
+        {"n": 6, "text": "Printed total: the bill total. You can close the invoice only when it matches."}
+    ],
+    "hints": {
+        "qty": "Pieces received (or Litres)",
+        "gross": "Line amount before discount and GST",
+        "discount": "Line discount, if any",
+        "cash_discount": "Discount on the whole bill, if any",
+        "printed_total": "Bill total as printed",
+        "tax_type": "IGST only if the supplier is in another state"
+    }
+}

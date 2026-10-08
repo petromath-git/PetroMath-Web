@@ -1082,6 +1082,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
             h.closing_status,
             h.invoice_date,
             h.invoice_number,
+            h.round_off,
             s.supplier_name,
             h.supplier_id
         FROM t_lubes_inv_hdr h
@@ -1109,7 +1110,8 @@ async function processLubesInvoiceEvent(event, processedBy) {
             p.product_name,
             COALESCE(l.taxable_value, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100), 2)) AS taxable_value,
             COALESCE(l.cgst_amount, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.cgst_percent,0) / 100, 2)) AS cgst_amount,
-            COALESCE(l.sgst_amount, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.sgst_percent,0) / 100, 2)) AS sgst_amount
+            COALESCE(l.sgst_amount, ROUND(l.amount / (1 + (COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0)) / 100) * COALESCE(p.sgst_percent,0) / 100, 2)) AS sgst_amount,
+            COALESCE(l.igst_amount, 0) AS igst_amount
         FROM t_lubes_inv_lines l
         JOIN m_product p ON p.product_id = l.product_id
         WHERE l.lubes_hdr_id = :lubesHdrId
@@ -1125,17 +1127,33 @@ async function processLubesInvoiceEvent(event, processedBy) {
     const journalLines = [];
     let totalCr = 0;
 
+    // Round-off (≤ ₹1, invoices from the redesigned screen) is landed cost on the
+    // largest line, so the supplier is credited exactly the printed invoice total.
+    const roundOff = parseFloat(hdr.round_off) || 0;
+    let roundOffLineId = null;
+    if (roundOff) {
+        roundOffLineId = lines_rows.reduce((best, ln) =>
+            (!best || parseFloat(ln.taxable_value) > parseFloat(best.taxable_value)) ? ln : best, null).lubes_line_id;
+    }
+
     for (const ln of lines_rows) {
-        const taxable = parseFloat(ln.taxable_value);
+        const taxable = Math.round((parseFloat(ln.taxable_value) + (ln.lubes_line_id === roundOffLineId ? roundOff : 0)) * 100) / 100;
         const cgst    = parseFloat(ln.cgst_amount || 0);
         const sgst    = parseFloat(ln.sgst_amount || 0);
-        totalCr      += taxable + cgst + sgst;
+        const igst    = parseFloat(ln.igst_amount || 0);
+        totalCr      += taxable + cgst + sgst + igst;
 
         const purchaseLedgerId = await resolveProductLedger(location_code, ln.product_id, 'PURCHASE');
         if (!purchaseLedgerId) throw new Error(`PURCHASE ledger not configured for product ${ln.product_name} (id:${ln.product_id})`);
 
         const lineNarration = `${ln.product_name} | ₹${taxable.toFixed(2)} + GST | ${narration}`;
         journalLines.push({ ledger_id: purchaseLedgerId, dr_amount: taxable, cr_amount: 0, narration: lineNarration });
+
+        if (igst > 0) {
+            const igstLedgerId = await resolveProductLedger(location_code, ln.product_id, 'INPUT_IGST');
+            if (!igstLedgerId) throw new Error(`INPUT_IGST ledger not mapped for product ${ln.product_name} — configure it at /products/ledger-map`);
+            journalLines.push({ ledger_id: igstLedgerId, dr_amount: igst, cr_amount: 0, narration: lineNarration });
+        }
 
         if (cgst > 0) {
             const cgstLedgerId = await resolveProductLedger(location_code, ln.product_id, 'INPUT_CGST');
@@ -1150,6 +1168,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
     }
 
     // Supplier CR — sum of all line amounts (guarantees balance regardless of header rounding)
+    totalCr = Math.round(totalCr * 100) / 100;
     journalLines.push({ ledger_id: supplierLedgerId, dr_amount: 0, cr_amount: totalCr, narration });
 
     const vid = await createVoucher({
