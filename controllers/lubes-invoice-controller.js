@@ -12,6 +12,8 @@ const { v4: uuidv4 } = require('uuid');
 const InvoiceParserService = require('../services/invoice-parser-service');
 const InvoiceProductMapDao = require('../dao/invoice-product-map-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
+const locationDao = require('../dao/location-dao');
+const moment = require('moment');
 const { getLocationConfigValue } = require('../utils/location-config');
 const Calc = require('../public/javascripts/lube-invoice-calc');
 const path = require('path');
@@ -100,6 +102,20 @@ module.exports = {
 
             const supplier = await db.m_supplier.findOne({ where: { supplier_id: parseInt(b.supplier_id) || 0, location_code: locationCode } });
             if (!supplier) return fail(400, 'Please select a supplier.');
+
+            // Earliest allowed date is the location's go-live (first shift), as for
+            // adjustments and bank entries. A supplier's start date doesn't restrict
+            // dates on or after go-live (suppliers are often added after their first
+            // invoices); its end date still does.
+            const invDate = String(b.invoice_date).slice(0, 10);
+            const goLive = await locationDao.getGoLiveDate(locationCode);
+            if (goLive && invDate < goLive) {
+                return fail(400, `Invoice date ${moment(invDate).format('DD-MMM-YYYY')} is before this location's PetroMath go-live date (${moment(goLive).format('DD-MMM-YYYY')}). Stock before go-live is covered by opening balances.`);
+            }
+            const supplierEnd = supplier.effective_end_date ? String(supplier.effective_end_date).slice(0, 10) : null;
+            if (supplierEnd && invDate > supplierEnd) {
+                return fail(400, `${supplier.supplier_name} is not active after ${moment(supplierEnd).format('DD-MMM-YYYY')}.`);
+            }
 
             const items = Array.isArray(b.items) ? b.items.filter(i => i && i.product_id) : [];
             if (!items.length) return fail(400, 'Please add at least one product.');
@@ -747,12 +763,13 @@ async function getLocationOmc(locationCode) {
 
 async function renderInvoiceForm(req, res, invoice, lines) {
     const locationCode = req.user.location_code;
-    const [products, suppliers, omcInfo, attachments, maxUploadMb] = await Promise.all([
+    const [products, suppliers, omcInfo, attachments, maxUploadMb, goLiveDate] = await Promise.all([
         lubesInvoiceDao.getProducts(locationCode),
         lubesInvoiceDao.getSuppliers(locationCode),
         getLocationOmc(locationCode),
         invoice ? DocumentStoreDao.findByEntity(ATTACHMENT_ENTITY, invoice.lubes_hdr_id) : Promise.resolve([]),
-        getLocationConfigValue(locationCode, 'DOC_MAX_UPLOAD_MB', '5')
+        getLocationConfigValue(locationCode, 'DOC_MAX_UPLOAD_MB', '5'),
+        locationDao.getGoLiveDate(locationCode)
     ]);
 
     // Plain product data for the screen: GST, selling price and pack size
@@ -823,6 +840,7 @@ async function renderInvoiceForm(req, res, invoice, lines) {
         attachments: attachments.map(a => ({ doc_id: a.doc_id, file_name: a.file_name, mime_type: a.mime_type, url: `/documents/${a.doc_id}` })),
         maxAttachments: MAX_ATTACHMENTS,
         maxUploadMb: parseFloat(maxUploadMb) || 5,
+        goLiveDate: goLiveDate,   // YYYY-MM-DD or null — earliest allowed invoice date
         mobileReady: true,   // viewport tag + body.mobile-ready: invoice lines stack into cards (m-stack)
         dateFormat: dateFormat
     });
