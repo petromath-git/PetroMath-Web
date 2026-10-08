@@ -1,5 +1,6 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -78,13 +79,13 @@ block content
             .mobile-cards-view.d-block.d-lg-none
                 .row
                     each val, index in users
-                        .col-12.mb-3
-                            .card.disabled-customer-card.shadow-sm(id=`mobile-disabled-card-${index}`)
-                                .card-header.bg-warning.text-white.d-flex.justify-content-between.align-items-center
+                        .col-12.mb-2
+                            .card.disabled-customer-card.m-card.m-collapsible(id=`mobile-disabled-card-${index}`)
+                                .card-header.d-flex.justify-content-between.align-items-center
                                     .customer-name
                                         strong= val.name
                                         span.badge.badge-light.ms-2(class=val.type === 'Credit' ? 'text-primary' : 'text-info')= val.type
-                                    button.btn.btn-success.btn-sm(type="button", onclick=`enableCustomer(${index}, ${val.id})`)
+                                    button.btn.btn-outline-success.btn-sm(type="button", title="Enable this customer", onclick=`enableCustomer(${index}, ${val.id})`)
                                         i.bi.bi-check-circle
                                 .card-body.p-3
                                     .row.g-2
@@ -110,6 +111,9 @@ block content
                 | No disabled customers found at this location.
                 br
                 small All customers are currently active.
+
+    //- phones: cards start collapsed to name + type; tap to open
+    +cardToggleMobile('.m-card.m-collapsible')
 
     // CSS for mobile responsiveness and styling
     style.
@@ -166,33 +170,13 @@ block content
             }
         }
         
-        /* Disabled customer card styling */
-        .disabled-customer-card {
-            border-radius: 12px;
-            border: 2px solid #ffc107;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .disabled-customer-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-        
-        .disabled-customer-card .card-header {
-            border-radius: 12px 12px 0 0 !important;
-            background: linear-gradient(45deg, #ffc107, #ff9800) !important;
-        }
-        
+        /* card look (white, labels, collapse) comes from style.css MOBILE CARDS (.m-card) */
         .customer-detail {
             margin-bottom: 8px;
         }
-        
-        .customer-detail small {
-            display: block;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 2px;
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .enable-customers-header-sticky { position: static; box-shadow: none; }
         }
         
         /* Table desktop container */
