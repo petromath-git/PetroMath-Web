@@ -1,7 +1,22 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     style.
+        .purchase-filters label { font-size: .8rem; margin-bottom: .15rem; color: #495057; }
+        .purchase-table .pi-sum-amt { font-family: 'Courier New', monospace; font-weight: 700; white-space: nowrap; display: block; }
+        .purchase-table .pi-sum-sub { font-size: .75em; color: #6c757d; display: block; }
+        @media (max-width: 767px) {
+            /* open card: drop the summary copy of amount/date */
+            .purchase-table tr.card-open > td.m-summary { display: none !important; }
+            /* the line-details row is only a card while its lines are showing */
+            .purchase-table tr.collapse-row:not(:has(.collapse.show)) { display: none !important; }
+            .purchase-table tr.collapse-row > td.line-details > .collapse > div { padding: .25rem 0 !important; overflow-x: auto; }
+            .purchase-filters .btn { width: 100%; }
+            /* lines inside an open invoice: compact cards on a light background */
+            .purchase-table .nested-table > tbody > tr { background: #f8f9fa !important; margin-bottom: .4rem; }
+            .purchase-table .nested-table > tbody > tr.table-info { display: flex; justify-content: space-between; background: #d1ecf1 !important; }
+        }
         .toggle-icon {
             transition: transform 0.2s ease-in-out;
         }
@@ -57,10 +72,7 @@ block content
             const fuelCategorySelect = document.getElementById('fuel_category');
             if (!fuelCategorySelect) return; // location has no CNG product; filter isn't rendered
             const show = document.getElementById('invoice_type').value === 'FUEL';
-            const display = show ? 'table-cell' : 'none';
-            document.getElementById('fuelCategorySpacer').style.display = display;
-            document.getElementById('fuelCategoryLabel').style.display = display;
-            document.getElementById('fuelCategoryField').style.display = display;
+            document.getElementById('fuelCategoryField').style.display = show ? '' : 'none';
             if (!show) fuelCategorySelect.value = '';
         }
 
@@ -101,41 +113,43 @@ block content
         function createLinesTable(lines) {
             if (!lines || lines.length === 0) return '<div class="p-3">No lines found</div>';
             
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const n2 = v => (parseFloat(v) || 0).toFixed(2);
             let html = `
                 <div class="p-3">
-                    <table class="table table-sm nested-table">
+                    <table class="table table-sm nested-table m-stack">
                         <thead>
                             <tr>
                                 <th>Product</th>
                                 <th class="text-right">Quantity</th>
-                                <th class="text-right">MRP</th>
-                                <th class="text-right">Net Rate</th>
+                                <th class="text-right">Rate</th>
+                                <th class="text-right">Discount</th>
+                                <th class="text-right">Taxable</th>
                                 <th class="text-right">Amount</th>
-                                <th>Notes</th>
                             </tr>
                         </thead>
                         <tbody>`;
-            
+
             let totalAmount = 0;
-            
+
             lines.forEach(line => {
                 totalAmount += parseFloat(line.amount) || 0;
+                const disc = (parseFloat(line.discount_amount) || 0) + (parseFloat(line.cash_discount_amount) || 0);
                 html += `
                     <tr>
-                        <td>${line.product_name || 'Unknown Product'}</td>
-                        <td class="text-right">${line.qty.toFixed(2)}</td>
-                        <td class="text-right">${line.mrp.toFixed(2)}</td>
-                        <td class="text-right">${line.net_rate.toFixed(2)}</td>
-                        <td class="text-right">${line.amount.toFixed(2)}</td>
-                        <td>${line.notes || ''}</td>
+                        <td class="m-title">${esc(line.product_name || 'Unknown Product')}${line.notes ? `<div class="small text-muted">${esc(line.notes)}</div>` : ''}</td>
+                        <td class="text-right" data-label="Quantity">${n2(line.qty)}</td>
+                        <td class="text-right" data-label="Rate">${n2(line.net_rate)}</td>
+                        <td class="text-right" data-label="Discount">${disc ? n2(disc) : '-'}</td>
+                        <td class="text-right" data-label="Taxable">${line.taxable_value != null ? n2(line.taxable_value) : '-'}</td>
+                        <td class="text-right" data-label="Amount">${n2(line.amount)}</td>
                     </tr>`;
             });
-            
+
             html += `
                     <tr class="table-info">
-                        <td colspan="4" class="text-right"><strong>Total:</strong></td>
+                        <td colspan="5" class="text-right"><strong>Total:</strong></td>
                         <td class="text-right"><strong>${totalAmount.toFixed(2)}</strong></td>
-                        <td></td>
                     </tr>
                 </tbody>
             </table>
@@ -144,83 +158,58 @@ block content
             return html;
         }
 
-    div.row
-    div.col-12
-        form(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
-            table.center
-                tr
-                    td Date Range:
-                    td
-                        select#dateRange.form-control.form-control-sm(onchange="updateInvoiceDateRange()")
-                            option(value='this_month') This Month
-                            option(value='last_month') Last Month
-                            option(value='this_financial_year') This Financial Year
-                            option(value='last_financial_year') Last Financial Year
-                            option(value='custom', selected=true) Custom Date
-                    td &nbsp;
-                    td#fromDateLabel From Date:
-                    td
-                        input#invoice_fromDate.form-control.form-control-sm(
-                            type='date',
-                            name='invoice_fromDate',
-                            value=fromDate,
-                            format="dd/mm/yyyy",
-                            required,
-                            onChange="copyToHidden(this);"
-                        )
-                    td &nbsp;
-                    td#toDateLabel To Date:
-                    td
-                        input#invoice_toDate.form-control.form-control-sm(
-                            type='date',
-                            name='invoice_toDate',
-                            value=toDate,
-                            format="dd/mm/yyyy",
-                            required,
-                            onChange="copyToHidden(this);"
-                        )
-                tr
-                    td &nbsp;
-                tr
-                    td Supplier:
-                    td
-                        select#supplier_id.form-control.form-control-sm(name='supplier_id')
-                            option(value='') All Suppliers
-                            each supplier in suppliers
-                                option(value=supplier.supplier_id,
-                                    selected=selectedSupplierId == supplier.supplier_id)= supplier.supplier_name
-                    td &nbsp;
-                    td Type:
-                    td
-                        select#invoice_type.form-control.form-control-sm(name='invoice_type' onchange='toggleFuelCategoryFilter()')
-                            option(value='' selected=selectedType == '') All Types
-                            option(value='FUEL' selected=selectedType == 'FUEL') Fuel
-                            option(value='LUBE' selected=selectedType == 'LUBE') Lube
-                    if hasCngProduct
-                        td#fuelCategorySpacer(style=selectedType == 'FUEL' ? '' : 'display:none') &nbsp;
-                        td#fuelCategoryLabel(style=selectedType == 'FUEL' ? '' : 'display:none') Fuel Category:
-                        td#fuelCategoryField(style=selectedType == 'FUEL' ? '' : 'display:none')
-                            select#fuel_category.form-control.form-control-sm(name='fuel_category')
-                                option(value='' selected=selectedFuelCategory == '') All Fuel
-                                option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
-                                option(value='MS_HSD' selected=selectedFuelCategory == 'MS_HSD') MS / HSD
-                    td &nbsp;
-                    td
-                        button.btn.btn-sm.btn-primary(type='submit') Go
-                    td &nbsp;
-                    td
-                        div.dropdown
-                            button.btn.btn-sm.btn-primary.dropdown-toggle(type='button' data-toggle='dropdown') New Purchase
-                            div.dropdown-menu
-                                a.dropdown-item(href='/purchases/fuel-invoice/new') Fuel Invoice
-                                a.dropdown-item(href='/lubes-invoice/new') Lube Invoice (Manual)
-            
-            input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
-            input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
-    div &nbsp;
+    //- Filters: one row on desktop, stacked on phones
+    form.purchase-filters.mb-3(method='GET' action='/lubes-invoice-home' id='lubesinvoicehome')
+        div.form-row.align-items-end
+            div.form-group.col-12.col-md-auto
+                label(for='dateRange') Date Range
+                select#dateRange.form-control.form-control-sm(onchange="updateInvoiceDateRange()")
+                    option(value='this_month') This Month
+                    option(value='last_month') Last Month
+                    option(value='this_financial_year') This Financial Year
+                    option(value='last_financial_year') Last Financial Year
+                    option(value='custom', selected=true) Custom Date
+            div.form-group.col-6.col-md-auto.custom-date-field
+                label#fromDateLabel(for='invoice_fromDate') From Date
+                input#invoice_fromDate.form-control.form-control-sm(type='date' name='invoice_fromDate' value=fromDate required onChange="copyToHidden(this);")
+            div.form-group.col-6.col-md-auto.custom-date-field
+                label#toDateLabel(for='invoice_toDate') To Date
+                input#invoice_toDate.form-control.form-control-sm(type='date' name='invoice_toDate' value=toDate required onChange="copyToHidden(this);")
+            div.form-group.col-12.col-md-auto
+                label(for='supplier_id') Supplier
+                select#supplier_id.form-control.form-control-sm(name='supplier_id')
+                    option(value='') All Suppliers
+                    each supplier in suppliers
+                        option(value=supplier.supplier_id selected=selectedSupplierId == supplier.supplier_id)= supplier.supplier_name
+            div.form-group.col-6.col-md-auto
+                label(for='invoice_type') Type
+                select#invoice_type.form-control.form-control-sm(name='invoice_type' onchange='toggleFuelCategoryFilter()')
+                    option(value='' selected=selectedType == '') All Types
+                    option(value='FUEL' selected=selectedType == 'FUEL') Fuel
+                    option(value='LUBE' selected=selectedType == 'LUBE') Lube
+            if hasCngProduct
+                div.form-group.col-6.col-md-auto#fuelCategoryField(style=selectedType == 'FUEL' ? '' : 'display:none')
+                    label(for='fuel_category') Fuel Category
+                    select#fuel_category.form-control.form-control-sm(name='fuel_category')
+                        option(value='' selected=selectedFuelCategory == '') All Fuel
+                        option(value='CNG' selected=selectedFuelCategory == 'CNG') CNG
+                        option(value='MS_HSD' selected=selectedFuelCategory == 'MS_HSD') MS / HSD
+            div.form-group.col-6.col-md-auto
+                button.btn.btn-sm.btn-primary(type='submit') Go
+            div.form-group.col-6.col-md-auto
+                div.dropdown
+                    button.btn.btn-sm.btn-primary.dropdown-toggle(type='button' data-toggle='dropdown') New Purchase
+                    div.dropdown-menu
+                        a.dropdown-item(href='/purchases/fuel-invoice/new') Fuel Invoice
+                        a.dropdown-item(href='/lubes-invoice/new') Lube Invoice (Manual)
+
+        input(type='hidden' id='invoice_fromDate_hiddenValue' name='invoice_fromDate_hiddenValue' value=fromDate)
+        input(type='hidden' id='invoice_toDate_hiddenValue' name='invoice_toDate_hiddenValue' value=toDate)
+
     div
         if invoiceValues && invoiceValues.length > 0
-            table.table
+            //- Phones: each invoice is a card, collapsed to supplier + amount/date; tap to open
+            table.table.purchase-table.m-stack.m-collapse
                 thead.thead-light
                     tr
                         th(style="width: 30px")
@@ -234,8 +223,12 @@ block content
                         th Actions
                 tbody
                     each val in invoiceValues
+                        - const amountText = val.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         tr(class=val.closing_status.toLowerCase())
-                            td
+                            td.m-summary.d-md-none
+                                span.pi-sum-amt ₹#{amountText}
+                                span.pi-sum-sub= val.date
+                            td.m-hide
                                 if val.type === 'LUBE'
                                     button.btn.btn-sm.btn-link.p-0(
                                         type='button'
@@ -243,27 +236,34 @@ block content
                                         aria-expanded='false'
                                     )
                                         i.oi.oi-chevron-right.toggle-icon
-                            td= val.invoice_number
-                            td= val.supplier_name
-                            td= val.date
-                            td
+                            td(data-label='Invoice No')= val.invoice_number
+                            td.m-title= val.supplier_name
+                            td(data-label='Date')= val.date
+                            td(data-label='Type')
                                 if val.type === 'FUEL'
                                     span.badge.badge-warning= val.fuel_category === 'CNG' ? 'CNG' : 'Fuel (MS/HSD)'
                                 else
                                     span.badge.badge-info Lube
-                            td.text-right= val.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            td.text-center
+                            td.text-right(data-label='Amount')= amountText
+                            td.text-center(data-label='Lines / Qty')
                                 if val.type === 'FUEL'
                                     = val.qty_kl ? val.qty_kl + ' ' + (val.qty_unit || 'KL') : val.total_lines + ' lines'
                                 else
                                     span.badge.badge-info= val.total_lines
-                            td
+                            td(data-label='Status')
                                 if val.type === 'FUEL'
                                     span.badge.badge-secondary= val.closing_status
                                 else
                                     span(class=val.closing_status === 'DRAFT' ? 'badge badge-warning' : 'badge badge-success')
                                         = val.closing_status
-                            td
+                            td.m-actions
+                                if val.type === 'LUBE'
+                                    //- phones: the chevron column is hidden, so lines open from here
+                                    button.btn.btn-sm.btn-outline-secondary.mr-2.d-md-none(
+                                        type='button'
+                                        onclick=`toggleInvoiceLines(${val.lubes_hdr_id}, this)`
+                                        aria-expanded='false'
+                                    ) Lines
                                 if val.type === 'FUEL'
                                     a.btn.btn-sm.btn-info.mr-1(href='/purchases/fuel-invoice/' + val.fuel_id)
                                         span.oi.oi-envelope-open
@@ -278,6 +278,10 @@ block content
                                     a.btn.btn-sm.btn-info(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-envelope-open
                         if val.type === 'LUBE'
-                            tr.collapse-row
-                                td.line-details(colspan='9')
+                            tr.collapse-row.m-static
+                                td.line-details.m-wide(colspan='9')
                                     div.collapse(id=`invoice-lines-${val.lubes_hdr_id}`)
+        else
+            div.text-center.text-muted.py-4 No purchase invoices for these filters.
+
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
