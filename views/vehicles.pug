@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -11,14 +12,14 @@ block content
     .vehicles-header-sticky
         .container-fluid
             .row.align-items-center.py-3
-                .col
-                    h4.mb-0.text-primary 
+                .col-12.col-md
+                    h4.mb-2.mb-md-0.text-primary 
                         | Vehicles for 
                         if customer
                             strong= customer.Company_Name
                         else
                             | Customer ##{creditlist_id}
-                .col-auto
+                .col-12.col-md-auto.vehicles-header-buttons
                     if canAdd
                         button.btn.btn-success.btn-sm#addVehicleBtn(type="button", data-toggle="modal", data-target="#addVehicleModal", style="margin-right: 8px;")
                             i.bi.bi-plus-circle
@@ -117,8 +118,8 @@ block content
         .mobile-cards-view.d-block.d-lg-none
             .row
                 each val, index in vehicles
-                    .col-12.mb-3
-                        .card.vehicle-card.shadow-sm(id=`mobile-vehicle-card-${index}`)
+                    .col-12.mb-2
+                        .card.vehicle-card.m-card.m-collapsible(id=`mobile-vehicle-card-${index}`)
                             .card-header.d-flex.justify-content-between.align-items-center
                                 .vehicle-name
                                     input.mobile-input.fw-bold.text-uppercase(
@@ -128,12 +129,12 @@ block content
                                         readonly,
                                         style="border: none; background: transparent; padding: 0; font-weight: bold; text-transform: uppercase;"
                                     )
-                                .vehicle-actions
+                                .vehicle-actions.text-nowrap
                                     if canEdit
-                                        button.btn.btn-primary.btn-sm.me-1(type="button", onclick=`editVehicleMobile(${index}, ${val.vehicle_id})`)
+                                        button.btn.btn-outline-primary.btn-sm.mr-1.vehicle-edit-btn(type="button", title="Edit", onclick=`editVehicleMobile(${index}, ${val.vehicle_id})`)
                                             i.bi.bi-pencil
                                     if canDisable
-                                        button.btn.btn-danger.btn-sm(type="button", onclick=`disableVehicle(${index}, ${val.vehicle_id})`)
+                                        button.btn.btn-outline-danger.btn-sm(type="button", title="Disable", onclick=`disableVehicle(${index}, ${val.vehicle_id})`)
                                             i.bi.bi-trash
                             .card-body.p-3
                                 .row.g-2
@@ -191,6 +192,9 @@ block content
                 .row#disabled-mobile-cards
                     // Will be populated dynamically
     
+    //- phones: vehicle cards start collapsed to the number; tap to open (Edit opens it too)
+    +cardToggleMobile('.m-card.m-collapsible')
+
     // Add Vehicle Modal
     .modal.fade#addVehicleModal(tabindex="-1", role="dialog", aria-labelledby="addVehicleModalLabel", aria-hidden="true")
         .modal-dialog.modal-lg(role="document")
@@ -262,17 +266,29 @@ block content
             overflow-y: auto;
         }
         
-        /* Mobile cards */
-        .vehicle-card {
-            border-left: 4px solid #007bff;
-            transition: transform 0.2s;
+        /* Mobile cards: look + collapse from style.css MOBILE CARDS (.m-card).
+           Fields are read-only boxes that become editable in place (Edit). */
+        .vehicle-card .vehicle-name { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+        .vehicle-card input.mobile-input,
+        .vehicle-card select.mobile-input { width: 100%; min-width: 0; color: #212529; }
+        .vehicle-card .card-header input.mobile-input { font-size: 1rem; font-weight: 600 !important; }
+        /* read-only: let taps reach the card so it opens / closes */
+        .vehicle-card input.mobile-input[readonly],
+        .vehicle-card select.mobile-input[disabled] { pointer-events: none; -webkit-appearance: none; appearance: none; }
+        /* editing: show the boxes */
+        .vehicle-card .mobile-input.editable {
+            border: 1px solid #ced4da !important;
+            background: #fff !important;
+            padding: 4px 8px !important;
+            border-radius: 4px;
+            font-size: 16px;
         }
-        
-        .vehicle-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        .vehicles-header-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+        .vehicles-header-buttons .btn { margin: 0 !important; }
+        @media (max-width: 767px) {
+            .vehicles-header-sticky { position: static; box-shadow: none; }
         }
-        
+
         .vehicle-detail {
             margin-bottom: 0.5rem;
         }
@@ -318,10 +334,7 @@ block content
             opacity: 0.7;
         }
 
-        .disabled-vehicle-card {
-            border-left: 4px solid #dc3545;
-            opacity: 0.8;
-        }
+        .disabled-vehicle-card > .card-header strong { color: #6c757d; }
 
         .custom-control-label {
             cursor: pointer;
@@ -436,10 +449,11 @@ block content
             
             productSelect.removeAttribute('disabled');
             productSelect.classList.add('editable');
-            
-            const btn = card.querySelector('button.btn-primary');
+            card.classList.add('card-open');   // type / fuel live in the body
+
+            const btn = card.querySelector('button.vehicle-edit-btn');
             btn.innerHTML = '<i class="bi bi-check"></i>';
-            btn.classList.replace('btn-primary', 'btn-success');
+            btn.classList.replace('btn-outline-primary', 'btn-outline-success');
             btn.setAttribute('onclick', `saveVehicleMobile(${i}, ${id})`);
         }
 
@@ -491,9 +505,9 @@ block content
                     card.querySelectorAll('input').forEach(x => {x.readOnly = true; x.classList.remove('editable');});
                     document.getElementById(`mobile-product-${i}`).disabled = true;
                     document.getElementById(`mobile-product-${i}`).classList.remove('editable');
-                    const b = card.querySelector('button.btn-success');
+                    const b = card.querySelector('button.vehicle-edit-btn');
                     b.innerHTML = '<i class="bi bi-pencil"></i>';
-                    b.classList.replace('btn-success', 'btn-primary');
+                    b.classList.replace('btn-outline-success', 'btn-outline-primary');
                     b.setAttribute('onclick', `editVehicleMobile(${i}, ${id})`);
                 } else {
                     showMessage('Error updating: ' + d.error, 'danger');
@@ -624,6 +638,14 @@ block content
             });
         }
 
+        // DD-MON-YYYY
+        function fmtDate(v) {
+            if (!v) return '';
+            const d = new Date(v);
+            if (isNaN(d)) return '';
+            return String(d.getDate()).padStart(2, '0') + '-' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + '-' + d.getFullYear();
+        }
+
         function displayDisabledVehicles(vehicles) {
             const desktopTable = document.querySelector('#disabled-vehicles-table tbody');
             const mobileContainer = document.getElementById('disabled-mobile-cards');
@@ -648,7 +670,7 @@ block content
                         <td>${vehicle.vehicle_number || ''}</td>
                         <td>${vehicle.vehicle_type || ''}</td>
                         <td>${vehicle.product_name || 'Not Set'}</td>
-                        <td>${vehicle.effective_end_date ? new Date(vehicle.effective_end_date).toLocaleDateString() : ''}</td>
+                        <td>${fmtDate(vehicle.effective_end_date)}</td>
                 `;
                 
                 if (canEditFlag) {
@@ -666,8 +688,8 @@ block content
                 
                 // Mobile card
                 let mobileCard = `
-                    <div class="col-12 mb-3">
-                        <div class="card disabled-vehicle-card shadow-sm">
+                    <div class="col-12 mb-2">
+                        <div class="card disabled-vehicle-card m-card m-collapsible">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <div class="vehicle-name">
                                     <strong class="text-uppercase">${vehicle.vehicle_number || ''}</strong>
@@ -677,7 +699,7 @@ block content
                 
                 if (canEditFlag) {
                     mobileCard += `
-                        <button class="btn btn-success btn-sm" type="button" onclick="enableVehicle(${vehicle.vehicle_id})">
+                        <button class="btn btn-outline-success btn-sm" type="button" title="Enable" onclick="enableVehicle(${vehicle.vehicle_id})">
                             <i class="bi bi-arrow-counterclockwise"></i>
                         </button>
                     `;
@@ -703,7 +725,7 @@ block content
                                     <div class="col-12">
                                         <div class="vehicle-detail">
                                             <small class="text-muted">Disabled Date</small>
-                                            <div class="fw-bold">${vehicle.effective_end_date ? new Date(vehicle.effective_end_date).toLocaleDateString() : ''}</div>
+                                            <div class="fw-bold">${fmtDate(vehicle.effective_end_date)}</div>
                                         </div>
                                     </div>
                                 </div>

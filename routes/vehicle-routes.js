@@ -45,6 +45,7 @@ router.post('/get', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTE
         res.render('vehicles', {
             title: 'Vehicle Master',
             user: req.user,
+            mobileReady: true,   // viewport tag + body.mobile-ready; Mobile Cards
             vehicles: vehicles,
             products: products,
             creditlist_id: creditlistId,
@@ -95,6 +96,7 @@ router.get('/:creditlist_id', [isLoginEnsured, security.hasPermission('VIEW_CUST
         res.render('vehicles', {
             title: 'Vehicle Master',
             user: req.user,
+            mobileReady: true,   // viewport tag + body.mobile-ready; Mobile Cards
             vehicles: vehicles,
             products: products,
             creditlist_id: creditlistId,
