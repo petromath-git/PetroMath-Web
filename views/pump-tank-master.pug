@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     style.
@@ -117,6 +118,27 @@ block content
             }
         }
 
+        /* Phones: header scrolls away (a sticky one would sit under the top bar);
+           cards start collapsed to their header (code + status) — tap to open */
+        @media (max-width: 767px) {
+            .pump-tank-header-sticky { position: static; box-shadow: none; }
+            .pump-tank-container { padding-left: 10px; padding-right: 10px; }
+            .master-card:hover { transform: none; }
+            .master-card { cursor: pointer; margin-bottom: 0; }
+            .master-card .card-header { position: relative; padding-right: 2.4rem; }
+            .master-card .card-header::after {
+                content: ""; position: absolute; right: 0.95rem; top: 50%;
+                width: 0.5rem; height: 0.5rem; margin-top: -0.35rem;
+                border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg);
+            }
+            .master-card.card-open .card-header::after { margin-top: -0.1rem; transform: rotate(-135deg); }
+            .master-card:not(.card-open) .card-header { border-radius: 12px; }
+            .master-card:not(.card-open) .card-body { display: none; }
+            /* tabs on one scrollable line */
+            #pumpTankTabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+            #pumpTankTabs .nav-link { white-space: nowrap; }
+        }
+
     // Alert for messages
     #messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
@@ -126,14 +148,10 @@ block content
     // Sticky header
     .pump-tank-header-sticky
         .container-fluid
-            .row.align-items-center.py-2.justify-content-center.justify-content-md-between
-                .col-auto.order-2.order-md-1
-                    h4.mb-0.text-primary.text-center.text-md-left Pump & Tank Master
-                .col-auto.order-1.order-md-2.ml-auto
-                    // Location selector
-                    select#locationSelector.form-control.form-control-sm(style="min-width: 200px;")
-                        each location in locations
-                            option(value=location.location_code, selected=location.location_code === selectedLocation)= location.location_name
+            .row.align-items-center.py-2
+                .col
+                    //- Always the logged-in location (no picker): switch location from the top bar
+                    h4.mb-0.text-primary Pump & Tank Master
 
     // Main content container
     .pump-tank-container
@@ -251,6 +269,9 @@ block content
                     #relationsCardContainer.row
                         .col-12.text-center.py-4
                             | Loading relations...
+    //- phones: tank / pump / link cards start collapsed; tap to open
+    +cardToggleMobile('.master-card')
+
     // ==================== TANK MODALS ====================
     
     // Add Tank Modal

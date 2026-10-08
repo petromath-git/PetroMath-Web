@@ -5,6 +5,39 @@ const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const appSecurity = require('../utils/app-security');
 const pumpTankController = require('../controllers/pump-tank-controller');
+const db = require('../db/db-connection');
+const { QueryTypes } = require('sequelize');
+
+// This screen only ever works on the location the user is logged in to.
+// The controller reads location_code from req.query / req.body in many
+// places, so pin both to the session location before any handler runs —
+// whatever the browser sends is ignored.
+router.use((req, res, next) => {
+    if (req.user) {
+        req.query.location_code = req.user.location_code;
+        if (req.body && typeof req.body === 'object') req.body.location_code = req.user.location_code;
+    }
+    next();
+});
+
+// Record endpoints take an id only — make sure that tank / pump / link belongs
+// to the session location before the controller reads or changes it.
+const ownedBy = (table, idColumn) => async (req, res, next) => {
+    try {
+        if (!req.user) return next();
+        const [row] = await db.sequelize.query(
+            `SELECT 1 AS ok FROM ${table} WHERE ${idColumn} = :id AND location_code = :loc`,
+            { replacements: { id: req.params.id, loc: req.user.location_code }, type: QueryTypes.SELECT }
+        );
+        if (!row) return res.status(404).json({ success: false, error: 'Not found at this location' });
+        next();
+    } catch (e) {
+        next(e);
+    }
+};
+router.use('/api/tanks/:id', ownedBy('m_tank', 'tank_id'));
+router.use('/api/pumps/:id', ownedBy('m_pump', 'pump_id'));
+router.use('/api/relations/:id', ownedBy('m_pump_tank', 'pump_tank_id'));
 
 // Main page - render the tabbed interface
 router.get('/', 
