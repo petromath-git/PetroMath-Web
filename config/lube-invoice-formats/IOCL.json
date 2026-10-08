@@ -13,7 +13,7 @@
         {"label": "Net Amt. Payable", "value": "88849", "mark": 6}
     ],
     "steps": [
-        {"n": 2, "text": "Quantity: type the <b>Qty (Ltr or Kg)</b> number and choose <b>Litres</b>. PetroMath converts it to pieces (32 L of 800 ml = 40 pieces). If you counted the pieces yourself, choose <b>Pieces</b> instead."},
+        {"n": 2, "text": "Quantity: type the <b>Qty (Ltr or Kg)</b> number and choose <b>Litres</b>. PetroMath converts it to Nos (32 L of 800 ml = 40 Nos). If you counted the bottles yourself, choose <b>Nos</b> instead."},
         {"n": 3, "text": "Amount: type <b>Net Total</b> (the amount before discount)."},
         {"n": 4, "text": "Discount: type <b>Disc</b>. Page 2 (Invoice Annexure) explains it, e.g. HO Promotional Disc."},
         {"n": 5, "text": "Cash discount: type <b>Total Cash Discount</b> if it is not 0."},

@@ -14,7 +14,7 @@
         {"label": "TOTAL AMOUNT", "value": "28,721.00", "mark": 6}
     ],
     "steps": [
-        {"n": 2, "text": "Quantity: type the <b>L29</b> number (litres) and choose <b>Litres</b>. PetroMath converts it: 40 L of 5 Ltr cans = 8 cans. Do <b>not</b> type litres as pieces."},
+        {"n": 2, "text": "Quantity: type the <b>L29</b> number (litres) and choose <b>Litres</b>. PetroMath converts it: 40 L of 5 Ltr cans = 8 Nos. Do <b>not</b> type litres as Nos."},
         {"n": 3, "text": "Amount: type the <b>Taxable Value</b> on the product's first line (before discount)."},
         {"n": 4, "text": "Discount: type the <b>DISCOUNT</b> amount on the second line (without the minus sign)."},
         {"n": 5, "text": "Cash discount: type <b>CASH DISCOUNT</b> from the bottom once. PetroMath spreads it across the products before GST, just like BPCL does."},
