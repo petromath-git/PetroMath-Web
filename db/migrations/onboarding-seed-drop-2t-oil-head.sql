@@ -1,3 +1,11 @@
+-- ************************************************************
+-- ALREADY APPLIED — DO NOT RE-RUN (checked 2026-10-08)
+-- The live trigger on dev AND prod already omits '2T Oil'. It ALSO no
+-- longer seeds 'Shift Opening' / 'Shift Cash Return', which this file
+-- still has (removed directly on both DBs after this was written).
+-- Re-running it would put those two heads back for new locations.
+-- To change the trigger, start from SHOW CREATE TRIGGER on the target DB.
+-- ************************************************************
 -- ============================================================
 -- trg_location_seed_data: stop seeding the '2T Oil' cashflow Account Head
 -- Generated: 2026-09-25
