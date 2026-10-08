@@ -127,17 +127,24 @@ document.addEventListener('DOMContentLoaded', function () {
         recalc();
     }
 
+    // The product master's unit word for counted products ("Nos"), so the
+    // screen uses the same word as Products and stock reports
+    function countUnit(p) {
+        const u = String((p && p.unit) || '').trim();
+        return u ? u.charAt(0).toUpperCase() + u.slice(1).toLowerCase() : 'Nos';
+    }
+
     // Unit choices for the quantity box, by product:
     //   counted in litres/kg (loose, barrels) → that unit only, no conversion
-    //   counted in pieces → Pieces, or Litres/Kg converted using the pack size
+    //   counted in Nos → Nos, or Litres/Kg converted to Nos using the pack size
     function configureUom(tr, preferred) {
         const p = productById.get(tr.querySelector('.pi-product').value);
         const uomSel = tr.querySelector('.pi-uom');
         let opts;
-        if (!p) opts = [['PCS', 'Pieces']];
+        if (!p) opts = [['PCS', 'Nos']];
         else if (p.measure === 'L') opts = [['LTR', 'Litres']];
         else if (p.measure === 'KG') opts = [['KG', 'Kg']];
-        else opts = [['PCS', 'Pieces'], p.pack_measure === 'KG' ? ['KG', 'Kg'] : ['LTR', 'Litres']];
+        else opts = [['PCS', countUnit(p)], p.pack_measure === 'KG' ? ['KG', 'Kg'] : ['LTR', 'Litres']];
         const current = preferred || uomSel.value;
         uomSel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
         uomSel.value = opts.some(o => o[0] === current) ? current : opts[0][0];
@@ -173,14 +180,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!p || !(entered > 0)) return { qty: 0, note: '', warn: '' };
         if (p.measure || uom === 'PCS') return { qty: entered, note: '', warn: '' };
         const size = rowPackSize(tr, p);
-        if (!size) return { qty: 0, note: '', warn: `Tell us how many ${uom === 'KG' ? 'kg' : 'litres'} one piece is, or enter pieces.` };
+        const nos = countUnit(p);
+        if (!size) return { qty: 0, note: '', warn: `Tell us how many ${uom === 'KG' ? 'kg' : 'litres'} one piece is, or enter the quantity in ${nos}.` };
         const r = Calc.toPieces(entered, uom, size);
         const unit = uom === 'KG' ? 'kg' : 'L';
         const sizeLabel = size < 1 ? `${Math.round(size * 1000)} ${uom === 'KG' ? 'g' : 'ml'}` : `${size} ${unit}`;
         return {
             qty: r.qty,
-            note: `${entered} ${unit} ÷ ${sizeLabel} = <b>${r.qty} pieces</b>`,
-            warn: r.whole ? '' : `${entered} ${unit} is not a whole number of ${sizeLabel} pieces — check the quantity.`
+            note: `${entered} ${unit} ÷ ${sizeLabel} = <b>${r.qty} ${esc(nos)}</b>`,
+            warn: r.whole ? '' : `${entered} ${unit} is not a whole number of ${sizeLabel} packs — check the quantity.`
         };
     }
 
@@ -283,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.querySelector('.pi-gstamt').textContent = fmt(l.gst_amount);
             tr.querySelector('.pi-amount').textContent = fmt(l.amount);
             if (p && !p.measure && l.entered_uom && l.entered_uom !== 'PCS') {
-                tr.querySelector('.pi-calc').innerHTML = `= <b>${l.qty} pieces</b>`;
+                tr.querySelector('.pi-calc').innerHTML = `= <b>${l.qty} ${esc(countUnit(p))}</b>`;
             }
             if (l.cash_discount_amount) tr.querySelector('.pi-disc-alloc').textContent = `cash disc. ₹${fmt(l.cash_discount_amount)}`;
             gross += l.gross_amount || 0; disc += l.discount_amount || 0;

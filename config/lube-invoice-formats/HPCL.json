@@ -1,7 +1,7 @@
 {
     "format": "HPCL",
     "title": "How to read your HPCL (HP Lubes) invoice",
-    "subtitle": "Lube warehouse invoice. Quantity is already in pieces (EA).",
+    "subtitle": "Lube warehouse invoice. Quantity is already in Nos (EA).",
     "columns": ["Item Description", "Quantity", "UoM", "Total Value", "Disc.", "Taxable Value", "CGST / IGST", "Net Amount"],
     "rows": [
         ["HP MILCY TURBO 15W40 - 10X1L  (Qty/Vol 50.000 L29)", {"text": "50", "mark": 2}, "EA", {"text": "16,850.00", "mark": 3}, {"text": "0.00", "mark": 4}, "16,850.00", "9% + 9%", "19,883.00"],
@@ -13,14 +13,14 @@
         {"label": "Tax columns", "value": "CGST + SGST, or one IGST column", "mark": 7}
     ],
     "steps": [
-        {"n": 2, "text": "Quantity: type <b>Quantity</b> (EA) and keep <b>Pieces</b>. EA is already bottles/cans, so no conversion."},
+        {"n": 2, "text": "Quantity: type <b>Quantity</b> (EA) and keep <b>Nos</b>. EA is already bottles/cans, so no conversion."},
         {"n": 3, "text": "Amount: type <b>Total Value</b>. A line with <b>0.00</b> is free stock: type the quantity and leave the amount 0."},
         {"n": 4, "text": "Discount: type <b>Disc.</b> if it is not 0."},
         {"n": 6, "text": "Printed total: type the <b>Net Amount</b> total. You can close the invoice only when it matches."},
         {"n": 7, "text": "Tax type: if the invoice has one <b>IGST</b> column (e.g. shipped from the Bengaluru warehouse), choose <b>IGST</b>. If it has CGST and SGST columns, keep <b>CGST + SGST</b>."}
     ],
     "hints": {
-        "qty": "HPCL: \"Quantity\" (EA) → keep Pieces",
+        "qty": "HPCL: \"Quantity\" (EA) → keep Nos",
         "gross": "HPCL: \"Total Value\" (0 = free stock)",
         "discount": "HPCL: \"Disc.\"",
         "cash_discount": "HPCL invoices normally have none",

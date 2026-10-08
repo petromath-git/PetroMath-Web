@@ -154,7 +154,7 @@ module.exports = {
                         }
                     }
                     if (!packSize) {
-                        errors.push(`Line ${n} (${product.product_name}): how many ${uom === 'KG' ? 'kg' : 'litres'} is one piece? Enter the pieces instead, or tell us the pack size.`);
+                        errors.push(`Line ${n} (${product.product_name}): how many ${uom === 'KG' ? 'kg' : 'litres'} is one piece? Enter the quantity in Nos instead, or tell us the pack size.`);
                     } else {
                         qty = Calc.toPieces(enteredQty, uom, packSize).qty;
                     }
