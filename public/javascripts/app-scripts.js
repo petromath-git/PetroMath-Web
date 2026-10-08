@@ -2081,6 +2081,8 @@ function postAjaxNew(url, newData, updateData, tabToActivate, currentTabId, hidd
 }
 
 function postDeleteAction(elementId, classValue) {
+    // Row may not be on the page (e.g. an old draft deleted from the home-screen note)
+    if (!document.getElementById(elementId)) return;
     document.getElementById(elementId).className = classValue;
     defaultInputValues(elementId);
 }
@@ -2380,10 +2382,10 @@ function finishClosing(hiddenPrefix, uri, redirect) {
 function deleteClosing(closingId) {
     const r = confirm("Please confirm if you want to delete the closing?");
     if (r == true) {
-        if (deleteAjax('delete-closing', closingId, 'closing-record-' + closingId, 'd-md-none')) {
-            //debugLog(location.href );
-            document.getElementById('home_tab').click();
-        }
+        // deleteAjax returns a Promise — wait for it, then reload so the
+        // stale-draft note and the Add New button reflect the deletion.
+        deleteAjax('delete-closing', closingId, 'closing-record-' + closingId, 'd-md-none')
+            .then(ok => { if (ok) setTimeout(() => location.reload(), 800); });
     }
 }
 
