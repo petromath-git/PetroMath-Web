@@ -5,6 +5,10 @@ block content
     - const fmt = (d) => { if (!d) return '—'; const x = new Date(d); return String(x.getDate()).padStart(2,'0') + '-' + MON[x.getMonth()] + '-' + x.getFullYear() + ' ' + String(x.getHours()).padStart(2,'0') + ':' + String(x.getMinutes()).padStart(2,'0'); };
     - const badge = { GOOD: 'badge-success', FAIR: 'badge-warning', POOR: 'badge-danger' };
     - const dash = (v) => v == null ? '—' : v;
+    //- effective_type is the browser's speed estimate (any fast link says '4g'); the real link type is only reported by Chrome on Android
+    - const SPEED_CLASS = { '4g': 'Fast', '3g': 'Fair', '2g': 'Slow', 'slow-2g': 'Very slow' };
+    - const LINK_TYPE = { wifi: 'Wi-Fi', cellular: 'Mobile', ethernet: 'Ethernet', bluetooth: 'Bluetooth', wimax: 'WiMAX' };
+    - const netLabel = (r, d) => { const c = (d.device && d.device.connection) || {}; const parts = []; if (LINK_TYPE[c.type]) parts.push(LINK_TYPE[c.type]); const s = SPEED_CLASS[r.connection_type]; if (s) parts.push(s); return parts.length ? parts.join(' · ') : '—'; };
     - const hoursLabel = (h) => h < 24 ? h + ' hours' : (h / 24) + (h === 24 ? ' day' : ' days');
 
     .container-fluid.pt-3
@@ -106,7 +110,7 @@ block content
                                     th.text-right Jitter
                                     th.text-right Down Mbps
                                     th.text-right Up Mbps
-                                    th Net
+                                    th(title="Browser's speed estimate; Wi-Fi / Mobile only shown on Android Chrome") Network
                                     th
                             tbody
                                 each r in rows
@@ -126,7 +130,7 @@ block content
                                         td.text-right= dash(r.jitter_ms)
                                         td.text-right= dash(r.download_mbps)
                                         td.text-right= dash(r.upload_mbps)
-                                        td= dash(r.connection_type)
+                                        td.text-nowrap= netLabel(r, d)
                                         td
                                             a(href="#" data-toggle="collapse" data-target='#st_' + r.speedtest_id) Details
                                     tr.collapse(id='st_' + r.speedtest_id)
