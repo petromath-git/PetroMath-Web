@@ -385,6 +385,7 @@ router.put('/api/:id/toggle-login', [isLoginEnsured, security.hasPermission('EDI
 
         const newEndDate = enable ? new Date('2099-12-31') : new Date('2000-01-01');
         await person.update({ effective_end_date: newEndDate, updated_by: req.user.User_Name, updation_date: new Date() });
+        require('../utils/request-cache').invalidate('person:'); // session check in app.js deserializeUser
 
         res.json({ success: true, loginEnabled: enable });
     } catch (error) {

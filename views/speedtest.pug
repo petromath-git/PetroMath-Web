@@ -57,10 +57,17 @@ block content
                 if (pct != null) $('stProgress').style.width = pct + '%';
             }
 
+            // effectiveType is the browser's speed estimate, not the link type —
+            // any fast link (Wi-Fi, fibre, 4G) reports '4g'. Only Chrome on
+            // Android exposes the real type; deviceMemory is capped at 8.
+            const SPEED_CLASS = { '4g': 'Fast', '3g': 'Fair', '2g': 'Slow', 'slow-2g': 'Very slow' };
+            const LINK_TYPE = { wifi: 'Wi-Fi', cellular: 'Mobile data', ethernet: 'Ethernet', bluetooth: 'Bluetooth', wimax: 'WiMAX' };
             const dev = PMSpeedtest.deviceInfo();
             const bits = [];
-            if (dev.connection && dev.connection.effective_type) bits.push('Network: ' + dev.connection.effective_type.toUpperCase());
-            if (dev.device_memory_gb) bits.push('Memory: ' + dev.device_memory_gb + ' GB');
+            const conn = dev.connection || {};
+            if (LINK_TYPE[conn.type]) bits.push('Connection: ' + LINK_TYPE[conn.type]);
+            if (SPEED_CLASS[conn.effective_type]) bits.push('Speed class: ' + SPEED_CLASS[conn.effective_type]);
+            if (dev.device_memory_gb) bits.push('Memory: ' + dev.device_memory_gb + (dev.device_memory_gb >= 8 ? ' GB+' : ' GB'));
             if (dev.cpu_cores) bits.push('CPU cores: ' + dev.cpu_cores);
             $('stDevice').textContent = bits.join(' · ');
 

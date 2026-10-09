@@ -5,6 +5,7 @@ const utils = require("../utils/app-utils");
 const Sequelize = require("sequelize");
 const dateFormat = require("dateformat");
 const bcrypt = require('bcrypt');
+const requestCache = require("../utils/request-cache");
 
 module.exports = {
     findUsers: (locationCode) => {
@@ -284,6 +285,9 @@ getUserAccessibleLocationsWithNames: async (personId) => {
             effective_end_date: formattedDate
         }, {
             where: { 'Person_id': personId }
+        }).then(result => {
+            requestCache.invalidate('person:'); // session check in app.js deserializeUser
+            return result;
         });
     },
 
@@ -307,7 +311,10 @@ getUserAccessibleLocationsWithNames: async (personId) => {
         return Person.update(
             { effective_end_date: UpdateDate },
             { where: { Person_id: personId } }
-        );
+        ).then(result => {
+            requestCache.invalidate('person:'); // session check in app.js deserializeUser
+            return result;
+        });
     },
     findPersonByCreditlistId: (creditlist_id) => {
         return Person.findOne({
