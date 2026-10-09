@@ -1,0 +1,72 @@
+extends layout
+
+block content
+    - const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    - const fmt = (d) => { if (!d) return '—'; const x = new Date(d); return String(x.getDate()).padStart(2,'0') + '-' + MON[x.getMonth()] + '-' + x.getFullYear() + ' ' + String(x.getHours()).padStart(2,'0') + ':' + String(x.getMinutes()).padStart(2,'0'); };
+    - const badge = { GOOD: 'badge-success', FAIR: 'badge-warning', POOR: 'badge-danger' };
+    - const dash = (v) => v == null ? '—' : v;
+
+    .container-fluid.pt-3
+        .d-flex.justify-content-between.align-items-center.mb-3.flex-wrap
+            h4.mb-0 Speed Test Results
+            a.btn.btn-sm.btn-outline-primary(href="/speedtest") Run a test
+
+        form.form-inline.mb-3(method="get" action="/speedtest/results")
+            input.form-control.form-control-sm.mr-2.mb-2(type="number" name="code" placeholder="Result code" value=filters.code style="max-width:140px")
+            input.form-control.form-control-sm.mr-2.mb-2(type="text" name="location" placeholder="Location" value=filters.location style="max-width:120px")
+            button.btn.btn-sm.btn-primary.mr-2.mb-2(type="submit") Filter
+            a.btn.btn-sm.btn-link.mb-2(href="/speedtest/results") Clear
+
+        .alert.alert-light.border.small.py-2
+            | <b>Delay</b> = full round trip; <b>Server</b> = part of it spent inside PetroMath, so Delay − Server ≈ network.
+            |  A baseline of ~250 ms is normal for India → our US server.
+
+        .card
+            .card-body.p-0
+                if rows.length
+                    .table-responsive
+                        table.table.table-sm.table-hover.mb-0.small
+                            thead.thead-light
+                                tr
+                                    th Code
+                                    th When
+                                    th User
+                                    th Loc
+                                    th Verdict
+                                    th.text-right Delay ms
+                                    th.text-right Server ms
+                                    th.text-right Jitter
+                                    th.text-right Down Mbps
+                                    th.text-right Up Mbps
+                                    th Net
+                                    th
+                            tbody
+                                each r in rows
+                                    - const d = (r.details_json && typeof r.details_json === 'object') ? r.details_json : {};
+                                    tr
+                                        td.font-weight-bold= r.speedtest_id
+                                        td.text-nowrap= fmt(r.created_at)
+                                        td= dash(r.user_name)
+                                        td= dash(r.location_code)
+                                        td
+                                            span.badge(class=badge[r.verdict] || 'badge-secondary')= dash(r.verdict)
+                                        td.text-right= dash(r.ping_avg_ms)
+                                        td.text-right= dash(r.server_avg_ms)
+                                        td.text-right= dash(r.jitter_ms)
+                                        td.text-right= dash(r.download_mbps)
+                                        td.text-right= dash(r.upload_mbps)
+                                        td= dash(r.connection_type)
+                                        td
+                                            a(href="#" data-toggle="collapse" data-target='#st_' + r.speedtest_id) Details
+                                    tr.collapse(id='st_' + r.speedtest_id)
+                                        td(colspan="12")
+                                            .mb-1
+                                                b Summary:
+                                                |  #{d.verdict_message || '—'}
+                                                if r.failed_pings
+                                                    |  · Failed requests: #{r.failed_pings}
+                                            .mb-1.text-muted
+                                                | IP #{r.ip_address || '—'} · #{r.user_agent || ''}
+                                            pre.bg-light.p-2.mb-0(style="max-height:400px;overflow:auto;white-space:pre-wrap")= JSON.stringify(d, null, 2)
+                else
+                    .p-3.small.text-muted No speed test results found.
