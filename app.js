@@ -501,6 +501,8 @@ const addUserLocationInfo = async (req, res, next) => {
 
 app.use(addUserLocationInfo);
 app.use(addDebugLogging);
+// Remote speed test requested for this user from /speedtest/results → res.locals.diagRequestId
+app.use(require('./utils/diag-request').diagRequestMiddleware);
 
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
