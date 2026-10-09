@@ -20,6 +20,7 @@ const MenuAccessDao = require('./dao/menu-access-dao');
 const personLocationDao = require('./dao/person-location-dao');
 const bcrypt = require('bcrypt');
 const { routeLogger } = require('./utils/route-logger');
+const requestCache = require('./utils/request-cache');
 
 
 // Passport - configuration - start....
@@ -116,11 +117,17 @@ passport.serializeUser((userData, done) => {
     done(null, userData);
 });
 
+// Runs on every request. The account-active check is cached for a minute
+// (requestCache key 'person:<User_Name>'); disable/enable-user invalidate it so
+// a disabled user is still logged out on their next request.
 passport.deserializeUser(function (userInfo, done) {
-    Person.findOne({where: {'User_Name': userInfo.User_Name}})
-        .then(function (user) {
+    requestCache.getOrLoad('person:' + userInfo.User_Name, 60_000, () =>
+        Person.findOne({ where: { 'User_Name': userInfo.User_Name }, attributes: ['effective_end_date'] })
+            .then(user => !!user && security.isAccountActive(user.effective_end_date))
+    )
+        .then(function (isActive) {
             // Ends the session of a user disabled after logging in
-            if (!user || !security.isAccountActive(user.effective_end_date)) {
+            if (!isActive) {
                 return done(null, false);
             }
             done(null, userInfo);
@@ -329,6 +336,11 @@ app.use(methodOverride('_method'));
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
+// Express only caches compiled templates when NODE_ENV=production, and beta/prod
+// run with NODE_ENV unset — so every render was recompiling the Pug files
+// (~50-220 ms per page). Cache everywhere except local dev; deploys restart PM2,
+// which picks up changed templates.
+app.set('view cache', process.env.NODE_ENV !== 'development');
 app.locals.CACHE_BUST = Date.now();
 
 // Per-location debug logging middleware — sets res.locals.debugLogging based on m_location_config
@@ -471,17 +483,20 @@ const addUserLocationInfo = async (req, res, next) => {
             } else if (req.user.Role === 'SuperUser') {
                 // SuperUsers always get the location switcher (can access all locations)
                 req.user.hasMultipleLocations = true;
-                // Get all locations for SuperUsers
-                const allLocations = await LocationDao.findAllLocations();
-                req.user.availableLocations = allLocations.map(loc => ({
-                    location_code: loc.location_code,
-                    location_name: loc.location_name,
-                    source: 'SUPERUSER',
-                    role: 'SuperUser'
-                }));
+                // Get all locations for SuperUsers (cached a minute, shared by all SuperUsers)
+                req.user.availableLocations = await requestCache.getOrLoad('locations:superuser', 60_000, async () => {
+                    const allLocations = await LocationDao.findAllLocations();
+                    return allLocations.map(loc => ({
+                        location_code: loc.location_code,
+                        location_name: loc.location_name,
+                        source: 'SUPERUSER',
+                        role: 'SuperUser'
+                    }));
+                });
             } else {
-                // Regular users: check their actual location access
-                const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(personId);
+                // Regular users: check their actual location access (cached a minute per person)
+                const userLocations = await requestCache.getOrLoad('locations:' + personId, 60_000,
+                    () => PersonDao.getUserAccessibleLocationsWithNames(personId));
 
                 req.user.hasMultipleLocations = userLocations.length > 1;
                 req.user.availableLocations = userLocations;
@@ -517,7 +532,8 @@ const { getLocationConfigValue } = require('./utils/location-config');
 app.use(async (req, res, next) => {
     try {
         const locationCode = (req.user && req.user.location_code) ? req.user.location_code : '*';
-        const zoom = await getLocationConfigValue(locationCode, 'DESKTOP_ZOOM', null);
+        const zoom = await requestCache.getOrLoad('config:DESKTOP_ZOOM:' + locationCode, 60_000,
+            () => getLocationConfigValue(locationCode, 'DESKTOP_ZOOM', null));
         res.locals.desktopZoom = zoom; // e.g. '0.85' or null to disable
     } catch (e) {
         res.locals.desktopZoom = null;
