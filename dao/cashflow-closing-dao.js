@@ -402,6 +402,17 @@ reopenCashflow: async (cashflowId, locationCode, userId) => {
             { replacements: { cashflowId }, transaction: t }
         );
 
+        // Same for employee ledger cash entries (Salary Advance / Payout /
+        // Advance Recovery lines) - after_cashflow_close stamps them too.
+        await db.sequelize.query(
+            `UPDATE t_employee_ledger el
+             JOIN t_cashflow_transaction tct
+               ON tct.source_table = 't_employee_ledger' AND tct.source_id = el.ledger_id
+             SET el.cashflow_date = NULL
+             WHERE tct.cashflow_id = :cashflowId`,
+            { replacements: { cashflowId }, transaction: t }
+        );
+
         return result[1]; // returns number of rows affected
     });
 },
