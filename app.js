@@ -1491,6 +1491,15 @@ app.delete('/remove-cashflow-receipt', isLoginEnsured, function (req, res, next)
     cashflowController.deleteDayCloseReceipt(req, res, next);
 });
 
+// Day Close salary lines -> employee ledger entries
+app.post('/save-cashflow-employee-entries', isLoginEnsured, function (req, res, next) {
+    cashflowController.saveDayCloseEmployeeEntries(req, res, next);
+});
+
+app.delete('/remove-cashflow-employee-entry', isLoginEnsured, function (req, res, next) {
+    cashflowController.deleteDayCloseEmployeeEntry(req, res, next);
+});
+
 app.post('/save-cashflow-denoms', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowDenomsData(req, res, next);
 });
