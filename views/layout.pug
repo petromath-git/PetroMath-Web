@@ -30,6 +30,10 @@ html
     script(src=`/javascripts/app-generate-pdf.js?v=${CACHE_BUST}`, defer)
     script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`, defer)
     script(src=`/javascripts/app-report-table-generator.js?v=${CACHE_BUST}`)
+    if diagRequestId
+      //- Remote speed test requested for this user (see /speedtest/results)
+      script(src=`/javascripts/speedtest-core.js?v=${CACHE_BUST}`, defer)
+      script(src=`/javascripts/diag-auto.js?v=${CACHE_BUST}`, defer, data-request=diagRequestId)
     
     if desktopZoom
       style.

@@ -1,0 +1,223 @@
+extends layout
+
+block content
+    - const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    - const fmt = (d) => { if (!d) return '—'; const x = new Date(d); return String(x.getDate()).padStart(2,'0') + '-' + MON[x.getMonth()] + '-' + x.getFullYear() + ' ' + String(x.getHours()).padStart(2,'0') + ':' + String(x.getMinutes()).padStart(2,'0'); };
+    - const badge = { GOOD: 'badge-success', FAIR: 'badge-warning', POOR: 'badge-danger' };
+    - const dash = (v) => v == null ? '—' : v;
+    - const hoursLabel = (h) => h < 24 ? h + ' hours' : (h / 24) + (h === 24 ? ' day' : ' days');
+
+    .container-fluid.pt-3
+        .d-flex.justify-content-between.align-items-center.mb-3.flex-wrap
+            h4.mb-0 Speed Test Results
+            a.btn.btn-sm.btn-outline-primary(href="/speedtest") Run a test
+
+        //- ---- Remote request ----
+        .card.mb-3
+            .card-header.py-2
+                span.small.font-weight-bold Test a user remotely
+            .card-body.py-2
+                p.small.text-muted.mb-2
+                    | The test runs silently in the user's browser on their next page load (no action needed from them),
+                    | then again at most once every #{autoIntervalMinutes} minutes while they use the app, until the request ends.
+                    | Each run uses about 1.5 MB of data.
+                form.form-inline#reqForm
+                    input.form-control.form-control-sm.mr-2.mb-2#reqLocation(type="text" placeholder="Location" style="max-width:110px;text-transform:uppercase" required)
+                    select.form-control.form-control-sm.mr-2.mb-2#reqPerson(style="max-width:260px")
+                        option(value="") All users at location
+                    select.form-control.form-control-sm.mr-2.mb-2#reqHours
+                        each h in requestHours
+                            option(value=h selected=(h === 24))= 'For ' + hoursLabel(h)
+                    input.form-control.form-control-sm.mr-2.mb-2#reqNote(type="text" placeholder="Note (optional)" maxlength="255" style="max-width:220px")
+                    button.btn.btn-sm.btn-primary.mb-2#reqSubmit(type="submit") Request Test
+
+                if requests.length
+                    .table-responsive.mt-2
+                        table.table.table-sm.mb-0.small
+                            thead.thead-light
+                                tr
+                                    th #
+                                    th Who
+                                    th Note
+                                    th Status
+                                    th Until
+                                    th.text-right Runs
+                                    th Last run
+                                    th By
+                                    th
+                            tbody
+                                each q in requests
+                                    tr
+                                        td= q.request_id
+                                        td
+                                            if q.person_id
+                                                | #{q.person_name || q.user_name || ('#' + q.person_id)}
+                                                span.text-muted  (#{q.location_code})
+                                            else
+                                                | All users at #{q.location_code}
+                                        td= dash(q.note)
+                                        td
+                                            if q.is_active
+                                                span.badge.badge-success Active
+                                            else if q.status === 'CANCELLED'
+                                                span.badge.badge-secondary Cancelled
+                                            else
+                                                span.badge.badge-light Ended
+                                        td.text-nowrap= fmt(q.expires_at)
+                                        td.text-right
+                                            if q.run_count
+                                                a(href='/speedtest/results?request=' + q.request_id)= q.run_count
+                                            else
+                                                | 0
+                                        td.text-nowrap= q.last_run_at ? fmt(q.last_run_at) : 'Waiting for user'
+                                        td= dash(q.created_by)
+                                        td
+                                            if q.is_active
+                                                button.btn.btn-link.btn-sm.p-0.text-danger.req-cancel(type="button" data-id=q.request_id) Stop
+
+        //- ---- Results ----
+        form.form-inline.mb-3(method="get" action="/speedtest/results")
+            input.form-control.form-control-sm.mr-2.mb-2(type="number" name="code" placeholder="Result code" value=filters.code style="max-width:140px")
+            input.form-control.form-control-sm.mr-2.mb-2(type="text" name="location" placeholder="Location" value=filters.location style="max-width:120px")
+            if filters.request
+                input(type="hidden" name="request" value=filters.request)
+                span.badge.badge-info.mr-2.mb-2 Request ##{filters.request}
+            button.btn.btn-sm.btn-primary.mr-2.mb-2(type="submit") Filter
+            a.btn.btn-sm.btn-link.mb-2(href="/speedtest/results") Clear
+
+        .alert.alert-light.border.small.py-2
+            | <b>Delay</b> = full round trip; <b>Server</b> = part of it spent inside PetroMath, so Delay − Server ≈ network.
+            |  A baseline of ~250 ms is normal for India → our US server.
+
+        .card
+            .card-body.p-0
+                if rows.length
+                    .table-responsive
+                        table.table.table-sm.table-hover.mb-0.small
+                            thead.thead-light
+                                tr
+                                    th Code
+                                    th When
+                                    th User
+                                    th Loc
+                                    th Verdict
+                                    th.text-right Delay ms
+                                    th.text-right Server ms
+                                    th.text-right Jitter
+                                    th.text-right Down Mbps
+                                    th.text-right Up Mbps
+                                    th Net
+                                    th
+                            tbody
+                                each r in rows
+                                    - const d = (r.details_json && typeof r.details_json === 'object') ? r.details_json : {};
+                                    tr
+                                        td.font-weight-bold
+                                            | #{r.speedtest_id}
+                                            if r.source === 'AUTO'
+                                                span.badge.badge-light.border.ml-1(title='Run remotely — request #' + r.request_id) Auto
+                                        td.text-nowrap= fmt(r.created_at)
+                                        td= dash(r.user_name)
+                                        td= dash(r.location_code)
+                                        td
+                                            span.badge(class=badge[r.verdict] || 'badge-secondary')= dash(r.verdict)
+                                        td.text-right= dash(r.ping_avg_ms)
+                                        td.text-right= dash(r.server_avg_ms)
+                                        td.text-right= dash(r.jitter_ms)
+                                        td.text-right= dash(r.download_mbps)
+                                        td.text-right= dash(r.upload_mbps)
+                                        td= dash(r.connection_type)
+                                        td
+                                            a(href="#" data-toggle="collapse" data-target='#st_' + r.speedtest_id) Details
+                                    tr.collapse(id='st_' + r.speedtest_id)
+                                        td(colspan="12")
+                                            .mb-1
+                                                b Summary:
+                                                |  #{d.verdict_message || '—'}
+                                                if r.failed_pings
+                                                    |  · Failed requests: #{r.failed_pings}
+                                                if d.page && d.page.url
+                                                    |  · Page: #{d.page.url}
+                                            .mb-1.text-muted
+                                                | IP #{r.ip_address || '—'} · #{r.user_agent || ''}
+                                            pre.bg-light.p-2.mb-0(style="max-height:400px;overflow:auto;white-space:pre-wrap")= JSON.stringify(d, null, 2)
+                else
+                    .p-3.small.text-muted No speed test results found.
+
+    script.
+        (function () {
+            const $ = (id) => document.getElementById(id);
+            const locInput = $('reqLocation');
+            const personSel = $('reqPerson');
+            let loadedFor = '';
+
+            async function loadUsers() {
+                const loc = locInput.value.trim().toUpperCase();
+                if (loc === loadedFor) return;
+                loadedFor = loc;
+                personSel.length = 1; // keep "All users at location"
+                if (!loc) return;
+                try {
+                    const res = await fetch('/speedtest/users?location=' + encodeURIComponent(loc));
+                    const data = await res.json();
+                    (data.users || []).forEach(function (u) {
+                        const opt = document.createElement('option');
+                        opt.value = u.person_id;
+                        opt.textContent = (u.person_name || u.user_name) + ' (' + u.user_name + ', ' + u.role + ')';
+                        personSel.appendChild(opt);
+                    });
+                    if (!(data.users || []).length) {
+                        const opt = document.createElement('option');
+                        opt.disabled = true;
+                        opt.textContent = 'No users found for ' + loc;
+                        personSel.appendChild(opt);
+                    }
+                } catch (e) {
+                    alert('Could not load users: ' + e.message);
+                }
+            }
+            locInput.addEventListener('change', loadUsers);
+            locInput.addEventListener('blur', loadUsers);
+
+            $('reqForm').addEventListener('submit', async function (ev) {
+                ev.preventDefault();
+                await loadUsers();
+                const loc = locInput.value.trim().toUpperCase();
+                const who = personSel.value ? personSel.options[personSel.selectedIndex].textContent : 'ALL users at ' + loc;
+                if (!confirm('Run a background speed test for ' + who + '?')) return;
+                const btn = $('reqSubmit');
+                btn.disabled = true;
+                try {
+                    const res = await fetch('/speedtest/requests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            location_code: loc,
+                            person_id: personSel.value || null,
+                            hours: $('reqHours').value,
+                            note: $('reqNote').value
+                        })
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Request failed');
+                    location.reload();
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                    btn.disabled = false;
+                }
+            });
+
+            document.querySelectorAll('.req-cancel').forEach(function (b) {
+                b.addEventListener('click', async function () {
+                    if (!confirm('Stop request #' + this.dataset.id + '?')) return;
+                    try {
+                        const res = await fetch('/speedtest/requests/' + this.dataset.id + '/cancel', { method: 'POST' });
+                        const data = await res.json();
+                        if (!data.success) throw new Error(data.error || 'Cancel failed');
+                        location.reload();
+                    } catch (e) {
+                        alert('Error: ' + e.message);
+                    }
+                });
+            });
+        })();

@@ -234,6 +234,22 @@ const helmet = require('helmet');
 app.use(helmet({ contentSecurityPolicy: false }));
 
 
+// Server-Timing: tells the browser how much of each request was spent inside the
+// app, so slowness can be split into server time vs network time (see /speedtest
+// and the Network tab's Timing view).
+app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    const writeHead = res.writeHead;
+    res.writeHead = function (...args) {
+        if (!res.headersSent) {
+            const ms = Number(process.hrtime.bigint() - start) / 1e6;
+            res.setHeader('Server-Timing', `app;dur=${ms.toFixed(1)}`);
+        }
+        return writeHead.apply(this, args);
+    };
+    next();
+});
+
 const compression = require('compression');
 app.use(compression());
 
@@ -484,6 +500,8 @@ const addUserLocationInfo = async (req, res, next) => {
 
 app.use(addUserLocationInfo);
 app.use(addDebugLogging);
+// Remote speed test requested for this user from /speedtest/results → res.locals.diagRequestId
+app.use(require('./utils/diag-request').diagRequestMiddleware);
 
 app.use((req, res, next) => {
     res.locals.APP_VERSION = process.env.APP_VERSION || 'stable';
@@ -523,7 +541,9 @@ app.use(routeLogger({
         '.jpg',
         '.ico',
         '/health',        // Skip health checks
-        '/ping'           // Skip ping requests
+        '/ping',          // Skip ping requests (incl. /speedtest/ping)
+        '/speedtest/blob',
+        '/speedtest/upload'
     ]
 }));
 
@@ -581,6 +601,7 @@ app.use('/dev-db-refresh', devDbRefreshRoutes);
 app.use('/bowser', bowserRoutes);
 app.use('/onboard', onboardingRoutes);
 app.use('/admin/onboarding', onboardingAdminRoutes);
+app.use('/speedtest', require('./routes/speedtest-routes'));
 
 
 

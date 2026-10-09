@@ -1,0 +1,100 @@
+extends layout
+
+block content
+    style.
+        .st-wrap { max-width: 560px; margin: 0 auto; }
+        .st-metric { text-align: center; padding: 10px 4px; }
+        .st-metric .v { font-size: 1.6rem; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+        @media (max-width: 400px) { .st-metric .v { font-size: 1.3rem; } }
+        .st-metric .l { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+        .st-code { font-size: 2.4rem; font-weight: 700; letter-spacing: .08em; }
+        .st-verdict-GOOD { color: #198754; }
+        .st-verdict-FAIR { color: #c98a00; }
+        .st-verdict-POOR { color: #dc3545; }
+
+    .container-fluid.pt-3
+        .st-wrap
+            h4.mb-1 Speed Test
+            p.small.text-muted.mb-3
+                | Checks how fast this device reaches PetroMath. Takes about 15 seconds.
+                | Run it on the same Wi-Fi / mobile data you use for the app.
+
+            .card.mb-3
+                .card-body.p-2
+                    .row.no-gutters
+                        .col-4.st-metric
+                            .v#mPing —
+                            .l Delay (ms)
+                        .col-4.st-metric
+                            .v#mDown —
+                            .l Download (Mbps)
+                        .col-4.st-metric
+                            .v#mUp —
+                            .l Upload (Mbps)
+                    .progress.mt-2(style="height:6px")
+                        .progress-bar#stProgress(role="progressbar" style="width:0%")
+                    .small.text-muted.text-center.mt-2#stStatus Ready
+
+            button.btn.btn-primary.btn-block.mb-3#stStart(type="button") Start Test
+
+            .card.mb-3.d-none#stResult
+                .card-body.text-center
+                    .small.text-muted Result code — read this out to support
+                    .st-code#stCode
+                    .h5.mb-1#stVerdict
+                    .small#stMessage
+
+            .small.text-muted#stDevice
+
+    script(src=`/javascripts/speedtest-core.js?v=${CACHE_BUST}`)
+    script.
+        (function () {
+            const $ = (id) => document.getElementById(id);
+            const showMbps = (n) => n == null ? '✕' : n >= 100 ? String(Math.round(n)) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+
+            function setStatus(text, pct) {
+                $('stStatus').textContent = text;
+                if (pct != null) $('stProgress').style.width = pct + '%';
+            }
+
+            const dev = PMSpeedtest.deviceInfo();
+            const bits = [];
+            if (dev.connection && dev.connection.effective_type) bits.push('Network: ' + dev.connection.effective_type.toUpperCase());
+            if (dev.device_memory_gb) bits.push('Memory: ' + dev.device_memory_gb + ' GB');
+            if (dev.cpu_cores) bits.push('CPU cores: ' + dev.cpu_cores);
+            $('stDevice').textContent = bits.join(' · ');
+
+            $('stStart').addEventListener('click', async function () {
+                const btn = this;
+                btn.disabled = true;
+                btn.textContent = 'Testing…';
+                $('stResult').classList.add('d-none');
+                ['mPing', 'mDown', 'mUp'].forEach(id => $(id).textContent = '…');
+
+                try {
+                    const payload = await PMSpeedtest.run({
+                        profile: 'full',
+                        onProgress: setStatus,
+                        onMetric: function (name, value) {
+                            if (name === 'ping') $('mPing').textContent = value != null ? value : '✕';
+                            if (name === 'download') $('mDown').textContent = showMbps(value);
+                            if (name === 'upload') $('mUp').textContent = showMbps(value);
+                        }
+                    });
+                    setStatus('Saving result…', 98);
+                    const data = await PMSpeedtest.save(payload);
+
+                    $('stCode').textContent = data.id;
+                    $('stVerdict').textContent = data.verdict;
+                    $('stVerdict').className = 'h5 mb-1 st-verdict-' + data.verdict;
+                    $('stMessage').textContent = data.message;
+                    $('stResult').classList.remove('d-none');
+                    setStatus('Done', 100);
+                } catch (e) {
+                    setStatus('Test failed: ' + (e.message || e) + ' — check the connection and try again.', 0);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Run Again';
+                }
+            });
+        })();
