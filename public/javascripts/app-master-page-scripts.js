@@ -265,20 +265,19 @@ function saveCashFlowTxns(debitPrefix, creditPrefix) {
         const updateTxns = [].concat(debitData.updateTxns, creditData.updateTxns);
         const newHiddenFieldsArr = [].concat(debitData.newHiddenFieldsArr, creditData.newHiddenFieldsArr);
         const cashReceipts = creditData.cashReceipts;
+        const employeeEntries = [].concat(debitData.employeeEntries, creditData.employeeEntries);
         debugLog("Consolidated - New cash flow txn data " + JSON.stringify(newTxns));
         debugLog("Consolidated - Update cash flow txn data " + JSON.stringify(updateTxns));
         const txnsSaved = (newTxns.length > 0 || updateTxns.length > 0)
             ? postAjaxNew('save-cashflow-txns', newTxns, updateTxns, undefined, undefined, newHiddenFieldsArr, 'transaction_id')
             : Promise.resolve(true);
-        txnsSaved.then((ok) => {
-            if (!ok || cashReceipts.length === 0) {
-                resolve(ok);
-                return;
-            }
-            // Cash Receipt lines become customer credit receipts; the page is
-            // reloaded so they reappear as the Day Close's generated lines.
-            saveDayCloseReceipts(cashReceipts).then(resolve);
-        });
+        // Cash Receipt lines become customer credit receipts and salary lines
+        // employee ledger entries; the page is then reloaded so they reappear
+        // as the Day Close's generated lines.
+        txnsSaved
+            .then((ok) => (ok && cashReceipts.length > 0) ? saveDayCloseReceipts(cashReceipts) : ok)
+            .then((ok) => (ok && employeeEntries.length > 0) ? saveDayCloseEmployeeEntries(employeeEntries) : ok)
+            .then(resolve);
     });
 }
 
@@ -331,18 +330,79 @@ function removeDayCloseReceipt(receiptId) {
         });
 }
 
+function saveDayCloseEmployeeEntries(employeeEntries) {
+    ajaxLoading('d-md-block');
+    return fetch('/save-cashflow-employee-entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            cashflowId: document.getElementById('cashflowId_hiddenId').value,
+            entries: employeeEntries
+        })
+    })
+        .then(res => res.json())
+        .then(result => {
+            ajaxLoading('d-md-none');
+            showToastMessage(result, result.error ? 7000 : undefined);
+            if (result.error) {
+                return false;
+            }
+            cashflowReloadAfterSave = true;
+            return true;
+        })
+        .catch(() => {
+            ajaxLoading('d-md-none');
+            showToastMessage({ error: 'Error while saving the employee entries.' }, 7000);
+            return false;
+        });
+}
+
+// Deletes an employee ledger entry that was entered from this Day Close (and
+// with it the generated salary line), then reloads the page.
+function removeDayCloseEmployeeEntry(ledgerId) {
+    if (!confirm('Delete this entry? It will also be removed from the employee ledger.')) {
+        return;
+    }
+    ajaxLoading('d-md-block');
+    fetch('/remove-cashflow-employee-entry?id=' + ledgerId, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(result => {
+            ajaxLoading('d-md-none');
+            showToastMessage(result, result.error ? 7000 : undefined);
+            if (!result.error) {
+                setTimeout(() => window.location.reload(), 800);
+            }
+        })
+        .catch(() => {
+            ajaxLoading('d-md-none');
+            showToastMessage({ error: 'Error while deleting the employee entry.' }, 7000);
+        });
+}
+
 function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
     const txnRow = debitOrCreditPrefix + 'table-row-';
     const txnsObj = document.getElementById('cashflow-txn-data').querySelectorAll('[id^=' + txnRow + ']:not([type="hidden"])');
-    let newTxns = [], updateTxns = [], newHiddenFieldsArr = [], cashReceipts = [];
+    let newTxns = [], updateTxns = [], newHiddenFieldsArr = [], cashReceipts = [], employeeEntries = [];
     const user = JSON.parse(document.getElementById("user").value);
     txnsObj.forEach((txnObj) => {
         if (!txnObj.className.includes('-none')) {
             const rowNum = txnObj.id.replace(txnRow, '');
             const amtField = document.getElementById(debitOrCreditPrefix + 'amt-' + rowNum);
             const customerObj = document.getElementById(debitOrCreditPrefix + 'customer-' + rowNum);
+            const employeeObj = document.getElementById(debitOrCreditPrefix + 'employee-' + rowNum);
             if (amtField.readOnly) {
                 ; // Do nothing for system generated txns
+            } else if (employeeObj && employeeObj.style.display !== 'none' && parseFloat(amtField.value) > 0) {
+                // Salary line -> employee ledger entry (replaces the row's old
+                // free-text line, if it had one); type comes from the head
+                const hiddenField = document.getElementById(debitOrCreditPrefix + rowNum + '_hiddenId');
+                employeeEntries.push({
+                    employee_id: employeeObj.value,
+                    account_head_id: document.getElementById(debitOrCreditPrefix + 'transaction-' + rowNum).value,
+                    amount: amtField.value,
+                    notes: document.getElementById(debitOrCreditPrefix + 'remarks-' + rowNum).value,
+                    replaces_txn_id: hiddenField && hiddenField.value ? hiddenField.value : null
+                });
             } else if (customerObj && customerObj.style.display !== 'none' && parseFloat(amtField.value) > 0) {
                 // Cash Receipt line -> customer credit receipt (replaces the
                 // row's old free-text line, if it had one)
@@ -369,7 +429,7 @@ function iterateDebitOrCreditTxns(debitOrCreditPrefix) {
     });
     debugLog("New cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(newTxns));
     debugLog("Update cash flow txn(" + debitOrCreditPrefix + ") data " + JSON.stringify(updateTxns));
-    return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr, "cashReceipts": cashReceipts };
+    return { "newTxns": newTxns, "updateTxns": updateTxns, "newHiddenFieldsArr": newHiddenFieldsArr, "cashReceipts": cashReceipts, "employeeEntries": employeeEntries };
 }
 
 function formCashFlowTxn(txnId, prefix, rowNum, user) {
@@ -410,6 +470,18 @@ function onCashflowTypeChange(prefix, rowNum) {
         if (!requiresVendor) {
             vendorObj.value = '';
             vendorObj.className = 'form-control mt-1 digital-vendor-select';
+        }
+    }
+    // Salary lines (data-requires-employee="Y", from
+    // m_account_heads.employee_ledger_txn_type): pick the employee.
+    const employeeObj = document.getElementById(prefix + 'employee-' + rowNum);
+    if (employeeObj) {
+        const requiresEmployee = selected.requiresEmployee === 'Y';
+        employeeObj.style.display = requiresEmployee ? '' : 'none';
+        employeeObj.required = requiresEmployee;
+        if (!requiresEmployee) {
+            employeeObj.value = '';
+            employeeObj.className = 'form-control mt-1 cashflow-employee-select';
         }
     }
     // InFlow "Cash Receipt" (data-requires-customer="Y", from

@@ -145,7 +145,8 @@ module.exports = {
         const txnData = req.body;
         if (txnData && txnData.length > 0) {
             const validationError = await validateDigitalVendorRows(txnData, req.user.location_code)
-                || await validateNoFreeTextCashReceipts(txnData);
+                || await validateNoFreeTextCashReceipts(txnData)
+                || await validateNoFreeTextSalaryLines(txnData);
             if (validationError) {
                 return res.status(400).send({error: validationError});
             }
@@ -226,6 +227,79 @@ module.exports = {
         } catch (err) {
             console.error('Error deleting Day Close cash receipt:', err);
             res.status(500).send({error: 'Error while deleting the cash receipt.'});
+        }
+    },
+    // Salary lines (Salary Advance / Payout / Advance Recovery) entered on a
+    // DRAFT Day Close: each becomes an employee ledger entry for the chosen
+    // employee (dated on the Day Close; type from the Account Head), which
+    // generate_cashflow then turns into the linked Day Close line.
+    saveDayCloseEmployeeEntries: async (req, res, next) => {
+        try {
+            const { cashflowId, entries } = req.body || {};
+            const cashflow = await cashflowDao.findCashflow(req.user.location_code, cashflowId);
+            if (!cashflow) {
+                return res.status(403).send({error: 'Unauthorized: this Day Close belongs to another location.'});
+            }
+            if (cashflow.status === 'CLOSED') {
+                return res.status(400).send({error: 'This Day Close is already closed.'});
+            }
+            if (!Array.isArray(entries) || entries.length === 0) {
+                return res.status(400).send({error: 'No employee entries to save.'});
+            }
+
+            const [employees, txnTypes] = await Promise.all([
+                cashflowDao.findCashflowEmployees(req.user.location_code),
+                cashflowDao.getAccountHeadEmployeeTxnTypes(
+                    [...new Set(entries.map(e => parseInt(e.account_head_id, 10)).filter(id => !isNaN(id)))])
+            ]);
+            const employeeIds = new Set(employees.map(e => String(e.employee_id)));
+            const rows = [];
+            for (const e of entries) {
+                const txnType = txnTypes.get(parseInt(e.account_head_id, 10));
+                const amount = Math.round((parseFloat(e.amount) || 0) * 100) / 100;
+                if (!txnType) {
+                    return res.status(400).send({error: 'This transaction type is not an employee entry.'});
+                }
+                if (!e.employee_id || !employeeIds.has(String(e.employee_id))) {
+                    return res.status(400).send({error: 'Please select a valid employee for every salary line.'});
+                }
+                if (!(amount > 0)) {
+                    return res.status(400).send({error: 'Salary line amount must be greater than zero.'});
+                }
+                rows.push({
+                    employeeId: parseInt(e.employee_id, 10),
+                    txnType,
+                    amount,
+                    notes: e.notes ? String(e.notes).trim().substring(0, 255) : null,
+                    replacesTxnId: parseInt(e.replaces_txn_id, 10) || null
+                });
+            }
+
+            await cashflowDao.createDayCloseEmployeeEntries(cashflow, rows, req.user.User_Name);
+            res.status(200).send({message: 'Saved ' + rows.length + ' employee entr' + (rows.length === 1 ? 'y' : 'ies') + ' to the employee ledger.'});
+        } catch (err) {
+            console.error('Error saving Day Close employee entries:', err);
+            const dbErr = err && (err.original || err.parent);
+            const message = dbErr && dbErr.sqlState === '45000' ? dbErr.sqlMessage : 'Error while saving the employee entries.';
+            res.status(500).send({error: message});
+        }
+    },
+    // Deletes an employee ledger entry that was entered from this (DRAFT) Day Close.
+    deleteDayCloseEmployeeEntry: async (req, res, next) => {
+        try {
+            const entry = await cashflowDao.findDayCloseEmployeeEntry(req.query.id);
+            if (!entry || !entry.origin_cashflow_id || entry.location_code !== req.user.location_code) {
+                return res.status(404).send({error: 'Entry not found or not entered from Day Close.'});
+            }
+            const cashflow = await cashflowDao.findCashflow(req.user.location_code, entry.origin_cashflow_id);
+            if (!cashflow || cashflow.status === 'CLOSED') {
+                return res.status(400).send({error: 'This Day Close is closed; reopen it to remove the entry.'});
+            }
+            await cashflowDao.deleteDayCloseEmployeeEntry(entry.ledger_id, entry.origin_cashflow_id, req.user.User_Name);
+            res.status(200).send({message: 'Employee entry deleted.'});
+        } catch (err) {
+            console.error('Error deleting Day Close employee entry:', err);
+            res.status(500).send({error: 'Error while deleting the employee entry.'});
         }
     },
     saveCashflowDenomsData: (req, res, next) => {
@@ -402,7 +476,8 @@ function collectCreditAndDebits(result) {
         type: t.type,
         calcFlag: t.calcFlag,
         digitalVendorId: t.digitalVendorId,
-        originReceiptId: t.originReceiptId
+        originReceiptId: t.originReceiptId,
+        originLedgerId: t.originLedgerId
     }));
     return { data: creditOrDebits, options: result.options || [] };
 }
@@ -419,7 +494,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
         locationConfig.getLocationConfigValue(locationCode, 'SHOW_CASHFLOW_DENOMINATIONS', 'Y'),
         locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt),
         adjustmentsDao.getDigitalVendors(locationCode),
-        cashflowDao.findCashReceiptCustomers(locationCode)
+        cashflowDao.findCashReceiptCustomers(locationCode),
+        cashflowDao.findCashflowEmployees(locationCode)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
@@ -440,7 +516,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             showCashFlowDenominations: values[5].value === 'Y',
             maxCashFlowRows: Number(values[6].value),
             digitalVendorList: values[7].value || [],
-            cashReceiptCustomers: values[8].value || []
+            cashReceiptCustomers: values[8].value || [],
+            cashflowEmployees: values[9].value || []
         });
     });
 }
@@ -518,6 +595,22 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
 // entered with a customer, via /save-cashflow-receipts, so it lands in the
 // customer's ledger. Rejects a free-text line carrying an amount - the gap that
 // let PAC's 27-Sep-2026 Rs 1,20,000 payment reach Day Close but not the ledger.
+// Salary lines (Account Head with employee_ledger_txn_type) must be entered
+// with an employee, via /save-cashflow-employee-entries, so they land in the
+// employee ledger - cash in/out of the employee ledger comes only from Day Close.
+async function validateNoFreeTextSalaryLines(txnData) {
+    const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
+    const employeeHeads = await cashflowDao.getAccountHeadEmployeeTxnTypes(accountHeadIds);
+    if (employeeHeads.size === 0) return null;
+
+    for (const row of txnData) {
+        if (employeeHeads.has(parseInt(row.account_head_id, 10)) && (parseFloat(row.amount) || 0) > 0) {
+            return '"' + row.type + '" must be entered with an employee.';
+        }
+    }
+    return null;
+}
+
 async function validateNoFreeTextCashReceipts(txnData) {
     const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
     const customerHeadIds = new Set(await cashflowDao.getAccountHeadsRequiringCustomerLink(accountHeadIds));
