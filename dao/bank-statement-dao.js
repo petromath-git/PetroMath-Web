@@ -363,6 +363,32 @@ saveTransaction: async (transactionData) => {
         });
     },
 
+    // Bank Deposit Reconciliation pairs Day Close "To Bank" lines with bank CASH
+    // lines via recon_match_id. When a matched bank line moves to another ledger
+    // the pairing no longer holds — clear the whole match group from both sides,
+    // same as Unmatch on that screen. Must run before the ledger is updated.
+    unmatchDepositRecon: async (t_bank_id, ledger_name, t) => {
+        const rows = await db.sequelize.query(
+            `SELECT recon_match_id FROM t_bank_transaction
+             WHERE t_bank_id = :t_bank_id
+               AND recon_match_id IS NOT NULL
+               AND NOT (ledger_name <=> :ledger_name)`,
+            { replacements: { t_bank_id, ledger_name }, type: QueryTypes.SELECT, transaction: t }
+        );
+        if (!rows.length) return;
+
+        const matchId = rows[0].recon_match_id;
+        for (const table of ['t_cashflow_transaction', 't_bank_transaction']) {
+            await db.sequelize.query(
+                `UPDATE ${table}
+                 SET recon_match_id = NULL, manual_recon_flag = 0,
+                     manual_recon_by = NULL, manual_recon_date = NULL
+                 WHERE recon_match_id = :matchId`,
+                { replacements: { matchId }, type: QueryTypes.UPDATE, transaction: t }
+            );
+        }
+    },
+
     // Reclassify an existing transaction's ledger.
     // If reclassifying to a Credit ledger on a credit transaction, auto-creates
     // a receipt in t_receipts (mirrors the saveTransaction receipt logic).
@@ -370,6 +396,8 @@ saveTransaction: async (transactionData) => {
                                     create_receipt, location_code, receipt_date, credit_amount, created_by }) => {
         const t = await db.sequelize.transaction();
         try {
+            await module.exports.unmatchDepositRecon(t_bank_id, ledger_name, t);
+
             await db.sequelize.query(
                 `UPDATE t_bank_transaction
                  SET ledger_name     = :ledger_name,
@@ -423,6 +451,8 @@ saveTransaction: async (transactionData) => {
         const t = await db.sequelize.transaction();
         try {
             for (const upd of updates) {
+                await module.exports.unmatchDepositRecon(upd.t_bank_id, upd.ledger_name, t);
+
                 await db.sequelize.query(
                     `UPDATE t_bank_transaction
                      SET ledger_name     = :ledger_name,
