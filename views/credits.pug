@@ -30,7 +30,7 @@ block content
     -
         const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
         const obDate = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p[2] + '-' + MON[Number(p[1]) - 1] + '-' + p[0]; };
-        const obAmt = a => '₹' + Math.abs(Number(a || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (Number(a) > 0 ? ' Dr' : Number(a) < 0 ? ' Cr' : '');
+        const obAmt = a => (Number(a) < 0 ? 'Advance ' : '') + '₹' + Math.abs(Number(a || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const obStatus = openingStatus || {};
 
     // Customers content
@@ -91,7 +91,7 @@ block content
                                         span.text-nowrap= obAmt(ob.legacy.balance)
                                         small.d-block.text-muted.text-nowrap(title="Carried forward from earlier records")= 'b/f ' + obDate(ob.legacy.balance_date)
                                     else if ob.state === 'MULTIPLE'
-                                        a.badge.badge-danger(href="/adjustments" title="Delete the wrong entry on the Adjustments screen")= ob.entries.length + ' entries – fix'
+                                        span.badge.badge-danger(title="More than one opening balance entry – contact support to combine them")= ob.entries.length + ' entries – contact support'
                                     else
                                         span.badge.badge-warning Not set
                                     if ob.state !== 'MULTIPLE' && (canEdit || ob.state !== 'MISSING')
@@ -248,19 +248,19 @@ block content
                                         each bank in banks
                                             option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
                         h6.border-top.pt-3.mb-2 Opening Balance
-                        p.small.text-muted.mb-2 What this customer owed (or had paid in advance) before their first bill in PetroMath. Leave 0 for a new customer.
+                        p.small.text-muted.mb-2 What this customer owed before their first bill in PetroMath. Leave 0 for a new customer.
                         .row
                             .col-md-4.mb-3
                                 label.form-label As on *
                                 input.form-control(type="date", name="ob_date", value=openingDateRules.defaultDate, min=openingDateRules.minDate || undefined, max=openingDateRules.today, required)
                             .col-md-4.mb-3
-                                label.form-label Amount (₹) *
+                                label.form-label Amount customer owes (₹) *
                                 input.form-control(type="number", name="ob_amount", value="0", min="0", step="0.01", inputmode="decimal", required)
-                            .col-md-4.mb-3
-                                label.form-label Balance is
-                                select.form-control(name="ob_direction")
-                                    option(value="OWES_US") Customer owes us
-                                    option(value="WE_OWE") Advance – we owe customer
+                            if allowOpeningAdvance
+                                .col-md-4.mb-3
+                                    label.form-label Advance / security deposit (₹)
+                                    input.form-control(type="number", name="ob_advance", value="0", min="0", step="0.01", inputmode="decimal")
+                                    small.form-text.text-muted Only if the customer paid us in advance. Fill one of the two.
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-primary(type="submit", form="addCustomerForm") Save Customer
@@ -287,13 +287,12 @@ block content
                                 small.form-text.text-muted#obDateHint
                             .form-row
                                 .col-12.col-sm-6.form-group
-                                    label.mb-1(for="obAmount") Amount (₹) *
+                                    label.mb-1(for="obAmount") Amount customer owes (₹) *
                                     input.form-control#obAmount(type="number", name="ob_amount", min="0", step="0.01", inputmode="decimal", required)
-                                .col-12.col-sm-6.form-group
-                                    label.mb-1(for="obDirection") Balance is
-                                    select.form-control#obDirection(name="ob_direction")
-                                        option(value="OWES_US") Customer owes us
-                                        option(value="WE_OWE") Advance – we owe
+                                .col-12.col-sm-6.form-group#obAdvanceGroup(style="display:none")
+                                    label.mb-1(for="obAdvance") Advance / security deposit (₹)
+                                    input.form-control#obAdvance(type="number", name="ob_advance", min="0", step="0.01", inputmode="decimal")
+                                    small.form-text.text-muted Only if the customer paid us in advance. Fill one of the two.
                             .form-group
                                 label.mb-1(for="obNote") Note
                                 input.form-control#obNote(type="text", name="ob_note", maxlength="500", placeholder="Optional, e.g. as per old ledger")
@@ -655,8 +654,7 @@ block content
         }
         function obFmtAmt(a) {
             const n = Number(a || 0);
-            return '₹' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                + (n > 0 ? ' Dr' : n < 0 ? ' Cr' : '');
+            return (n < 0 ? 'Advance ' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         function obEsc(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -705,14 +703,21 @@ block content
             document.getElementById('obDateHint').textContent =
                 `Suggested: ${obFmtDate(rules.defaultDate)}, ${basis}. A customer added later can use a later date, but not after their first bill or receipt.`;
 
-            const canSave = s.state === 'MISSING' || (s.state === 'SET' && data.canChange);
+            // An advance (credit-side) opening can only be changed where the
+            // location has the advance field switched on
+            const isAdvance = !!entry && Number(entry.amount) < 0;
+            const advanceLocked = isAdvance && !data.allowAdvance;
+            const canSave = s.state === 'MISSING' || (s.state === 'SET' && data.canChange && !advanceLocked);
+            document.getElementById('obAdvanceGroup').style.display = data.allowAdvance ? '' : 'none';
             let noticeHtml = '';
             if (s.state === 'LEGACY') {
                 noticeHtml = `<div class="alert alert-info small">Carried forward from earlier records: <strong>${obFmtAmt(s.legacy.balance)}</strong> as on ${obFmtDate(s.legacy.balance_date)}. Contact support to change it.</div>`;
             } else if (s.state === 'MULTIPLE') {
                 noticeHtml = `<div class="alert alert-danger small">This customer has ${s.entries.length} opening balance entries: `
-                    + s.entries.map(e => `#${e.adjustment_id} ${obFmtAmt(e.amount)} (${obFmtDate(e.adjustment_date)})`).join(', ')
-                    + '. Delete the wrong one on the <a href="/adjustments">Adjustments</a> screen.</div>';
+                    + s.entries.map(e => `${obFmtAmt(e.amount)} (${obFmtDate(e.adjustment_date)})`).join(', ')
+                    + '. Contact support to combine them.</div>';
+            } else if (advanceLocked) {
+                noticeHtml = `<div class="alert alert-info small mb-2">This opening balance is an advance / security deposit of <strong>${obFmtAmt(entry.amount)}</strong>. Contact support to change it.</div>`;
             } else if (s.state === 'MISSING') {
                 noticeHtml = '<div class="alert alert-warning small mb-2">Not set yet. Enter what this customer owed before their first bill in PetroMath (0 if nothing was due).</div>';
             } else if (!data.canChange) {
@@ -722,7 +727,7 @@ block content
             }
             notice.innerHTML = noticeHtml;
 
-            form.style.display = (s.state === 'MISSING' || s.state === 'SET') ? '' : 'none';
+            form.style.display = (s.state === 'MISSING' || s.state === 'SET') && !advanceLocked ? '' : 'none';
             form.querySelectorAll('input, select').forEach(el => { if (el.type !== 'hidden') el.disabled = !canSave; });
             document.getElementById('obReasonGroup').style.display = entry && canSave ? '' : 'none';
             document.getElementById('obReason').required = !!(entry && canSave);
@@ -732,13 +737,13 @@ block content
 
             if (entry) {
                 dateInput.value = entry.adjustment_date;
-                document.getElementById('obAmount').value = Math.abs(Number(entry.amount)).toFixed(2);
-                document.getElementById('obDirection').value = Number(entry.amount) < 0 ? 'WE_OWE' : 'OWES_US';
+                document.getElementById('obAmount').value = isAdvance ? '0' : Math.abs(Number(entry.amount)).toFixed(2);
+                document.getElementById('obAdvance').value = isAdvance ? Math.abs(Number(entry.amount)).toFixed(2) : '0';
                 document.getElementById('obNote').value = entry.description === 'Opening Balance' ? '' : (entry.description || '');
             } else {
                 dateInput.value = rules.defaultDate;
                 document.getElementById('obAmount').value = '0';
-                document.getElementById('obDirection').value = 'OWES_US';
+                document.getElementById('obAdvance').value = '0';
                 document.getElementById('obNote').value = '';
             }
 
