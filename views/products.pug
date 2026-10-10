@@ -3,6 +3,30 @@ include mixins/mixins
 include mixins/card-toggle-mobile
 
 block content
+    -
+        const osMon = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const osDate = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '-' + osMon[Number(p[1]) - 1] + '-' + p[0] : ''; };
+        const osQty = (q, unit) => { const n = Number(q || 0); return (n % 1 === 0 ? n : n.toFixed(2)) + (unit ? ' ' + unit : ''); };
+
+    mixin openingStockCell(val)
+        - const os = val.opening
+        if !val.stock_tracked
+            span.text-muted -
+        else
+            if os.state === 'SET'
+                span.text-nowrap= osQty(os.entry.qty, val.unit)
+                small.d-block.text-muted.text-nowrap= 'from ' + osDate(os.entry.adjustment_date)
+            else if os.state === 'MULTIPLE'
+                span.badge.badge-danger(title="More than one opening stock entry – contact support to combine them")= os.entries.length + ' entries – contact support'
+            else
+                span.badge.badge-warning Not set
+            if os.state !== 'MULTIPLE'
+                button.btn.btn-sm.btn-outline-primary.py-0.px-2.mt-1.d-block.text-nowrap.opening-stock-btn(
+                    type="button"
+                    data-product-id=val.id
+                    title=os.state === 'MISSING' ? 'Set opening stock' : 'View / change opening stock'
+                )= os.state === 'MISSING' ? 'Set' : 'View / Change'
+
     // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
@@ -41,6 +65,7 @@ block content
                             th(scope="col") Price
                             th(scope="col") CGST%
                             th(scope="col") SGST%
+                            th(scope="col") Opening Stock
                             if user.Role === 'SuperUser'
                                 th(scope="col").text-center Tank Product
                             th(scope="col").text-center Non-Fuel Product
@@ -61,6 +86,8 @@ block content
                                         span.form-control-plaintext= val.price
                                 td(scope="row") #{val.cgst_percent}%
                                 td(scope="row") #{val.sgst_percent}%
+                                td(scope="row")
+                                    +openingStockCell(val)
                                 if user.Role === 'SuperUser'
                                     td(scope="row").text-center
                                         .form-check.d-inline-block
@@ -141,6 +168,10 @@ block content
                         .product-detail
                             small HSN Code
                             span= val.hsn_code || '-'
+                        if val.stock_tracked
+                            .product-detail
+                                small Opening Stock
+                                +openingStockCell(val)
                         if val.sku_name || val.sku_number
                             .product-detail
                                 small SKU Name
@@ -295,6 +326,45 @@ block content
                         strong#details-sku-number -
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Close
+
+    // Opening Stock Modal
+    .modal.fade#openingStockModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        | Opening Stock
+                        small.d-block.text-muted#osProductName
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    div#osLoading.text-center.text-muted.py-3 Loading...
+                    div#osBody(style="display:none")
+                        div#osNotice
+                        form#openingStockForm
+                            input(type="hidden", id="osProductId")
+                            .form-group
+                                label.mb-1(for="osDate") Stock counted from *
+                                input.form-control#osDate(type="date", name="date", required)
+                                small.form-text.text-muted#osDateHint
+                            .form-group
+                                label.mb-1(for="osQty")
+                                    | Quantity in stock at the start of that day *
+                                .input-group
+                                    input.form-control#osQty(type="number", name="qty", min="0", step="0.01", inputmode="decimal", required)
+                                    .input-group-append
+                                        span.input-group-text#osUnit
+                            .form-group
+                                label.mb-1(for="osNote") Note
+                                input.form-control#osNote(type="text", name="note", maxlength="500", placeholder="Optional, e.g. physical count")
+                            .form-group#osReasonGroup(style="display:none")
+                                label.mb-1(for="osReason") Reason for change *
+                                input.form-control#osReason(type="text", name="reason", maxlength="500", placeholder="e.g. recounted the stock")
+                        div#osFeedback
+                        div#osHistory
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Close
+                    button.btn.btn-primary#osSaveBtn(type="submit", form="openingStockForm") Save
 
         // End of main-content wrapper
     
@@ -547,6 +617,157 @@ block content
         function refreshData() {
             location.reload();
         }
+
+        // ── Opening stock ───────────────────────────────────────────────
+        const OS_MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        function osFmtDate(d) {
+            if (!d) return '';
+            const p = String(d).slice(0, 10).split('-');
+            return p[2] + '-' + OS_MON[Number(p[1]) - 1] + '-' + p[0];
+        }
+        function osFmtQty(q, unit) {
+            const n = Number(q || 0);
+            return (n % 1 === 0 ? String(n) : n.toFixed(2)) + (unit ? ' ' + unit : '');
+        }
+        function osEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        document.querySelectorAll('.opening-stock-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation(); // don't toggle the phone card
+                openOpeningStock(this.getAttribute('data-product-id'));
+            });
+        });
+
+        function openOpeningStock(productId) {
+            document.getElementById('osProductId').value = productId;
+            document.getElementById('osProductName').textContent = '';
+            document.getElementById('osLoading').textContent = 'Loading...';
+            document.getElementById('osLoading').style.display = '';
+            document.getElementById('osBody').style.display = 'none';
+            document.getElementById('osFeedback').innerHTML = '';
+            document.getElementById('osSaveBtn').style.display = 'none';
+            document.getElementById('osSaveBtn').disabled = false;
+            $('#openingStockModal').modal('show');
+
+            fetch(`/products/api/${productId}/opening-stock`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Could not load');
+                    renderOpeningStock(data);
+                })
+                .catch(err => {
+                    document.getElementById('osLoading').textContent = err.message || 'Could not load the opening stock.';
+                });
+        }
+
+        function renderOpeningStock(data) {
+            const s = data.status, rules = data.dateRules, entry = s.entry, unit = data.unit || '';
+            const form = document.getElementById('openingStockForm');
+            const dateInput = document.getElementById('osDate');
+            document.getElementById('osProductName').textContent = data.productName;
+            document.getElementById('osUnit').textContent = unit || '-';
+            document.getElementById('osLoading').style.display = 'none';
+            document.getElementById('osBody').style.display = '';
+
+            dateInput.max = rules.today;
+            const basis = rules.basis === 'first_shift' ? 'your first shift'
+                : rules.basis === 'start_date' ? 'your go-live date' : 'today';
+            document.getElementById('osDateHint').textContent = rules.lateStart
+                ? 'Sales and purchases before this date are not counted in stock.'
+                : `That day's sales count against this stock. Suggested: ${osFmtDate(rules.defaultDate)} (${basis}). A product added later can use a later date, but not after its first sale or purchase.`;
+
+            const canSave = s.state === 'MISSING' || (s.state === 'SET' && data.canChange);
+            let noticeHtml = '';
+            if (s.state === 'MULTIPLE') {
+                noticeHtml = `<div class="alert alert-danger small">This product has ${s.entries.length} opening stock entries: `
+                    + s.entries.map(e => `${osFmtQty(e.qty, unit)} (${osFmtDate(e.adjustment_date)})`).join(', ')
+                    + '. Contact support to combine them.</div>';
+            } else if (s.state === 'MISSING') {
+                noticeHtml = '<div class="alert alert-warning small mb-2">Not set yet. Enter the stock you had when you started using PetroMath for this product (0 if none).</div>';
+            } else if (!data.canChange) {
+                noticeHtml = '<div class="alert alert-secondary small mb-2">Only Admin, PowerUser or SuperUser can change an opening stock once it is set.</div>';
+            } else {
+                noticeHtml = '<div class="alert alert-light border small mb-2">Changing this changes the stock balance and every stock report from this date. The old figure is kept in the history below.</div>';
+            }
+            document.getElementById('osNotice').innerHTML = noticeHtml;
+
+            form.style.display = s.state === 'MULTIPLE' ? 'none' : '';
+            form.querySelectorAll('input').forEach(el => { if (el.type !== 'hidden') el.disabled = !canSave; });
+            document.getElementById('osReasonGroup').style.display = entry && canSave ? '' : 'none';
+            document.getElementById('osReason').required = !!(entry && canSave);
+            document.getElementById('osReason').value = '';
+            document.getElementById('osSaveBtn').style.display = canSave ? '' : 'none';
+            document.getElementById('osSaveBtn').textContent = entry ? 'Save Change' : 'Save';
+
+            if (entry) {
+                dateInput.value = entry.adjustment_date;
+                document.getElementById('osQty').value = Number(entry.qty);
+                document.getElementById('osNote').value = entry.remarks === 'Opening Stock' ? '' : (entry.remarks || '');
+            } else {
+                dateInput.value = rules.defaultDate;
+                document.getElementById('osQty').value = '';
+                document.getElementById('osNote').value = '';
+            }
+
+            // History: current entry first, then earlier versions
+            let hist = '';
+            if (entry) {
+                hist += '<h6 class="mt-3 mb-2 small font-weight-bold text-muted">HISTORY</h6><ul class="list-unstyled small mb-0">';
+                hist += `<li class="mb-2"><strong>${osFmtQty(entry.qty, unit)}</strong> from ${osFmtDate(entry.adjustment_date)}`
+                    + ` <span class="badge badge-success">current</span><br><span class="text-muted">by ${osEsc(entry.updated_by || entry.created_by)}`
+                    + ` on ${osFmtDate(entry.updation_date || entry.creation_date)}</span></li>`;
+                (data.history || []).forEach(h => {
+                    hist += `<li class="mb-2 text-muted"><s>${osFmtQty(h.qty, unit)} from ${osFmtDate(h.adjustment_date)}</s>`
+                        + `<br>changed by ${osEsc(h.changed_by)} on ${osFmtDate(h.changed_date)}`
+                        + (h.change_reason ? ` — “${osEsc(h.change_reason)}”` : '') + '</li>';
+                });
+                hist += '</ul>';
+            }
+            document.getElementById('osHistory').innerHTML = hist;
+        }
+
+        function saveOpeningStock(confirmed) {
+            const form = document.getElementById('openingStockForm');
+            const productId = document.getElementById('osProductId').value;
+            const saveBtn = document.getElementById('osSaveBtn');
+            const feedback = document.getElementById('osFeedback');
+            const body = Object.fromEntries(new FormData(form));
+            if (confirmed) body.confirmed = true;
+            saveBtn.disabled = true;
+            feedback.innerHTML = '';
+
+            fetch(`/products/api/${productId}/opening-stock`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        feedback.innerHTML = `<div class="alert alert-success py-1 px-2 small mb-0">${osEsc(data.message)}</div>`;
+                        setTimeout(() => location.reload(), 900);
+                    } else if (data.needsConfirm) {
+                        feedback.innerHTML = `<div class="alert alert-warning py-2 px-2 small mb-0">${osEsc(data.warning)}`
+                            + '<div class="mt-2"><button type="button" class="btn btn-sm btn-warning" id="osConfirmBtn">Save anyway</button></div></div>';
+                        document.getElementById('osConfirmBtn').addEventListener('click', () => saveOpeningStock(true));
+                        saveBtn.disabled = false;
+                    } else {
+                        feedback.innerHTML = `<div class="alert alert-danger py-1 px-2 small mb-0">${osEsc(data.error)}</div>`;
+                        saveBtn.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    feedback.innerHTML = '<div class="alert alert-danger py-1 px-2 small mb-0">Network error. Try again.</div>';
+                    saveBtn.disabled = false;
+                });
+        }
+
+        document.getElementById('openingStockForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveOpeningStock(false);
+        });
         
         function showMessage(message, type) {
             const alertDiv = document.getElementById('messageAlert');
