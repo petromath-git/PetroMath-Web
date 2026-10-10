@@ -1,6 +1,7 @@
 // controllers/stock-adjustment-controller.js
 const stockAdjustmentDao = require('../dao/stock-adjustment-dao');
 const openingStockDao = require('../dao/product-opening-stock-dao');
+const ProductDao = require('../dao/product-dao');
 const moment = require('moment');
 
 module.exports = {
@@ -95,6 +96,12 @@ getStockAdjustmentListPage: async (req, res, next) => {
             // Opening stock is set on the Products page (one per product, with history)
             if (adjustment_type === 'OPENING') {
                 req.flash('error', 'Opening stock is now set on the Products page.');
+                return res.redirect('/stock-adjustment/add');
+            }
+
+            const pieceError = await ProductDao.checkPieceQuantities([{ product_id, qty }]);
+            if (pieceError) {
+                req.flash('error', pieceError);
                 return res.redirect('/stock-adjustment/add');
             }
 
