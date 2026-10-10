@@ -34,12 +34,14 @@ block content
                 td.rf-label.rf-range Date Range:
                 td.rf-field.rf-range
                     select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='month_year') Month / Year
                         option(value='this_month') This Month
                         option(value='last_month') Last Month
                         option(value='this_financial_year') This Financial Year
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom', selected=true) Custom Date
-                td.rf-gap &nbsp;                   
+                +rangeMonthYearCells()
+                td.rf-gap &nbsp;
                 td.rf-label.rf-from#fromDateLabel From Date:
                 td.rf-field.rf-from
                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, format="dd/mm/yyyy", required)

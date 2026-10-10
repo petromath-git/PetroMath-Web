@@ -1,4 +1,6 @@
 extends layout
+include mixins/report-filters-mobile
+include mixins/card-toggle-mobile
 
 block content
     script.
@@ -18,7 +20,10 @@ block content
             const yr = today.getFullYear();
             const mo = today.getMonth(); // 0-based; March=2, April=3
 
-            if (range === 'this_month') {
+            showRangeMonthYear(range === 'month_year');
+            if (range === 'month_year') {
+                setRangeMonthYear('fromDate', 'toDate');
+            } else if (range === 'this_month') {
                 fromInput.value = fmt(new Date(yr, mo, 1));
                 toInput.value = fmt(today);
             } else if (range === 'last_month') {
@@ -37,33 +42,36 @@ block content
             }
         }
 
-    form(method='POST' action='/reports/stock/ledger')
+    form.report-filters(method='POST' action='/reports/stock/ledger')
+        +reportFiltersMobile({ hasRange: true, hasResults: !!selectedProductId, rangeId: 'stockLedgerDateRange', fromId: 'fromDate', toId: 'toDate', companyId: 'productId' })
         table.center
             tr
-                td Period:
-                td
+                td.rf-label.rf-range Period:
+                td.rf-field.rf-range
                     select#stockLedgerDateRange.form-control(name='dateRange' onchange='updateStockLedgerDateRange()')
+                        option(value='month_year'           selected=selectedDateRange==='month_year')           Month / Year
                         option(value='this_month'           selected=selectedDateRange==='this_month')           This Month
                         option(value='last_month'           selected=selectedDateRange==='last_month')           Last Month
                         option(value='this_financial_year'  selected=selectedDateRange==='this_financial_year')  This Financial Year
                         option(value='last_financial_year'  selected=selectedDateRange==='last_financial_year')  Last Financial Year
                         option(value='custom'               selected=selectedDateRange==='custom')               Custom Date
-                td &nbsp;
-                td From Date:
-                td
+                +rangeMonthYearCells({ onchange: 'updateStockLedgerDateRange()', date: selectedDateRange === 'month_year' ? fromDate : null })
+                td.rf-gap &nbsp;
+                td.rf-label.rf-from From Date:
+                td.rf-field.rf-from
                     input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;
-                td To Date:
-                td
+                td.rf-gap &nbsp;
+                td.rf-label.rf-to To Date:
+                td.rf-field.rf-to
                     input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format="dd/mm/yyyy", required)
-                td &nbsp;
-                td Product:
-                td
+                td.rf-gap &nbsp;
+                td.rf-label Product:
+                td.rf-field
                     select#productId.form-control(name='productId', required)
                         option(value='') Select Product
                         each product in products
                             option(value=product.product_id, selected=selectedProductId == product.product_id)= product.product_name
-                td &nbsp;
+                td.rf-gap &nbsp;
                 include report-print-download.pug
     div &nbsp;
     div
@@ -129,7 +137,7 @@ block content
                                         div(style="font-size: 1.5em; font-weight: bold; color: #007bff;")= closingBalance + ' ' + productInfo.unit
                         
                         .table-responsive
-                            table.table.table-bordered.table-hover
+                            table.table.table-bordered.table-hover.m-stack.m-collapse.stock-ledger-table
                                 thead.thead-light
                                     tr
                                         th Date
@@ -142,7 +150,7 @@ block content
                                 tbody
                                     // Opening Balance Row
                                     - var runningBalance = parseFloat(openingBalance)
-                                    tr.table-info
+                                    tr.table-info.m-static
                                         td(colspan='6')
                                             strong Opening Balance
                                         td.text-right
@@ -151,29 +159,32 @@ block content
                                     // Transaction Rows
                                     each txn in ledgerData
                                         - runningBalance = runningBalance + parseFloat(txn.in_qty || 0) - parseFloat(txn.out_qty || 0)
+                                        - var _inQty = parseFloat(txn.in_qty || 0), _outQty = parseFloat(txn.out_qty || 0)
                                         tr
-                                            td= new Date(txn.txn_date).toLocaleDateString('en-GB')
-                                            td= txn.txn_type
-                                            td= txn.reference_no || '-'
-                                            td= txn.party_name || '-'
-                                            td.text-right
+                                            td.m-title= new Date(txn.txn_date).toLocaleDateString('en-GB')
+                                            td(data-label='Type')= txn.txn_type
+                                            td(data-label='Reference')= txn.reference_no || '-'
+                                            td.m-wide(data-label='Party / Remarks')= txn.party_name || '-'
+                                            //- phones only: the collapsed card's one-line summary
+                                            td.m-only.m-summary(class=(_inQty > 0 ? 'text-success' : 'text-danger'))= txn.txn_type + '  ' + (_inQty > 0 ? '+' + _inQty.toFixed(2) : '−' + _outQty.toFixed(2))
+                                            td.text-right(data-label='IN')
                                                 if parseFloat(txn.in_qty) > 0
                                                     span.text-success= parseFloat(txn.in_qty).toFixed(2)
                                                 else
                                                     | -
-                                            td.text-right
+                                            td.text-right(data-label='OUT')
                                                 if parseFloat(txn.out_qty) > 0
                                                     span.text-danger= parseFloat(txn.out_qty).toFixed(2)
                                                 else
                                                     | -
-                                            td.text-right(class=runningBalance < 0 ? 'text-danger font-weight-bold' : '')
+                                            td.text-right(data-label='Balance' class=runningBalance < 0 ? 'text-danger font-weight-bold' : '')
                                                 = runningBalance.toFixed(2)
                                 
                                 tfoot.bg-light
                                     tr.font-weight-bold
-                                        td(colspan='4') Total
-                                        td.text-right.text-success= totalIn
-                                        td.text-right.text-danger= totalOut
+                                        td.m-title(colspan='4') Total
+                                        td.text-right.text-success(data-label='IN')= totalIn
+                                        td.text-right.text-danger(data-label='OUT')= totalOut
                                         td.text-right Closing: #{closingBalance}                       
                         
         else if selectedProductId
@@ -187,3 +198,4 @@ block content
     
     // Include the overlay
     include overlay.pug
+    +cardToggleMobile('table.stock-ledger-table > tbody > tr:not(.m-static)')

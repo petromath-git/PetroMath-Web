@@ -70,12 +70,25 @@ block content
             .row.g-3
                 .col-md-2.col-6
                     label.form-label Period:
-                    select.form-control#periodPreset(onchange="glSetPeriod(this)" data-from="fromPeriod" data-to="toPeriod")
+                    select.form-control#periodPreset(onchange="glSetPeriod(this)" data-from="fromPeriod" data-to="toPeriod" data-monthyear="pbMonthYearWrap" data-month="pbMonth" data-year="pbYear")
+                        option(value="month_year") Month / Year
                         option(value="this_month") This Month
                         option(value="last_month") Last Month
                         option(value="this_fy") This Financial Year
                         option(value="last_fy") Last Financial Year
                         option(value="custom" selected) Custom
+                //- Month / Year pickers (FY-ordered months, 0-based values) for the Month / Year period
+                - var _pbNow = new Date()
+                - var _pbMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                .col-md-2.col-6#pbMonthYearWrap(style="display:none")
+                    label.form-label Month / Year:
+                    .d-flex
+                        select#pbMonth.form-control.mr-1(onchange="glSetMonthYear('fromPeriod','toPeriod','pbMonth','pbYear')")
+                            each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                                option(value=m selected=(m === _pbNow.getMonth()))= _pbMonthNames[m]
+                        select#pbYear.form-control(onchange="glSetMonthYear('fromPeriod','toPeriod','pbMonth','pbYear')")
+                            each y in [0, 1, 2, 3, 4, 5].map(function (n) { return _pbNow.getFullYear() - n; })
+                                option(value=y selected=(y === _pbNow.getFullYear()))= y
                 .col-md-2.col-6
                     label.form-label From Period:
                     input#fromPeriod.form-control(type='date' value=fromPeriod)

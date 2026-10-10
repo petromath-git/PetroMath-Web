@@ -1,23 +1,27 @@
 //- Phone layout for a report's filter form. Meant to be reused by every report:
 //- include this file, call +reportFiltersMobile(...) as the first thing inside
 //- form.report-filters, and give the filter cells the rf-* classes (see the
-//- credit reports). It drives the existing fields by id (dateRange,
-//- fromclosingDate, toclosingDate, company_id), so Go / generatePDF / Excel keep
-//- reading the same inputs.
+//- credit reports). It drives the existing fields by id, so Go / generatePDF /
+//- Excel keep reading the same inputs.
 //- Desktop and PDFs are untouched: everything it adds is hidden outside
 //- "@media screen and (max-width: 768px)" in style.css (REPORT FILTERS - MOBILE),
 //- the script does nothing unless that query matches, and the PDF generator
 //- hides the whole filter form.
-//-   hasRange   - show the period buttons (false for as-of-date reports)
+//-   hasRange   - show the period buttons (false for as-of-date reports); the
+//-                page's range dropdown needs a month_year option for the Month chip
 //-   hasResults - the page is already showing a report: start collapsed to a
 //-                one-line summary with an Edit button
+//-   rangeId / fromId / toId - the range dropdown and date inputs
+//-                (default dateRange / fromclosingDate / toclosingDate)
+//-   companyId  - the main pick shown in the summary line and made searchable
+//-                (default company_id; e.g. productId on the Stock Ledger)
 mixin reportFiltersMobile(opts)
     - var o = opts || {}
     div.rf-mobile.rf-head
         if o.hasRange
             div.rf-title Period
             div.rf-chips
-                each c in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This FY'], ['last_financial_year', 'Last FY'], ['custom', 'Custom']]
+                each c in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['month_year', 'Month'], ['this_financial_year', 'This FY'], ['last_financial_year', 'Last FY'], ['custom', 'Custom']]
                     button.rf-chip(type='button' data-range=c[0])= c[1]
             div.rf-period
     div.rf-mobile.rf-summary
@@ -37,10 +41,10 @@ mixin reportFiltersMobile(opts)
 
             function init() {
                 var hasResults = !{JSON.stringify(!!o.hasResults)};
-                var range = document.getElementById('dateRange');
-                var from = document.getElementById('fromclosingDate');
-                var to = document.getElementById('toclosingDate');
-                var company = document.getElementById('company_id');
+                var range = document.getElementById(!{JSON.stringify(o.rangeId || 'dateRange')});
+                var from = document.getElementById(!{JSON.stringify(o.fromId || 'fromclosingDate')});
+                var to = document.getElementById(!{JSON.stringify(o.toId || 'toclosingDate')});
+                var company = document.getElementById(!{JSON.stringify(o.companyId || 'company_id')});
                 var chips = form.querySelectorAll('.rf-chip');
                 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -70,7 +74,7 @@ mixin reportFiltersMobile(opts)
                     chip.addEventListener('click', function () {
                         var keepFrom = from.value, keepTo = to.value;
                         range.value = chip.getAttribute('data-range');
-                        range.dispatchEvent(new Event('change'));   // runs updateDateRange()
+                        range.dispatchEvent(new Event('change'));   // runs the page's range function
                         if (range.value === 'custom') {             // updateDateRange() blanks both dates
                             from.value = keepFrom;
                             to.value = keepTo;
@@ -78,7 +82,9 @@ mixin reportFiltersMobile(opts)
                         refresh();
                     });
                 });
-                [from, to, company].forEach(function (el) { if (el) el.addEventListener('change', refresh); });
+                // Month / Year pickers run the page's range function from their own onchange first
+                [from, to, company, document.getElementById('rangeMonth'), document.getElementById('rangeYear')]
+                    .forEach(function (el) { if (el) el.addEventListener('change', refresh); });
                 form.querySelector('.rf-edit').addEventListener('click', function () {
                     form.classList.remove('rf-collapsed');
                 });
@@ -91,3 +97,27 @@ mixin reportFiltersMobile(opts)
                 refresh();
             }
         })();
+
+//- Month / Year pickers for the "Month / Year" Date Range option (desktop) and
+//- the Month chip (phone). Place right after the Date Range cells; they stay
+//- hidden until that option is picked (showRangeMonthYear in app-report-date.js
+//- toggles .rf-month). Months run in FY order (Apr..Mar); values are 0-based JS months.
+//-   onchange - JS to run when month/year changes (default updateDateRange())
+//-   date     - 'YYYY-MM-DD' to preselect that month and show the pickers
+//-              (pages that remember a month_year range across a submit)
+mixin rangeMonthYearCells(opts)
+    - var _o = opts || {}
+    - var _sel = _o.date ? new Date(_o.date + 'T00:00:00') : new Date()
+    - var _now = new Date()
+    - var _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    - var _hide = _o.date ? undefined : 'display:none'
+    - var _onchange = _o.onchange || 'updateDateRange()'
+    td.rf-label.rf-month(style=_hide) Month:
+    td.rf-field.rf-month(style=_hide)
+        .d-flex
+            select#rangeMonth.form-control.mr-1(onchange=_onchange)
+                each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                    option(value=m selected=(m === _sel.getMonth()))= _monthNames[m]
+            select#rangeYear.form-control(onchange=_onchange)
+                each y in [0, 1, 2, 3, 4, 5].map(function (n) { return _now.getFullYear() - n; })
+                    option(value=y selected=(y === _sel.getFullYear()))= y

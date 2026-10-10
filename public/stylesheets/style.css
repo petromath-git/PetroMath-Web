@@ -3733,6 +3733,9 @@ tr.d-md-none,
   body.mobile-ready .report-filters table.center td.rf-label.rf-to { order: 2; }
   body.mobile-ready .report-filters table.center td.rf-field.rf-from { order: 3; }
   body.mobile-ready .report-filters table.center td.rf-field.rf-to { order: 4; }
+  /* Month chip: Month / Year pickers take the From / To slot (those are hidden then) */
+  body.mobile-ready .report-filters table.center td.rf-label.rf-month { order: 1; }
+  body.mobile-ready .report-filters table.center td.rf-field.rf-month { order: 3; }
 
   body.mobile-ready .report-filters .form-control {
     height: 44px;
@@ -4079,5 +4082,94 @@ body.mobile-ready .master-card > .card-body small {
   body.mobile-ready .m-card.m-collapsible:not(.card-open) > .card-body,
   body.mobile-ready .master-card:not(.card-open) > .card-body {
     display: none;
+  }
+}
+
+/* ===== SALES & STOCK REPORTS — MOBILE =====
+   Sales Summary, Stock Summary, Stock Ledger and Tank Loss/Gain use .m-stack
+   (+ .m-collapse) cards. Extras they need, all phone-only:
+     tfoot totals          a card like the rows, grey, always open
+     td.m-only             a cell only phones show (the Stock Ledger's one-line
+                           "Type +qty" summary); hidden on desktop and in open cards
+     row highlights        weekend days (bg-warning), totals (m-total) and
+                           missing opening stock (table-warning) keep a tint,
+                           since .m-stack forces white cards */
+.m-only {
+  display: none;
+}
+@media screen and (max-width: 767px) {
+  body.mobile-ready table.m-stack > tfoot {
+    display: block;
+  }
+  body.mobile-ready table.m-stack > tfoot > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem 0.75rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #f8f9fa !important;
+  }
+  body.mobile-ready table.m-stack > tfoot > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+    font-size: 0.9rem !important;
+    text-align: left !important;
+  }
+  body.mobile-ready table.m-stack > tfoot td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  body.mobile-ready table.m-stack > tfoot td.m-title {
+    grid-column: 1 / -1;
+    font-size: 1rem !important;
+  }
+  body.mobile-ready table.m-stack > tfoot .m-hide {
+    display: none !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr > td.m-only {
+    display: block;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  body.mobile-ready table.m-stack > tbody > tr.card-open > td.m-only {
+    display: none !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr.bg-warning {
+    background: #fff8e1 !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr.table-warning {
+    background: #fff8e1 !important;
+  }
+  body.mobile-ready table.m-stack > tbody > tr.m-total {
+    background: #f8f9fa !important;
+  }
+  /* Bootstrap also tints each cell of a bg-warning / table-warning / table-info
+     row; on a card that shows as blocks, so the cells take the card's tint */
+  body.mobile-ready table.sales-summary-table > tbody > tr > td,
+  body.mobile-ready #stockSummaryTable > tbody > tr > td,
+  body.mobile-ready table.stock-ledger-table > tbody > tr > td,
+  body.mobile-ready table.tank-variance-table > tbody > tr > td {
+    background: transparent !important;
+  }
+  /* Sales Summary total card has an empty Day */
+  body.mobile-ready table.sales-summary-table > tbody > tr > td:empty {
+    display: none !important;
+  }
+  /* Stock Ledger: the opening-balance line, label left and amount right */
+  body.mobile-ready table.stock-ledger-table > tbody > tr.m-static {
+    grid-template-columns: minmax(0, 1fr) auto;
+    background: #e7f3ff !important;
+  }
+  body.mobile-ready table.stock-ledger-table > tbody > tr.m-static > td.text-right {
+    text-align: right !important;
   }
 }

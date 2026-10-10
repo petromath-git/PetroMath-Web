@@ -8,11 +8,24 @@ block content
             .col-12.col-sm-auto.mb-2.mb-sm-0
                 label.d-block Date Range
                 select#dateRange.form-control(onchange="updateDateRange()")
+                    option(value='month_year') Month / Year
                     option(value='this_month') This Month
                     option(value='last_month') Last Month
                     option(value='this_financial_year') This Financial Year
                     option(value='last_financial_year') Last Financial Year
                     option(value='custom' selected=true) Custom Date
+            //- Months in FY order (Apr..Mar); values are 0-based JS months
+            - var _now = new Date()
+            - var _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            .col-12.col-sm-auto.mb-2.mb-sm-0#monthYearGroup(style='display:none')
+                label.d-block Month / Year
+                .d-flex
+                    select#rangeMonth.form-control.mr-1(onchange='updateDateRange()')
+                        each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                            option(value=m selected=(m === _now.getMonth()))= _monthNames[m]
+                    select#rangeYear.form-control(onchange='updateDateRange()')
+                        each y in [0, 1, 2, 3, 4, 5].map(function (n) { return _now.getFullYear() - n; })
+                            option(value=y selected=(y === _now.getFullYear()))= y
             .col-6.col-sm-auto.mb-2.mb-sm-0#fromDateGroup
                 label#fromDateLabel.d-block From Date
                 input#fromclosingDate.form-control(type='date' name='fromClosingDate' value=fromClosingDate max=currentDate required)
@@ -204,6 +217,11 @@ block content
                     var yr = currentDate.getFullYear(), mo = currentDate.getMonth();
                     fromDate = mo < 3 ? new Date(yr - 2, 3, 1) : new Date(yr - 1, 3, 1);
                     toDate = mo < 3 ? new Date(yr - 1, 2, 31) : new Date(yr, 2, 31);
+                } else if (dateRange === 'month_year') {
+                    var m = parseInt(document.getElementById('rangeMonth').value, 10);
+                    var y = parseInt(document.getElementById('rangeYear').value, 10);
+                    fromDate = new Date(y, m, 1);
+                    toDate = new Date(y, m + 1, 0);
                 } else {
                     fromDate = null;
                     toDate = null;
@@ -215,9 +233,14 @@ block content
 
                 if (fromDate) fromDateInput.value = toISO(fromDate);
                 if (toDate) toDateInput.value = toISO(toDate);
+                // Dates can't go past today (input max): the current month stops at today
+                [fromDateInput, toDateInput].forEach(function (el) {
+                    if (el.max && el.value > el.max) el.value = el.max;
+                });
 
                 var show = dateRange === 'custom';
                 fromGroup.style.display = show ? '' : 'none';
                 toGroup.style.display = show ? '' : 'none';
+                document.getElementById('monthYearGroup').style.display = dateRange === 'month_year' ? '' : 'none';
             };
         });
