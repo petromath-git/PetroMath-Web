@@ -3733,6 +3733,9 @@ tr.d-md-none,
   body.mobile-ready .report-filters table.center td.rf-label.rf-to { order: 2; }
   body.mobile-ready .report-filters table.center td.rf-field.rf-from { order: 3; }
   body.mobile-ready .report-filters table.center td.rf-field.rf-to { order: 4; }
+  /* Month chip: Month / Year pickers take the From / To slot (those are hidden then) */
+  body.mobile-ready .report-filters table.center td.rf-label.rf-month { order: 1; }
+  body.mobile-ready .report-filters table.center td.rf-field.rf-month { order: 3; }
 
   body.mobile-ready .report-filters .form-control {
     height: 44px;

@@ -17,7 +17,7 @@ mixin reportFiltersMobile(opts)
         if o.hasRange
             div.rf-title Period
             div.rf-chips
-                each c in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This FY'], ['last_financial_year', 'Last FY'], ['custom', 'Custom']]
+                each c in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['month_year', 'Month'], ['this_financial_year', 'This FY'], ['last_financial_year', 'Last FY'], ['custom', 'Custom']]
                     button.rf-chip(type='button' data-range=c[0])= c[1]
             div.rf-period
     div.rf-mobile.rf-summary
@@ -78,7 +78,9 @@ mixin reportFiltersMobile(opts)
                         refresh();
                     });
                 });
-                [from, to, company].forEach(function (el) { if (el) el.addEventListener('change', refresh); });
+                // Month / Year pickers run updateDateRange() from their own onchange first
+                [from, to, company, document.getElementById('rangeMonth'), document.getElementById('rangeYear')]
+                    .forEach(function (el) { if (el) el.addEventListener('change', refresh); });
                 form.querySelector('.rf-edit').addEventListener('click', function () {
                     form.classList.remove('rf-collapsed');
                 });
@@ -91,3 +93,20 @@ mixin reportFiltersMobile(opts)
                 refresh();
             }
         })();
+
+//- Month / Year pickers for the "Month / Year" Date Range option (desktop) and
+//- the Month chip (phone). Place right after the Date Range cells; they stay
+//- hidden until that option is picked (updateDateRange toggles .rf-month).
+//- Months run in FY order (Apr..Mar); values are 0-based JS months.
+mixin rangeMonthYearCells()
+    - var _now = new Date()
+    - var _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    td.rf-label.rf-month(style='display:none') Month:
+    td.rf-field.rf-month(style='display:none')
+        .d-flex
+            select#rangeMonth.form-control.mr-1(onchange='updateDateRange()')
+                each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                    option(value=m selected=(m === _now.getMonth()))= _monthNames[m]
+            select#rangeYear.form-control(onchange='updateDateRange()')
+                each y in [0, 1, 2, 3, 4, 5].map(function (n) { return _now.getFullYear() - n; })
+                    option(value=y selected=(y === _now.getFullYear()))= y
