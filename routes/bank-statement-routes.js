@@ -50,7 +50,7 @@ router.post('/',
 // PATCH route - Bulk reclassify multiple transactions (must be before /:id routes)
 router.patch('/reclassify-bulk',
     isLoginEnsured,
-    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    appSecurity.hasPermission('RECLASSIFY_BANK_STATEMENT'),
     (req, res, next) => {
         bankStatementController.bulkReclassifyTransactions(req, res, next);
     }
@@ -59,7 +59,7 @@ router.patch('/reclassify-bulk',
 // PATCH route - Reclassify ledger on an existing transaction
 router.patch('/:id/reclassify',
     isLoginEnsured,
-    appSecurity.hasPermission('EDIT_BANK_STATEMENT'),
+    appSecurity.hasPermission('RECLASSIFY_BANK_STATEMENT'),
     (req, res, next) => {
         bankStatementController.reclassifyTransaction(req, res, next);
     }

@@ -201,17 +201,18 @@ block content
                                                 button.split-remove-btn(type='button' title='Remove split and reset' onclick='removeSplit('+val.t_bank_id+')') ✕
                                         else
                                             span.ledger-display(class=isUnclassified ? 'ledger-unclassified' : '')= isUnclassified ? 'Unclassified' : val.ledger_name
+                                            if allowBankReclassify === 'true' && canReclassify
+                                                | &nbsp;
+                                                button.btn.btn-link.btn-sm.p-0.reclassify-btn(type='button' title='Reclassify ledger') ✎
+                                                .reclassify-form(style='display:none')
+                                                    select.form-control.form-control-sm.reclassify-select
+                                                        option(value='') Loading...
+                                                    .mt-1
+                                                        button.btn.btn-success.btn-sm.reclassify-save(type='button') ✓ Save
+                                                        |
+                                                        button.btn.btn-secondary.btn-sm.reclassify-cancel(type='button') ✕ Cancel
                                             if canSplit
                                                 | &nbsp;
-                                                if canReclassify
-                                                    button.btn.btn-link.btn-sm.p-0.reclassify-btn(type='button' title='Reclassify ledger') ✎
-                                                    .reclassify-form(style='display:none')
-                                                        select.form-control.form-control-sm.reclassify-select
-                                                            option(value='') Loading...
-                                                        .mt-1
-                                                            button.btn.btn-success.btn-sm.reclassify-save(type='button') ✓ Save
-                                                            |
-                                                            button.btn.btn-secondary.btn-sm.reclassify-cancel(type='button') ✕ Cancel
                                                 button.split-btn(type='button' title='Split this transaction across multiple ledgers' onclick='openSplitModal('+val.t_bank_id+', '+val.bank_id+')') ⇄ Split
                                     td.text-right= val.debit_amount && val.debit_amount !== null ? parseFloat(val.debit_amount).toFixed(2) : '-'
                                     td.text-right= val.credit_amount && val.credit_amount !== null ? parseFloat(val.credit_amount).toFixed(2) : '-'
