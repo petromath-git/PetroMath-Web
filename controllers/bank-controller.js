@@ -54,6 +54,7 @@ module.exports = {
 
             res.render('bank-master', {
                 title: 'Bank Master',
+                mobileReady: true,   // table stacks into cards on phones (m-stack)
                 user: req.user,
                 banks: banks,
                 templates: templates,

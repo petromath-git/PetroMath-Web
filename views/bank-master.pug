@@ -1,5 +1,6 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -12,21 +13,19 @@ block content
     .banks-header-sticky
         .container-fluid
             .row.align-items-center.py-3
-                .col
-                    h4.mb-0.text-primary Bank Master
-                .col-auto
+                .col-12.col-md
+                    h4.mb-2.mb-md-0.text-primary Bank Master
+                .col-12.col-md-auto.banks-header-buttons
                     if canAdd
-                        button.btn.btn-success.btn-sm#addBankBtn(type="button", data-toggle="modal", data-target="#addBankModal", style="margin-right: 8px;")
-                            i.bi.bi-plus-circle
-                            span.d-none.d-md-inline.ms-1 Add Bank
-                            span.d-inline.d-md-none.ms-1 Add
-                    button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick="window.location.href='/bank-master/enable'", style="margin-right: 8px;")
-                        i.bi.bi-eye-slash
-                        span.d-none.d-md-inline.ms-1 View Disabled
-                        span.d-inline.d-md-none.ms-1 Disabled
+                        button.btn.btn-success.btn-sm#addBankBtn(type="button", data-toggle="modal", data-target="#addBankModal")
+                            i.bi.bi-plus-circle.mr-1
+                            | Add Bank
+                    button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick="window.location.href='/bank-master/enable'")
+                        i.bi.bi-eye-slash.mr-1
+                        | View Disabled
                     button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
-                        i.bi.bi-arrow-clockwise
-                        span.d-none.d-md-inline.ms-1 Refresh
+                        i.bi.bi-arrow-clockwise.mr-1
+                        | Refresh
 
     // Banks content
     .banks-container
@@ -46,10 +45,10 @@ block content
                         button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
                             i.bi.bi-x-circle
         
-        // Desktop table view
-        .desktop-table-view.d-none.d-lg-block
+        // Table — on phones each bank becomes a card (Mobile Cards)
+        .desktop-table-view
             .table-responsive.table-desktop-container
-                table.table.table-hover.table-striped(id="banks-master-table")
+                table.table.table-hover.table-striped.m-stack.m-collapse(id="banks-master-table")
                     thead.thead-dark.sticky-top
                         tr
                             th #
@@ -70,98 +69,42 @@ block content
                         if banks && banks.length > 0
                             each bank, index in banks
                                 tr(data-bank-id=bank.bank_id)
-                                    td= index + 1
-                                    td= bank.bank_name
-                                    td= bank.bank_branch
-                                    td= bank.account_number
-                                    td= bank.ifsc_code
-                                    td= bank.account_nickname || '-'
-                                    td= bank.type || '-'
-                                    td= bank.cc_limit ? bank.cc_limit.toLocaleString() : '-'
-                                    td= bank.ledger_name || '-'
-                                    td
+                                    td.m-hide= index + 1
+                                    td.m-title= bank.bank_name
+                                    td(data-label="Branch")= bank.bank_branch
+                                    td(data-label="Account Number")= bank.account_number
+                                    td(data-label="IFSC Code")= bank.ifsc_code
+                                    td.m-summary(data-label="Nickname")= bank.account_nickname || '-'
+                                    td(data-label="Type")= bank.type || '-'
+                                    td(data-label="CC Limit")= bank.cc_limit ? bank.cc_limit.toLocaleString() : '-'
+                                    td.m-wide(data-label="Ledger Name")= bank.ledger_name || '-'
+                                    td(data-label="Internal")
                                         span.badge(class=bank.internal_flag === 'Y' ? 'badge-info' : 'badge-secondary')
                                             = bank.internal_flag === 'Y' ? 'Yes' : 'No'
-                                    td
+                                    td(data-label="Oil Company")
                                         span.badge(class=bank.is_oil_company === 'Y' ? 'badge-warning' : 'badge-secondary')
                                             = bank.is_oil_company === 'Y' ? 'Yes' : 'No'
-                                    td
+                                    td.m-wide(data-label="Statement Template")
                                         - const tpl = bank.template_id ? templates.find(t => t.template_id === bank.template_id) : null
                                         if tpl
                                             span.badge.badge-success= tpl.template_name
                                         else
                                             span.text-muted(style="font-size:0.85em") auto
                                     if canEdit || canDisable
-                                        td
+                                        td.m-actions
                                             if canEdit
-                                                button.btn.btn-primary.btn-sm.me-1.edit-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
+                                                button.btn.btn-outline-primary.btn-sm.edit-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-pencil
                                             if canDisable
-                                                button.btn.btn-danger.btn-sm.disable-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
+                                                button.btn.btn-outline-danger.btn-sm.ml-1.disable-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-trash
                         else
-                            tr
-                                td(colspan="13").text-center No banks found
-        
-        // Mobile cards view
-        .mobile-cards-view.d-block.d-lg-none
-            if banks && banks.length > 0
-                each bank, index in banks
-                    .card.bank-card.mb-3(data-bank-id=bank.bank_id)
-                        .card-header
-                            .d-flex.justify-content-between.align-items-center
-                                div
-                                    strong= bank.bank_name
-                                    if bank.internal_flag === 'Y'
-                                        span.badge.badge-info.ml-2 Internal
-                                    if bank.is_oil_company === 'Y'
-                                        span.badge.badge-warning.ml-2 Oil Co.
-                                .bank-actions
-                                    if canEdit
-                                        button.btn.btn-primary.btn-sm.me-1.edit-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
-                                            i.bi.bi-pencil
-                                    if canDisable
-                                        button.btn.btn-danger.btn-sm.disable-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
-                                            i.bi.bi-trash
-                        .card-body.p-3
-                            .row.g-2
-                                .col-6
-                                    .bank-detail
-                                        small.text-muted Branch
-                                        input.mobile-input.fw-bold(type="text", id=`mobile-branch-${index}`, value=bank.bank_branch, readonly, style="border: none; background: transparent; padding: 0; font-weight: bold;")
-                                .col-6
-                                    .bank-detail
-                                        small.text-muted Account Number
-                                        input.mobile-input.fw-bold(type="text", id=`mobile-account-${index}`, value=bank.account_number, readonly, style="border: none; background: transparent; padding: 0; font-weight: bold;")
-                                .col-12
-                                    .bank-detail
-                                        small.text-muted IFSC Code
-                                        input.mobile-input.fw-bold(type="text", id=`mobile-ifsc-${index}`, value=bank.ifsc_code, readonly, style="border: none; background: transparent; padding: 0; font-weight: bold;")
-                                if bank.account_nickname
-                                    .col-12
-                                        .bank-detail
-                                            small.text-muted Nickname
-                                            div.fw-bold= bank.account_nickname
-                                if bank.type
-                                    .col-6
-                                        .bank-detail
-                                            small.text-muted Type
-                                            div= bank.type
-                                if bank.cc_limit
-                                    .col-6
-                                        .bank-detail
-                                            small.text-muted CC Limit
-                                            div= bank.cc_limit.toLocaleString()
-                                if bank.ledger_name
-                                    .col-12
-                                        .bank-detail
-                                            small.text-muted Ledger Name
-                                            div= bank.ledger_name
-            else
-                .alert.alert-info.text-center
-                    i.bi.bi-info-circle
-                    |  No banks found
+                            tr.m-static
+                                td.text-center.m-wide(colspan="13") No banks found
 
+    //- phones: cards start collapsed to bank name + nickname; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
+        
     // Add Bank Modal
     .modal.fade#addBankModal(tabindex="-1", role="dialog", aria-labelledby="addBankModalLabel", aria-hidden="true")
         .modal-dialog.modal-lg(role="document")
@@ -288,40 +231,6 @@ block content
             padding-top: 15px;
         }
         
-        @media (min-width: 992px) {
-            .banks-header-sticky {
-                margin-left: 260px;
-            }
-        }
-        
-        .bank-card {
-            border-radius: 12px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        
-        .bank-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-        
-        .bank-card .card-header {
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            color: white;
-            border-radius: 12px 12px 0 0;
-        }
-        
-        .bank-detail {
-            margin-bottom: 8px;
-        }
-        
-        .bank-detail small {
-            display: block;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 2px;
-        }
-        
         .table-desktop-container {
             max-height: calc(100vh - 200px);
             overflow-y: auto;
@@ -333,6 +242,14 @@ block content
             background: #343a40;
             color: white;
             z-index: 10;
+        }
+        .banks-header-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .banks-header-sticky { position: static; box-shadow: none; }
+            .banks-container { padding: 0 10px; }
+            /* the card layout needs the full page height; drop the scroll box */
+            .table-desktop-container { max-height: none; overflow: visible; }
         }
 
     
@@ -386,17 +303,9 @@ block content
         });
         
         function filterBanks(searchTerm) {
-            const desktopRows = document.querySelectorAll('#banks-master-table tbody tr');
-            const mobileCards = document.querySelectorAll('.bank-card');
-            
-            desktopRows.forEach(row => {
+            document.querySelectorAll('#banks-master-table tbody tr').forEach(row => {
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-            
-            mobileCards.forEach(card => {
-                const text = card.textContent.toLowerCase();
-                card.style.display = text.includes(searchTerm) ? '' : 'none';
             });
         }
         

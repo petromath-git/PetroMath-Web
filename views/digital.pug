@@ -1,5 +1,6 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     // Alert for messages
@@ -12,18 +13,18 @@ block content
     .vendors-header-sticky
         .container-fluid
             .row.align-items-center.py-3
-                .col
-                    h4.mb-0.text-primary Digital Vendor Master
-                .col-auto
+                .col-12.col-md
+                    h4.mb-2.mb-md-0.text-primary Digital Vendor Master
+                .col-12.col-md-auto.vendors-header-buttons
                     if canAdd
                         button.btn.btn-success.btn-sm#addVendorBtn(type="button", data-toggle="modal", data-target="#addVendorModal")
-                            i.bi.bi-plus-circle.me-1
+                            i.bi.bi-plus-circle.mr-1
                             | Add Digital Vendor
                     button.btn.btn-warning.btn-sm.ms-2#viewDisabledBtn(type="button", onclick="window.location.href='/digital-vendors/enable'")
-                        i.bi.bi-eye-slash.me-1
+                        i.bi.bi-eye-slash.mr-1
                         | View Disabled
                     button.btn.btn-info.btn-sm.ms-2#refreshDataBtn(type="button")
-                        i.bi.bi-arrow-clockwise.me-1
+                        i.bi.bi-arrow-clockwise.mr-1
                         | Refresh
 
     // Vendors content
@@ -46,7 +47,7 @@ block content
         
         // Desktop table view
         .table-responsive
-            table.table.table-hover.table-striped(id="vendors-master-table")
+            table.table.table-hover.table-striped.m-stack.m-collapse(id="vendors-master-table")
                 thead.thead-dark.sticky-top
                     tr
                         th #
@@ -64,17 +65,17 @@ block content
                     if vendors && vendors.length > 0
                         each val, index in vendors
                             tr(data-vendor-id=val.id)
-                                td= index + 1
-                                td= val.name
-                                td= val.short_name || '-'
-                                td= val.ledger_name || '-'
-                                td= val.bank_name || '-'
-                                td.text-center= val.settlement_lookback_days || '-'
-                                td= val.gst || '-'
-                                td= val.phoneno || '-'
-                                td= val.address || '-'
+                                td.m-hide= index + 1
+                                td.m-title= val.name
+                                td(data-label="Short Name")= val.short_name || '-'
+                                td.m-summary(data-label="Ledger Name")= val.ledger_name || '-'
+                                td(data-label="Remittance Bank")= val.bank_name || '-'
+                                td.text-center(data-label="Settlement Days")= val.settlement_lookback_days || '-'
+                                td(data-label="GST")= val.gst || '-'
+                                td(data-label="Phone")= val.phoneno || '-'
+                                td.m-wide(data-label="Address")= val.address || '-'
                                 if canEdit || canDisable
-                                    td
+                                    td.m-actions
                                         if canEdit
                                             button.btn.btn-sm.btn-outline-primary.edit-vendor-btn(
                                                 type="button",
@@ -84,15 +85,18 @@ block content
                                             )
                                                 i.bi.bi-pencil
                                         if canDisable
-                                            button.btn.btn-sm.btn-outline-danger.ms-1.disable-vendor-btn(
+                                            button.btn.btn-sm.btn-outline-danger.ml-1.disable-vendor-btn(
                                                 type="button",
                                                 data-vendor-id=val.id,
                                                 data-vendor-name=val.name
                                             )
                                                 i.bi.bi-trash
                     else
-                        tr
-                            td.text-center(colspan="10") No digital vendors found
+                        tr.m-static
+                            td.text-center.m-wide(colspan="10") No digital vendors found
+
+    //- phones: cards start collapsed to name + ledger; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     // Add Vendor Modal
     .modal.fade#addVendorModal(tabindex="-1", role="dialog")
@@ -197,6 +201,16 @@ block content
         }
         .text-uppercase {
             text-transform: uppercase;
+        }
+        /* gap between header buttons (their ms-2 is Bootstrap 5, a no-op on BS4) */
+        .vendors-header-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+        .vendors-header-buttons .btn { margin: 0 !important; }
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .vendors-header-sticky { position: static; box-shadow: none; }
+            .vendors-container { padding: 10px; }
+            /* the table card layout needs room; drop the scroll wrapper's clipping */
+            .vendors-container .table-responsive { overflow: visible; }
         }
 
     // JavaScript
