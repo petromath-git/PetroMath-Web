@@ -6,6 +6,7 @@ const locationConfigDao = require('../dao/location-config-dao');
 const bankReconDao = require('../dao/bank-reconciliation-dao');
 const locationDao = require('../dao/location-dao');
 const { beforeGoLiveError } = require('../utils/golive-guard');
+const rolePermissionsDao = require('../dao/role-permissions-dao');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -16,13 +17,16 @@ module.exports = {
             let bankId = req.query.bank_id || 0;
 
             // Get configuration for manual transactions (default: true if not configured)
-            const [allowManualSetting, allowReclassifySetting, allowSplitSetting] = await Promise.all([
+            const [allowManualSetting, allowReclassifySetting, allowSplitSetting, canReclassify] = await Promise.all([
                 locationConfigDao.getSetting(locationCode, 'ALLOW_MANUAL_BANK_TRANSACTIONS'),
                 locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_RECLASSIFY'),
-                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_SPLIT')
+                locationConfigDao.getSetting(locationCode, 'ALLOW_BANK_SPLIT'),
+                rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'RECLASSIFY_BANK_STATEMENT')
             ]);
             const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
-            const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
+            // Reclassify needs both the location setting (default on) and the role permission
+            const reclassifyEnabled = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
+            const allowReclassify = reclassifyEnabled === 'true' && canReclassify ? 'true' : 'false';
             // Split is disabled by default — must be explicitly enabled per location
             const allowSplit = allowSplitSetting === 'true' ? 'true' : 'false';
 
