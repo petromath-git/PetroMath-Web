@@ -204,7 +204,7 @@ mixin addCashSales(cashSaleRowNo, rowData)
             select.form-control(name=prefix+'product-'+cashSaleRowNo id=prefix+'product-'+cashSaleRowNo onChange='creditOrSaleUpdateProductTypePrices(this, ' + cashSaleRowNo + ', \'' + prefix +'\')')
                 if productValues
                     each val in productValues
-                        option(value=`${val.productId}` selected= val.productId === rowData.productId)= val.productAlias
+                        option(value=`${val.productId}` data-unit=val.unit selected= val.productId === rowData.productId)= val.productAlias
         td(data-label='Bill #')
             input.form-control(name=prefix+'billno-' + cashSaleRowNo id=prefix+'billno-' + cashSaleRowNo value=rowData.billNo type='number' inputmode='numeric' required min=1)
             
@@ -402,7 +402,7 @@ mixin addCredits(creditRowNo, rowData)
             select.form-control(name=prefix + 'product-'+creditRowNo id=prefix + 'product-'+creditRowNo  onChange='creditOrSaleUpdateProductTypePrices(this, ' + creditRowNo + ', \'' + prefix +'\')')
                 if productValues
                     each val in productValues
-                        option(value=`${val.productId}` selected= rowData.productId === val.productId)= val.productAlias
+                        option(value=`${val.productId}` data-unit=val.unit selected= rowData.productId === val.productId)= val.productAlias
         td
             input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo type='number' inputmode='numeric' min=1 oninput='validity.valid||(value="1")')
         td

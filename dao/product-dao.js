@@ -24,7 +24,60 @@ const PRODUCT_REF_TABLES = [
     ['m_creditlist_vehicles',    'customer vehicles']
 ];
 
+// Product units come from config productUnits (LIT, NOS). Older spellings
+// (Litres, LTS, Nos, Kgs ...) map onto them; anything unknown returns null.
+function normalizeUnit(unit) {
+    const u = String(unit || '').trim().toUpperCase();
+    if (/^(L|LT|LTR|LTRS|LTS|LIT|LITS|LITRE|LITRES|LITER|LITERS)$/.test(u)) return 'LIT';
+    if (/^(NO|NOS|PC|PCS|PIECE|PIECES|KG|KGS)$/.test(u)) return 'NOS';
+    return null;
+}
+
+// NOS products are counted in pieces, so their quantities must be whole
+// numbers; LIT products may have decimals. Quantities worked out from an
+// amount are stored to 3 decimals, hence the tolerance.
+function isPieceUnit(unit) {
+    return normalizeUnit(unit) === 'NOS';
+}
+function isWholeQty(qty) {
+    const n = Number(qty);
+    return Math.abs(n - Math.round(n)) < 0.0005;
+}
+
+function fmtQty(qty) {
+    return String(Math.round(Number(qty) * 1000) / 1000);
+}
+
 module.exports = {
+    normalizeUnit,
+    isPieceUnit,
+    isWholeQty,
+
+    // Returns an error message for the first row selling/moving a piece (NOS)
+    // product in a fractional quantity, or null.
+    //   rows: [{ product_id, qty }]   (qty may also be an array of quantities)
+    //   hint: what the user should do, appended to the message
+    checkPieceQuantities: async (rows, hint) => {
+        const ids = [...new Set((rows || []).map(r => parseInt(r.product_id)).filter(id => id > 0))];
+        if (!ids.length) return null;
+        const products = await db.sequelize.query(
+            `SELECT product_id, product_name, unit FROM m_product WHERE product_id IN (:ids)`,
+            { replacements: { ids }, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        const byId = new Map(products.map(p => [Number(p.product_id), p]));
+        for (const row of rows) {
+            const product = byId.get(parseInt(row.product_id));
+            if (!product || !isPieceUnit(product.unit)) continue;
+            const qtys = Array.isArray(row.qty) ? row.qty : [row.qty];
+            const bad = qtys.find(q => q !== null && q !== undefined && q !== '' && !isWholeQty(q));
+            if (bad !== undefined) {
+                return `${product.product_name} is sold in pieces (NOS), so the quantity must be a whole number — ${fmtQty(bad)} is not.`
+                    + (hint ? ' ' + hint : '');
+            }
+        }
+        return null;
+    },
+
     findPumpLinkedProductNames: async (locationCode) => {
         const rows = await db.sequelize.query(`
             SELECT DISTINCT product_code
@@ -224,7 +277,6 @@ findPumpProducts: async (locationCode) => {
     update: (product) => {
         const updateFields = {
             price: product.price,
-            unit: product.unit,
             ledger_name: product.ledger_name,
             purchase_ledger_name: product.purchase_ledger_name,
             cgst_percent: product.cgst_percent,
@@ -233,6 +285,7 @@ findPumpProducts: async (locationCode) => {
             updation_date: new Date()
         };
 
+        if (product.unit) updateFields.unit = product.unit;
         if (product.product_name) updateFields.product_name = product.product_name;
         if (product.sku_name) updateFields.sku_name = product.sku_name;
         if (product.sku_number) updateFields.sku_number = product.sku_number;
@@ -302,6 +355,30 @@ findPumpProducts: async (locationCode) => {
             type: db.Sequelize.QueryTypes.SELECT
         });
         return new Set(rows.map(r => Number(r.product_id)));
+    },
+
+    // Product ids at the location with any sale, purchase or stock entry
+    // (the PRODUCT_REF_TABLES) — their unit is locked.
+    findUsedProductIds: async (locationCode) => {
+        const usedSql = PRODUCT_REF_TABLES
+            .map(([table]) => `SELECT product_id FROM ${table} WHERE product_id IN (SELECT product_id FROM m_product WHERE location_code = :locationCode)`)
+            .join(' UNION ');
+        const rows = await db.sequelize.query(usedSql, {
+            replacements: { locationCode },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return new Set(rows.map(r => Number(r.product_id)));
+    },
+
+    isProductUsed: async (productId) => {
+        const sql = PRODUCT_REF_TABLES
+            .map(([table]) => `SELECT 1 FROM ${table} WHERE product_id = :productId`)
+            .join(' UNION ALL ');
+        const rows = await db.sequelize.query(`SELECT EXISTS (${sql}) AS used`, {
+            replacements: { productId },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return Number(rows[0].used) === 1;
     },
 
     // Caller must check getDeleteBlockers first. Removes config-only rows that

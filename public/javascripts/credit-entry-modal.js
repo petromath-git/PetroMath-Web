@@ -194,6 +194,11 @@ function saveCreditRowModal() {
         alert('Please enter a Sale Amount greater than zero before saving this credit sale.');
         return;
     }
+    var pieceProblem = typeof pieceQtyProblem === 'function' ? pieceQtyProblem('credit-', rowNo) : null;
+    if (pieceProblem) {
+        alert(pieceProblem);
+        return;
+    }
 
     creditModalState.savedThisSession = true;
     var detailTr = document.getElementById('credit-table-row-' + rowNo);

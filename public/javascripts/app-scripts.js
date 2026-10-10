@@ -616,6 +616,30 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
 
 
 
+// Piece (NOS) products must be sold in whole numbers; litre products may have
+// decimals. Returns the message to show for a cash/credit row, or null.
+// (The server checks the same thing when the row is saved.)
+function pieceQtyProblem(prefix, rowNo) {
+    const productEl = document.getElementById(prefix + 'product-' + rowNo);
+    const qtyEl = document.getElementById(prefix + 'qty-' + rowNo);
+    if (!productEl || !qtyEl || productEl.selectedIndex < 0) return null;
+    const option = productEl.options[productEl.selectedIndex];
+    const unit = String((option && option.dataset.unit) || '').toUpperCase();
+    const qty = parseFloat(qtyEl.value);
+    if (unit !== 'NOS' || !(qty > 0) || Math.abs(qty - Math.round(qty)) < 0.0005) return null;
+    return `${option.text.trim()} is sold in pieces, so the quantity must be a whole number (not ${qty}). `
+        + 'Enter the number of pieces and put any price difference in Discount.';
+}
+
+// Marks the row's quantity red while it is a fractional number of pieces
+function flagPieceQty(prefix, rowNo) {
+    const qtyEl = document.getElementById(prefix + 'qty-' + rowNo);
+    if (!qtyEl) return;
+    const problem = pieceQtyProblem(prefix, rowNo);
+    qtyEl.classList.toggle('is-invalid', !!problem);
+    qtyEl.title = problem || '';
+}
+
 // Add new page: Calculate cash/credit Quantity
 function calculateCashOrCreditQuantity(prefix, rowNo) {
     const amt = parseFloat(document.getElementById(prefix + 'amt-' + rowNo).value);
@@ -628,6 +652,7 @@ function calculateCashOrCreditQuantity(prefix, rowNo) {
     } else {
         document.getElementById(prefix + 'qty-' + rowNo).value = 0;
     }
+    flagPieceQty(prefix, rowNo);
     calculateTotal(prefix);
 }
 
@@ -642,6 +667,7 @@ function calculateCashOrCreditSale(prefix, rowNo) {
     } else {
         document.getElementById(prefix + 'amt-' + rowNo).value = 0;
     }
+    flagPieceQty(prefix, rowNo);
     calculateTotal(prefix);
 }
 
@@ -1362,12 +1388,19 @@ function saveCashSales() {
         const salesObj = document.getElementById(currentTabId).querySelectorAll('[id^=' + cashSaleRow + ']:not([type="hidden"])');
         let newSales = [], updateSales = [], newHiddenFieldsArr = [];
         const user = JSON.parse(document.getElementById("user").value);
+        let pieceProblem = null;
         salesObj.forEach((saleObj) => {
+            if (pieceProblem) return;
             if (!saleObj.className.includes('-none')) {
                 const saleObjRowNum = saleObj.id.replace(cashSaleRow, '');
                 const saleField = document.getElementById(cashSaleTag + 'amt-' + saleObjRowNum);
                 const hiddenField = document.getElementById(cashSaleTag + saleObjRowNum + '_hiddenId');
                 if (parseFloat(saleField.value) > 0 || (hiddenField.value && parseInt(hiddenField.value) > 0)) {
+                    pieceProblem = pieceQtyProblem(cashSaleTag, saleObjRowNum);
+                    if (pieceProblem) {
+                        pieceProblem = `Row ${parseInt(saleObjRowNum) + 1}: ${pieceProblem}`;
+                        return;
+                    }
                     if (hiddenField.value && parseInt(hiddenField.value) > 0) {
                         // Scenario: Where user clears the value to '0', so just update the data in DB
                         updateSales.push(formCashSales(hiddenField.value, cashSaleTag, saleObjRowNum, user));
@@ -1378,6 +1411,11 @@ function saveCashSales() {
                 }
             }
         });
+        if (pieceProblem) {
+            saveAlert(pieceProblem);
+            resolve(false);
+            return;
+        }
         debugLog("NEW CASH SALES DATA " + JSON.stringify(newSales));
         debugLog("UPDATE CASH SALES DATA " + JSON.stringify(updateSales));
         postAjaxNew('new-cash-sales', newSales, updateSales, tabToActivate, currentTabId, newHiddenFieldsArr, 'cashsales_id')
@@ -1429,6 +1467,12 @@ function saveCreditSales() {
                     const creditParty = getCreditType(creditSaleTag, saleObjRowNum);
                     if (!creditParty) {
                         saveAlert(`Row ${parseInt(saleObjRowNum) + 1}: Please select a customer before saving.`);
+                        hasValidationError = true;
+                        return;
+                    }
+                    const pieceProblem = pieceQtyProblem(creditSaleTag, saleObjRowNum);
+                    if (pieceProblem) {
+                        saveAlert(`Row ${parseInt(saleObjRowNum) + 1}: ${pieceProblem}`);
                         hasValidationError = true;
                         return;
                     }
