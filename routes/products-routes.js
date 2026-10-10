@@ -11,8 +11,12 @@ const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
 const { getLedgersByGroup } = require('./gl-routes');
+const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
+
+// Lube / non-fuel and tank products carry stock (same set as Stock Adjustment)
+const isStockTracked = (product) => Number(product.is_lube_product) === 1 || Number(product.is_tank_product) === 1;
 
 const isTruthySetting = (value) => {
     if (value === null || value === undefined) return false;
@@ -25,13 +29,14 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
             ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
-            ProductDao.findDeletableProductIds(locationCode)
+            ProductDao.findDeletableProductIds(locationCode),
+            openingStockDao.getLocationStatus(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -54,7 +59,9 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 is_tank_product: product.is_tank_product,
                 is_lube_product: product.is_lube_product,
                 can_edit_name: canEditNameForRow,
-                can_delete: deletableIds.has(Number(product.product_id))
+                can_delete: deletableIds.has(Number(product.product_id)),
+                stock_tracked: isStockTracked(product),
+                opening: openingStatus[product.product_id] || { state: 'MISSING', entry: null, entries: [] }
             });
         });
 
@@ -278,6 +285,103 @@ router.delete('/api/:id', [isLoginEnsured, security.isAdmin()], async function (
             success: false,
             error: 'Failed to delete product: ' + error.message
         });
+    }
+});
+
+// ── Opening stock ─────────────────────────────────────────────────────────────
+
+// Opening stock of one product, with its change history and date rules
+router.get('/api/:id/opening-stock', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const locationCode = req.user.location_code;
+        const product = await ProductDao.findById(req.params.id, locationCode);
+        if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+        if (!isStockTracked(product)) return res.status(400).json({ success: false, error: 'Stock is not tracked for this product.' });
+
+        const [status, dateRules] = await Promise.all([
+            openingStockDao.getStatus(product.product_id, locationCode),
+            openingStockDao.getDateRules(locationCode)
+        ]);
+        const history = status.entry ? await openingStockDao.getHistory(status.entry.adjustment_id) : [];
+
+        res.json({
+            success: true,
+            productName: product.product_name,
+            unit: product.unit,
+            status,
+            history,
+            dateRules,
+            canChange: openingStockDao.EDIT_ROLES.includes(req.user.Role)
+        });
+    } catch (error) {
+        console.error('Error loading opening stock:', error);
+        res.status(500).json({ success: false, error: 'Failed to load opening stock' });
+    }
+});
+
+// Set a product's opening stock, or change it (Admin / PowerUser / SuperUser).
+// Body: { date, qty, note, reason, confirmed }. When the date would leave
+// earlier sales/purchases out of stock (late-start locations only) the first
+// call answers { needsConfirm, warning } and the user resends with confirmed.
+router.put('/api/:id/opening-stock', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const locationCode = req.user.location_code;
+        const product = await ProductDao.findById(req.params.id, locationCode);
+        if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+        if (!isStockTracked(product)) return res.status(400).json({ success: false, error: 'Stock is not tracked for this product.' });
+
+        const status = await openingStockDao.getStatus(product.product_id, locationCode);
+        if (status.state === 'MULTIPLE') {
+            return res.status(400).json({ success: false, error: 'This product has more than one opening stock entry. Contact support to combine them.' });
+        }
+
+        let reason = null;
+        if (status.entry) {
+            if (!openingStockDao.EDIT_ROLES.includes(req.user.Role)) {
+                return res.status(403).json({ success: false, error: 'Only Admin, PowerUser or SuperUser can change an opening stock once it is set.' });
+            }
+            reason = String(req.body.reason || '').trim().slice(0, 500);
+            if (!reason) return res.status(400).json({ success: false, error: 'Please give a reason for the change.' });
+        }
+
+        const date = String(req.body.date || '').trim();
+        const qtyText = String(req.body.qty === undefined || req.body.qty === null ? '' : req.body.qty).trim();
+        const qty = Number(qtyText);
+        if (qtyText === '' || !isFinite(qty) || qty < 0) {
+            return res.status(400).json({ success: false, error: 'Enter the opening stock quantity (0 or more).' });
+        }
+        if (Math.round(qty * 100) / 100 !== qty) {
+            return res.status(400).json({ success: false, error: 'Quantity can have at most 2 decimals.' });
+        }
+        const note = String(req.body.note || '').trim();
+
+        if (status.entry && status.entry.adjustment_date === date
+            && Number(status.entry.qty) === qty
+            && (status.entry.remarks || 'Opening Stock') === (note || 'Opening Stock')) {
+            return res.status(400).json({ success: false, error: 'Nothing changed.' });
+        }
+
+        const check = await openingStockDao.validateDate(locationCode, product.product_id, date,
+            status.entry ? status.entry.adjustment_date : null);
+        if (check.error) return res.status(400).json({ success: false, error: check.error });
+        if (check.warning && !req.body.confirmed) {
+            return res.json({ success: false, needsConfirm: true, warning: check.warning });
+        }
+
+        await openingStockDao.save({
+            locationCode,
+            productId: product.product_id,
+            date,
+            qty,
+            note,
+            userName: req.user.User_Name,
+            reason
+        });
+
+        res.json({ success: true, message: status.entry ? 'Opening stock updated' : 'Opening stock saved' });
+    } catch (error) {
+        console.error('Error saving opening stock:', error);
+        res.status(500).json({ success: false, error: 'Failed to save opening stock' });
     }
 });
 

@@ -1,5 +1,6 @@
 // controllers/stock-adjustment-controller.js
 const stockAdjustmentDao = require('../dao/stock-adjustment-dao');
+const openingStockDao = require('../dao/product-opening-stock-dao');
 const moment = require('moment');
 
 module.exports = {
@@ -91,19 +92,23 @@ getStockAdjustmentListPage: async (req, res, next) => {
                 return res.redirect('/stock-adjustment/add');
             }
 
-            // Opening Balance can only be entered once per product,
-            // and only if no IN/OUT adjustments exist before the proposed date.
+            // Opening stock is set on the Products page (one per product, with history)
             if (adjustment_type === 'OPENING') {
-                const alreadyExists = await stockAdjustmentDao.hasOpeningBalance(product_id, locationCode);
-                if (alreadyExists) {
-                    req.flash('error', 'An Opening Balance entry already exists for this product. Only one Opening Balance is allowed per product.');
-                    return res.redirect('/stock-adjustment/add');
-                }
-                const hasPrior = await stockAdjustmentDao.hasAdjustmentsBeforeDate(product_id, locationCode, adjustment_date);
-                if (hasPrior) {
-                    req.flash('error', 'Cannot add Opening Balance — stock IN/OUT entries already exist before this date. Opening Balance must be the earliest entry for the product.');
-                    return res.redirect('/stock-adjustment/add');
-                }
+                req.flash('error', 'Opening stock is now set on the Products page.');
+                return res.redirect('/stock-adjustment/add');
+            }
+
+            // Stock is counted from the opening date, so an IN/OUT needs an
+            // opening on or before it (otherwise it would become the start).
+            const opening = await openingStockDao.getStatus(product_id, locationCode);
+            if (opening.state === 'MISSING') {
+                req.flash('error', 'Set this product\'s opening stock on the Products page first.');
+                return res.redirect('/stock-adjustment/add');
+            }
+            const openingDate = opening.entries[0].adjustment_date; // earliest
+            if (adjustment_date < openingDate) {
+                req.flash('error', `This product's stock is counted from ${moment(openingDate).format('DD-MMM-YYYY').toUpperCase()} (its opening stock). The adjustment cannot be dated before that.`);
+                return res.redirect('/stock-adjustment/add');
             }
 
             // Prepare adjustment data
@@ -203,13 +208,11 @@ function validateStockAdjustmentData(data) {
         return { isValid: false, message: 'Adjustment type is required' };
     }
 
-    // OPENING balance may legitimately be 0 (e.g. a product newly added with no
-    // starting stock); IN/OUT movements must still be a positive quantity.
     const qty = parseFloat(data.qty);
     if (data.qty === undefined || data.qty === null || data.qty === '' || isNaN(qty) || qty < 0) {
         return { isValid: false, message: 'Quantity is required and cannot be negative' };
     }
-    if (data.adjustment_type !== 'OPENING' && qty <= 0) {
+    if (qty <= 0) {
         return { isValid: false, message: 'Quantity must be greater than 0' };
     }
 

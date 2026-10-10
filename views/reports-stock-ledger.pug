@@ -88,13 +88,13 @@ block content
                                 ul.text-left
                                     li This is a new product and opening stock has not been entered yet
                                     li The selected date range is before the opening stock adjustment date
-                                    li No stock adjustment (IN) has been recorded for this product
                                 p.mt-3.mb-2
                                     strong To resolve this issue:
                                 ol.text-left
-                                    li Go to 
-                                        strong Transactions → Stock Adjustment
-                                    li Enter opening stock for this product (quantity can be 0 if starting fresh)
+                                    li Go to the
+                                        a(href='/products') Products
+                                        |  page
+                                    li Set the opening stock for this product (quantity can be 0 if starting fresh)
                                     li After recording opening stock, generate reports from that date onwards
         else if ledgerData && ledgerData.length > 0
             div.row &nbsp;

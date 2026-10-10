@@ -55,9 +55,13 @@ block content
                                         required
                                     )
                                         option(value='') Select Type
-                                        option(value='OPENING') Opening Balance
                                         option(value='IN') Stock IN (+)
                                         option(value='OUT') Stock OUT (-)
+                                    small.form-text.text-muted
+                                        | Opening stock is set on the
+                                        |
+                                        a(href='/products') Products
+                                        |  page.
 
                                 .form-group.col-md-6
                                     label(for='qty') Quantity
@@ -115,18 +119,6 @@ block content
             const adjustmentTypeSelect = document.getElementById('adjustment_type');
             const qtyInput = document.getElementById('qty');
             const qtyHint = document.getElementById('qty-hint');
-
-            // Opening Balance may legitimately be 0 (e.g. a newly added product with
-            // no starting stock); Stock IN/OUT must remain a positive quantity.
-            adjustmentTypeSelect.addEventListener('change', function() {
-                if (this.value === 'OPENING') {
-                    qtyInput.min = '0';
-                    qtyHint.textContent = 'Opening Balance may be 0 if the product is starting with no stock.';
-                } else {
-                    qtyInput.min = '0.01';
-                    qtyHint.textContent = '';
-                }
-            });
 
             // Function to fetch current stock
             async function fetchCurrentStock() {
