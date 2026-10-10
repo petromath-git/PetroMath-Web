@@ -3,6 +3,7 @@ const adjustmentDao = require('../dao/adjustments-dao');
 const moment = require('moment');
 const locationConfig = require('../utils/location-config');
 const locationDao = require('../dao/location-dao');
+const customerOpeningBalanceDao = require('../dao/customer-opening-balance-dao');
 
 module.exports = {
 
@@ -337,6 +338,14 @@ module.exports = {
                 return res.status(404).json({ success: false, error: 'Deleted adjustment not found' });
             }
 
+            // A customer keeps one opening balance
+            if (String(archived.adjustment_type) === '201' && archived.external_source === 'CUSTOMER') {
+                const status = await customerOpeningBalanceDao.getStatus(archived.external_id);
+                if (status.entries.length > 0) {
+                    return res.status(400).json({ success: false, error: 'This customer already has an opening balance. Change it in Customer Master instead of restoring this one.' });
+                }
+            }
+
             await adjustmentDao.restoreAdjustment(adjustmentId, req.user.User_Name);
 
             res.json({ success: true, message: `Adjustment #${adjustmentId} restored.` });
@@ -370,6 +379,11 @@ async function validateAdjustmentData(data, locationCode) {
 
     if (!data.adjustment_type) {
         return { isValid: false, message: 'Adjustment type is required' };
+    }
+
+    // One opening balance per customer, kept in Customer Master
+    if (String(data.adjustment_type) === '201' && data.external_source === 'CUSTOMER') {
+        return { isValid: false, message: 'Customer opening balances are set in Customer Master (one per customer). Use General Adjustment for other corrections.' };
     }
 
     // Check amount - must have either debit or credit, but not both

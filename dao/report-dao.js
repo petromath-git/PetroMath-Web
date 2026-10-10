@@ -6,15 +6,21 @@ const Sequelize = require("sequelize");
 
 
 module.exports = {
-    getBalance: (creditId, closingQueryFromDate,closingQueryToDate) => {     
-        //console.log('in GetBalance')
-        //console.log(closingQueryFromDate); 
-        //console.log(closingQueryToDate); 
+    // Values come from the request, so they go in as parameters (a blank id
+    // used to be pasted into the SQL as-is and crash the process)
+    getBalance: (creditId, closingQueryFromDate,closingQueryToDate) => {
         return db.sequelize.query(
-            "select get_opening_credit_balance("+ creditId + ",'"+ closingQueryFromDate+ "') as OpeningData,get_closing_credit_balance("+ creditId + ",'"+ closingQueryToDate+ "') as ClosingData",
-            { type: Sequelize.QueryTypes.SELECT }           
+            "select get_opening_credit_balance(:creditId, :fromDate) as OpeningData, get_closing_credit_balance(:creditId, :toDate) as ClosingData",
+            {
+                replacements: {
+                    creditId: creditId === undefined || creditId === '' ? null : creditId,
+                    fromDate: closingQueryFromDate,
+                    toDate: closingQueryToDate
+                },
+                type: Sequelize.QueryTypes.SELECT
+            }
         );
-        
+
     },
     // getDayBalance: (locationCode,closingQueryToDate) => {             
     //     return db.sequelize.query(
@@ -677,6 +683,12 @@ updateReconMatch: async ({ tableName, recordId, matchId, user }) => {
     console.log('recordId:', recordId);
     console.log('matchId:', matchId);
     console.log('user:', user);
+
+    // tableName arrives from the browser and is placed in the SQL, so only
+    // the tables a recon row can come from are accepted
+    if (!/^(\w+\.)?(t_receipts|t_digital_sales|t_bowser_digital_sales|t_bank_transaction|t_adjustments|t_cashflow_transaction)$/.test(String(tableName))) {
+        throw new Error(`Invalid recon source table: ${tableName}`);
+    }
 
     return db.sequelize.query(
         `

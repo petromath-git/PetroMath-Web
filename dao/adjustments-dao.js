@@ -410,6 +410,11 @@ module.exports = {
                 return { canModify: false, reason: `Adjustment is ${adjustment.status}` };
             }
 
+            // A customer's opening balance is changed in Customer Master, never deleted
+            if (String(adjustment.adjustment_type) === '201' && adjustment.external_source === 'CUSTOMER') {
+                return { canModify: false, reason: 'A customer\'s opening balance cannot be deleted. Change it in Customer Master (set 0 if nothing was due).' };
+            }
+
             // Auto-created rows (e.g. digital-vendor cash payout) are owned by their
             // source screen and must be changed there
             if (adjustment.source_table) {

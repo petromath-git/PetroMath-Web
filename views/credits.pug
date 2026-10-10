@@ -26,6 +26,13 @@ block content
                         i.bi.bi-arrow-clockwise.me-1
                         | Refresh
 
+    //- Opening balance cell helpers (DD-MON-YYYY, ₹ with Dr/Cr)
+    -
+        const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const obDate = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p[2] + '-' + MON[Number(p[1]) - 1] + '-' + p[0]; };
+        const obAmt = a => (Number(a) < 0 ? 'Advance ' : '') + '₹' + Math.abs(Number(a || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const obStatus = openingStatus || {};
+
     // Customers content
     .customers-container
         // Search Box
@@ -58,6 +65,7 @@ block content
                         th Address
                         th GST
                         th Remittance Bank
+                        th Opening Balance
                         th Login
                         if canEdit || canDisable
                             th Actions
@@ -74,6 +82,29 @@ block content
                                 td.m-wide(data-label="Address")= val.address || '-'
                                 td(data-label="GST")= val.gst || '-'
                                 td(data-label="Remittance Bank")= val.bank_name || '-'
+                                - const ob = obStatus[val.creditlist_id] || { state: 'MISSING' }
+                                td.ob-cell(data-label="Opening Balance" data-ob-state=ob.state)
+                                    if ob.state === 'SET'
+                                        span.text-nowrap= obAmt(ob.entry.amount)
+                                        small.d-block.text-muted.text-nowrap= 'as on ' + obDate(ob.entry.adjustment_date)
+                                    else if ob.state === 'LEGACY'
+                                        span.text-nowrap= obAmt(ob.legacy.balance)
+                                        small.d-block.text-muted.text-nowrap(title="Carried forward from earlier records")= 'b/f ' + obDate(ob.legacy.balance_date)
+                                    else if ob.state === 'MULTIPLE'
+                                        span.badge.badge-danger(title="More than one opening balance entry – contact support to combine them")= ob.entries.length + ' entries – contact support'
+                                    else
+                                        span.badge.badge-warning Not set
+                                    if ob.state !== 'MULTIPLE' && (canEdit || ob.state !== 'MISSING')
+                                        button.btn.btn-sm.btn-outline-primary.py-0.px-2.mt-1.d-block.text-nowrap.opening-balance-btn(
+                                            type="button"
+                                            data-customer-id=val.creditlist_id
+                                            title=ob.state === 'MISSING' ? 'Set opening balance' : 'View / change opening balance'
+                                        )
+                                            if ob.state === 'MISSING'
+                                                | Set
+                                            else
+                                                i.bi.bi-pencil-square.mr-1
+                                                | View / Change
                                 td.m-wide(data-label="Login")
                                     if val.username && val.username !== 'No Login Account' && val.username !== 'Error Loading'
                                         span.text-monospace.small= val.username
@@ -126,7 +157,7 @@ block content
                                                 i.bi.bi-trash
                     else
                         tr.m-static
-                            td.text-center.m-wide(colspan="9") No customers found
+                            td.text-center.m-wide(colspan="10") No customers found
 
     //- phones: cards start collapsed to name + phone; tap to open
     +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
@@ -216,9 +247,63 @@ block content
                                     if banks
                                         each bank in banks
                                             option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                        h6.border-top.pt-3.mb-2 Opening Balance
+                        p.small.text-muted.mb-2 What this customer owed before their first bill in PetroMath. Leave 0 for a new customer.
+                        .row
+                            .col-md-4.mb-3
+                                label.form-label As on *
+                                input.form-control(type="date", name="ob_date", value=openingDateRules.defaultDate, min=openingDateRules.minDate || undefined, max=openingDateRules.today, required)
+                            .col-md-4.mb-3
+                                label.form-label Amount customer owes (₹) *
+                                input.form-control(type="number", name="ob_amount", value="0", min="0", step="0.01", inputmode="decimal", required)
+                            if allowOpeningAdvance
+                                .col-md-4.mb-3
+                                    label.form-label Advance / security deposit (₹)
+                                    input.form-control(type="number", name="ob_advance", value="0", min="0", step="0.01", inputmode="decimal")
+                                    small.form-text.text-muted Only if the customer paid us in advance. Fill one of the two.
                 .modal-footer
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-primary(type="submit", form="addCustomerForm") Save Customer
+
+    // Opening Balance Modal
+    .modal.fade#openingBalanceModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title
+                        | Opening Balance
+                        small.d-block.text-muted#obCustomerName
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    div#obLoading.text-center.text-muted.py-3 Loading...
+                    div#obBody(style="display:none")
+                        div#obNotice
+                        form#openingBalanceForm
+                            input(type="hidden", id="obCustomerId")
+                            .form-group
+                                label.mb-1(for="obDate") As on *
+                                input.form-control#obDate(type="date", name="ob_date", required)
+                                small.form-text.text-muted#obDateHint
+                            .form-row
+                                .col-12.col-sm-6.form-group
+                                    label.mb-1(for="obAmount") Amount customer owes (₹) *
+                                    input.form-control#obAmount(type="number", name="ob_amount", min="0", step="0.01", inputmode="decimal", required)
+                                .col-12.col-sm-6.form-group#obAdvanceGroup(style="display:none")
+                                    label.mb-1(for="obAdvance") Advance / security deposit (₹)
+                                    input.form-control#obAdvance(type="number", name="ob_advance", min="0", step="0.01", inputmode="decimal")
+                                    small.form-text.text-muted Only if the customer paid us in advance. Fill one of the two.
+                            .form-group
+                                label.mb-1(for="obNote") Note
+                                input.form-control#obNote(type="text", name="ob_note", maxlength="500", placeholder="Optional, e.g. as per old ledger")
+                            .form-group#obReasonGroup(style="display:none")
+                                label.mb-1(for="obReason") Reason for change *
+                                input.form-control#obReason(type="text", name="reason", maxlength="500", placeholder="e.g. customer confirmed a different figure")
+                        div#obFeedback
+                        div#obHistory
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Close
+                    button.btn.btn-primary#obSaveBtn(type="submit", form="openingBalanceForm") Save
 
     // Edit Customer Modal
     .modal.fade#editCustomerModal(tabindex="-1", role="dialog")
@@ -559,6 +644,155 @@ block content
                 showMessage('Copied to clipboard', 'success');
             });
         }
+
+        // ── Opening balance ─────────────────────────────────────────────
+        const OB_MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        function obFmtDate(d) {
+            if (!d) return '';
+            const p = String(d).slice(0, 10).split('-');
+            return p[2] + '-' + OB_MON[Number(p[1]) - 1] + '-' + p[0];
+        }
+        function obFmtAmt(a) {
+            const n = Number(a || 0);
+            return (n < 0 ? 'Advance ' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function obEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        document.querySelectorAll('.opening-balance-btn').forEach(btn => {
+            btn.addEventListener('click', function() { openOpeningBalance(this.getAttribute('data-customer-id')); });
+        });
+
+        function openOpeningBalance(customerId) {
+            document.getElementById('obCustomerId').value = customerId;
+            document.getElementById('obCustomerName').textContent = '';
+            document.getElementById('obLoading').style.display = '';
+            document.getElementById('obBody').style.display = 'none';
+            document.getElementById('obFeedback').innerHTML = '';
+            document.getElementById('obSaveBtn').style.display = 'none';
+            document.getElementById('obSaveBtn').disabled = false;
+            $('#openingBalanceModal').modal('show');
+
+            fetch(`/credit-master/api/${customerId}/opening-balance`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Could not load');
+                    renderOpeningBalance(data);
+                })
+                .catch(err => {
+                    document.getElementById('obLoading').textContent = err.message || 'Could not load the opening balance.';
+                });
+        }
+
+        function renderOpeningBalance(data) {
+            const s = data.status, rules = data.dateRules, entry = s.entry;
+            const form = document.getElementById('openingBalanceForm');
+            const notice = document.getElementById('obNotice');
+            const dateInput = document.getElementById('obDate');
+            document.getElementById('obCustomerName').textContent = data.customerName;
+            document.getElementById('obLoading').style.display = 'none';
+            document.getElementById('obBody').style.display = '';
+
+            // Date limits: the day before the first shift is the earliest allowed
+            dateInput.max = rules.today;
+            if (rules.minDate) dateInput.min = rules.minDate; else dateInput.removeAttribute('min');
+            const basis = rules.basis === 'first_shift'
+                ? `the day before your first shift (${obFmtDate(rules.firstShift)})`
+                : rules.basis === 'start_date' ? 'the day before your go-live date' : 'yesterday';
+            document.getElementById('obDateHint').textContent =
+                `Suggested: ${obFmtDate(rules.defaultDate)}, ${basis}. A customer added later can use a later date, but not after their first bill or receipt.`;
+
+            // An advance (credit-side) opening can only be changed where the
+            // location has the advance field switched on
+            const isAdvance = !!entry && Number(entry.amount) < 0;
+            const advanceLocked = isAdvance && !data.allowAdvance;
+            const canSave = s.state === 'MISSING' || (s.state === 'SET' && data.canChange && !advanceLocked);
+            document.getElementById('obAdvanceGroup').style.display = data.allowAdvance ? '' : 'none';
+            let noticeHtml = '';
+            if (s.state === 'LEGACY') {
+                noticeHtml = `<div class="alert alert-info small">Carried forward from earlier records: <strong>${obFmtAmt(s.legacy.balance)}</strong> as on ${obFmtDate(s.legacy.balance_date)}. Contact support to change it.</div>`;
+            } else if (s.state === 'MULTIPLE') {
+                noticeHtml = `<div class="alert alert-danger small">This customer has ${s.entries.length} opening balance entries: `
+                    + s.entries.map(e => `${obFmtAmt(e.amount)} (${obFmtDate(e.adjustment_date)})`).join(', ')
+                    + '. Contact support to combine them.</div>';
+            } else if (advanceLocked) {
+                noticeHtml = `<div class="alert alert-info small mb-2">This opening balance is an advance / security deposit of <strong>${obFmtAmt(entry.amount)}</strong>. Contact support to change it.</div>`;
+            } else if (s.state === 'MISSING') {
+                noticeHtml = '<div class="alert alert-warning small mb-2">Not set yet. Enter what this customer owed before their first bill in PetroMath (0 if nothing was due).</div>';
+            } else if (!data.canChange) {
+                noticeHtml = '<div class="alert alert-secondary small mb-2">Only Admin, PowerUser or SuperUser can change an opening balance once it is set.</div>';
+            } else {
+                noticeHtml = '<div class="alert alert-light border small mb-2">Changing this changes the customer\'s balance and every statement from this date. The old figure is kept in the history below.</div>';
+            }
+            notice.innerHTML = noticeHtml;
+
+            form.style.display = (s.state === 'MISSING' || s.state === 'SET') && !advanceLocked ? '' : 'none';
+            form.querySelectorAll('input, select').forEach(el => { if (el.type !== 'hidden') el.disabled = !canSave; });
+            document.getElementById('obReasonGroup').style.display = entry && canSave ? '' : 'none';
+            document.getElementById('obReason').required = !!(entry && canSave);
+            document.getElementById('obReason').value = '';
+            document.getElementById('obSaveBtn').style.display = canSave ? '' : 'none';
+            document.getElementById('obSaveBtn').textContent = entry ? 'Save Change' : 'Save';
+
+            if (entry) {
+                dateInput.value = entry.adjustment_date;
+                document.getElementById('obAmount').value = isAdvance ? '0' : Math.abs(Number(entry.amount)).toFixed(2);
+                document.getElementById('obAdvance').value = isAdvance ? Math.abs(Number(entry.amount)).toFixed(2) : '0';
+                document.getElementById('obNote').value = entry.description === 'Opening Balance' ? '' : (entry.description || '');
+            } else {
+                dateInput.value = rules.defaultDate;
+                document.getElementById('obAmount').value = '0';
+                document.getElementById('obAdvance').value = '0';
+                document.getElementById('obNote').value = '';
+            }
+
+            // History: current entry first, then earlier versions
+            let hist = '';
+            if (entry) {
+                hist += '<h6 class="mt-3 mb-2 small font-weight-bold text-muted">HISTORY</h6><ul class="list-unstyled small mb-0">';
+                hist += `<li class="mb-2"><strong>${obFmtAmt(entry.amount)}</strong> as on ${obFmtDate(entry.adjustment_date)}`
+                    + ` <span class="badge badge-success">current</span><br><span class="text-muted">by ${obEsc(entry.updated_by || entry.created_by)}`
+                    + ` on ${obFmtDate(entry.updation_date || entry.creation_date)}</span></li>`;
+                (data.history || []).forEach(h => {
+                    hist += `<li class="mb-2 text-muted"><s>${obFmtAmt(h.amount)} as on ${obFmtDate(h.adjustment_date)}</s>`
+                        + `<br>changed by ${obEsc(h.changed_by)} on ${obFmtDate(h.changed_date)}`
+                        + (h.change_reason ? ` — “${obEsc(h.change_reason)}”` : '') + '</li>';
+                });
+                hist += '</ul>';
+            }
+            document.getElementById('obHistory').innerHTML = hist;
+        }
+
+        document.getElementById('openingBalanceForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const customerId = document.getElementById('obCustomerId').value;
+            const saveBtn = document.getElementById('obSaveBtn');
+            const feedback = document.getElementById('obFeedback');
+            const body = Object.fromEntries(new FormData(this));
+            saveBtn.disabled = true;
+            feedback.innerHTML = '';
+
+            fetch(`/credit-master/api/${customerId}/opening-balance`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        feedback.innerHTML = `<div class="alert alert-success py-1 px-2 small mb-0">${obEsc(data.message)}</div>`;
+                        setTimeout(() => location.reload(), 900);
+                    } else {
+                        feedback.innerHTML = `<div class="alert alert-danger py-1 px-2 small mb-0">${obEsc(data.error)}</div>`;
+                        saveBtn.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    feedback.innerHTML = '<div class="alert alert-danger py-1 px-2 small mb-0">Network error. Try again.</div>';
+                    saveBtn.disabled = false;
+                });
+        });
 
         // Disable customer functionality
         document.querySelectorAll('.disable-customer-btn').forEach(btn => {

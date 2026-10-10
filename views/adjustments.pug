@@ -261,10 +261,34 @@ block content
         // ── Entry form ───────────────────────────────────────────────────────
         function loadAccounts() {
             populateAccountDropdown('account_name', document.getElementById('account_type').value);
+            syncOpeningBalanceOption('');
         }
 
         function loadAccountsMobile() {
             populateAccountDropdown('account_name_mobile', document.getElementById('account_type_mobile').value);
+            syncOpeningBalanceOption('_mobile');
+        }
+
+        // A customer's opening balance is set in Customer Master, so Opening
+        // Balance Entry isn't offered once Customer is picked
+        function syncOpeningBalanceOption(suffix) {
+            const typeSelect = document.getElementById('adjustment_type' + suffix);
+            const isCustomer = document.getElementById('account_type' + suffix).value === 'CUSTOMER';
+            const option = typeSelect.querySelector(`option[value="${OPENING_BALANCE_TYPE}"]`);
+            if (option) { option.hidden = isCustomer; option.disabled = isCustomer; }
+            if (isCustomer && typeSelect.value === OPENING_BALANCE_TYPE) {
+                typeSelect.value = '';
+                applyOpeningBalanceDate(suffix);
+            }
+            let note = document.getElementById('obMasterNote' + suffix);
+            if (!note) {
+                note = document.createElement('small');
+                note.id = 'obMasterNote' + suffix;
+                note.className = 'form-text text-muted';
+                note.innerHTML = 'Customer opening balances are set in <a href="/credit-master">Customer Master</a>.';
+                typeSelect.parentNode.appendChild(note);
+            }
+            note.style.display = isCustomer ? '' : 'none';
         }
 
         function populateAccountDropdown(dropdownId, accountType) {
@@ -365,6 +389,7 @@ block content
                 document.getElementById('account_name').disabled = true;
                 document.getElementById('debit_amount').disabled = false;
                 document.getElementById('credit_amount').disabled = false;
+                syncOpeningBalanceOption('');
             }
         }
 
@@ -373,6 +398,7 @@ block content
                 document.getElementById('adjustmentFormMobile').reset();
                 document.getElementById('account_name_mobile').disabled = true;
                 document.getElementById('amount_mobile').disabled = true;
+                syncOpeningBalanceOption('_mobile');
             }
         }
 
@@ -506,6 +532,9 @@ block content
             if (!canEdit) return '<span class="text-muted small">-</span>';
             if (adj.source_table) return '<span class="text-muted small" title="Created automatically - change it from its source screen">Auto</span>';
             if (adj.recon_match_id || adj.manual_recon_flag) return '<span class="text-muted small" title="Bank-reconciled - remove the reconciliation first">Reconciled</span>';
+            if (String(adj.adjustment_type) === OPENING_BALANCE_TYPE && adj.external_source === 'CUSTOMER') {
+                return '<a class="small" href="/credit-master" title="Opening balances are changed in Customer Master">Customer Master</a>';
+            }
             return `<button class="btn btn-outline-danger btn-sm" onclick="deleteAdjustment(${adj.adjustment_id}, '${adj.adjustment_type}')" title="Delete this adjustment">
                         <i class="bi bi-trash"></i></button>`;
         }

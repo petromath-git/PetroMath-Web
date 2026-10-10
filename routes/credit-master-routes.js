@@ -11,6 +11,52 @@ const dbMapping = require("../db/ui-db-field-mapping")
 const lookupDao = require('../dao/lookup-dao');
 const rolePermissionsDao = require('../dao/role-permissions-dao');
 const BankDao = require('../dao/bank-dao');
+const openingBalanceDao = require('../dao/customer-opening-balance-dao');
+
+// A non-negative rupee amount from a form field ('' = 0); NaN if invalid
+function parseRupees(value) {
+    const raw = String(value === undefined || value === null ? '' : value).trim();
+    const amount = raw === '' ? 0 : Number(raw);
+    if (!Number.isFinite(amount) || amount < 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) return NaN;
+    return Math.round(amount * 100) / 100;
+}
+
+// Reads the opening balance fields posted by the modal / Add Customer form.
+// ob_amount is what the customer owes us. ob_advance (an advance / security
+// deposit, stored on the credit side) is only read where the location has
+// CUSTOMER_OPENING_ADVANCE = Y. Returns { date, amount (signed), note } or { error }.
+function parseOpeningBalanceInput(body, allowAdvance) {
+    const owed = parseRupees(body.ob_amount);
+    if (Number.isNaN(owed)) {
+        return { error: 'Enter the amount the customer owes as a positive number with at most 2 decimals (0 if nothing was due).' };
+    }
+    const advance = allowAdvance ? parseRupees(body.ob_advance) : 0;
+    if (Number.isNaN(advance)) {
+        return { error: 'Enter the advance / security deposit as a positive number with at most 2 decimals.' };
+    }
+    if (owed > 0 && advance > 0) {
+        return { error: 'Enter either the amount the customer owes or an advance / security deposit, not both.' };
+    }
+    return {
+        date: String(body.ob_date || '').slice(0, 10),
+        amount: advance > 0 ? -advance : owed,
+        note: body.ob_note
+    };
+}
+
+// Whether this location lets users enter an advance / security deposit as
+// the opening balance (off unless configured)
+async function openingAdvanceAllowed(locationCode) {
+    const locationConfig = require('../utils/location-config');
+    return (await locationConfig.getLocationConfigValue(locationCode, 'CUSTOMER_OPENING_ADVANCE', 'N')) === 'Y';
+}
+
+// A non-digital customer of the user's location, or null
+async function findOwnCustomer(id, locationCode) {
+    const credit = await CreditDao.findById(id);
+    if (!credit || credit.location_code !== locationCode || credit.card_flag === 'Y') return null;
+    return credit;
+}
 
 // ===== CREDIT CUSTOMER ROUTES =====
 
@@ -38,17 +84,26 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
             req.user.location_code, 
             'DISABLE_CUSTOMER_MASTER'
         );
-        
+        const [openingStatus, openingDateRules, allowOpeningAdvance] = await Promise.all([
+            openingBalanceDao.getLocationStatus(req.user.location_code),
+            openingBalanceDao.getDateRules(req.user.location_code),
+            openingAdvanceAllowed(req.user.location_code)
+        ]);
+
         res.render('credits', {
             title: 'Customer Master',
             user: req.user,
             mobileReady: true,   // viewport tag + body.mobile-ready; table stacks into cards (m-stack)
             credits: credits,
             customerTypes: customerTypes,
-            banks: banks, 
+            banks: banks,
             canEdit: canEdit,
             canAdd: canAdd,
-            canDisable: canDisable
+            canDisable: canDisable,
+            openingStatus: openingStatus,
+            openingDateRules: openingDateRules,
+            allowOpeningAdvance: allowOpeningAdvance,
+            canChangeOpening: openingBalanceDao.EDIT_ROLES.includes(req.user.Role)
         });
     } catch (error) {
         console.error('Error loading customer master:', error);
@@ -84,12 +139,30 @@ router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')]
         if (!req.body.m_credit_type_0) {
             const defaultType = await lookupDao.getDefaultCustomerType(req.user.location_code);
             req.body.m_credit_type_0 = defaultType;
-        }    
+        }
 
+        // Opening balance is entered with the customer (₹0 by default); check it
+        // before creating anything so a bad date doesn't leave a half-made customer
+        const opening = parseOpeningBalanceInput(req.body, await openingAdvanceAllowed(locationCode));
+        if (!opening.error) {
+            opening.error = await openingBalanceDao.validateDate(locationCode, null, opening.date, null);
+        }
+        if (opening.error) {
+            req.flash('error', `Customer not created: ${opening.error}`);
+            return res.redirect('/credit-master');
+        }
 
         const newCredit = await CreditDao.create(dbMapping.newCredit(req));
         await PersonDao.createUserForCredit(newCredit, req.user);
-        
+        await openingBalanceDao.save({
+            locationCode,
+            creditlistId: newCredit.creditlist_id,
+            date: opening.date,
+            amount: opening.amount,
+            note: opening.note,
+            userName: req.user.User_Name
+        });
+
         req.flash('success', 'Credit customer created successfully');
         res.redirect('/credit-master');
     } catch (error) {
@@ -438,6 +511,96 @@ router.put('/api/:id/reset-password', [isLoginEnsured, security.hasPermission('E
     } catch (error) {
         console.error('Error resetting customer password:', error);
         res.status(500).json({ success: false, error: 'Failed to reset password' });
+    }
+});
+
+// Opening balance of one customer, with its change history and date rules
+router.get('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const credit = await findOwnCustomer(req.params.id, req.user.location_code);
+        if (!credit) return res.status(404).json({ success: false, error: 'Customer not found' });
+
+        const [status, dateRules, allowAdvance] = await Promise.all([
+            openingBalanceDao.getStatus(credit.creditlist_id),
+            openingBalanceDao.getDateRules(req.user.location_code),
+            openingAdvanceAllowed(req.user.location_code)
+        ]);
+        const history = status.entry ? await openingBalanceDao.getHistory(status.entry.adjustment_id) : [];
+
+        res.json({
+            success: true,
+            customerName: credit.Company_Name,
+            status,
+            history,
+            dateRules,
+            allowAdvance,
+            canChange: openingBalanceDao.EDIT_ROLES.includes(req.user.Role)
+        });
+    } catch (error) {
+        console.error('Error loading opening balance:', error);
+        res.status(500).json({ success: false, error: 'Failed to load opening balance' });
+    }
+});
+
+// Set a customer's opening balance, or change it (Admin / PowerUser / SuperUser)
+router.put('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('EDIT_CUSTOMER_MASTER')], async function (req, res) {
+    try {
+        const locationCode = req.user.location_code;
+        const credit = await findOwnCustomer(req.params.id, locationCode);
+        if (!credit) return res.status(404).json({ success: false, error: 'Customer not found' });
+
+        const status = await openingBalanceDao.getStatus(credit.creditlist_id);
+        if (status.state === 'MULTIPLE') {
+            return res.status(400).json({ success: false, error: 'This customer has more than one opening balance entry. Contact support to combine them.' });
+        }
+        if (status.state === 'LEGACY') {
+            return res.status(400).json({ success: false, error: 'This customer\'s opening balance comes from earlier records and cannot be changed here. Contact support.' });
+        }
+        const allowAdvance = await openingAdvanceAllowed(locationCode);
+        if (!allowAdvance && status.entry && Number(status.entry.amount) < 0) {
+            return res.status(400).json({ success: false, error: 'This customer\'s opening balance is an advance / security deposit and cannot be changed here. Contact support.' });
+        }
+
+        let reason = null;
+        if (status.entry) {
+            if (!openingBalanceDao.EDIT_ROLES.includes(req.user.Role)) {
+                return res.status(403).json({ success: false, error: 'Only Admin, PowerUser or SuperUser can change an opening balance once it is set.' });
+            }
+            if (status.entry.recon_match_id || status.entry.manual_recon_flag) {
+                return res.status(400).json({ success: false, error: 'This opening balance is bank-reconciled; remove the reconciliation first.' });
+            }
+            reason = String(req.body.reason || '').trim().slice(0, 500);
+            if (!reason) return res.status(400).json({ success: false, error: 'Please give a reason for the change.' });
+        }
+
+        const opening = parseOpeningBalanceInput(req.body, allowAdvance);
+        if (opening.error) return res.status(400).json({ success: false, error: opening.error });
+
+        const dateError = await openingBalanceDao.validateDate(locationCode, credit.creditlist_id, opening.date, status);
+        if (dateError) return res.status(400).json({ success: false, error: dateError });
+
+        if (status.entry && status.entry.adjustment_date === opening.date
+            && Number(status.entry.amount) === opening.amount
+            && (status.entry.description || '') === ((opening.note || '').trim() || 'Opening Balance')) {
+            return res.status(400).json({ success: false, error: 'Nothing changed.' });
+        }
+
+        await openingBalanceDao.save({
+            locationCode,
+            creditlistId: credit.creditlist_id,
+            date: opening.date,
+            amount: opening.amount,
+            note: opening.note,
+            userName: req.user.User_Name,
+            reason
+        });
+
+        res.json({ success: true, message: status.entry ? 'Opening balance updated' : 'Opening balance saved' });
+    } catch (error) {
+        console.error('Error saving opening balance:', error);
+        // DB go-live trigger messages are written for users
+        const msg = error.parent && error.parent.sqlState === '45000' ? error.parent.sqlMessage : 'Failed to save opening balance';
+        res.status(500).json({ success: false, error: msg });
     }
 });
 
