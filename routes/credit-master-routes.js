@@ -13,23 +13,42 @@ const rolePermissionsDao = require('../dao/role-permissions-dao');
 const BankDao = require('../dao/bank-dao');
 const openingBalanceDao = require('../dao/customer-opening-balance-dao');
 
-// Reads the opening balance fields posted by the modal / Add Customer form.
-// Returns { date, amount (signed), note } or { error }.
-function parseOpeningBalanceInput(body) {
-    const raw = String(body.ob_amount === undefined || body.ob_amount === null ? '' : body.ob_amount).trim();
+// A non-negative rupee amount from a form field ('' = 0); NaN if invalid
+function parseRupees(value) {
+    const raw = String(value === undefined || value === null ? '' : value).trim();
     const amount = raw === '' ? 0 : Number(raw);
-    if (!Number.isFinite(amount) || amount < 0) {
-        return { error: 'Enter the opening balance as a positive amount (0 if nothing was due).' };
+    if (!Number.isFinite(amount) || amount < 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) return NaN;
+    return Math.round(amount * 100) / 100;
+}
+
+// Reads the opening balance fields posted by the modal / Add Customer form.
+// ob_amount is what the customer owes us. ob_advance (an advance / security
+// deposit, stored on the credit side) is only read where the location has
+// CUSTOMER_OPENING_ADVANCE = Y. Returns { date, amount (signed), note } or { error }.
+function parseOpeningBalanceInput(body, allowAdvance) {
+    const owed = parseRupees(body.ob_amount);
+    if (Number.isNaN(owed)) {
+        return { error: 'Enter the amount the customer owes as a positive number with at most 2 decimals (0 if nothing was due).' };
     }
-    if (Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
-        return { error: 'Opening balance can have at most 2 decimals.' };
+    const advance = allowAdvance ? parseRupees(body.ob_advance) : 0;
+    if (Number.isNaN(advance)) {
+        return { error: 'Enter the advance / security deposit as a positive number with at most 2 decimals.' };
     }
-    const direction = body.ob_direction === 'WE_OWE' ? -1 : 1;
+    if (owed > 0 && advance > 0) {
+        return { error: 'Enter either the amount the customer owes or an advance / security deposit, not both.' };
+    }
     return {
         date: String(body.ob_date || '').slice(0, 10),
-        amount: Math.round(amount * 100) / 100 * direction,
+        amount: advance > 0 ? -advance : owed,
         note: body.ob_note
     };
+}
+
+// Whether this location lets users enter an advance / security deposit as
+// the opening balance (off unless configured)
+async function openingAdvanceAllowed(locationCode) {
+    const locationConfig = require('../utils/location-config');
+    return (await locationConfig.getLocationConfigValue(locationCode, 'CUSTOMER_OPENING_ADVANCE', 'N')) === 'Y';
 }
 
 // A non-digital customer of the user's location, or null
@@ -65,9 +84,10 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
             req.user.location_code, 
             'DISABLE_CUSTOMER_MASTER'
         );
-        const [openingStatus, openingDateRules] = await Promise.all([
+        const [openingStatus, openingDateRules, allowOpeningAdvance] = await Promise.all([
             openingBalanceDao.getLocationStatus(req.user.location_code),
-            openingBalanceDao.getDateRules(req.user.location_code)
+            openingBalanceDao.getDateRules(req.user.location_code),
+            openingAdvanceAllowed(req.user.location_code)
         ]);
 
         res.render('credits', {
@@ -82,6 +102,7 @@ router.get('/', [isLoginEnsured, security.hasPermission('VIEW_CUSTOMER_MASTER')]
             canDisable: canDisable,
             openingStatus: openingStatus,
             openingDateRules: openingDateRules,
+            allowOpeningAdvance: allowOpeningAdvance,
             canChangeOpening: openingBalanceDao.EDIT_ROLES.includes(req.user.Role)
         });
     } catch (error) {
@@ -122,7 +143,7 @@ router.post('/', [isLoginEnsured, security.hasPermission('ADD_CUSTOMER_MASTER')]
 
         // Opening balance is entered with the customer (₹0 by default); check it
         // before creating anything so a bad date doesn't leave a half-made customer
-        const opening = parseOpeningBalanceInput(req.body);
+        const opening = parseOpeningBalanceInput(req.body, await openingAdvanceAllowed(locationCode));
         if (!opening.error) {
             opening.error = await openingBalanceDao.validateDate(locationCode, null, opening.date, null);
         }
@@ -499,9 +520,10 @@ router.get('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('
         const credit = await findOwnCustomer(req.params.id, req.user.location_code);
         if (!credit) return res.status(404).json({ success: false, error: 'Customer not found' });
 
-        const [status, dateRules] = await Promise.all([
+        const [status, dateRules, allowAdvance] = await Promise.all([
             openingBalanceDao.getStatus(credit.creditlist_id),
-            openingBalanceDao.getDateRules(req.user.location_code)
+            openingBalanceDao.getDateRules(req.user.location_code),
+            openingAdvanceAllowed(req.user.location_code)
         ]);
         const history = status.entry ? await openingBalanceDao.getHistory(status.entry.adjustment_id) : [];
 
@@ -511,6 +533,7 @@ router.get('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('
             status,
             history,
             dateRules,
+            allowAdvance,
             canChange: openingBalanceDao.EDIT_ROLES.includes(req.user.Role)
         });
     } catch (error) {
@@ -528,10 +551,14 @@ router.put('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('
 
         const status = await openingBalanceDao.getStatus(credit.creditlist_id);
         if (status.state === 'MULTIPLE') {
-            return res.status(400).json({ success: false, error: 'This customer has more than one opening balance entry. Delete the wrong one on the Adjustments screen first.' });
+            return res.status(400).json({ success: false, error: 'This customer has more than one opening balance entry. Contact support to combine them.' });
         }
         if (status.state === 'LEGACY') {
             return res.status(400).json({ success: false, error: 'This customer\'s opening balance comes from earlier records and cannot be changed here. Contact support.' });
+        }
+        const allowAdvance = await openingAdvanceAllowed(locationCode);
+        if (!allowAdvance && status.entry && Number(status.entry.amount) < 0) {
+            return res.status(400).json({ success: false, error: 'This customer\'s opening balance is an advance / security deposit and cannot be changed here. Contact support.' });
         }
 
         let reason = null;
@@ -546,7 +573,7 @@ router.put('/api/:id/opening-balance', [isLoginEnsured, security.hasPermission('
             if (!reason) return res.status(400).json({ success: false, error: 'Please give a reason for the change.' });
         }
 
-        const opening = parseOpeningBalanceInput(req.body);
+        const opening = parseOpeningBalanceInput(req.body, allowAdvance);
         if (opening.error) return res.status(400).json({ success: false, error: opening.error });
 
         const dateError = await openingBalanceDao.validateDate(locationCode, credit.creditlist_id, opening.date, status);
