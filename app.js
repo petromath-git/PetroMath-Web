@@ -1762,6 +1762,7 @@ app.get('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res) 
     ]).then(([suppliers, banks]) => {
         res.render('suppliers', {
             title: 'Suppliers',
+            mobileReady: true,
             user: req.user,
             suppliers: suppliers,
             banks: banks
@@ -1787,6 +1788,7 @@ app.post('/suppliers', [isLoginEnsured, security.isAdmin()], function (req, res)
                 ]).then(([suppliers, banks]) => {
                     res.status(400).render('suppliers', {
                         title: 'Suppliers',
+                        mobileReady: true,
                         user: req.user,
                         suppliers: suppliers,
                         banks: banks,

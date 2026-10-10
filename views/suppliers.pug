@@ -1,41 +1,94 @@
 extends layout
-include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
-    form(method='POST' action='/suppliers')
-        table(class="table" id="suppliers-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Name
-                    th(scope="col") Short Name
-                    th(scope="col") Remittance Bank
-                    th(scope="col") Start Date
-                    th(scope="col") Actions
-            tbody
-                each val, index in suppliers
-                    tr(id='supplier-' + index)
-                        th(scope="row")= index + 1
-                        td= val.name
-                        td= val.shortName
-                        td= val.bankName || '-'
-                        td= val.effective_start_date
-                        td
-                            div.align-items-start
-                                button.btn.btn-primary(id="edit-supplier-"+index, title="Edit Supplier", data-toggle="modal", data-target="#editSupplierModal", onclick="openEditSupplierModal('"+index+"')")
-                                    span.oi.oi-pencil
-                                span &nbsp;
-                                button.btn.btn-info(id="disable-supplier-"+index, onclick="disableSupplier('"+index+"', '"+ val.id +"')")
-                                    span.oi.oi-delete
-                - var rowCnt = 0
-                while rowCnt < 1
-                    +addNewSupplier(rowCnt++, banks)
-        div(align="center")
-            button.btn.btn-primary(type="button", onClick="window.location.href='/enable-supplier'", id="enable-supplier", title="Enable Supplier") Enable Supplier
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-info(type="button", onClick="showSupplierMasterEntryRow(this, 'suppliers')", id='suppliers-add-new', title="Only one can be added at a time.") Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", disabled=true, title="Enabled on 'Add New'", id='suppliers-save') Save
+    // Sticky header
+    .suppliers-header-sticky
+        .container-fluid
+            .row.align-items-center.py-3
+                .col-12.col-md
+                    h4.mb-2.mb-md-0.text-primary Supplier Master
+                .col-12.col-md-auto.suppliers-header-buttons
+                    button.btn.btn-success.btn-sm#suppliers-add-new(type="button", data-toggle="modal", data-target="#addSupplierModal")
+                        i.bi.bi-plus-circle.mr-1
+                        | Add Supplier
+                    button.btn.btn-warning.btn-sm#enable-supplier(type="button", onclick="window.location.href='/enable-supplier'")
+                        i.bi.bi-eye-slash.mr-1
+                        | View Disabled
+                    button.btn.btn-info.btn-sm(type="button", onclick="location.reload()")
+                        i.bi.bi-arrow-clockwise.mr-1
+                        | Refresh
+
+    .suppliers-container
+        // Search Box
+        .row.mb-3
+            .col-12.col-md-6.col-lg-4
+                .input-group
+                    .input-group-prepend
+                        span.input-group-text
+                            i.bi.bi-search
+                    input.form-control#searchInput(type="text", placeholder="Search by name, short name, bank...", autocomplete="off")
+                    .input-group-append
+                        button.btn.btn-outline-secondary#clearSearch(type="button", style="display: none;")
+                            i.bi.bi-x-circle
+
+        .table-responsive
+            table.table.table-hover.table-striped.m-stack.m-collapse(id="suppliers-table")
+                thead.thead-dark
+                    tr
+                        th #
+                        th Name
+                        th Short Name
+                        th Remittance Bank
+                        th Start Date
+                        th Actions
+                tbody#suppliersTableBody
+                    if suppliers && suppliers.length > 0
+                        each val, index in suppliers
+                            //- id is used by disableSupplier() to drop the row
+                            tr(id='supplier-' + index)
+                                td.m-hide= index + 1
+                                td.m-title= val.name
+                                td.m-summary(data-label="Short Name")= val.shortName || '-'
+                                td(data-label="Remittance Bank")= val.bankName || '-'
+                                td(data-label="Start Date")= val.effective_start_date
+                                td.m-actions
+                                    button.btn.btn-sm.btn-outline-primary(type="button", title="Edit Supplier", data-toggle="modal", data-target="#editSupplierModal", onclick="openEditSupplierModal('" + index + "')")
+                                        i.bi.bi-pencil
+                                    button.btn.btn-sm.btn-outline-danger.ml-1(type="button", title="Disable Supplier", onclick="disableSupplier('" + index + "', '" + val.id + "')")
+                                        i.bi.bi-trash
+                    else
+                        tr.m-static
+                            td.text-center.m-wide(colspan="6") No suppliers found
+
+    //- phones: cards start collapsed to name + short name; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
+
+    // Add Supplier Modal — posts the field names dbMapping.newSupplier reads
+    .modal.fade#addSupplierModal(tabindex="-1", role="dialog")
+        .modal-dialog(role="document")
+            form.modal-content#addSupplierForm(method='POST', action='/suppliers')
+                .modal-header
+                    h5.modal-title Add Supplier
+                    button.close(type="button", data-dismiss="modal", aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    .form-group
+                        label(for="supplier_name_0") Name *
+                        input.form-control(type='text', name='supplier_name_0', id='supplier_name_0', required)
+                    .form-group
+                        label(for="supplier_short_name_0") Short Name *
+                        input.form-control(type='text', name='supplier_short_name_0', id='supplier_short_name_0', required)
+                    .form-group
+                        label(for="remittance_bank_id_0") Remittance Bank
+                        select.form-control(name='remittance_bank_id_0', id='remittance_bank_id_0')
+                            option(value="") Select Bank
+                            if banks
+                                each bank in banks
+                                    option(value=bank.bank_id)= bank.account_nickname || bank.bank_name
+                .modal-footer
+                    button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                    button.btn.btn-primary#suppliers-save(type="submit") Save Supplier
 
     // Edit Supplier Modal
     .modal.fade#editSupplierModal(tabindex="-1", role="dialog")
@@ -68,8 +121,46 @@ block content
                     button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                     button.btn.btn-primary(type="button", onclick="saveSupplierEdit()") Save
 
+    style.
+        .suppliers-header-sticky {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .suppliers-container { padding: 20px; }
+        .suppliers-header-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+        @media (max-width: 767px) {
+            /* phones: header scrolls away (a sticky one would sit under the top bar) */
+            .suppliers-header-sticky { position: static; box-shadow: none; }
+            .suppliers-container { padding: 10px; }
+            .suppliers-container .table-responsive { overflow: visible; }
+        }
+
     script.
         let suppliersData = !{JSON.stringify(suppliers || [])};
+
+        // Search
+        document.getElementById('searchInput').addEventListener('input', function (e) {
+            const term = e.target.value.toLowerCase();
+            document.getElementById('clearSearch').style.display = term ? 'block' : 'none';
+            filterSuppliers(term);
+        });
+        document.getElementById('clearSearch').addEventListener('click', function () {
+            document.getElementById('searchInput').value = '';
+            this.style.display = 'none';
+            filterSuppliers('');
+        });
+        function filterSuppliers(term) {
+            document.querySelectorAll('#suppliersTableBody tr').forEach(row => {
+                row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+            });
+        }
+
+        $('#addSupplierModal').on('shown.bs.modal', function () {
+            document.getElementById('supplier_name_0').focus();
+        });
 
         function openEditSupplierModal(index) {
             const supplier = suppliersData[index];
