@@ -15,6 +15,10 @@ const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
 
+// Product names are stored uppercase with single spaces and no leading or
+// trailing spaces/tabs (the browser uppercases, but the server must not rely on it)
+const normalizeProductName = (name) => String(name || '').replace(/\s+/g, ' ').trim().toUpperCase();
+
 // Lube / non-fuel and tank products carry stock (same set as Stock Adjustment)
 const isStockTracked = (product) => Number(product.is_lube_product) === 1 || Number(product.is_tank_product) === 1;
 
@@ -128,8 +132,11 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, r
     try {
         // Same-name products break the m_pump/m_tank name joins and are usually
         // an onboarding slip (e.g. re-created just to change the unit).
-        const newName = (req.body.product_name || '').trim().toUpperCase();
-        const existing = newName ? await ProductDao.findByName(newName, req.user.location_code) : null;
+        const newName = normalizeProductName(req.body.product_name);
+        if (!newName) {
+            return res.status(400).json({ success: false, error: 'Product name is required' });
+        }
+        const existing = await ProductDao.findByName(newName, req.user.location_code);
         if (existing) {
             return res.status(400).json({
                 success: false,
@@ -140,7 +147,7 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, r
         // Map the request body to match dbMapping.newProduct expectations
         const mappedReq = {
             body: {
-                m_product_name_0: req.body.product_name,
+                m_product_name_0: newName,
                 m_product_qty_0: req.body.qty || 0,
                 m_product_unit_0: req.body.unit,
                 m_product_price_0: req.body.price,
@@ -196,8 +203,12 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
         }
 
         const canEditProductName = isTruthySetting(editableSetting);
-        const newProductName = (req.body.m_product_name || '').trim().toUpperCase();
-        const isRenameRequested = Boolean(newProductName) && newProductName !== existingProduct.product_name;
+        const newProductName = normalizeProductName(req.body.m_product_name);
+        // Older names may have lowercase or stray spaces/tabs ("1 Lt Servo MG
+        // 20W40", "PRIDE 40 "). Only a real change of name counts as a rename —
+        // otherwise a price edit is refused where name editing is off.
+        const isRenameRequested = Boolean(newProductName)
+            && newProductName !== normalizeProductName(existingProduct.product_name);
 
         if (isRenameRequested) {
             if (!canEditProductName) {
@@ -517,6 +528,7 @@ router.put('/api/ledger-maps/:productId/:mapType', [isLoginEnsured, security.isA
 
 // Legacy route for form-based product creation (maintaining backward compatibility)
 router.post('/', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    req.body.m_product_name_0 = normalizeProductName(req.body.m_product_name_0);
     ProductDao.create(dbMapping.newProduct(req))
         .then(() => {
             req.flash('success', 'Product created successfully');
