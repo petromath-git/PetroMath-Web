@@ -85,9 +85,7 @@ function updateDateRange() {
     clampToMax(fromDateInput, toDateInput);
 
     // Month / Year pickers are shown only while that option is selected
-    document.querySelectorAll('.rf-month').forEach(cell => {
-        cell.style.display = dateRange === 'month_year' ? '' : 'none';
-    });
+    showRangeMonthYear(dateRange === 'month_year');
 
     if (dateRange === 'custom') {
         // Show the From Date and To Date inputs when 'Custom Date' is selected
@@ -274,6 +272,25 @@ function clampToMax(...inputs) {
     inputs.forEach(el => {
         if (el && el.max && el.value > el.max) el.value = el.max;
     });
+}
+
+// Month / Year pickers from +rangeMonthYearCells (report-filters-mobile.pug).
+// updateDateRange uses these; so do report pages with their own date-range
+// function (the stock reports), passing their own From / To input ids.
+function showRangeMonthYear(show) {
+    document.querySelectorAll('.rf-month').forEach(cell => {
+        cell.style.display = show ? '' : 'none';
+    });
+}
+function setRangeMonthYear(fromId, toId) {
+    const month = parseInt(document.getElementById('rangeMonth').value, 10);
+    const year  = parseInt(document.getElementById('rangeYear').value, 10);
+    const iso = d => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+    const fromInput = document.getElementById(fromId);
+    const toInput   = document.getElementById(toId);
+    fromInput.value = iso(new Date(year, month, 1));
+    toInput.value   = iso(new Date(year, month + 1, 0));
+    clampToMax(fromInput, toInput);
 }
 
 // glSetAsOf(sel) — for single-date views (Trial Balance, Balance Sheet)

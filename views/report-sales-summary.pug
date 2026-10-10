@@ -1,7 +1,20 @@
 extends layout
+include mixins/report-filters-mobile
 
 block content
-    form(method='POST' action='/reports-sales-summary' id='salesSummaryForm')
+    // ================================
+    // TABS for Day-wise and Month-wise
+    // ================================
+    ul.nav.nav-tabs
+        li.nav-item
+            a.nav-link(class=viewType === 'daily' ? 'active' : '', href='#', onclick='switchView("daily"); return false;') Day-wise
+        li.nav-item
+            a.nav-link(class=viewType === 'monthly' ? 'active' : '', href='#', onclick='switchView("monthly"); return false;') Month-wise
+
+    div.row &nbsp;
+
+    form.report-filters(method='POST' action='/reports-sales-summary' id='salesSummaryForm')
+        +reportFiltersMobile({ hasRange: true, hasResults: !!Saleslist })
         input(type='hidden' name='viewType' id='viewTypeInput' value=viewType || 'daily')
         
         script.
@@ -29,7 +42,7 @@ block content
                 var result = "<div class='card' style='margin-bottom: 10px;'>";
                 result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>";
                 result += "<div class='card-body "+tableWidthClass+"' style='padding-bottom: 10px;'>";
-                result += "<table class='table table-bordered table-sm' style='width:100%; border:1px solid #000;'>";
+                result += "<table class='table table-bordered table-sm m-stack sales-summary-table' style='width:100%; border:1px solid #000;'>";
 
                 // Headers
                 result += "<thead class='thead-light text-center'><tr>";
@@ -52,11 +65,12 @@ block content
                     }
 
                     // Total row formatting
-                    if (row.Date === "Total" || row.Month === "Total") {
+                    let isTotal = (row.Date === "Total" || row.Month === "Total");
+                    if (isTotal) {
                         rowClass += " font-weight-bold text-danger ";
                     }
 
-                    result += "<tr class='"+rowClass+"'>";
+                    result += "<tr class='"+rowClass+(isTotal ? " m-total" : "")+"'>";
 
                     Object.keys(row).forEach(key => {
                         let dataValue = row[key];
@@ -77,13 +91,17 @@ block content
                                 });
                             }
 
-                            result += "<td class='text-right "+rowClass+"' style='border:1px solid #000;'>" + printedValue + "</td>";
+                            result += "<td class='text-right "+rowClass+"' data-label='"+key+"' style='border:1px solid #000;'>" + printedValue + "</td>";
                         }
                         else {
                             // CENTER ONLY THE DAY COLUMN
                             let align = (key === "Day") ? "text-center" : "text-left";
+                            // Date / Month heads the phone card; other text columns get a label
+                            let cellAttrs = (key === "Date" || key === "Month")
+                                ? "class='"+align+" "+rowClass+" m-title'"
+                                : "class='"+align+" "+rowClass+"' data-label='"+key+"'";
 
-                            result += "<td class='"+align+" "+rowClass+"' style='border:1px solid #000;'>" + dataValue + "</td>";
+                            result += "<td "+cellAttrs+" style='border:1px solid #000;'>" + dataValue + "</td>";
                         }
                     });
 
@@ -221,25 +239,14 @@ block content
             }
 
         // ================================
-        // TABS for Day-wise and Month-wise
-        // ================================
-        ul.nav.nav-tabs
-            li.nav-item
-                a.nav-link(class=viewType === 'daily' ? 'active' : '', href='#', onclick='switchView("daily"); return false;') Day-wise
-            li.nav-item
-                a.nav-link(class=viewType === 'monthly' ? 'active' : '', href='#', onclick='switchView("monthly"); return false;') Month-wise
-
-        div.row &nbsp;
-
-      
-        // ================================
         // FILTER BAR (UI)
         // ================================
         table.center
             tr
-                td Date Range:
-                td
+                td.rf-label.rf-range Date Range:
+                td.rf-field.rf-range
                     select#dateRange.form-control(onchange="updateDateRange()")
+                        option(value='month_year') Month / Year
                         option(value='today') Today
                         option(value='yesterday') Yesterday
                         option(value='this_week') This Week
@@ -248,11 +255,12 @@ block content
                         option(value='this_financial_year') This Financial Year
                         option(value='last_financial_year') Last Financial Year
                         option(value='custom') Custom Date
-                td &nbsp;
+                +rangeMonthYearCells()
+                td.rf-gap &nbsp;
 
                 if viewType === 'daily'
-                    td Day:
-                    td
+                    td.rf-label Day:
+                    td.rf-field
                         select#dayFilter.form-control(onchange="applyFilters()")
                             option(value='') All Days
                             option(value='Mon') Mon
@@ -262,27 +270,28 @@ block content
                             option(value='Fri') Fri
                             option(value='Sat') Sat
                             option(value='Sun') Sun
-                    td &nbsp;
+                    td.rf-gap &nbsp;
 
-                    td Weekend Only:
-                    td
+                    td.rf-label Weekend Only:
+                    td.rf-field
                         input#weekendOnly(type='checkbox', onchange='applyFilters()')
-                    td &nbsp;
+                    td.rf-gap &nbsp;
 
-                td From Date:
-                td
+                td.rf-label.rf-from#fromDateLabel From Date:
+                td.rf-field.rf-from
                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, required)
-                td &nbsp;
+                td.rf-gap &nbsp;
 
-                td To Date:
-                td
+                td.rf-label.rf-to#toDateLabel To Date:
+                td.rf-field.rf-to
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, required)
-                td &nbsp;
+                td.rf-gap &nbsp;
 
                 include report-print-download.pug
-                td
+                td.rf-btn
                     button.btn.btn-success.ml-2(type='button', onClick='exportSalesSummaryExcel()', title='Export Excel', data-toggle='tooltip', data-placement='top')
                         i.bi.bi-file-earmark-spreadsheet
+                        span.rf-label-mobile  Excel
 
 
     // ================================
