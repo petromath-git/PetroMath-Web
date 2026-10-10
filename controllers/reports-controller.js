@@ -1074,7 +1074,7 @@ getSalesSummaryReport: async(req, res) => {
     }
 
     if(caller == 'notpdf') {
-        res.render('report-sales-summary', renderData);
+        res.render('report-sales-summary', { ...renderData, mobileReady: true });
     } else {                
         return new Promise((resolve, reject) => {
             res.render('report-sales-summary', renderData,

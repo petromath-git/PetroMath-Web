@@ -54,6 +54,8 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.reportType = 'TankVariance';
         requestBody.fromDate = document.getElementById('fromDate').value;
         requestBody.toDate = document.getElementById('toDate').value;
+        // without it the server falls back to this_month and overrides the dates
+        requestBody.selectedRange = document.getElementById('dateRange') ? document.getElementById('dateRange').value : 'custom';
         requestBody.tank_code = document.getElementById('tank_code') ? document.getElementById('tank_code').value : '';
         requestBody.product_code = document.getElementById('product_code') ? document.getElementById('product_code').value : '';
     }else if (currentPage.includes('reports/stock/summary')) {

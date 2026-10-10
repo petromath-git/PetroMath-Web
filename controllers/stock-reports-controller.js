@@ -76,7 +76,7 @@ getStockSummaryReport: async (req, res, next) => {
         };
 
         if (caller === 'notpdf') {
-            res.render('reports-stock-summary', viewData);
+            res.render('reports-stock-summary', { ...viewData, mobileReady: true });
         } else {
             return new Promise((resolve, reject) => {
                 res.render('reports-stock-summary', viewData, (err, html) => {
@@ -307,7 +307,8 @@ getStockLedgerReport: async (req, res, next) => {
                 formattedToDate: formattedToDate,
                 selectedProductId: productId,
                 selectedDateRange: dateRange,
-                currentDate: currentDate
+                currentDate: currentDate,
+                mobileReady: true
             });
         } else {
             // For PDF generation
@@ -518,7 +519,7 @@ getTankVarianceReport: async (req, res, next) => {
         };
 
         if (caller === 'notpdf') {
-            return res.render('reports-tank-variance', renderModel);
+            return res.render('reports-tank-variance', { ...renderModel, mobileReady: true });
         }
 
         return new Promise((resolve, reject) => {

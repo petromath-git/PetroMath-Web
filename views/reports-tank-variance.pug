@@ -1,40 +1,45 @@
 extends layout
+include mixins/report-filters-mobile
+include mixins/card-toggle-mobile
 
 block content
-    form(method='POST' action='/reports/stock/tank-variance')
+    form.report-filters(method='POST' action='/reports/stock/tank-variance')
+        +reportFiltersMobile({ hasRange: true, hasResults: true, fromId: 'fromDate', toId: 'toDate', companyId: 'tank_code' })
         table.center
             tr
-                td Date Range:
-                td
+                td.rf-label.rf-range Date Range:
+                td.rf-field.rf-range
                     select#dateRange.form-control(name='selectedRange', onchange='onDateRangeChange()')
+                        option(value='month_year' selected=(selectedRange==='month_year')) Month / Year
                         option(value='this_month' selected=(selectedRange==='this_month' || !selectedRange)) This Month
                         option(value='last_month' selected=(selectedRange==='last_month')) Last Month
                         option(value='this_financial_year' selected=(selectedRange==='this_financial_year')) This Financial Year
                         option(value='last_financial_year' selected=(selectedRange==='last_financial_year')) Last Financial Year
                         option(value='custom' selected=(selectedRange==='custom')) Custom Date
-                td &nbsp;
-                td#fromDateLabel(style=selectedRange==='custom' ? '' : 'display:none') From Date:
-                td(style=selectedRange==='custom' ? '' : 'display:none')
+                +rangeMonthYearCells({ onchange: 'onDateRangeChange()', date: selectedRange === 'month_year' ? fromDate : null })
+                td.rf-gap &nbsp;
+                td.rf-label.rf-from#fromDateLabel(style=selectedRange==='custom' ? '' : 'display:none') From Date:
+                td.rf-field.rf-from(style=selectedRange==='custom' ? '' : 'display:none')
                     input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate, format='dd/mm/yyyy', required)
-                td &nbsp;
-                td#toDateLabel(style=selectedRange==='custom' ? '' : 'display:none') To Date:
-                td(style=selectedRange==='custom' ? '' : 'display:none')
+                td.rf-gap &nbsp;
+                td.rf-label.rf-to#toDateLabel(style=selectedRange==='custom' ? '' : 'display:none') To Date:
+                td.rf-field.rf-to(style=selectedRange==='custom' ? '' : 'display:none')
                     input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate, format='dd/mm/yyyy', required)
-                td &nbsp;
-                td Tank:
-                td
+                td.rf-gap &nbsp;
+                td.rf-label Tank:
+                td.rf-field
                     select#tank_code.form-control(name='tank_code')
                         option(value='') All Tanks
                         each tank in tankOptions
                             option(value=tank, selected=(selectedTank === tank))= tank
-                td &nbsp;
-                td Product:
-                td
+                td.rf-gap &nbsp;
+                td.rf-label Product:
+                td.rf-field
                     select#product_code.form-control(name='product_code')
                         option(value='') All Products
                         each product in productOptions
                             option(value=product, selected=(selectedProduct === product))= product
-                td &nbsp;
+                td.rf-gap &nbsp;
                 include report-print-download.pug
 
     div &nbsp;
@@ -54,7 +59,7 @@ block content
             each tankCode in tankCodes
                 h6.font-weight-bold.mt-3.mb-2= `Tank: ${tankCode}`
                 .table-responsive
-                    table.table.table-bordered.table-hover.table-sm
+                    table.table.table-bordered.table-hover.table-sm.m-stack.m-collapse.tank-variance-table
                         thead.thead-light
                             tr
                                 th Date
@@ -91,39 +96,39 @@ block content
                                 - totalVariance += row.variance_liters || 0
                                 - if (row.gap_warning) hasGapWarning = true
                                 tr(class=(row.gap_warning ? 'table-secondary' : (Math.abs(row.variance_liters) >= 100 ? 'table-warning' : '')))
-                                    td
+                                    td.m-title
                                         = row.date_display
                                         if row.gap_warning
                                             span.ml-1(title=`Previous reading was ${row.gap_days} days ago`) ⚠
-                                    td= row.time
-                                    td= row.tank_code
-                                    td= row.product_code
-                                    td.text-right= Number(row.opening_liters || 0).toFixed(2)
-                                    td.text-right.text-success= Number(row.receipts_liters || 0).toFixed(2)
-                                    td.text-right= Number(row.gross_sales_liters || 0).toFixed(2)
-                                    td.text-right.text-info= Number(row.testing_liters || 0).toFixed(2)
-                                    td.text-right.text-danger= Number(row.sales_liters || 0).toFixed(2)
-                                    td.text-right= Number(row.expected_liters || 0).toFixed(2)
-                                    td.text-right= Number(row.actual_liters || 0).toFixed(2)
-                                    td.text-right(class=(row.variance_liters < 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'))
+                                    td(data-label='Time')= row.time
+                                    td.m-hide= row.tank_code
+                                    td(data-label='Product')= row.product_code
+                                    td.text-right(data-label='Opening (L)')= Number(row.opening_liters || 0).toFixed(2)
+                                    td.text-right.text-success(data-label='Receipts (L)')= Number(row.receipts_liters || 0).toFixed(2)
+                                    td.text-right(data-label='Gross Sales (L)')= Number(row.gross_sales_liters || 0).toFixed(2)
+                                    td.text-right.text-info(data-label='Testing (L)')= Number(row.testing_liters || 0).toFixed(2)
+                                    td.text-right.text-danger(data-label='Net Sales (L)')= Number(row.sales_liters || 0).toFixed(2)
+                                    td.text-right(data-label='Expected (L)')= Number(row.expected_liters || 0).toFixed(2)
+                                    td.text-right(data-label='Actual (L)')= Number(row.actual_liters || 0).toFixed(2)
+                                    td.text-right.m-summary(data-label='Variance (L)' class=(row.variance_liters < 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'))
                                         = Number(row.variance_liters || 0).toFixed(2)
-                                    td.text-right
+                                    td.text-right(data-label='Variance %')
                                         if row.variance_pct !== null
                                             = Number(row.variance_pct).toFixed(2) + '%'
                                         else
                                             | -
                         tfoot.bg-light
                             tr.font-weight-bold
-                                td(colspan='4') Total
-                                td.text-right= totalOpening.toFixed(2)
-                                td.text-right.text-success= totalReceipts.toFixed(2)
-                                td.text-right= totalGrossSales.toFixed(2)
-                                td.text-right.text-info= totalTesting.toFixed(2)
-                                td.text-right.text-danger= totalSales.toFixed(2)
-                                td.text-right= totalExpected.toFixed(2)
-                                td.text-right= totalActual.toFixed(2)
-                                td.text-right= totalVariance.toFixed(2)
-                                td.text-right
+                                td.m-title(colspan='4') Total
+                                td.text-right(data-label='Opening (L)')= totalOpening.toFixed(2)
+                                td.text-right.text-success(data-label='Receipts (L)')= totalReceipts.toFixed(2)
+                                td.text-right(data-label='Gross Sales (L)')= totalGrossSales.toFixed(2)
+                                td.text-right.text-info(data-label='Testing (L)')= totalTesting.toFixed(2)
+                                td.text-right.text-danger(data-label='Net Sales (L)')= totalSales.toFixed(2)
+                                td.text-right(data-label='Expected (L)')= totalExpected.toFixed(2)
+                                td.text-right(data-label='Actual (L)')= totalActual.toFixed(2)
+                                td.text-right(data-label='Variance (L)')= totalVariance.toFixed(2)
+                                td.text-right(data-label='Variance %')
                                     if totalSales > 0
                                         = ((totalVariance / totalSales) * 100).toFixed(2) + '%'
                                     else
@@ -141,6 +146,7 @@ block content
             div.alert.alert-info.text-center No records to display for selected range.
 
     include overlay.pug
+    +cardToggleMobile('table.tank-variance-table > tbody > tr')
 
     script.
         function onDateRangeChange() {
@@ -164,7 +170,17 @@ block content
                 var m = today.getMonth();
                 from = m < 3 ? new Date(today.getFullYear() - 2, 3, 1) : new Date(today.getFullYear() - 1, 3, 1);
                 to = m < 3 ? new Date(today.getFullYear() - 1, 2, 31) : new Date(today.getFullYear(), 2, 31);
+            } else if (range === 'month_year') {
+                // Month / Year: set the dates, wait for Go (the month may still change)
+                showRangeMonthYear(true);
+                setRangeMonthYear('fromDate', 'toDate');
+                ['fromDateLabel','toDateLabel'].forEach(function(id) {
+                    document.getElementById(id).style.display = 'none';
+                    document.getElementById(id).nextElementSibling.style.display = 'none';
+                });
+                return;
             } else {
+                showRangeMonthYear(false);
                 ['fromDateLabel','toDateLabel'].forEach(function(id) {
                     document.getElementById(id).style.display = 'table-cell';
                     document.getElementById(id).nextElementSibling.style.display = 'table-cell';
@@ -177,6 +193,7 @@ block content
             }
             fromInput.value = fmt(from);
             toInput.value = fmt(to);
+            showRangeMonthYear(false);
             ['fromDateLabel','toDateLabel'].forEach(function(id) {
                 document.getElementById(id).style.display = 'none';
                 document.getElementById(id).nextElementSibling.style.display = 'none';
