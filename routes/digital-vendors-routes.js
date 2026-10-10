@@ -34,6 +34,7 @@ router.get('/', [isLoginEnsured], async function (req, res) {
 
         res.render('digital', {
             title: 'Digital Vendor Master',
+            mobileReady: true,   // table stacks into cards on phones (m-stack)
             user: req.user,
             vendors: vendors,
             banks: banks,

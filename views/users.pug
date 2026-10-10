@@ -1,11 +1,13 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     - var roles = manageableRoles || []
     - var canManage = function (role) { return user.Role === 'SuperUser' || roles.includes(role) }
     - var showDisabled = view === 'disabled'
 
+    h4.text-primary.mb-3 Users
     div.d-flex.flex-wrap.justify-content-between.align-items-center.mb-3
         div.btn-group.btn-group-toggle.mb-2(role="group" aria-label="Show users")
             a.btn(href="/users" class=showDisabled ? 'btn-outline-secondary' : 'btn-secondary')
@@ -20,7 +22,7 @@ block content
                 |  Add User
 
     if !showDisabled
-        table(class="table" id="users-table")
+        table.table.m-stack.m-collapse#users-table
             thead(class="thead-light")
                 tr
                     th(scope="col") #
@@ -32,12 +34,12 @@ block content
             tbody
                 each val, index in users
                     tr(id='user-' + index)
-                        th(scope="row")= index + 1
-                        td= val.name
-                        td= val.username
-                        td= val.role
-                        td= val.effective_start_date
-                        td
+                        th.m-hide(scope="row")= index + 1
+                        td.m-title= val.name
+                        td(data-label="UserName")= val.username
+                        td.m-summary(data-label="Role")= val.role
+                        td(data-label="Start Date")= val.effective_start_date
+                        td.m-actions
                             if val.id === user.Person_id
                                 span.text-muted You
                             else if canManage(val.role)
@@ -47,10 +49,10 @@ block content
                             else
                                 span.text-muted No permission
                 if !users.length
-                    tr
-                        td.text-center.text-muted(colspan="6") No active users
+                    tr.m-static
+                        td.text-center.text-muted.m-wide(colspan="6") No active users
     else
-        table(class="table" id="disabled-users-table")
+        table.table.m-stack.m-collapse#disabled-users-table
             thead(class="thead-light")
                 tr
                     th(scope="col") #
@@ -62,12 +64,12 @@ block content
             tbody
                 each val, index in disabledUsers
                     tr(id='disabled-user-' + index)
-                        th(scope="row")= index + 1
-                        td= val.name
-                        td= val.username
-                        td= val.role
-                        td= val.effective_end_date
-                        td
+                        th.m-hide(scope="row")= index + 1
+                        td.m-title= val.name
+                        td(data-label="UserName")= val.username
+                        td.m-summary(data-label="Role")= val.role
+                        td(data-label="Disabled On")= val.effective_end_date
+                        td.m-actions
                             if canManage(val.role)
                                 button.btn.btn-outline-success.btn-sm(type="button" title="Enable user" onclick="setUserEnabled('" + val.id + "', true)")
                                     span.oi.oi-check
@@ -75,8 +77,11 @@ block content
                             else
                                 span.text-muted No permission
                 if !disabledUsers.length
-                    tr
-                        td.text-center.text-muted(colspan="6") No disabled users
+                    tr.m-static
+                        td.text-center.text-muted.m-wide(colspan="6") No disabled users
+
+    //- phones: cards start collapsed to name + role; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     //- Add User modal — posts the same field names dbMapping.newUser reads
     if roles.length

@@ -79,6 +79,7 @@ module.exports = {
         const disabledIds = new Set(disabledUsers.map(u => u.id));
         res.status(status).render('users', {
             title: 'Users',
+            mobileReady: true,   // tables stack into cards on phones (m-stack)
             user: req.user,
             users: activeUsers.filter(u => !disabledIds.has(u.id)),
             disabledUsers,
