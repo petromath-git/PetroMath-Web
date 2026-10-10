@@ -11,8 +11,16 @@ const dbMapping = require("../db/ui-db-field-mapping")
 const config = require('../config/app-config');
 const locationConfigDao = require('../dao/location-config-dao');
 const { getLedgersByGroup } = require('./gl-routes');
+const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
+
+// Product names are stored uppercase with single spaces and no leading or
+// trailing spaces/tabs (the browser uppercases, but the server must not rely on it)
+const normalizeProductName = (name) => String(name || '').replace(/\s+/g, ' ').trim().toUpperCase();
+
+// Lube / non-fuel and tank products carry stock (same set as Stock Adjustment)
+const isStockTracked = (product) => Number(product.is_lube_product) === 1 || Number(product.is_tank_product) === 1;
 
 const isTruthySetting = (value) => {
     if (value === null || value === undefined) return false;
@@ -25,13 +33,14 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
             ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
-            ProductDao.findDeletableProductIds(locationCode)
+            ProductDao.findDeletableProductIds(locationCode),
+            openingStockDao.getLocationStatus(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -54,7 +63,9 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 is_tank_product: product.is_tank_product,
                 is_lube_product: product.is_lube_product,
                 can_edit_name: canEditNameForRow,
-                can_delete: deletableIds.has(Number(product.product_id))
+                can_delete: deletableIds.has(Number(product.product_id)),
+                stock_tracked: isStockTracked(product),
+                opening: openingStatus[product.product_id] || { state: 'MISSING', entry: null, entries: [] }
             });
         });
 
@@ -121,8 +132,11 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, r
     try {
         // Same-name products break the m_pump/m_tank name joins and are usually
         // an onboarding slip (e.g. re-created just to change the unit).
-        const newName = (req.body.product_name || '').trim().toUpperCase();
-        const existing = newName ? await ProductDao.findByName(newName, req.user.location_code) : null;
+        const newName = normalizeProductName(req.body.product_name);
+        if (!newName) {
+            return res.status(400).json({ success: false, error: 'Product name is required' });
+        }
+        const existing = await ProductDao.findByName(newName, req.user.location_code);
         if (existing) {
             return res.status(400).json({
                 success: false,
@@ -133,7 +147,7 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, r
         // Map the request body to match dbMapping.newProduct expectations
         const mappedReq = {
             body: {
-                m_product_name_0: req.body.product_name,
+                m_product_name_0: newName,
                 m_product_qty_0: req.body.qty || 0,
                 m_product_unit_0: req.body.unit,
                 m_product_price_0: req.body.price,
@@ -189,8 +203,12 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
         }
 
         const canEditProductName = isTruthySetting(editableSetting);
-        const newProductName = (req.body.m_product_name || '').trim().toUpperCase();
-        const isRenameRequested = Boolean(newProductName) && newProductName !== existingProduct.product_name;
+        const newProductName = normalizeProductName(req.body.m_product_name);
+        // Older names may have lowercase or stray spaces/tabs ("1 Lt Servo MG
+        // 20W40", "PRIDE 40 "). Only a real change of name counts as a rename —
+        // otherwise a price edit is refused where name editing is off.
+        const isRenameRequested = Boolean(newProductName)
+            && newProductName !== normalizeProductName(existingProduct.product_name);
 
         if (isRenameRequested) {
             if (!canEditProductName) {
@@ -278,6 +296,103 @@ router.delete('/api/:id', [isLoginEnsured, security.isAdmin()], async function (
             success: false,
             error: 'Failed to delete product: ' + error.message
         });
+    }
+});
+
+// ── Opening stock ─────────────────────────────────────────────────────────────
+
+// Opening stock of one product, with its change history and date rules
+router.get('/api/:id/opening-stock', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const locationCode = req.user.location_code;
+        const product = await ProductDao.findById(req.params.id, locationCode);
+        if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+        if (!isStockTracked(product)) return res.status(400).json({ success: false, error: 'Stock is not tracked for this product.' });
+
+        const [status, dateRules] = await Promise.all([
+            openingStockDao.getStatus(product.product_id, locationCode),
+            openingStockDao.getDateRules(locationCode)
+        ]);
+        const history = status.entry ? await openingStockDao.getHistory(status.entry.adjustment_id) : [];
+
+        res.json({
+            success: true,
+            productName: product.product_name,
+            unit: product.unit,
+            status,
+            history,
+            dateRules,
+            canChange: openingStockDao.EDIT_ROLES.includes(req.user.Role)
+        });
+    } catch (error) {
+        console.error('Error loading opening stock:', error);
+        res.status(500).json({ success: false, error: 'Failed to load opening stock' });
+    }
+});
+
+// Set a product's opening stock, or change it (Admin / PowerUser / SuperUser).
+// Body: { date, qty, note, reason, confirmed }. When the date would leave
+// earlier sales/purchases out of stock (late-start locations only) the first
+// call answers { needsConfirm, warning } and the user resends with confirmed.
+router.put('/api/:id/opening-stock', [isLoginEnsured, security.isAdmin()], async function (req, res) {
+    try {
+        const locationCode = req.user.location_code;
+        const product = await ProductDao.findById(req.params.id, locationCode);
+        if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+        if (!isStockTracked(product)) return res.status(400).json({ success: false, error: 'Stock is not tracked for this product.' });
+
+        const status = await openingStockDao.getStatus(product.product_id, locationCode);
+        if (status.state === 'MULTIPLE') {
+            return res.status(400).json({ success: false, error: 'This product has more than one opening stock entry. Contact support to combine them.' });
+        }
+
+        let reason = null;
+        if (status.entry) {
+            if (!openingStockDao.EDIT_ROLES.includes(req.user.Role)) {
+                return res.status(403).json({ success: false, error: 'Only Admin, PowerUser or SuperUser can change an opening stock once it is set.' });
+            }
+            reason = String(req.body.reason || '').trim().slice(0, 500);
+            if (!reason) return res.status(400).json({ success: false, error: 'Please give a reason for the change.' });
+        }
+
+        const date = String(req.body.date || '').trim();
+        const qtyText = String(req.body.qty === undefined || req.body.qty === null ? '' : req.body.qty).trim();
+        const qty = Number(qtyText);
+        if (qtyText === '' || !isFinite(qty) || qty < 0) {
+            return res.status(400).json({ success: false, error: 'Enter the opening stock quantity (0 or more).' });
+        }
+        if (Math.round(qty * 100) / 100 !== qty) {
+            return res.status(400).json({ success: false, error: 'Quantity can have at most 2 decimals.' });
+        }
+        const note = String(req.body.note || '').trim();
+
+        if (status.entry && status.entry.adjustment_date === date
+            && Number(status.entry.qty) === qty
+            && (status.entry.remarks || 'Opening Stock') === (note || 'Opening Stock')) {
+            return res.status(400).json({ success: false, error: 'Nothing changed.' });
+        }
+
+        const check = await openingStockDao.validateDate(locationCode, product.product_id, date,
+            status.entry ? status.entry.adjustment_date : null);
+        if (check.error) return res.status(400).json({ success: false, error: check.error });
+        if (check.warning && !req.body.confirmed) {
+            return res.json({ success: false, needsConfirm: true, warning: check.warning });
+        }
+
+        await openingStockDao.save({
+            locationCode,
+            productId: product.product_id,
+            date,
+            qty,
+            note,
+            userName: req.user.User_Name,
+            reason
+        });
+
+        res.json({ success: true, message: status.entry ? 'Opening stock updated' : 'Opening stock saved' });
+    } catch (error) {
+        console.error('Error saving opening stock:', error);
+        res.status(500).json({ success: false, error: 'Failed to save opening stock' });
     }
 });
 
@@ -413,6 +528,7 @@ router.put('/api/ledger-maps/:productId/:mapType', [isLoginEnsured, security.isA
 
 // Legacy route for form-based product creation (maintaining backward compatibility)
 router.post('/', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
+    req.body.m_product_name_0 = normalizeProductName(req.body.m_product_name_0);
     ProductDao.create(dbMapping.newProduct(req))
         .then(() => {
             req.flash('success', 'Product created successfully');
