@@ -1,29 +1,34 @@
 extends layout
+include mixins/report-filters-mobile
+include mixins/card-toggle-mobile
 
 block content
-    form#summaryForm(method='POST' action='/reports/stock/summary')
+    form#summaryForm.report-filters(method='POST' action='/reports/stock/summary')
+        +reportFiltersMobile({ hasRange: true, hasResults: true, fromId: 'fromDate', toId: 'toDate' })
         input(type='hidden' name='showValues' id='showValuesInput' value=showValues ? 'true' : 'false')
         input(type='hidden' name='selectedRange' id='selectedRangeInput' value=selectedRange || 'this_month')
         table.center
             tr
-                td Date Range:
-                td
+                td.rf-label.rf-range Date Range:
+                td.rf-field.rf-range
                     select#dateRange.form-control(onchange="onDateRangeChange()")
+                        option(value='month_year' selected=(selectedRange==='month_year')) Month / Year
                         option(value='this_month' selected=(selectedRange==='this_month' || !selectedRange)) This Month
                         option(value='last_month' selected=(selectedRange==='last_month')) Last Month
                         option(value='this_financial_year' selected=(selectedRange==='this_financial_year')) This Financial Year
                         option(value='last_financial_year' selected=(selectedRange==='last_financial_year')) Last Financial Year
                         option(value='custom' selected=(selectedRange==='custom')) Custom Date
-                td &nbsp;
-                td#fromDateLabel(style=selectedRange==='custom' ? '' : 'display:none') From Date:
-                td(style=selectedRange==='custom' ? '' : 'display:none')
+                +rangeMonthYearCells({ onchange: 'onDateRangeChange()', date: selectedRange === 'month_year' ? fromDate : null })
+                td.rf-gap &nbsp;
+                td.rf-label.rf-from#fromDateLabel(style=selectedRange==='custom' ? '' : 'display:none') From Date:
+                td.rf-field.rf-from(style=selectedRange==='custom' ? '' : 'display:none')
                     input#fromDate.form-control(type='date', name='fromDate', value=fromDate, max=currentDate)
-                td &nbsp;
-                td#toDateLabel(style=selectedRange==='custom' ? '' : 'display:none') To Date:
-                td(style=selectedRange==='custom' ? '' : 'display:none')
+                td.rf-gap &nbsp;
+                td.rf-label.rf-to#toDateLabel(style=selectedRange==='custom' ? '' : 'display:none') To Date:
+                td.rf-field.rf-to(style=selectedRange==='custom' ? '' : 'display:none')
                     input#toDate.form-control(type='date', name='toDate', value=toDate, max=currentDate)
-                td &nbsp;
-                td
+                td.rf-gap &nbsp;
+                td.rf-field
                     .form-check.d-inline-flex.align-items-center.ml-3
                         input#showValuesCheck.form-check-input(
                             type='checkbox'
@@ -32,10 +37,10 @@ block content
                             style="margin-top:0"
                         )
                         label.form-check-label.ml-2(for='showValuesCheck') Show Values
-                td &nbsp;
+                td.rf-gap &nbsp;
                 include report-print-download.pug
-                td
-                    if fromDate && toDate && stockSummary && stockSummary.length > 0
+                if fromDate && toDate && stockSummary && stockSummary.length > 0
+                    td.rf-btn
                         button.btn.btn-success.ml-2(
                             type='button'
                             onclick="exportExcel()"
@@ -57,7 +62,7 @@ block content
             div.col-md-12
                 div.row &nbsp;
                 div.table-responsive
-                    table.table.table-bordered.table-hover.table-sm#stockSummaryTable
+                    table.table.table-bordered.table-hover.table-sm.m-stack.m-collapse#stockSummaryTable
                         thead.thead-light
                             tr
                                 th.text-center(rowspan='2') #
@@ -101,33 +106,33 @@ block content
                                     - if(item.closing_value) totClosingVal += item.closing_value
 
                                 tr(class=rowClass)
-                                    td.text-center= index + 1
-                                    td= item.product_name
-                                    td.text-center= item.unit
+                                    td.text-center.m-hide= index + 1
+                                    td.m-title= item.product_name
+                                    td.text-center(data-label='Unit')= item.unit
                                     if item.opening_balance === null || item.opening_balance === undefined
-                                        td.text-center(colspan= showValues ? '8' : '4')
+                                        td.text-center.m-wide.m-summary(colspan= showValues ? '8' : '4')
                                             span.text-warning.font-italic
                                                 i.fas.fa-exclamation-triangle
                                                 |  No opening stock
                                     else
-                                        td.text-right= fmtN(item.opening_balance)
+                                        td.text-right(data-label='Opening')= fmtN(item.opening_balance)
                                         if showValues
-                                            td.text-right.text-muted= item.opening_value !== null ? fmtN(item.opening_value) : '-'
-                                        td.text-right
+                                            td.text-right.text-muted(data-label='Opening Value')= item.opening_value !== null ? fmtN(item.opening_value) : '-'
+                                        td.text-right(data-label='Purchase')
                                             if item.total_in > 0
                                                 span.text-success.font-weight-bold= fmtN(item.total_in)
                                             else
                                                 span.text-muted -
                                         if showValues
-                                            td.text-right.text-muted= item.purchase_value > 0 ? fmtN(item.purchase_value) : '-'
-                                        td.text-right
+                                            td.text-right.text-muted(data-label='Purchase Amount')= item.purchase_value > 0 ? fmtN(item.purchase_value) : '-'
+                                        td.text-right(data-label='Sales')
                                             if item.total_out > 0
                                                 span.text-danger.font-weight-bold= fmtN(item.total_out)
                                             else
                                                 span.text-muted -
                                         if showValues
-                                            td.text-right.text-muted= item.sales_value > 0 ? fmtN(item.sales_value) : '-'
-                                        td.text-right
+                                            td.text-right.text-muted(data-label='Sales Amount')= item.sales_value > 0 ? fmtN(item.sales_value) : '-'
+                                        td.text-right.m-summary(data-label='Closing')
                                             if item.closing_balance === null || item.closing_balance === undefined
                                                 span.text-warning.font-italic N/A
                                             else if parseFloat(item.closing_balance) < 0
@@ -135,25 +140,25 @@ block content
                                             else
                                                 = fmtN(item.closing_balance)
                                         if showValues
-                                            td.text-right.text-muted= item.closing_value !== null ? fmtN(item.closing_value) : '-'
+                                            td.text-right.text-muted(data-label='Closing Value')= item.closing_value !== null ? fmtN(item.closing_value) : '-'
 
                         tfoot.bg-light
                             tr.font-weight-bold
-                                td(colspan='3')
+                                td.m-title(colspan='3')
                                     div Total Products: #{stockSummary.length}
                                     div.small.text-muted With Stock: #{productsWithStock} | With Movement: #{productsWithMovement}
-                                td.text-right -
+                                td.text-right.m-hide -
                                 if showValues
-                                    td.text-right= fmtN(totOpeningVal)
-                                td.text-right= fmtN(totPurchaseQty)
+                                    td.text-right(data-label='Opening Value')= fmtN(totOpeningVal)
+                                td.text-right(data-label='Purchase')= fmtN(totPurchaseQty)
                                 if showValues
-                                    td.text-right= fmtN(totPurchaseVal)
-                                td.text-right= fmtN(totSalesQty)
+                                    td.text-right(data-label='Purchase Amount')= fmtN(totPurchaseVal)
+                                td.text-right(data-label='Sales')= fmtN(totSalesQty)
                                 if showValues
-                                    td.text-right= fmtN(totSalesVal)
-                                td.text-right -
+                                    td.text-right(data-label='Sales Amount')= fmtN(totSalesVal)
+                                td.text-right.m-hide -
                                 if showValues
-                                    td.text-right= fmtN(totClosingVal)
+                                    td.text-right(data-label='Closing Value')= fmtN(totClosingVal)
 
             if stockSummary.some(item => item.opening_balance === null || item.opening_balance === undefined)
                 div.row &nbsp;
@@ -166,6 +171,7 @@ block content
             div.row.bg-light No records to display.
 
     include overlay.pug
+    +cardToggleMobile('#stockSummaryTable > tbody > tr')
 
     style.
         .table-success-light { background-color: #f0f9ff !important; }
@@ -192,13 +198,21 @@ block content
                 var m = today.getMonth();
                 from = m < 3 ? new Date(today.getFullYear()-2, 3, 1) : new Date(today.getFullYear()-1, 3, 1);
                 to   = m < 3 ? new Date(today.getFullYear()-1, 2, 31) : new Date(today.getFullYear(), 2, 31);
+            } else if (range === 'month_year') {
+                // Month / Year: set the dates, wait for Go (the month may still change)
+                showRangeMonthYear(true);
+                setRangeMonthYear('fromDate', 'toDate');
+                ['fromDateLabel','toDateLabel'].forEach(function(id) { document.getElementById(id).style.display = 'none'; document.getElementById(id).nextElementSibling.style.display = 'none'; });
+                return;
             } else {
+                showRangeMonthYear(false);
                 ['fromDateLabel','toDateLabel'].forEach(function(id) { document.getElementById(id).style.display = 'table-cell'; document.getElementById(id).nextElementSibling.style.display = 'table-cell'; });
                 return;
             }
             function fmt(d) { return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0]; }
             fromInput.value = fmt(from);
             toInput.value   = fmt(to);
+            showRangeMonthYear(false);
             ['fromDateLabel','toDateLabel'].forEach(function(id) { document.getElementById(id).style.display = 'none'; document.getElementById(id).nextElementSibling.style.display = 'none'; });
             document.getElementById('summaryForm').submit();
         }
