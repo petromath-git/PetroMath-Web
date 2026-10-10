@@ -1,5 +1,6 @@
 const db = require("../db/db-connection");
 const { QueryTypes } = require('sequelize');
+const BankStatementDao = require('./bank-statement-dao');
 
 module.exports = {
     // Get oil company bank accounts for a location
@@ -327,6 +328,8 @@ saveTransaction: async (transactionData) => {
                                     create_receipt, location_code, receipt_date, credit_amount, created_by }) => {
         const t = await db.sequelize.transaction();
         try {
+            await BankStatementDao.unmatchDepositRecon(t_bank_id, ledger_name, t);
+
             await db.sequelize.query(
                 `UPDATE t_bank_transaction
                  SET ledger_name     = :ledger_name,
@@ -380,6 +383,8 @@ saveTransaction: async (transactionData) => {
         const t = await db.sequelize.transaction();
         try {
             for (const upd of updates) {
+                await BankStatementDao.unmatchDepositRecon(upd.t_bank_id, upd.ledger_name, t);
+
                 await db.sequelize.query(
                     `UPDATE t_bank_transaction
                      SET ledger_name     = :ledger_name,
