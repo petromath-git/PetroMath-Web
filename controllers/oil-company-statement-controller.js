@@ -5,6 +5,7 @@ const OilCompanyDao = require("../dao/oil-company-statement-dao");
 const locationConfigDao = require('../dao/location-config-dao');
 const locationDao = require('../dao/location-dao');
 const { beforeGoLiveError } = require('../utils/golive-guard');
+const rolePermissionsDao = require('../dao/role-permissions-dao');
 
 module.exports = {
     getStatementData: async (req, res, next) => {
@@ -15,12 +16,15 @@ module.exports = {
             let bankId = req.query.bank_id || 0;
 
             // Get configuration for manual transactions and reclassify
-            const [allowManualSetting, allowReclassifySetting] = await Promise.all([
+            const [allowManualSetting, allowReclassifySetting, canReclassify] = await Promise.all([
                 locationConfigDao.getSetting(locationCode, 'ALLOW_MANUAL_BANK_TRANSACTIONS'),
-                locationConfigDao.getSetting(locationCode, 'ALLOW_OIL_RECLASSIFY')
+                locationConfigDao.getSetting(locationCode, 'ALLOW_OIL_RECLASSIFY'),
+                rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'RECLASSIFY_OIL_COMPANY_STATEMENT')
             ]);
             const allowManual = allowManualSetting === null || allowManualSetting === undefined ? 'true' : allowManualSetting;
-            const allowReclassify = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
+            // Reclassify needs both the location setting (default on) and the role permission
+            const reclassifyEnabled = allowReclassifySetting === null || allowReclassifySetting === undefined ? 'true' : allowReclassifySetting;
+            const allowReclassify = reclassifyEnabled === 'true' && canReclassify ? 'true' : 'false';
 
             const [accountList, locationData, transactionList, goLiveDate] = await Promise.all([
                 OilCompanyDao.getOilCompanyAccounts(locationCode),
