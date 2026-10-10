@@ -14,6 +14,7 @@ const { getLedgersByGroup } = require('./gl-routes');
 const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
+const PRODUCT_UNITS = config.APP_CONFIGS.productUnits; // LIT, NOS
 
 // Product names are stored uppercase with single spaces and no leading or
 // trailing spaces/tabs (the browser uppercases, but the server must not rely on it)
@@ -33,14 +34,15 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus] = await Promise.all([
+        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus, usedIds] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
             ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
             ProductDao.findDeletableProductIds(locationCode),
-            openingStockDao.getLocationStatus(locationCode)
+            openingStockDao.getLocationStatus(locationCode),
+            ProductDao.findUsedProductIds(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
         const pumpLinkedSet = new Set(pumpLinkedNames);
@@ -64,6 +66,8 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 is_lube_product: product.is_lube_product,
                 can_edit_name: canEditNameForRow,
                 can_delete: deletableIds.has(Number(product.product_id)),
+                // unit can't change once the product has entries (SuperUser excepted)
+                unit_locked: usedIds.has(Number(product.product_id)) && req.user.Role !== 'SuperUser',
                 stock_tracked: isStockTracked(product),
                 opening: openingStatus[product.product_id] || { state: 'MISSING', entry: null, entries: [] }
             });
@@ -144,12 +148,17 @@ router.post('/api', [isLoginEnsured, security.isAdmin()], async function (req, r
             });
         }
 
+        const unit = String(req.body.unit || '').trim().toUpperCase();
+        if (!PRODUCT_UNITS.includes(unit)) {
+            return res.status(400).json({ success: false, error: `Unit must be one of ${PRODUCT_UNITS.join(', ')}` });
+        }
+
         // Map the request body to match dbMapping.newProduct expectations
         const mappedReq = {
             body: {
                 m_product_name_0: newName,
                 m_product_qty_0: req.body.qty || 0,
-                m_product_unit_0: req.body.unit,
+                m_product_unit_0: unit,
                 m_product_price_0: req.body.price,
                 m_product_ledger_name_0: req.body.ledger_name,
                 m_product_purchase_ledger_name_0: req.body.purchase_ledger_name,
@@ -235,11 +244,28 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             }
         }
 
+        // Unit: one of the configured units; locked once the product has entries
+        // (changing it would change what every past quantity means)
+        let unit;
+        const newUnit = String(req.body.m_product_unit || '').trim().toUpperCase();
+        if (newUnit && newUnit !== existingProduct.unit) {
+            if (!PRODUCT_UNITS.includes(newUnit)) {
+                return res.status(400).json({ success: false, error: `Unit must be one of ${PRODUCT_UNITS.join(', ')}` });
+            }
+            if (req.user.Role !== 'SuperUser' && await ProductDao.isProductUsed(existingProduct.product_id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Unit cannot be changed because this product already has sales, purchases or stock entries. Contact support.'
+                });
+            }
+            unit = newUnit;
+        }
+
         const data = await ProductDao.update({
             product_id: productId,
             product_name: isRenameRequested ? newProductName : undefined,
             price: req.body.m_product_price,
-            unit: req.body.m_product_unit,
+            unit,
             ledger_name: req.body.m_product_ledger_name,
             purchase_ledger_name: req.body.m_product_purchase_ledger_name,
             cgst_percent: req.body.m_product_cgst,
@@ -363,6 +389,9 @@ router.put('/api/:id/opening-stock', [isLoginEnsured, security.isAdmin()], async
         }
         if (Math.round(qty * 100) / 100 !== qty) {
             return res.status(400).json({ success: false, error: 'Quantity can have at most 2 decimals.' });
+        }
+        if (ProductDao.isPieceUnit(product.unit) && !ProductDao.isWholeQty(qty)) {
+            return res.status(400).json({ success: false, error: `${product.product_name} is counted in pieces (NOS), so the opening stock must be a whole number.` });
         }
         const note = String(req.body.note || '').trim();
 

@@ -281,8 +281,10 @@ html(lang="en")
                                             td(data-label="Unit")
                                                 select.form-control.form-control-sm(data-field="unit")
                                                     option(value="" selected=!row.unit) -- Select --
-                                                    each u in ['Litres','Nos','Kgs']
-                                                        option(value=u selected=(row.unit===u))= u
+                                                    //- older drafts saved Litres / Nos / Kgs
+                                                    - const rowUnit = ({ LITRES: 'LIT', NOS: 'NOS', KGS: 'NOS' })[String(row.unit || '').toUpperCase()] || row.unit
+                                                    each u in [['LIT','Litres (loose)'],['NOS','Nos (pieces)']]
+                                                        option(value=u[0] selected=(rowUnit===u[0]))= u[1]
                                             td(data-label="Price (₹)"): input.form-control.form-control-sm(type="number" step="0.01" data-field="selling_price" value=(row.selling_price||'') placeholder="0.00")
                                             td(data-label="HSN Code"): input.form-control.form-control-sm(type="text" data-field="hsn_code" value=(row.hsn_code||'') placeholder="e.g. 27101290" maxlength="20")
                                             td(data-label="CGST %"): input.form-control.form-control-sm(type="number" step="0.01" min="0" max="50" data-field="cgst_percent" value=(row.cgst_percent!=null?row.cgst_percent:'') placeholder="e.g. 9")

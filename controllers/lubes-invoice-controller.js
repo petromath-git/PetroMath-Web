@@ -13,6 +13,7 @@ const InvoiceParserService = require('../services/invoice-parser-service');
 const InvoiceProductMapDao = require('../dao/invoice-product-map-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
 const locationDao = require('../dao/location-dao');
+const ProductDao = require('../dao/product-dao');
 const moment = require('moment');
 const { getLocationConfigValue } = require('../utils/location-config');
 const Calc = require('../public/javascripts/lube-invoice-calc');
@@ -160,6 +161,10 @@ module.exports = {
                     }
                 }
                 if (!(qty > 0)) errors.push(`Line ${n} (${product.product_name}): quantity must be more than 0.`);
+                else if (!measure && !ProductDao.isWholeQty(qty)) {
+                    // Counted in pieces: a part piece means the quantity or pack size is wrong
+                    errors.push(`Line ${n} (${product.product_name}): ${Math.round(qty * 1000) / 1000} pieces is not a whole number. Check the quantity${uom !== 'PCS' ? ' or the pack size' : ''}.`);
+                }
 
                 const gross = parseFloat(item.gross_amount);
                 if (!(gross >= 0)) errors.push(`Line ${n} (${product.product_name}): enter the amount (0 for free stock).`);

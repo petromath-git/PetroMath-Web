@@ -21,6 +21,10 @@ const db = require("../db/db-connection");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
 const serviceTier = require('../utils/service-tier');
 
+// Shown when a piece (NOS) product is saved with a fractional quantity —
+// usually an amount typed in that is not a multiple of the price.
+const PIECE_SALE_HINT = 'Enter the number of pieces and put any price difference in Discount.';
+
 
 module.exports = {
 
@@ -244,9 +248,16 @@ module.exports = {
     }
 },
 
-    save2TSalesData: (req, res, next) => {
+    save2TSalesData: async (req, res, next) => {
         const saleData = req.body;
         if(saleData && saleData[0] && saleData[0].closing_id) {
+            const pieceError = await ProductDao.checkPieceQuantities(
+                saleData.map(s => ({ product_id: s.product_id, qty: [s.given_qty, s.returned_qty] })),
+                'Enter the number of pieces given and returned.');
+            if (pieceError) {
+                res.status(500).send({error: pieceError});
+                return;
+            }
             saveController.txnWrite2TSalesPromise(saleData).then((result) => {
                 if (!result.error) {
                     res.status(200).send({message: 'Saved 2T oil data successfully.', rowsData: result});
@@ -257,9 +268,14 @@ module.exports = {
         }
     },
 
-    saveCashSalesData: (req, res, next) => {
+    saveCashSalesData: async (req, res, next) => {
         const salesData = req.body;
         if (salesData) {
+            const pieceError = await ProductDao.checkPieceQuantities(salesData, PIECE_SALE_HINT);
+            if (pieceError) {
+                res.status(500).send({error: pieceError});
+                return;
+            }
             saveController.txnWriteCashSalesPromise(salesData).then((result) => {
                 if (!result.error) {
                     res.status(200).send({message: 'Saved cash sales data successfully.', rowsData: result});
@@ -273,7 +289,8 @@ module.exports = {
     saveCreditSalesData: async (req, res, next) => {
         const salesData = req.body;
         if (salesData) {
-            const validationError = await validateCreditBillDates(salesData);
+            const validationError = await validateCreditBillDates(salesData)
+                || await ProductDao.checkPieceQuantities(salesData, PIECE_SALE_HINT);
             if (validationError) {
                 res.status(500).send({error: validationError});
                 return;
@@ -1035,6 +1052,7 @@ function formProductData(product, productAlias, textName) {
         productPrice: product.price,
         productName: product.product_name,
         rgbColor: product.rgb_color,
+        unit: product.unit,
         returnedQty: 0,
         givenQty: 0,
         isLubeProduct: product.is_lube_product == 1 && product.is_tank_product == 1

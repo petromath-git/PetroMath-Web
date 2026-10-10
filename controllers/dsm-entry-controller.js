@@ -1,4 +1,5 @@
 const dsmEntryDao = require("../dao/dsm-entry-dao");
+const ProductDao = require("../dao/product-dao");
 const DocumentStoreDao = require("../dao/document-store-dao");
 const CreditVehiclesDao = require("../dao/credit-vehicles-dao");
 const { getLocationConfigValue } = require("../utils/location-config");
@@ -119,6 +120,12 @@ module.exports = {
 
             if (parseFloat(qty) <= 0 || parseFloat(amount) <= 0) {
                 return res.status(400).json({ success: false, message: "Quantity and amount must be greater than zero." });
+            }
+
+            const pieceError = await ProductDao.checkPieceQuantities([{ product_id, qty }],
+                'Enter the number of pieces.');
+            if (pieceError) {
+                return res.status(400).json({ success: false, message: pieceError });
             }
 
             if (!credit_bill_date) {
