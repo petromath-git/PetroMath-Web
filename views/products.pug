@@ -6,6 +6,7 @@ block content
     -
         const osMon = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
         const osDate = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '-' + osMon[Number(p[1]) - 1] + '-' + p[0] : ''; };
+        const unitLabels = { LIT: 'LIT (litres)', NOS: 'NOS (pieces)' };
         const osQty = (q, unit) => { const n = Number(q || 0); return (n % 1 === 0 ? n : n.toFixed(2)) + (unit ? ' ' + unit : ''); };
 
     mixin openingStockCell(val)
@@ -72,7 +73,7 @@ block content
                             th(scope="col") Edit
                     tbody
                         each val, index in products
-                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                            - const productPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0, unit_locked: val.unit_locked ? 1 : 0 }))
                             tr(id=`product-row-${index}`)
                                 th(scope="row")= index + 1
                                 td(scope="row")
@@ -139,7 +140,7 @@ block content
         // nothing has a minimum width to push the card past a phone screen
         .mobile-cards-view.d-block.d-lg-none
             each val, index in products
-                - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0 }))
+                - const mobileProductPayload = encodeURIComponent(JSON.stringify({ id: val.id, name: val.name, sku_name: val.sku_name || '', sku_number: val.sku_number || '', hsn_code: val.hsn_code || '', unit: val.unit || '', price: val.price || '', ledger_name: val.ledger_name || '', purchase_ledger_name: val.purchase_ledger_name || '', cgst_percent: val.cgst_percent || 0, sgst_percent: val.sgst_percent || 0, is_tank_product: val.is_tank_product ? 1 : 0, is_lube_product: val.is_lube_product ? 1 : 0, can_edit_name: val.can_edit_name ? 1 : 0, unit_locked: val.unit_locked ? 1 : 0 }))
                 .card.product-card.m-card.m-collapsible.mb-2(id=`mobile-product-card-${index}`)
                     .card-header.d-flex.justify-content-between.align-items-center
                         .product-name(title=val.can_edit_name ? '' : 'Product name cannot be edited because it is linked to pump configuration')= val.name
@@ -216,8 +217,8 @@ block content
                                 label.form-label Unit
                                 select.form-control(name="unit", required)
                                     option(value="", disabled, selected) Select Unit
-                                    option(value="NOS") NOS
-                                    option(value="LIT") LIT
+                                    each u in config.productUnits
+                                        option(value=u)= unitLabels[u] || u
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input.form-control(type="number", name="price", step="0.01", required)
@@ -282,7 +283,11 @@ block content
                                 input#edit-hsn-code.form-control.text-uppercase(type="text", readonly, style="text-transform: uppercase;")
                             .col-md-6.mb-3
                                 label.form-label Unit
-                                input#edit-unit.form-control.text-uppercase(type="text", style="text-transform: uppercase;")
+                                select#edit-unit.form-control
+                                    each u in config.productUnits
+                                        option(value=u)= unitLabels[u] || u
+                                small.form-text.text-muted#edit-unit-note(style="display:none;")
+                                    | Locked: this product already has sales, purchases or stock entries.
                             .col-md-6.mb-3
                                 label.form-label Price
                                 input#edit-price.form-control(type="number", step="0.01")
@@ -510,7 +515,17 @@ block content
             document.getElementById('edit-sku-name').value = product.sku_name || '';
             document.getElementById('edit-sku-number').value = product.sku_number || '';
             document.getElementById('edit-hsn-code').value = product.hsn_code || '';
-            document.getElementById('edit-unit').value = product.unit || '';
+            const unitSelect = document.getElementById('edit-unit');
+            // An old unit not in the list shows as-is until changed
+            unitSelect.querySelectorAll('option[data-legacy]').forEach(o => o.remove());
+            if (product.unit && ![...unitSelect.options].some(o => o.value === product.unit)) {
+                const legacy = new Option(product.unit, product.unit);
+                legacy.dataset.legacy = '1';
+                unitSelect.add(legacy, 0);
+            }
+            unitSelect.value = product.unit || '';
+            unitSelect.disabled = !!product.unit_locked;
+            document.getElementById('edit-unit-note').style.display = product.unit_locked ? 'block' : 'none';
             document.getElementById('edit-price').value = product.price || '';
             document.getElementById('edit-cgst').value = product.cgst_percent || 0;
             document.getElementById('edit-sgst').value = product.sgst_percent || 0;
@@ -555,7 +570,7 @@ block content
             const updateData = {
                 m_product_name: document.getElementById('edit-product-name').value.toUpperCase().trim(),
                 m_product_price: document.getElementById('edit-price').value,
-                m_product_unit: document.getElementById('edit-unit').value.toUpperCase(),
+                m_product_unit: document.getElementById('edit-unit').value,
                 m_product_cgst: document.getElementById('edit-cgst').value,
                 m_product_sgst: document.getElementById('edit-sgst').value
             };
