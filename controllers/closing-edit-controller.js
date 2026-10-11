@@ -399,6 +399,16 @@ const txnClosingPromise = (closingId) => {
     });
 }
 
+// The product a pump dispenses: by product_id, falling back to the name match
+// for a pump saved before product_id existed. (This used to call
+// utils.getProduct(t_data.pump_code, ...) — t_data is the list, so it always
+// returned the location's first product and a pump without a reading showed
+// that product's price.)
+const pumpProduct = (pump, productData) =>
+    productData.find(p => pump.product_id && p.product_id === pump.product_id)
+    || productData.find(p => p.product_name === pump.product_code)
+    || null;
+
 // Used to join reading and pump data - assumes location code of pumps match that of the closing data.
 const txnPumpAndReadingPromise = (closingId, locationCode) => {
     return new Promise((resolve, reject) => {
@@ -423,22 +433,24 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                             pumpCode: t_pump.pump_code,
                                         });
                                     });
-                                    const product = utils.getProduct(t_data.pump_code, productData);
+                                    const product = pumpProduct(t_pump, productData);
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productId: t_pump.product_id,
                                         productCode: t_pump.product_code,
-                                        productPrice: product.price,
+                                        productPrice: product ? product.price : 0,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: t_pump_readings,
                                     });
                                 } else {
-                                    const product = utils.getProduct(t_data.pump_code, productData);
+                                    const product = pumpProduct(t_pump, productData);
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productId: t_pump.product_id,
                                         productCode: t_pump.product_code,
-                                        productPrice: product.price,
+                                        productPrice: product ? product.price : 0,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: [],
                                     });

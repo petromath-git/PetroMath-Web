@@ -88,7 +88,7 @@ mixin listProductNames(pumpProductValues, prefix)
 
 mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
     //- Find the product that matches this pump's productCode
-    - var matchingProduct = productValuesData.find(p => p.productName === val.productCode);
+    - var matchingProduct = productValuesData.find(p => val.productId ? p.productId === val.productId : p.productName === val.productCode);
     - var rgbColor = matchingProduct ? matchingProduct.rgbColor : '200,200,200'; // fallback to gray
     
     - var pumpUniqueName = `${pumpInstance}${val.pumpCode}`;

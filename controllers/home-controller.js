@@ -1013,10 +1013,10 @@ const pumpProductDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         // First get pump product codes for this location in correct order
         db.sequelize.query(
-            `SELECT product_code, MIN(display_order) as min_order 
-                FROM m_pump 
-                WHERE location_code = :locationCode 
-                GROUP BY product_code 
+            `SELECT product_id, product_code, MIN(display_order) as min_order
+                FROM m_pump
+                WHERE location_code = :locationCode
+                GROUP BY product_id, product_code
                 ORDER BY min_order`,
             {
                 replacements: { locationCode },
@@ -1029,10 +1029,15 @@ const pumpProductDataPromise = (locationCode) => {
                     let products = [], productIdAliasMapping = [];
                     const productMap = config.PRODUCT_DETAILS_MAPPING;
                     
-                    // Process products in pump order, not product table order
+                    // Process products in pump order, not product table order.
+                    // Pumps point at their product by product_id; the name match
+                    // is only a fallback for a pump row without one.
+                    const seen = new Set();
                     pumpProductCodes.forEach((pumpProduct) => {
-                        const product = data.find(p => p.product_name === pumpProduct.product_code);
-                        if (product) {
+                        const product = data.find(p => pumpProduct.product_id && p.product_id === pumpProduct.product_id)
+                            || data.find(p => p.product_name === pumpProduct.product_code);
+                        if (product && !seen.has(product.product_id)) {
+                            seen.add(product.product_id);
                             const mapData = productMap.get(product.product_name);
                             const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
                             const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;

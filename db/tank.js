@@ -9,6 +9,7 @@ module.exports = function(sequelize, DataTypes) {
         },
         tank_code: DataTypes.STRING,
         product_code: DataTypes.STRING,
+        product_id: DataTypes.INTEGER,   // kept in step with product_code by DB trigger
         location_code: DataTypes.STRING,
         tank_orig_capacity: DataTypes.DECIMAL,
         tank_current_stock: DataTypes.DECIMAL,
