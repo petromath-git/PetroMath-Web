@@ -320,8 +320,9 @@ mixin addEmployeeAdvance(advanceRowNo, rowData)
         input(type='hidden' id=prefix + advanceRowNo + '_hiddenId' value=rowData.ledgerId)
         td(data-label='Type')
             select.form-control(name=prefix + 'type-' + advanceRowNo id=prefix + 'type-' + advanceRowNo required)
-                if config.employeeAdvanceTxnTypes
-                    each txnType in config.employeeAdvanceTxnTypes
+                - var advanceTxnTypes = (employeeAdvanceTxnTypes && employeeAdvanceTxnTypes.length) ? employeeAdvanceTxnTypes : config.employeeAdvanceTxnTypes
+                if advanceTxnTypes
+                    each txnType in advanceTxnTypes
                         option(value=txnType.id selected= rowData.txnType === txnType.id)= txnType.label
         td(data-label='Employee')
             select.form-control(name=prefix + 'employee-' + advanceRowNo id=prefix + 'employee-' + advanceRowNo required)
