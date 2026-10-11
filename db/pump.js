@@ -10,6 +10,7 @@ module.exports = function(sequelize, DataTypes) {
         pump_code: DataTypes.STRING,
         pump_make: DataTypes.STRING,
         product_code: DataTypes.STRING,
+        product_id: DataTypes.INTEGER,   // kept in step with product_code by DB trigger
         opening_reading: DataTypes.DECIMAL,
         location_code: DataTypes.STRING,
         current_stamping_date: DataTypes.DATE,

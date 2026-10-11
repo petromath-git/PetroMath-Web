@@ -72,6 +72,7 @@ const pumpDataPromise = (locationCode) => {
                 data.forEach((pump) => {
                     pumps.push({
                         pumpId: pump.pump_id,
+                        productId: pump.product_id,
                         productCode: pump.product_code,
                         pumpCode: pump.pump_code,
                         pumpClosing: pump.opening_reading,

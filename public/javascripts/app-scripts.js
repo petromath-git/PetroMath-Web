@@ -162,6 +162,18 @@ function hideAndDeleteReadingPump(elementId) {
 //     }
 // }
 
+// A pump points at its product by productId (m_pump.product_id); the name
+// match is only a fallback for a pump without one.
+function pumpSellsProduct(pump, product) {
+    if (!pump || !product) return false;
+    if (pump.productId) return String(pump.productId) === String(product.productId);
+    return pump.productCode === product.productName;
+}
+function pumpProductOf(pump) {
+    if (!pump || !window.productValuesData) return null;
+    return window.productValuesData.find(p => pumpSellsProduct(pump, p)) || null;
+}
+
 function updatePriceOnReadingTab(isOnLoad) {
     const pumpSelect = document.getElementById("reading-pump-name");
     const pumpCode = pumpSelect.value;
@@ -170,9 +182,8 @@ function updatePriceOnReadingTab(isOnLoad) {
     // Find the pump in pumpsData to get its product_code
     const pump = window.pumpsData.find(p => p.pumpCode === pumpCode);
     
-    if (pump && pump.productCode) {
-        // Find the product in productValuesData that matches this product_code
-        const product = window.productValuesData.find(p => p.productName === pump.productCode);
+    if (pump && (pump.productId || pump.productCode)) {
+        const product = pumpProductOf(pump);
         
         if (product) {
             // Build the rate field ID using the product's textName
@@ -289,13 +300,13 @@ function addAllPumps() {
         // Find the pump data
         const pump = window.pumpsData.find(p => p.pumpCode === pumpCode);
         
-        if (!pump || !pump.productCode) {
+        if (!pump || !(pump.productId || pump.productCode)) {
             skippedPumps.push(pumpCode + " (no product code)");
             return;
         }
-        
+
         // Find the product for this pump
-        const product = window.productValuesData.find(p => p.productName === pump.productCode);
+        const product = pumpProductOf(pump);
         
         if (!product) {
             skippedPumps.push(pumpCode + " (product not found)");
@@ -520,7 +531,7 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
         
         if (product) {
             // Check if this product has pumps (is a fuel/pump product)
-            const hasPumps = window.pumpsData && window.pumpsData.some(pump => pump.productCode === product.productName);
+            const hasPumps = window.pumpsData && window.pumpsData.some(pump => pumpSellsProduct(pump, product));
             
             if (hasPumps) {
                 // For pump products: try to find rate element, fallback to DB price
@@ -560,7 +571,7 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
                         
                         // Find pump data for this option
                         const pumpData = window.pumpsData.find(p => p.pumpCode === currentOption);
-                        if (pumpData && pumpData.productCode === product.productName) {
+                        if (pumpData && pumpSellsProduct(pumpData, product)) {
                             let readingData = document.getElementById('f_' + currentOption + '_price');
                             if (readingData && readingData.parentNode.className.indexOf('d-md-block') > -1) {
                                 productPrice = readingData.value;
