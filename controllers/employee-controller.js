@@ -268,7 +268,13 @@ module.exports.addLedgerEntry = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
-        const validTypes = ['SALARY_CREDIT', 'ADVANCE', 'PAYMENT', 'BANK_PAYMENT', 'ADVANCE_RECOVERY', 'DEDUCTION', 'ADJUSTMENT_CR', 'ADJUSTMENT_DR'];
+        // Bank movements come only from the bank statement (classify the bank
+        // line to the employee); BANK_* entries are created from there.
+        if (['BANK_PAYMENT', 'BANK_ADVANCE', 'BANK_RECOVERY'].includes(req.body.txn_type)) {
+            return res.status(400).json({ success: false, message: 'Salary paid or advances/recoveries by bank are entered from the bank statement: classify the bank line to the employee.' });
+        }
+
+        const validTypes = ['SALARY_CREDIT', 'ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY', 'DEDUCTION', 'ADJUSTMENT_CR', 'ADJUSTMENT_DR'];
         if (!validTypes.includes(req.body.txn_type)) {
             return res.status(400).json({ success: false, message: 'Invalid transaction type' });
         }
@@ -320,6 +326,10 @@ module.exports.deleteLedgerEntry = async (req, res) => {
         const entry = await EmployeeDao.findLedgerEntry(ledgerId, employeeId);
         if (!entry) {
             return res.status(404).json({ success: false, message: 'Entry not found' });
+        }
+
+        if (entry.bank_txn_id) {
+            return res.status(400).json({ success: false, message: 'This entry comes from a bank statement line. Reclassify or delete the bank line instead.' });
         }
 
         // Only Day Close locations hand cash entries to a Day Close; elsewhere
