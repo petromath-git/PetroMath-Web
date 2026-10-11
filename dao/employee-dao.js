@@ -370,6 +370,21 @@ module.exports = {
         });
     },
 
+    // Shift-closing Employee Advance tab options: the location's Day Close
+    // salary heads (m_account_heads.employee_ledger_txn_type), so the tab
+    // shows the same names as the Day Close lines they become (Salary
+    // Advance / Salary Payout / Salary Advance Recovery). Value = ledger type.
+    getAdvanceTabTxnTypes: async (locationCode) => {
+        return db.sequelize.query(`
+            SELECT employee_ledger_txn_type AS id, account_head_name AS label
+            FROM m_account_heads
+            WHERE location_code = :locationCode
+              AND employee_ledger_txn_type IS NOT NULL
+              AND active_flag = 'Y'
+            ORDER BY FIELD(employee_ledger_txn_type, 'ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY')
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
     deleteLedgerEntry: async (ledgerId, employeeId, deletedBy) => {
         await db.sequelize.query(
             'SET @ledger_action_by = :user',
