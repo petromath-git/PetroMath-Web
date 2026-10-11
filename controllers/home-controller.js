@@ -98,6 +98,8 @@ module.exports = {
     'ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING',
     'N' // default - disabled
     );
+    const employeeAdvanceTxnTypes = allowEmployeeAdvanceInClosing === 'Y'
+        ? await EmployeeDao.getAdvanceTabTxnTypes(locationCode) : [];
 
     const maxCreditReceiptsRowCnt = Number(await locationConfig.getLocationConfigValue(
     locationCode,
@@ -155,6 +157,7 @@ module.exports = {
                             allowOffMeterSale: allowOffMeterSale === 'Y',
                             allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y',
                             allowEmployeeAdvanceInClosing: allowEmployeeAdvanceInClosing === 'Y',
+                            employeeAdvanceTxnTypes: employeeAdvanceTxnTypes,
                             employeeValues: values[10].value || []
                   //          digitalCompanyValues: values[8].value,
                         });
