@@ -259,6 +259,7 @@ module.exports = {
             reference_id:  data.reference_id || null,
             salary_period: data.txn_type === 'SALARY_CREDIT' ? (data.salary_period || null) : null,
             bank_id:       data.txn_type === 'BANK_PAYMENT'  ? (data.bank_id || null) : null,
+            cashflow_date: data.cashflow_date || null,
             created_by:    data.created_by,
             creation_date: new Date()
         });
