@@ -6,6 +6,16 @@ const { getLocationConfigValue } = require('../utils/location-config');
 const dateFormat      = require('dateformat');
 const db              = require('../db/db-connection');
 
+// Cash in/out of the employee ledger (Advance, cash salary, Advance Recovery)
+// comes only from Day Close - Day Close salary lines or the shift-closing
+// advance tab. The Employee screen offers these types only at locations
+// without Day Close (CASHFLOW_ENABLED off), where it is the only way in.
+const CASH_LEDGER_TYPES = ['ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY'];
+async function isDayCloseLocation(locationCode) {
+    const v = await getLocationConfigValue(locationCode, 'CASHFLOW_ENABLED', 'false');
+    return String(v).toLowerCase() === 'true';
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(d) {
@@ -82,7 +92,7 @@ module.exports.getListPage = async (req, res) => {
 module.exports.getDetailPage = async (req, res) => {
     try {
         const employeeId = parseInt(req.params.id);
-        const [employee, rawLedger, salaryHistory, banks] = await Promise.all([
+        const [employee, rawLedger, salaryHistory, banks, cashInDayClose] = await Promise.all([
             EmployeeDao.findById(employeeId),
             EmployeeDao.getLedger(employeeId),
             EmployeeDao.getSalaryHistory(employeeId),
@@ -91,7 +101,8 @@ module.exports.getDetailPage = async (req, res) => {
                  WHERE location_code = :locationCode AND active_flag = 'Y'
                  ORDER BY bank_name`,
                 { replacements: { locationCode: req.user.location_code }, type: db.Sequelize.QueryTypes.SELECT }
-            )
+            ),
+            isDayCloseLocation(req.user.location_code)
         ]);
 
         if (!employee) {
@@ -128,6 +139,7 @@ module.exports.getDetailPage = async (req, res) => {
             ledger,
             salaryHistory: salaryHistoryMapped,
             banks,
+            cashInDayClose,
             canLedger:  req.user.isAdmin,
             canEdit:    req.user.isAdmin
         });
@@ -261,6 +273,12 @@ module.exports.addLedgerEntry = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid transaction type' });
         }
 
+        const isCashType = CASH_LEDGER_TYPES.includes(req.body.txn_type);
+        const dayCloseLocation = isCashType && await isDayCloseLocation(req.user.location_code);
+        if (dayCloseLocation) {
+            return res.status(400).json({ success: false, message: 'Cash advances, salary paid in cash and advance recoveries are entered on the Day Close (Salary Advance / Salary Payout / Salary Advance Recovery). For an opening balance use Adjustment Debit/Credit.' });
+        }
+
         if (req.body.txn_type === 'BANK_PAYMENT' && !req.body.bank_id) {
             return res.status(400).json({ success: false, message: 'Bank is required for bank payments' });
         }
@@ -280,6 +298,8 @@ module.exports.addLedgerEntry = async (req, res) => {
             reference_id:  req.body.reference_id || null,
             salary_period: req.body.salary_period || null,
             bank_id:       req.body.bank_id       || null,
+            // No Day Close here to claim it: settle cash entries on their own date
+            cashflow_date: isCashType ? req.body.txn_date : null,
             created_by:    req.user.User_Name
         });
 
@@ -302,7 +322,10 @@ module.exports.deleteLedgerEntry = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Entry not found' });
         }
 
-        const cashflowEligible = ['ADVANCE', 'PAYMENT', 'ADVANCE_RECOVERY'].includes(entry.txn_type);
+        // Only Day Close locations hand cash entries to a Day Close; elsewhere
+        // their cashflow_date is just the settle stamp set when they were added.
+        const cashflowEligible = CASH_LEDGER_TYPES.includes(entry.txn_type)
+            && await isDayCloseLocation(req.user.location_code);
         if (cashflowEligible) {
             if (entry.cashflow_date) {
                 return res.status(400).json({ success: false, message: 'This entry has been closed in a cashflow and cannot be deleted.' });

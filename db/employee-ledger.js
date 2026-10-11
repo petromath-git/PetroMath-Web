@@ -20,6 +20,7 @@ module.exports = function(sequelize, DataTypes) {
         closing_id:           DataTypes.INTEGER,      // FK to t_closing; NULL for admin-entered rows
         cashflow_date:        DataTypes.DATEONLY,     // system-stamped on cashflow close
         pending_cashflow_id:  DataTypes.INTEGER,      // claimed by generate_cashflow
+        origin_cashflow_id:   DataTypes.INTEGER,      // Day Close it was entered from; deleted with it
         created_by:           DataTypes.STRING(45),
         creation_date:        DataTypes.DATE
     }, {

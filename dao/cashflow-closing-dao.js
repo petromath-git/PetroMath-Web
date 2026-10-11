@@ -138,7 +138,8 @@ module.exports = {
         const options = await db.sequelize.query(`
             SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name,
                    ah.requires_digital_vendor_link AS requiresDigitalVendor,
-                   ah.requires_credit_customer_link AS requiresCustomer
+                   ah.requires_credit_customer_link AS requiresCustomer,
+                   ah.employee_ledger_txn_type AS employeeTxnType
             FROM m_account_heads ah
             INNER JOIN m_ledger_rules mlr
                 ON  mlr.location_code = ah.location_code
@@ -153,12 +154,17 @@ module.exports = {
         const transactions = await db.sequelize.query(`
             SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag,
                    tct.digital_vendor_id AS digitalVendorId,
-                   tr.treceipt_id AS originReceiptId
+                   tr.treceipt_id AS originReceiptId,
+                   el.ledger_id AS originLedgerId
             FROM t_cashflow_transaction tct
             LEFT JOIN t_receipts tr
                 ON  tct.source_table = 't_receipts'
                 AND tr.treceipt_id = tct.source_id
                 AND tr.origin_cashflow_id = tct.cashflow_id
+            LEFT JOIN t_employee_ledger el
+                ON  tct.source_table = 't_employee_ledger'
+                AND el.ledger_id = tct.source_id
+                AND el.origin_cashflow_id = tct.cashflow_id
             LEFT JOIN m_ledger_rules mlr
                 ON  mlr.location_code = :location
                 AND mlr.external_id   = tct.account_head_id
@@ -257,6 +263,88 @@ module.exports = {
         await db.sequelize.query(`
             DELETE FROM t_receipts WHERE treceipt_id = :receiptId AND origin_cashflow_id = :cashflowId
         `, { replacements: { receiptId, cashflowId } });
+        await db.sequelize.query('CALL generate_cashflow(:cashflowId)', { replacements: { cashflowId } });
+    },
+    // Account Heads whose Day Close line is an employee ledger entry
+    // (m_account_heads.employee_ledger_txn_type: Salary Advance -> ADVANCE,
+    // Salary Payout -> PAYMENT, Salary Advance Recovery -> ADVANCE_RECOVERY),
+    // as a Map of account_head_id -> txn_type.
+    getAccountHeadEmployeeTxnTypes: async (accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return new Map();
+        const rows = await db.sequelize.query(`
+            SELECT account_head_id, employee_ledger_txn_type
+            FROM m_account_heads
+            WHERE account_head_id IN (:accountHeadIds) AND employee_ledger_txn_type IS NOT NULL
+        `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return new Map(rows.map(r => [r.account_head_id, r.employee_ledger_txn_type]));
+    },
+    // Active employees of a location, for the Day Close salary-line picker
+    // and for validating what it posts.
+    findCashflowEmployees: (locationCode) => {
+        return db.sequelize.query(`
+            SELECT employee_id, name
+            FROM m_employee
+            WHERE location_code = :locationCode AND is_active = 'Y'
+            ORDER BY name
+        `, { replacements: { locationCode }, type: Sequelize.QueryTypes.SELECT });
+    },
+    // Creates employee ledger entries entered on a DRAFT Day Close (Salary
+    // Advance / Payout / Advance Recovery lines), dated on the Day Close and
+    // tagged with origin_cashflow_id, then regenerates the Day Close so they
+    // show up as its linked lines. A row may replace an old free-text salary
+    // line (replacesTxnId), removed in the same transaction.
+    createDayCloseEmployeeEntries: async (cashflow, rows, username) => {
+        await db.sequelize.transaction(async (t) => {
+            for (const row of rows) {
+                const isCredit = row.txnType === 'ADVANCE_RECOVERY';
+                await db.sequelize.query(`
+                    INSERT INTO t_employee_ledger
+                        (employee_id, location_code, txn_date, txn_type, credit_amount, debit_amount,
+                         description, origin_cashflow_id, created_by)
+                    SELECT :employeeId, tcc.location_code, tcc.cashflow_date, :txnType, :credit, :debit,
+                           :description, tcc.cashflow_id, :username
+                    FROM t_cashflow_closing tcc
+                    WHERE tcc.cashflow_id = :cashflowId
+                `, {
+                    replacements: {
+                        employeeId: row.employeeId,
+                        txnType: row.txnType,
+                        credit: isCredit ? row.amount : 0,
+                        debit: isCredit ? 0 : row.amount,
+                        description: row.notes || 'Day Close',
+                        cashflowId: cashflow.cashflowId,
+                        username
+                    },
+                    transaction: t
+                });
+                if (row.replacesTxnId) {
+                    await db.sequelize.query(`
+                        DELETE FROM t_cashflow_transaction
+                        WHERE transaction_id = :txnId AND cashflow_id = :cashflowId
+                          AND COALESCE(calc_flag, 'N') <> 'Y'
+                    `, { replacements: { txnId: row.replacesTxnId, cashflowId: cashflow.cashflowId }, transaction: t });
+                }
+            }
+        });
+        await db.sequelize.query('CALL generate_cashflow(:cashflowId)', { replacements: { cashflowId: cashflow.cashflowId } });
+    },
+    findDayCloseEmployeeEntry: (ledgerId) => {
+        return db.sequelize.query(`
+            SELECT ledger_id, origin_cashflow_id, location_code
+            FROM t_employee_ledger WHERE ledger_id = :ledgerId
+        `, { replacements: { ledgerId }, type: Sequelize.QueryTypes.SELECT })
+            .then(rows => rows[0] || null);
+    },
+    // Removes an employee ledger entry entered from a DRAFT Day Close (the
+    // before_employee_ledger_delete trigger logs it to history), then
+    // regenerates the Day Close so its linked line disappears too.
+    deleteDayCloseEmployeeEntry: async (ledgerId, cashflowId, username) => {
+        await db.sequelize.transaction(async (t) => {
+            await db.sequelize.query('SET @ledger_action_by = :username', { replacements: { username }, transaction: t });
+            await db.sequelize.query(`
+                DELETE FROM t_employee_ledger WHERE ledger_id = :ledgerId AND origin_cashflow_id = :cashflowId
+            `, { replacements: { ledgerId, cashflowId }, transaction: t });
+        });
         await db.sequelize.query('CALL generate_cashflow(:cashflowId)', { replacements: { cashflowId } });
     },
     triggerGenerateCashflow : (cashflowId) => {
@@ -398,6 +486,17 @@ reopenCashflow: async (cashflowId, locationCode, userId) => {
              JOIN t_cashflow_transaction tct
                ON tct.source_table = 't_receipts' AND tct.source_id = tr.treceipt_id
              SET tr.cashflow_date = NULL
+             WHERE tct.cashflow_id = :cashflowId`,
+            { replacements: { cashflowId }, transaction: t }
+        );
+
+        // Same for employee ledger cash entries (Salary Advance / Payout /
+        // Advance Recovery lines) - after_cashflow_close stamps them too.
+        await db.sequelize.query(
+            `UPDATE t_employee_ledger el
+             JOIN t_cashflow_transaction tct
+               ON tct.source_table = 't_employee_ledger' AND tct.source_id = el.ledger_id
+             SET el.cashflow_date = NULL
              WHERE tct.cashflow_id = :cashflowId`,
             { replacements: { cashflowId }, transaction: t }
         );
