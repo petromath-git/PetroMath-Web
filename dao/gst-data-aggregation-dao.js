@@ -290,7 +290,7 @@ getHSNSummary: async (locationCode, fromDate, toDate) => {
             JOIN t_reading tr ON tc.closing_id = tr.closing_id
             JOIN m_pump mpump ON tr.pump_id = mpump.pump_id 
                 AND DATE(tc.closing_date) BETWEEN mpump.effective_start_date AND mpump.effective_end_date
-            JOIN m_product mprod ON mpump.product_code = mprod.product_name
+            JOIN m_product mprod ON mprod.product_id = mpump.product_id
                 AND mprod.location_code = tc.location_code
             WHERE tc.closing_status = 'CLOSED'
                 AND tc.location_code = :locationCode
@@ -708,7 +708,7 @@ getNilRatedSalesSummary: async (locationCode, fromDate, toDate) => {
             JOIN t_reading tr ON tc.closing_id = tr.closing_id
             JOIN m_pump mpump ON tr.pump_id = mpump.pump_id 
                 AND DATE(tc.closing_date) BETWEEN mpump.effective_start_date AND mpump.effective_end_date
-            JOIN m_product mprod ON mpump.product_code = mprod.product_name
+            JOIN m_product mprod ON mprod.product_id = mpump.product_id
                 AND mprod.location_code = tc.location_code
             WHERE tc.closing_status = 'CLOSED'
                 AND tc.location_code = :locationCode

@@ -12,6 +12,20 @@ const XMS_TAG = "xmsrate";
 
 const POUCH_DESC = "2T POUCH";
 const LOOSE_DESC = "2T LOOSE";
+
+// m_product.product_type: what a product IS, independent of its (editable)
+// name. Code that needs "the 2T loose oil" or "the MS" checks the type.
+const PRODUCT_TYPE = {
+  MS: 'MS', HSD: 'HSD', XMS: 'XMS', GD: 'GD', E20: 'E20', CNG: 'CNG',
+  LOOSE_2T: '2T_LOOSE', POUCH_2T: '2T_POUCH', DSR_OIL: 'DSR_OIL'
+};
+// Type a new product gets from its name (exact names the app has always
+// treated specially; anything else has no type)
+const PRODUCT_TYPE_BY_NAME = {
+  'MS': PRODUCT_TYPE.MS, 'HSD': PRODUCT_TYPE.HSD, 'XMS': PRODUCT_TYPE.XMS, 'GD': PRODUCT_TYPE.GD,
+  'E20': PRODUCT_TYPE.E20, 'CNG': PRODUCT_TYPE.CNG, '2T LOOSE': PRODUCT_TYPE.LOOSE_2T,
+  '2T POUCH': PRODUCT_TYPE.POUCH_2T, 'DSR - OIL': PRODUCT_TYPE.DSR_OIL
+};
 const LOOSE_TAG = "loose2t";
 const POUCH_TAG = "pouch2t";
 
@@ -270,14 +284,18 @@ productUnits: ['LIT', 'NOS'],
   PRODUCT_PUMPS: PRODUCT_PUMPS,
   PRODUCT_2T: PRODUCT_2T,
   PRODUCTS: PRODUCTS,
+  PRODUCT_TYPE: PRODUCT_TYPE,
+  PRODUCT_TYPE_BY_NAME: PRODUCT_TYPE_BY_NAME,
 };
 
+// Keyed by m_product.product_type (not name), so a renamed product keeps its
+// rate-field tag and label
 function setProductDetailsMap() {
   let productMap = new Map();
-  productMap.set(MS_DESC, { label: MS_LABEL, tag: MS_TAG });
-  productMap.set(HSD_DESC, { label: HSD_LABEL, tag: HSD_TAG });
-  productMap.set(XMS_DESC, { label: XMS_LABEL, tag: XMS_TAG });
-  productMap.set(POUCH_DESC, { tag: POUCH_TAG });
-  productMap.set(LOOSE_DESC, { tag: LOOSE_TAG });
+  productMap.set(PRODUCT_TYPE.MS, { label: MS_LABEL, tag: MS_TAG });
+  productMap.set(PRODUCT_TYPE.HSD, { label: HSD_LABEL, tag: HSD_TAG });
+  productMap.set(PRODUCT_TYPE.XMS, { label: XMS_LABEL, tag: XMS_TAG });
+  productMap.set(PRODUCT_TYPE.POUCH_2T, { tag: POUCH_TAG });
+  productMap.set(PRODUCT_TYPE.LOOSE_2T, { tag: LOOSE_TAG });
   return productMap;
 }

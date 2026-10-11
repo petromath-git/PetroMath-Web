@@ -194,7 +194,7 @@ module.exports = {
                     p.product_name,
                     p.rgb_color
                 FROM m_tank t
-                LEFT JOIN m_product p ON t.product_code = p.product_name 
+                LEFT JOIN m_product p ON p.product_id = t.product_id 
                     AND p.location_code = t.location_code
                     AND p.is_tank_product = 1
                 WHERE t.location_code = :locationCode
@@ -235,7 +235,7 @@ module.exports = {
                     prod.product_name,
                     prod.rgb_color
                 FROM m_pump p
-                LEFT JOIN m_product prod ON p.product_code = prod.product_name 
+                LEFT JOIN m_product prod ON prod.product_id = p.product_id 
                     AND prod.location_code = p.location_code
                     AND prod.is_tank_product = 1
                 WHERE p.location_code = :locationCode

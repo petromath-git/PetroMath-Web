@@ -97,6 +97,13 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.DECIMAL(10, 3),
             allowNull: true,
             field: 'pack_volume'
+        },
+        // What the product is (config PRODUCT_TYPE: MS, 2T_LOOSE, DSR_OIL ...),
+        // independent of its editable name. NULL = nothing special.
+        product_type: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+            field: 'product_type'
         }
     }, {
         timestamps: false,

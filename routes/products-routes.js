@@ -15,6 +15,7 @@ const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
 const PRODUCT_UNITS = config.APP_CONFIGS.productUnits; // LIT, NOS
+const PRODUCT_TYPES = Object.values(config.PRODUCT_TYPE);
 
 // Product names are stored uppercase with single spaces and no leading or
 // trailing spaces/tabs (the browser uppercases, but the server must not rely on it)
@@ -34,10 +35,9 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus, usedIds] = await Promise.all([
+        const [data, editableSetting, salesLedgers, purchaseLedgers, deletableIds, openingStatus, usedIds] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
-            ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
             ProductDao.findDeletableProductIds(locationCode),
@@ -45,10 +45,11 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
             ProductDao.findUsedProductIds(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
-        const pumpLinkedSet = new Set(pumpLinkedNames);
 
         data.forEach((product) => {
-            const canEditNameForRow = canEditProductName && !pumpLinkedSet.has(product.product_name);
+            // Pumps and tanks link by product_id and follow a rename (DB trigger),
+            // so fuel products can be renamed like any other
+            const canEditNameForRow = canEditProductName;
             products.push({
                 id: product.product_id,
                 name: product.product_name,
@@ -64,6 +65,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 hsn_code: product.hsn_code,
                 is_tank_product: product.is_tank_product,
                 is_lube_product: product.is_lube_product,
+                product_type: product.product_type || '',
                 can_edit_name: canEditNameForRow,
                 can_delete: deletableIds.has(Number(product.product_id)),
                 // unit can't change once the product has entries (SuperUser excepted)
@@ -75,6 +77,7 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
 
         res.render('products', {
             title: 'Products',
+            productTypes: PRODUCT_TYPES,
             user: req.user,
             mobileReady: true,   // body.mobile-ready: drops the global phone hacks (50px body padding etc.)
             products: products,
@@ -227,11 +230,11 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
                 });
             }
 
-            const isLinked = await ProductDao.isProductLinkedToPumpOrTank(locationCode, existingProduct.product_name);
-            if (isLinked) {
+            // Pumps/tanks keep the name as a label in VARCHAR(50)
+            if (newProductName.length > 50 && await ProductDao.isProductLinkedToPumpOrTank(locationCode, existingProduct.product_id)) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Product is linked to pump/tank configuration and name cannot be changed'
+                    error: 'A product with pumps or tanks can have at most 50 characters in its name.'
                 });
             }
 
@@ -271,7 +274,11 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             cgst_percent: req.body.m_product_cgst,
             sgst_percent: req.body.m_product_sgst,
             is_tank_product: req.body.m_product_is_tank_product,
-            is_lube_product: req.body.m_product_is_lube_product
+            is_lube_product: req.body.m_product_is_lube_product,
+            // What the product is (2T loose oil, MS ...) - SuperUser only
+            product_type: req.user.Role === 'SuperUser' && req.body.m_product_product_type !== undefined
+                ? (PRODUCT_TYPES.includes(req.body.m_product_product_type) ? req.body.m_product_product_type : null)
+                : undefined
         });
 
         if (data == 1 || data == 0) {
@@ -305,7 +312,7 @@ router.delete('/api/:id', [isLoginEnsured, security.isAdmin()], async function (
             return res.status(404).json({ success: false, error: 'Product not found' });
         }
 
-        const blockers = await ProductDao.getDeleteBlockers(product.product_id, locationCode, product.product_name);
+        const blockers = await ProductDao.getDeleteBlockers(product.product_id, locationCode);
         if (blockers.length) {
             const detail = blockers.map(b => `${b.count} ${b.label}`).join(', ');
             return res.status(400).json({
