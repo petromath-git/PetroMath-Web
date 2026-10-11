@@ -142,8 +142,8 @@ block content
                         tbody
                             if ledger && ledger.length > 0
                                 each entry in ledger
-                                    - const tColors = {SALARY_CREDIT:'success',ADVANCE:'danger',PAYMENT:'warning',BANK_PAYMENT:'info',ADVANCE_RECOVERY:'primary',DEDUCTION:'warning',ADJUSTMENT_CR:'success',ADJUSTMENT_DR:'danger'}
-                                    - const tLabels = {SALARY_CREDIT:'Salary',ADVANCE:'Advance',PAYMENT:'Cash Pay',BANK_PAYMENT:'Bank Pay',ADVANCE_RECOVERY:'Recovery',DEDUCTION:'Deduction',ADJUSTMENT_CR:'Adj+',ADJUSTMENT_DR:'Adj−'}
+                                    - const tColors = {SALARY_CREDIT:'success',ADVANCE:'danger',PAYMENT:'warning',BANK_PAYMENT:'info',BANK_ADVANCE:'danger',BANK_RECOVERY:'primary',ADVANCE_RECOVERY:'primary',DEDUCTION:'warning',ADJUSTMENT_CR:'success',ADJUSTMENT_DR:'danger'}
+                                    - const tLabels = {SALARY_CREDIT:'Salary',ADVANCE:'Advance',PAYMENT:'Cash Pay',BANK_PAYMENT:'Bank Pay',BANK_ADVANCE:'Bank Advance',BANK_RECOVERY:'Bank Recovery',ADVANCE_RECOVERY:'Recovery',DEDUCTION:'Deduction',ADJUSTMENT_CR:'Adj+',ADJUSTMENT_DR:'Adj−'}
                                     tr
                                         td: small= dd(entry.txn_date)
                                         td
@@ -218,7 +218,6 @@ block content
                                 if !cashInDayClose
                                     option(value="ADVANCE") Advance (cash given to employee)
                                     option(value="PAYMENT") Payment (salary paid in cash)
-                                option(value="BANK_PAYMENT") Bank Payment (salary paid via bank)
                                 if !cashInDayClose
                                     option(value="ADVANCE_RECOVERY") Advance Recovery (cash returned)
                                 option(value="SALARY_CREDIT") Salary Credit (salary earned)
