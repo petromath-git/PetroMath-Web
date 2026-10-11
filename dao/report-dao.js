@@ -561,7 +561,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
               JOIN t_closing tcoil ON tcoil.closing_id = toil.closing_id
               JOIN m_product mp ON toil.product_id = mp.product_id
               WHERE tcoil.location_code = :locationCode
-                AND UPPER(mp.product_name) = '2T LOOSE'
+                AND mp.product_type = '2T_LOOSE'
               GROUP BY DATE(tcoil.closing_date)
             )
             SELECT
@@ -639,7 +639,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
                 JOIN t_closing tcoil ON tcoil.closing_id = toil.closing_id
                 JOIN m_product mp ON toil.product_id = mp.product_id
                 WHERE tcoil.location_code = :locationCode
-                    AND UPPER(mp.product_name) = '2T LOOSE'
+                    AND mp.product_type = '2T_LOOSE'
                 GROUP BY DATE_FORMAT(tcoil.closing_date, '%Y-%m')
             )
             SELECT

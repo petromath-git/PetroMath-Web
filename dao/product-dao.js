@@ -2,6 +2,7 @@ const db = require("../db/db-connection");
 const Product = db.product;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
+const { PRODUCT_TYPE_BY_NAME } = require("../config/app-config");
 
 // Tables that reference m_product.product_id. Any row here means the product
 // has been used and must not be deleted.
@@ -78,20 +79,6 @@ module.exports = {
         return null;
     },
 
-    findPumpLinkedProductNames: async (locationCode) => {
-        const rows = await db.sequelize.query(`
-            SELECT DISTINCT product_code
-            FROM m_pump
-            WHERE location_code = :locationCode
-              AND product_code IS NOT NULL
-        `, {
-            replacements: { locationCode },
-            type: db.Sequelize.QueryTypes.SELECT
-        });
-
-        return rows.map(r => r.product_code);
-    },
-
     findById: (productId, locationCode) => {
         const where = { product_id: productId };
         if (locationCode) where.location_code = locationCode;
@@ -104,16 +91,16 @@ module.exports = {
         return Product.findOne({ where });
     },
 
-    isProductLinkedToPumpOrTank: async (locationCode, productName) => {
+    isProductLinkedToPumpOrTank: async (locationCode, productId) => {
         const rows = await db.sequelize.query(`
             SELECT
                 (
-                    (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_code = :productName)
+                    (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_id = :productId)
                     +
-                    (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_code = :productName)
+                    (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_id = :productId)
                 ) AS link_count
         `, {
-            replacements: { locationCode, productName },
+            replacements: { locationCode, productId },
             type: db.Sequelize.QueryTypes.SELECT
         });
 
@@ -121,16 +108,14 @@ module.exports = {
     },
 
     findProducts: async (locationCode) => {
-        // Base pump products query with location filter
-        const pumpProductsQuery = `
-            SELECT DISTINCT product_code 
-            FROM m_pump 
-            WHERE product_code IS NOT NULL 
-            ${locationCode ? `AND location_code = '${locationCode}'` : ''}
-        `;
-        
-        const [pumpProducts] = await db.sequelize.query(pumpProductsQuery);
-        const pumpProductCodes = pumpProducts.map(p => p.product_code);
+        // Products dispensed by pumps (listed first), by product_id
+        const pumpProducts = await db.sequelize.query(`
+            SELECT DISTINCT product_id
+            FROM m_pump
+            WHERE product_id IS NOT NULL
+            ${locationCode ? 'AND location_code = :locationCode' : ''}
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        const pumpProductIds = pumpProducts.map(p => Number(p.product_id)).filter(id => id > 0);
         
         const baseQuery = {
             attributes: [
@@ -148,11 +133,12 @@ module.exports = {
                 'hsn_code',
                 'rgb_color',
                 'is_tank_product',
-                'is_lube_product'
+                'is_lube_product',
+                'product_type'
             ],
             order: [
-                // Dynamic ordering based on location-specific pump products
-                Sequelize.literal(`CASE WHEN product_name IN ('${pumpProductCodes.join("','")}') THEN 0 ELSE 1 END`),
+                // Pump products first (ids are integers, safe to inline)
+                Sequelize.literal(pumpProductIds.length ? `CASE WHEN product_id IN (${pumpProductIds.join(',')}) THEN 0 ELSE 1 END` : '1'),
                 ['product_name', 'ASC']
             ]
         };
@@ -266,6 +252,10 @@ findPumpProducts: async (locationCode) => {
         if (!product.sku_name) {
             product.sku_name = product.product_name;
         }
+        // Products the app treats specially (MS, 2T LOOSE, DSR - OIL ...) get their type from the name
+        if (product.product_type === undefined) {
+            product.product_type = PRODUCT_TYPE_BY_NAME[String(product.product_name || '').trim().toUpperCase()] || null;
+        }
         
         if (!product.sku_number) {
             product.sku_number = `SKU-${Date.now()}`;
@@ -292,6 +282,7 @@ findPumpProducts: async (locationCode) => {
         if (product.hsn_code) updateFields.hsn_code = product.hsn_code;
         if (product.is_tank_product !== undefined) updateFields.is_tank_product = product.is_tank_product;
         if (product.is_lube_product !== undefined) updateFields.is_lube_product = product.is_lube_product;
+        if (product.product_type !== undefined) updateFields.product_type = product.product_type || null;
 
         return Product.update(updateFields, {
             where: {
@@ -302,9 +293,8 @@ findPumpProducts: async (locationCode) => {
 
     // Returns [{ label, count }] for everything that stops a product from being
     // deleted. Empty array = safe to delete. Transaction tables are matched by
-    // product_id; pump/tank config is matched by name (m_pump/m_tank.product_code),
-    // so a name link only blocks when this is the sole product carrying that name.
-    getDeleteBlockers: async (productId, locationCode, productName) => {
+    // product_id; so are pumps and tanks (m_pump/m_tank.product_id).
+    getDeleteBlockers: async (productId, locationCode) => {
         const sql = PRODUCT_REF_TABLES
             .map(([table, label]) => `SELECT '${label}' AS label, COUNT(*) AS cnt FROM ${table} WHERE product_id = :productId`)
             .join(' UNION ALL ');
@@ -318,17 +308,14 @@ findPumpProducts: async (locationCode) => {
 
         const [link] = await db.sequelize.query(`
             SELECT
-                (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_code = :productName) AS pumps,
-                (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_code = :productName) AS tanks,
-                (SELECT COUNT(*) FROM m_product WHERE location_code = :locationCode AND product_name = :productName) AS same_name
+                (SELECT COUNT(*) FROM m_pump WHERE location_code = :locationCode AND product_id = :productId) AS pumps,
+                (SELECT COUNT(*) FROM m_tank WHERE location_code = :locationCode AND product_id = :productId) AS tanks
         `, {
-            replacements: { locationCode, productName },
+            replacements: { locationCode, productId },
             type: db.Sequelize.QueryTypes.SELECT
         });
-        if (Number(link.same_name) <= 1) {
-            if (Number(link.pumps) > 0) blockers.push({ label: 'nozzles (pump configuration)', count: Number(link.pumps) });
-            if (Number(link.tanks) > 0) blockers.push({ label: 'tanks', count: Number(link.tanks) });
-        }
+        if (Number(link.pumps) > 0) blockers.push({ label: 'nozzles (pump configuration)', count: Number(link.pumps) });
+        if (Number(link.tanks) > 0) blockers.push({ label: 'tanks', count: Number(link.tanks) });
         return blockers;
     },
 
@@ -345,11 +332,8 @@ findPumpProducts: async (locationCode) => {
             LEFT JOIN (${usedSql}) used ON used.product_id = p.product_id
             WHERE p.location_code = :locationCode
               AND used.product_id IS NULL
-              AND (
-                    (SELECT COUNT(*) FROM m_product s WHERE s.location_code = p.location_code AND s.product_name = p.product_name) > 1
-                    OR (    NOT EXISTS (SELECT 1 FROM m_pump mp WHERE mp.location_code = p.location_code AND mp.product_code = p.product_name)
-                        AND NOT EXISTS (SELECT 1 FROM m_tank mt WHERE mt.location_code = p.location_code AND mt.product_code = p.product_name))
-                  )
+              AND NOT EXISTS (SELECT 1 FROM m_pump mp WHERE mp.product_id = p.product_id)
+              AND NOT EXISTS (SELECT 1 FROM m_tank mt WHERE mt.product_id = p.product_id)
         `, {
             replacements: { locationCode },
             type: db.Sequelize.QueryTypes.SELECT

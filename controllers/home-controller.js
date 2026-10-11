@@ -838,7 +838,7 @@ const getLocationProductColumns = (locationCode) => {
         const productQuery = `
             SELECT DISTINCT mp.product_code 
             FROM m_pump mp
-            JOIN m_product prod ON mp.product_code = prod.product_name 
+            JOIN m_product prod ON prod.product_id = mp.product_id 
                                 AND mp.location_code = prod.location_code
             WHERE mp.location_code = :locationCode 
             AND mp.product_code IS NOT NULL 
@@ -878,7 +878,7 @@ const getLocationProductColumns = (locationCode) => {
                     SELECT COUNT(*) as count 
                     FROM m_product 
                     WHERE location_code = :locationCode 
-                    AND product_name = '2T LOOSE'
+                    AND product_type = '2T_LOOSE'
                 `;
                 
                 db.sequelize.query(twoTQuery, {
@@ -991,13 +991,13 @@ const productDataPromise = (locationCode) => {
         return ProductDao.findProducts(locationCode)
             .then(data => {
                 data.forEach((product) => {
-                    const mapData = productMap.get(product.product_name);
+                    const mapData = productMap.get(product.product_type);
                     const productAlias = mapData ?  mapData.label ? mapData.label : product.product_name : product.product_name;
                     const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
                     products.push(formProductData(product, productAlias, textName));
                     productIdAliasMapping.push(formProductAliasMap(product, productAlias));
-                    if(product.product_name === config.POUCH_DESC ||
-                        product.product_name === config.LOOSE_DESC) {
+                    if(product.product_type === config.PRODUCT_TYPE.POUCH_2T ||
+                        product.product_type === config.PRODUCT_TYPE.LOOSE_2T) {
                         products2T.push(formProductData(product, textName, textName));
                     }
                 });
@@ -1038,7 +1038,7 @@ const pumpProductDataPromise = (locationCode) => {
                             || data.find(p => p.product_name === pumpProduct.product_code);
                         if (product && !seen.has(product.product_id)) {
                             seen.add(product.product_id);
-                            const mapData = productMap.get(product.product_name);
+                            const mapData = productMap.get(product.product_type);
                             const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
                             const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
                             products.push(formProductData(product, productAlias, textName));

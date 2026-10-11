@@ -3,6 +3,7 @@ const utils = require("../utils/app-utils");
 const lubesInvoiceDao = require("../dao/lubes-invoice-dao");
 const supplierDao = require("../dao/supplier-dao");
 const config = require("../config/app-config").APP_CONFIGS;
+const { PRODUCT_TYPE } = require("../config/app-config");
 const appCache = require("../utils/app-cache");
 const db = require("../db/db-connection");
 const LubesInvoiceHeader = db.t_lubes_inv_hdr;
@@ -874,7 +875,7 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
         where: {
             location_code: user.location_code,
             is_tank_product: 1,
-            product_name: db.Sequelize.where(db.Sequelize.fn('UPPER', db.Sequelize.col('product_name')), 'CNG')
+            product_type: PRODUCT_TYPE.CNG
         },
         attributes: ['product_id']
     });

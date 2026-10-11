@@ -79,7 +79,7 @@ module.exports = {
         ON tr.pump_id = mp.pump_id
         AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
       JOIN m_product mprod
-        ON mp.product_code = mprod.product_name
+        ON mprod.product_id = mp.product_id
         AND mprod.location_code = tc.location_code
       WHERE tc.closing_status = 'CLOSED'
         AND tc.location_code = :locationCode

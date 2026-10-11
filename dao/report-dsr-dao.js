@@ -161,18 +161,19 @@ getDeadline: async (locationCode, reportDate) => {
                 from
                                         (select mp.pump_code,
                                         mp.product_code,
+                                        mp.product_id,
                                         max(tr.closing_reading),
                                         min(tr.opening_reading),
                                         max(tr.closing_reading)-min(tr.opening_reading) sales
                                         from t_reading tr,m_pump mp 
                                         where tr.closing_id in (:closing_id) and   tr.pump_id = mp.pump_id 
-                                        group by  mp.pump_code,mp.product_code) a lEFT OUTER JOIN
-                                        (select sum(tcr.qty) cr_qty,mp.product_name from t_credits tcr,m_product mp,m_credit_list mcl where 1=1
+                                        group by  mp.pump_code,mp.product_code,mp.product_id) a lEFT OUTER JOIN
+                                        (select sum(tcr.qty) cr_qty,mp.product_id from t_credits tcr,m_product mp,m_credit_list mcl where 1=1
                                         and  tcr.product_id = mp.product_id
                                         and  tcr.creditlist_id = mcl.creditlist_id
                                         and  COALESCE(mcl.card_flag,'N') = 'N'
-                                        and  tcr.closing_id in (:closing_id) group by mp.product_name)b 
-                                        ON a.product_code = b.product_name
+                                        and  tcr.closing_id in (:closing_id) group by mp.product_id)b 
+                                        ON a.product_id = b.product_id
                                         lEFT OUTER JOIN
                                         (select mp.product_code,sum(tr.testing) test_qty from t_reading tr,m_pump mp 
                                           where tr.pump_id = mp.pump_id
@@ -211,9 +212,9 @@ getDeadline: async (locationCode, reportDate) => {
                             JOIN m_product mp ON tcr.product_id = mp.product_id
                             JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
                             WHERE tcr.closing_id IN (:closing_id)
-                            AND mp.product_name = a.product_code
+                            AND mp.product_id = a.product_id
                             AND COALESCE(mcl.card_flag,'N') != 'Y'
-                            GROUP BY mp.product_name
+                            GROUP BY mp.product_id
                         ), 0) as crsaleamtwithoutdisc,
                         COALESCE((
                             SELECT SUM(ROUND(tcr.qty * (tcr.price-tcr.price_discount), 2))
@@ -221,20 +222,21 @@ getDeadline: async (locationCode, reportDate) => {
                             JOIN m_product mp ON tcr.product_id = mp.product_id
                             JOIN m_credit_list mcl ON tcr.creditlist_id = mcl.creditlist_id
                             WHERE tcr.closing_id IN (:closing_id)
-                            AND mp.product_name = a.product_code
+                            AND mp.product_id = a.product_id
                             AND COALESCE(mcl.card_flag,'N') != 'Y'
-                            GROUP BY mp.product_name
+                            GROUP BY mp.product_id
                         ), 0) as crsaleamt
                     from (
                         select 
                             mp.product_code,
+                            mp.product_id,
                             sum((tr.closing_reading - tr.opening_reading - tr.testing)*price) total_amt
                         from t_reading tr
                         join m_pump mp on tr.pump_id = mp.pump_id
                         where tr.closing_id in (:closing_id)
-                        group by mp.product_code
+                        group by mp.product_code, mp.product_id
                     ) a
-                    group by a.product_code
+                    group by a.product_code, a.product_id
                 ) x; `,
         {
             replacements: { closing_id: closing_id}, 
@@ -281,7 +283,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                                         WHEN :locationCode IN ('MC','MUE','MC2','MME') 
                                             THEN (SELECT price 
                                                 FROM m_product 
-                                                WHERE product_name = 'DSR - OIL' 
+                                                WHERE product_type = 'DSR_OIL' 
                                                     AND location_code = mp.location_code)
                                         ELSE tc.price
                                         END AS cash_amt,
@@ -289,7 +291,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                                     FROM  t_2toil tc
                                     JOIN m_product mp ON mp.product_id = tc.product_id
                                     WHERE tc.closing_id in (:closing_id)
-                                    AND UPPER(mp.product_name) = '2T LOOSE'
+                                    AND mp.product_type = '2T_LOOSE'
                             UNION ALL
                             -- Subquery 2: Calculate cash_amt for '2T POUCH'
                             SELECT 
@@ -300,7 +302,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                             JOIN
                                 m_product mp ON tc.product_id = mp.product_id
                             WHERE
-                                UPPER(mp.product_name) = '2T POUCH' 
+                                mp.product_type = '2T_POUCH' 
                                 AND tc.closing_id in (:closing_id)
                             UNION ALL
                             -- Subquery 3: Calculate cash_amt from t_cashsales
@@ -317,7 +319,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                                     FROM t_reading tr
                                     JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
                                     WHERE tr.closing_id in (:closing_id)
-                                      AND mp2.product_code = mp.product_name
+                                      AND mp2.product_id = mp.product_id
                                 )
                                 AND tc.closing_id in (:closing_id)
                             UNION ALL
@@ -335,7 +337,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                                     FROM t_reading tr
                                     JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
                                     WHERE tr.closing_id in (:closing_id)
-                                      AND mp2.product_code = mp.product_name
+                                      AND mp2.product_id = mp.product_id
                                 )
                                 AND tc.closing_id in (:closing_id)
                         ) a`,
@@ -424,20 +426,20 @@ getCashsales: async (locationCode, reportDate) => {
          SELECT mp.product_name,
                 SUM((given_qty-returned_qty)) qty,
                 CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                     THEN (SELECT price FROM m_product WHERE product_name = 'DSR - OIL' AND location_code = mp.location_code)
+                     THEN (SELECT price FROM m_product WHERE product_type = 'DSR_OIL' AND location_code = mp.location_code)
                      ELSE tc.price
                 END AS price,
                 0,
                 SUM((given_qty-returned_qty) *
                     CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                         THEN (SELECT price FROM m_product WHERE product_name = 'DSR - OIL' AND location_code = mp.location_code)
+                         THEN (SELECT price FROM m_product WHERE product_type = 'DSR_OIL' AND location_code = mp.location_code)
                          ELSE tc.price
                     END
                 ) AS amt,
                 'Cash' AS type
            FROM t_2toil tc
            JOIN m_product mp ON tc.product_id = mp.product_id
-          WHERE UPPER(mp.product_name) = '2T LOOSE'
+          WHERE mp.product_type = '2T_LOOSE'
             AND tc.closing_id IN (:closing_id)
           GROUP BY mp.product_name, price
          UNION ALL
@@ -445,7 +447,7 @@ getCashsales: async (locationCode, reportDate) => {
                 SUM((given_qty-returned_qty)*tc.price) amt, 'Cash' AS type
            FROM t_2toil tc, m_product mp
           WHERE tc.product_id = mp.product_id
-            AND UPPER(mp.product_name) = '2T POUCH'
+            AND mp.product_type = '2T_POUCH'
             AND tc.closing_id IN (:closing_id)
           GROUP BY mp.product_name, mp.price
          UNION ALL
@@ -612,7 +614,7 @@ getCashsales: async (locationCode, reportDate) => {
           DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date_formatted,
           CALCULATE_EXSHORTAGE(tc.closing_id) AS ex_short,
           (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id =tc.closing_id and toil.product_id = mp.product_id
-          and upper(mp.product_name) = '2T LOOSE' ) loose,
+          and mp.product_type = '2T_LOOSE' ) loose,
           tc.notes,
           ${caseStatements}
         FROM 
