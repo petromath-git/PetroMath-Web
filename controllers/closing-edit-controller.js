@@ -12,6 +12,7 @@ const security = require("../utils/app-security");
 const CreditVehicleDao = require("../dao/credit-vehicles-dao");
 const locationConfig = require('../utils/location-config');
 const db = require('../db/db-connection');
+const EmployeeDao = require('../dao/employee-dao');
 const DayBillSvc = require('../services/day-bill-service');
 // Edit flow: This controller takes care of all joins to get data for editing.
 
@@ -127,6 +128,8 @@ module.exports = {
                 'ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING',
                 'N' // default - disabled
             );
+            const employeeAdvanceTxnTypes = allowEmployeeAdvanceInClosing === 'Y'
+                ? await EmployeeDao.getAdvanceTabTxnTypes(locationCode) : [];
 
             const maxCreditReceiptsRowCnt = Number(await locationConfig.getLocationConfigValue(
                 locationCode,
@@ -205,6 +208,7 @@ module.exports = {
                         t_intercompany: values[20].value || [],
                         creditReceiptsData: values[21].value || [],
                         employeeValues: values[22].value || [],
+                        employeeAdvanceTxnTypes: employeeAdvanceTxnTypes,
                         employeeAdvanceData: values[23].value || []
                     });
                 }).catch((err) => {
