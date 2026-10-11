@@ -215,14 +215,18 @@ block content
                         .form-group
                             label Transaction Type *
                             select.form-control#entry_type
-                                option(value="ADVANCE") Advance (cash given to employee)
-                                option(value="PAYMENT") Payment (salary paid in cash)
+                                if !cashInDayClose
+                                    option(value="ADVANCE") Advance (cash given to employee)
+                                    option(value="PAYMENT") Payment (salary paid in cash)
                                 option(value="BANK_PAYMENT") Bank Payment (salary paid via bank)
-                                option(value="ADVANCE_RECOVERY") Advance Recovery (cash returned)
+                                if !cashInDayClose
+                                    option(value="ADVANCE_RECOVERY") Advance Recovery (cash returned)
                                 option(value="SALARY_CREDIT") Salary Credit (salary earned)
                                 option(value="DEDUCTION") Deduction (shortage / other)
                                 option(value="ADJUSTMENT_CR") Adjustment Credit (+)
                                 option(value="ADJUSTMENT_DR") Adjustment Debit (−)
+                            if cashInDayClose
+                                small.form-text.text-muted Cash advances, cash salary and advance recoveries are entered on the Day Close. Use Adjustment Debit/Credit for opening balances.
                         .form-group#bankGroup(style="display:none;")
                             label Bank *
                             select.form-control#entry_bank
@@ -355,6 +359,7 @@ block scripts
             $('#salaryPeriodGroup').toggle(t === 'SALARY_CREDIT');
             $('#bankGroup').toggle(t === 'BANK_PAYMENT');
         });
+        $('#entry_type').trigger('change');   // first option may be Bank Payment
 
         $('#btnSaveEntry').on('click', function() {
             const txnType = $('#entry_type').val();
