@@ -1571,6 +1571,17 @@ function deriveBankVoucherType(txn, bankIsDr) {
 
 // Returns counterpart ledger_id, or null if the event was already marked PROCESSED (skip).
 // Throws on unresolvable ledger.
+// Employee bank lines/splits carry ledger_name "<purpose> - <name> [<code>]"
+// (fn_employee_bank_ledger_name). They post through the purpose's Static
+// mapping - the same Account Head the Day Close salary lines use - so one GL
+// Control mapping covers cash and bank alike.
+const EMPLOYEE_BANK_PURPOSES = ['Salary Advance Recovery', 'Salary Advance', 'Salary Payout'];
+function employeeBankPurpose(ledgerName) {
+    const purpose = EMPLOYEE_BANK_PURPOSES.find(p => (ledgerName || '').startsWith(p + ' - '));
+    if (!purpose) throw new Error(`Cannot resolve employee bank purpose from ledger_name='${ledgerName}'`);
+    return purpose;
+}
+
 async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy) {
     const { external_id, ledger_name } = txn;
     const external_source = txn.external_source ? txn.external_source.toLowerCase() : null;
@@ -1599,6 +1610,15 @@ async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy)
         const id = await resolveLedger(locationCode, 'SUPPLIER', external_id);
         if (!id) throw new Error(`SUPPLIER GL ledger not found for supplier_id=${external_id}`);
         return id;
+    }
+
+    if (external_source === 'employee') {
+        const { treatment, ledgerId } = await resolveStaticLedger(locationCode, employeeBankPurpose(ledger_name));
+        if (treatment === 'SKIP') {
+            await markEventProcessed(eventId, null, processedBy);
+            return null;
+        }
+        return ledgerId;
     }
 
     if (external_source === 'bank') {
@@ -1667,6 +1687,10 @@ async function resolveSplitCounterLedger(split, locationCode) {
         const id = await resolveLedger(locationCode, 'BANK', external_id);
         if (!id) throw new Error(`BANK GL ledger not found for bank_id=${external_id} (${errCtx})`);
         return id;
+    }
+    if (external_source === 'Employee') {
+        const { ledgerId } = await resolveStaticLedger(locationCode, employeeBankPurpose(ledger_name), false);
+        return ledgerId;
     }
     throw new Error(`Cannot resolve split ledger: source='${external_source}', id=${external_id} (${errCtx})`);
 }
