@@ -3,6 +3,7 @@ const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 const OnboardingDao = require('../dao/onboarding-dao');
 const ProductDao = require('../dao/product-dao');
+const { PRODUCT_TYPE_BY_NAME } = require('../config/app-config');
 const bcrypt = require('bcrypt');
 
 // Password for the ADMIN-<LOC> login created on migrate — client changes it after handoff
@@ -179,9 +180,9 @@ module.exports = {
                 if (exists) return 'skipped';
                 const rgb = PRODUCT_RGB[(p.short_name || '').toUpperCase()] || '200,200,200';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
-                     VALUES (:name, :loc, 1, 'LIT', :price, 1, :rgb, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
-                    { name: up(p.short_name), loc, price: p.selling_price || null, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_tank_product, rgb_color, hsn_code, cgst_percent, sgst_percent, product_type, created_by, updated_by)
+                     VALUES (:name, :loc, 1, 'LIT', :price, 1, :rgb, :hsn, :cgst, :sgst, :ptype, 'onboarding', 'onboarding')`,
+                    { name: up(p.short_name), ptype: PRODUCT_TYPE_BY_NAME[up(p.short_name)] || null, loc, price: p.selling_price || null, rgb, hsn: up(p.hsn_code) || null, cgst: p.cgst_percent ?? null, sgst: p.sgst_percent ?? null }
                 );
             }));
 
@@ -194,9 +195,9 @@ module.exports = {
                 );
                 if (exists) return 'skipped';
                 await insertRow(
-                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code, cgst_percent, sgst_percent, created_by, updated_by)
-                     VALUES (:name, :loc, 1, :unit, :price, 1, :hsn, :cgst, :sgst, 'onboarding', 'onboarding')`,
-                    { name: up(l.product_name), loc, unit: ProductDao.normalizeUnit(l.unit) || 'NOS', price: l.selling_price || null, hsn: up(l.hsn_code) || null, cgst: l.cgst_percent ?? null, sgst: l.sgst_percent ?? null }
+                    `INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code, cgst_percent, sgst_percent, product_type, created_by, updated_by)
+                     VALUES (:name, :loc, 1, :unit, :price, 1, :hsn, :cgst, :sgst, :ptype, 'onboarding', 'onboarding')`,
+                    { name: up(l.product_name), ptype: PRODUCT_TYPE_BY_NAME[up(l.product_name)] || null, loc, unit: ProductDao.normalizeUnit(l.unit) || 'NOS', price: l.selling_price || null, hsn: up(l.hsn_code) || null, cgst: l.cgst_percent ?? null, sgst: l.sgst_percent ?? null }
                 );
             }));
 

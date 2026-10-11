@@ -88,7 +88,7 @@ const DayBillDao = {
             JOIN t_closing c ON r.closing_id = c.closing_id
             JOIN m_pump mp ON r.pump_id = mp.pump_id
                 AND DATE(c.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
-            JOIN m_product p ON mp.product_code = p.product_name
+            JOIN m_product p ON p.product_id = mp.product_id
                 AND p.location_code = c.location_code
             WHERE c.location_code = :locationCode
               AND DATE_FORMAT(c.closing_date, '%Y-%m-%d') = :billDate
@@ -148,7 +148,7 @@ const DayBillDao = {
               AND cs.product_id IN (
                   SELECT DISTINCT p2.product_id
                   FROM m_pump mp
-                  JOIN m_product p2 ON mp.product_code = p2.product_name
+                  JOIN m_product p2 ON p2.product_id = mp.product_id
                       AND p2.location_code = mp.location_code
                   WHERE mp.location_code = :locationCode
               )

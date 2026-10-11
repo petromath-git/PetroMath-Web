@@ -477,7 +477,7 @@ const txn2TSalePromise= (closingId, locationCode) => {
                             let t_2toils = [];
                             t_data.forEach((t_2tSale) => {
                                 let t_sale = t_2tSale.t_2toils;
-                                const mapData = productMap.get(t_2tSale.product_name);
+                                const mapData = productMap.get(t_2tSale.product_type);
                                 if (t_sale && t_sale.length > 0) {
                                     t_sale.forEach((sale) => {
                                         t_2toils.push({
@@ -493,7 +493,7 @@ const txn2TSalePromise= (closingId, locationCode) => {
                                         });
                                     });
                                 } else {
-                                    const mapData = productMap.get(t_2tSale.product_name);
+                                    const mapData = productMap.get(t_2tSale.product_type);
                                     t_2toils.push({
                                         productId: t_2tSale.product_id,
                                         productAlias: mapData.tag,
