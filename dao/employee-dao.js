@@ -348,8 +348,8 @@ module.exports = {
                 e.employee_id, e.employee_code, e.name, e.designation,
                 COALESCE(SUM(CASE WHEN el.txn_type = 'SALARY_CREDIT'                         THEN el.credit_amount ELSE 0 END), 0) AS salary_credited,
                 COALESCE(SUM(CASE WHEN el.txn_type IN ('ADVANCE','PAYMENT')                   THEN el.debit_amount  ELSE 0 END), 0) AS cash_paid,
-                COALESCE(SUM(CASE WHEN el.txn_type = 'BANK_PAYMENT'                           THEN el.debit_amount  ELSE 0 END), 0) AS bank_paid,
-                COALESCE(SUM(CASE WHEN el.txn_type = 'ADVANCE_RECOVERY'                       THEN el.credit_amount ELSE 0 END), 0) AS recovered,
+                COALESCE(SUM(CASE WHEN el.txn_type IN ('BANK_PAYMENT','BANK_ADVANCE')         THEN el.debit_amount  ELSE 0 END), 0) AS bank_paid,
+                COALESCE(SUM(CASE WHEN el.txn_type IN ('ADVANCE_RECOVERY','BANK_RECOVERY')    THEN el.credit_amount ELSE 0 END), 0) AS recovered,
                 COALESCE(SUM(CASE WHEN el.txn_type = 'DEDUCTION'                              THEN el.debit_amount  ELSE 0 END), 0) AS deductions,
                 COALESCE(SUM(el.credit_amount), 0) - COALESCE(SUM(el.debit_amount), 0)        AS net_balance
              FROM m_employee e
