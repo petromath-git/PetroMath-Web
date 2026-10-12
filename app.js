@@ -393,9 +393,12 @@ app.use((req, res, next) => {
 });
 
 // One-time "Use Face ID / fingerprint next time?" card on the first page after
-// a password login on a phone (flag set in POST /login)
+// a password login on a phone (flag set in POST /login). SuperUsers pass
+// through Select Location first, which doesn't show the card, so the flag
+// waits for the page after it.
 app.use((req, res, next) => {
-    if (req.session && req.session.offerPasskey && req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
+    if (req.session && req.session.offerPasskey && req.method === 'GET' && /text\/html/.test(req.headers.accept || '')
+        && !req.path.startsWith('/select-location')) {
         res.locals.offerPasskey = true;
         delete req.session.offerPasskey;
     }
