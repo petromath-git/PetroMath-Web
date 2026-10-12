@@ -21,6 +21,7 @@ const personLocationDao = require('./dao/person-location-dao');
 const bcrypt = require('bcrypt');
 const { routeLogger } = require('./utils/route-logger');
 const requestCache = require('./utils/request-cache');
+const { buildLoginUser, completeLogin, logFailedLogin } = require('./utils/login-flow');
 
 
 // Passport - configuration - start....
@@ -52,44 +53,9 @@ passport.use(new LocalStrategy(
                                     console.log(`Customer ${data.User_name} logged in with universal password`);
                                 }
 
-                            let now = new Date();
-                            const today_date = dateFormat(now, "yyyy-mm-dd");
-                            
-                            if (data.effective_end_date > today_date) {
-
-                                 // Check if user's location is active and get service tier
-                                    const locationStatus = await LocationDao.isLocationActive(data.location_code);
-                                    console.log("locationStatus:", locationStatus);
-                                    if (!locationStatus.isActive) {
-                                        done(null, false, { message: 'This location is currently inactive. Please contact your administrator.' });
-                                        return;
-                                    }
-                                // Fetch menu access from DAO
-                                const role = data.Role;
-                                const location = data.location_code;
-                                const isAdmin = security.isAdminChk(data);
-
-                                const menus = await MenuAccessDao.getAllowedMenusForUser(role, location);
-                                const allowedMenus = menus.map(m => m.menu_code);
-                                const menuDetails = menus;
-
-                                // Locations this person is explicitly assigned to (m_person_location),
-                                // beyond their single home location_code above.
-                                const personLocations = await personLocationDao.getPersonLocations(data.Person_id);
-                                const assignedLocations = personLocations.map(pl => pl.location_code);
-
-                                // Construct enriched UserData
-                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails, locationStatus.service_tier, assignedLocations);
-
-                                return done(null, userInfo);
-                            } else {
-                                // Account is disabled
-                                done(null, false, { 
-                                    message: `${data.User_Name} Your User Account is Disabled`,
-                                    Person_id: data.Person_id,
-                                    location_code: data.location_code
-                                });
-                            }
+                            // Disabled account / inactive location checks, menus
+                            const result = await buildLoginUser(data);
+                            return result.user ? done(null, result.user) : done(null, false, result.failure);
                         } else {
                             // Password mismatch
                             done(null, false, { 
@@ -157,7 +123,6 @@ const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 const LocationDao = require("./dao/location-dao");
 const MenuManagementDao = require("./dao/menu-management-dao");
-const { handleVersionRouting } = require('./utils/version-routing');
 
 db.sequelize.sync();
 // ORM DB - end
@@ -427,6 +392,16 @@ app.use((req, res, next) => {
     next();
 });
 
+// One-time "Use Face ID / fingerprint next time?" card on the first page after
+// a password login on a phone (flag set in POST /login)
+app.use((req, res, next) => {
+    if (req.session && req.session.offerPasskey && req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
+        res.locals.offerPasskey = true;
+        delete req.session.offerPasskey;
+    }
+    next();
+});
+
 
 
 
@@ -576,6 +551,7 @@ app.use(routeLogger({
 
 app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
+app.use('/passkey', require('./routes/passkey-routes'));
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
 app.use('/customer', customerDashboardRoutes);
 app.use('/adjustments', adjustmentRoutes);
@@ -716,30 +692,8 @@ app.post('/login', webLoginLimiter, function(req, res, next) {
             return next(err);
         }
 
-        // Capture request info
-        const loginInfo = {
-            ip_address: req.ip,
-            user_agent: req.headers['user-agent'],
-            attempted_username: req.body.username  // Capture the attempted username
-        };
-
         if (!user) {
-            // Log failed login attempt
-            try {
-                await LoginLogDao.create({
-                    Person_id: info.Person_id || null,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'failed',
-                    failure_reason: info.message,
-                    location_code: info.location_code || null,
-                    created_by: 'SYSTEM'
-                });
-            } catch (error) {
-                console.error("Error logging failed login:", error);
-            }
-
+            await logFailedLogin(req, req.body.username, info);
             req.flash('error', info.message);
             return res.redirect('/login');
         }
@@ -749,42 +703,13 @@ app.post('/login', webLoginLimiter, function(req, res, next) {
                 return next(err);
             }
 
-            // Log successful login after successful authentication
-            try {
-                await LoginLogDao.create({
-                    Person_id: user.Person_id,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'success',
-                    location_code: user.location_code,
-                    created_by: user.Person_id.toString()
-                });
-            } catch (error) {
-                console.error("Error logging login:", error);
+            // Phones: offer Face ID / fingerprint on the next page (see passkeyOffer).
+            // Set after logIn, which starts a fresh session.
+            if (isPhone(req) && user.Role !== 'Customer') {
+                req.session.offerPasskey = true;
             }
 
-                 const shouldRedirect = await handleVersionRouting(user, req, res);
-		        if (shouldRedirect) {
-		                 return; // Redirect happened, stop processing
-		            }
-
-            // Cashier goes directly to credit entry page
-            if (user.Role === 'Cashier') {
-                return res.redirect('/dsm-entry');
-            }
-
-             // Check if the user is a superuser
-             if (user.Role === 'SuperUser') {
-                // Redirect to location selection page if superuser
-                return res.redirect('/select-location');
-            }
-
-            if(user.Role === 'Customer') {
-                return res.redirect('/home-customer');
-                        }
-                else{
-                    return res.redirect(isPhone(req) ? '/m' : '/home');}
+            await completeLogin(req, user, req.body.username, url => res.redirect(url));
         });
     })(req, res, next);
 });
