@@ -878,7 +878,7 @@ const getLocationProductColumns = (locationCode) => {
                     SELECT COUNT(*) as count 
                     FROM m_product 
                     WHERE location_code = :locationCode 
-                    AND product_type = '2T_LOOSE'
+                    AND product_id = two_t_product_id(:locationCode, 'LOOSE')
                 `;
                 
                 db.sequelize.query(twoTQuery, {
@@ -988,16 +988,19 @@ const productDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         let products = [], productIdAliasMapping = [], products2T = [];
         const productMap = config.PRODUCT_DETAILS_MAPPING;
-        return ProductDao.findProducts(locationCode)
-            .then(data => {
+        return Promise.all([ProductDao.findProducts(locationCode), ProductDao.getTwoTProductIds(locationCode)])
+            .then(([data, twoT]) => {
                 data.forEach((product) => {
-                    const mapData = productMap.get(product.product_type);
+                    // 2T tab products come from the location's 2T settings (by id);
+                    // MS/HSD/XMS labels from the name map
+                    const twoTTag = Number(product.product_id) === twoT.loose ? config.LOOSE_TAG_NAME
+                        : Number(product.product_id) === twoT.pouch ? config.POUCH_TAG_NAME : null;
+                    const mapData = twoTTag ? { tag: twoTTag } : productMap.get(product.product_name);
                     const productAlias = mapData ?  mapData.label ? mapData.label : product.product_name : product.product_name;
                     const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
                     products.push(formProductData(product, productAlias, textName));
                     productIdAliasMapping.push(formProductAliasMap(product, productAlias));
-                    if(product.product_type === config.PRODUCT_TYPE.POUCH_2T ||
-                        product.product_type === config.PRODUCT_TYPE.LOOSE_2T) {
+                    if (twoTTag) {
                         products2T.push(formProductData(product, textName, textName));
                     }
                 });
@@ -1038,7 +1041,7 @@ const pumpProductDataPromise = (locationCode) => {
                             || data.find(p => p.product_name === pumpProduct.product_code);
                         if (product && !seen.has(product.product_id)) {
                             seen.add(product.product_id);
-                            const mapData = productMap.get(product.product_type);
+                            const mapData = productMap.get(product.product_name);
                             const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
                             const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
                             products.push(formProductData(product, productAlias, textName));

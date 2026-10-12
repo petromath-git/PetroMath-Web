@@ -280,18 +280,17 @@ getDigitalSales: async (locationCode, reportDate) => {
                                 SELECT 
                                     (tc.given_qty - tc.returned_qty) * 
                                         CASE 
-                                        WHEN :locationCode IN ('MC','MUE','MC2','MME') 
+                                        WHEN dsr_oil_product_id(:locationCode) IS NOT NULL 
                                             THEN (SELECT price 
                                                 FROM m_product 
-                                                WHERE product_type = 'DSR_OIL' 
-                                                    AND location_code = mp.location_code)
+                                                WHERE product_id = dsr_oil_product_id(mp.location_code))
                                         ELSE tc.price
                                         END AS cash_amt,
                                     0 AS credit_amt
                                     FROM  t_2toil tc
                                     JOIN m_product mp ON mp.product_id = tc.product_id
                                     WHERE tc.closing_id in (:closing_id)
-                                    AND mp.product_type = '2T_LOOSE'
+                                    AND mp.product_id = two_t_product_id(mp.location_code, 'LOOSE')
                             UNION ALL
                             -- Subquery 2: Calculate cash_amt for '2T POUCH'
                             SELECT 
@@ -302,7 +301,7 @@ getDigitalSales: async (locationCode, reportDate) => {
                             JOIN
                                 m_product mp ON tc.product_id = mp.product_id
                             WHERE
-                                mp.product_type = '2T_POUCH' 
+                                mp.product_id = two_t_product_id(mp.location_code, 'POUCH') 
                                 AND tc.closing_id in (:closing_id)
                             UNION ALL
                             -- Subquery 3: Calculate cash_amt from t_cashsales
@@ -425,21 +424,21 @@ getCashsales: async (locationCode, reportDate) => {
          UNION ALL
          SELECT mp.product_name,
                 SUM((given_qty-returned_qty)) qty,
-                CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                     THEN (SELECT price FROM m_product WHERE product_type = 'DSR_OIL' AND location_code = mp.location_code)
+                CASE WHEN dsr_oil_product_id(:locationCode) IS NOT NULL
+                     THEN (SELECT price FROM m_product WHERE product_id = dsr_oil_product_id(mp.location_code))
                      ELSE tc.price
                 END AS price,
                 0,
                 SUM((given_qty-returned_qty) *
-                    CASE WHEN :locationCode IN ('MC','MUE','MC2','MME')
-                         THEN (SELECT price FROM m_product WHERE product_type = 'DSR_OIL' AND location_code = mp.location_code)
+                    CASE WHEN dsr_oil_product_id(:locationCode) IS NOT NULL
+                         THEN (SELECT price FROM m_product WHERE product_id = dsr_oil_product_id(mp.location_code))
                          ELSE tc.price
                     END
                 ) AS amt,
                 'Cash' AS type
            FROM t_2toil tc
            JOIN m_product mp ON tc.product_id = mp.product_id
-          WHERE mp.product_type = '2T_LOOSE'
+          WHERE mp.product_id = two_t_product_id(mp.location_code, 'LOOSE')
             AND tc.closing_id IN (:closing_id)
           GROUP BY mp.product_name, price
          UNION ALL
@@ -447,7 +446,7 @@ getCashsales: async (locationCode, reportDate) => {
                 SUM((given_qty-returned_qty)*tc.price) amt, 'Cash' AS type
            FROM t_2toil tc, m_product mp
           WHERE tc.product_id = mp.product_id
-            AND mp.product_type = '2T_POUCH'
+            AND mp.product_id = two_t_product_id(mp.location_code, 'POUCH')
             AND tc.closing_id IN (:closing_id)
           GROUP BY mp.product_name, mp.price
          UNION ALL
@@ -614,7 +613,7 @@ getCashsales: async (locationCode, reportDate) => {
           DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date_formatted,
           CALCULATE_EXSHORTAGE(tc.closing_id) AS ex_short,
           (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id =tc.closing_id and toil.product_id = mp.product_id
-          and mp.product_type = '2T_LOOSE' ) loose,
+          and mp.product_id = two_t_product_id(mp.location_code, 'LOOSE') ) loose,
           tc.notes,
           ${caseStatements}
         FROM 

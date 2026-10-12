@@ -15,7 +15,6 @@ const openingStockDao = require('../dao/product-opening-stock-dao');
 
 const PRODUCT_NAME_EDITABLE_SETTING = 'PRODUCT_NAME_EDITABLE';
 const PRODUCT_UNITS = config.APP_CONFIGS.productUnits; // LIT, NOS
-const PRODUCT_TYPES = Object.values(config.PRODUCT_TYPE);
 
 // Product names are stored uppercase with single spaces and no leading or
 // trailing spaces/tabs (the browser uppercases, but the server must not rely on it)
@@ -65,7 +64,6 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
                 hsn_code: product.hsn_code,
                 is_tank_product: product.is_tank_product,
                 is_lube_product: product.is_lube_product,
-                product_type: product.product_type || '',
                 can_edit_name: canEditNameForRow,
                 can_delete: deletableIds.has(Number(product.product_id)),
                 // unit can't change once the product has entries (SuperUser excepted)
@@ -77,7 +75,6 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
 
         res.render('products', {
             title: 'Products',
-            productTypes: PRODUCT_TYPES,
             user: req.user,
             mobileReady: true,   // body.mobile-ready: drops the global phone hacks (50px body padding etc.)
             products: products,
@@ -274,11 +271,7 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
             cgst_percent: req.body.m_product_cgst,
             sgst_percent: req.body.m_product_sgst,
             is_tank_product: req.body.m_product_is_tank_product,
-            is_lube_product: req.body.m_product_is_lube_product,
-            // What the product is (2T loose oil, MS ...) - SuperUser only
-            product_type: req.user.Role === 'SuperUser' && req.body.m_product_product_type !== undefined
-                ? (PRODUCT_TYPES.includes(req.body.m_product_product_type) ? req.body.m_product_product_type : null)
-                : undefined
+            is_lube_product: req.body.m_product_is_lube_product
         });
 
         if (data == 1 || data == 0) {
