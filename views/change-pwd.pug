@@ -12,3 +12,6 @@ block content
             div &nbsp;
             div(style="text-align:center")
                 button.btn.btn-primary(type='submit') Change Password
+        if user && user.Role !== 'Customer'
+            +passkeyScript()
+            +passkeyManage(passkeyCount || 0)

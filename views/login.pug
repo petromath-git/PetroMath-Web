@@ -55,6 +55,9 @@ block content
                             if message
                                 div.alert.alert-danger.mb-3 #{message}
                             
+                            +passkeyScript()
+                            +passkeyLoginButton()
+
                             form(method='POST' action='/login')
                                 div.form-group.mb-3
                                     label.form-label.text-muted.fw-bold Username:
