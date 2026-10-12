@@ -21,7 +21,7 @@ const personLocationDao = require('./dao/person-location-dao');
 const bcrypt = require('bcrypt');
 const { routeLogger } = require('./utils/route-logger');
 const requestCache = require('./utils/request-cache');
-const { buildLoginUser, completeLogin, logFailedLogin } = require('./utils/login-flow');
+const { buildLoginUser, completeLogin, logFailedLogin, passwordSig } = require('./utils/login-flow');
 
 
 // Passport - configuration - start....
@@ -83,17 +83,25 @@ passport.serializeUser((userData, done) => {
     done(null, userData);
 });
 
-// Runs on every request. The account-active check is cached for a minute
+// Runs on every request. The account check is cached for a minute
 // (requestCache key 'person:<User_Name>'); disable/enable-user invalidate it so
 // a disabled user is still logged out on their next request.
 passport.deserializeUser(function (userInfo, done) {
     requestCache.getOrLoad('person:' + userInfo.User_Name, 60_000, () =>
-        Person.findOne({ where: { 'User_Name': userInfo.User_Name }, attributes: ['effective_end_date'] })
-            .then(user => !!user && security.isAccountActive(user.effective_end_date))
+        Person.findOne({ where: { 'User_Name': userInfo.User_Name }, attributes: ['effective_end_date', 'Password'] })
+            .then(user => ({
+                active: !!user && security.isAccountActive(user.effective_end_date),
+                pwdSig: user ? passwordSig(user) : null
+            }))
     )
-        .then(function (isActive) {
+        .then(function (person) {
             // Ends the session of a user disabled after logging in
-            if (!isActive) {
+            if (!person.active) {
+                return done(null, false);
+            }
+            // Ends every login (all phones and PCs) within a minute of a password
+            // change by any route. pwd_sig is set at login (buildLoginUser).
+            if (userInfo.pwd_sig && userInfo.pwd_sig !== person.pwdSig) {
                 return done(null, false);
             }
             done(null, userInfo);
@@ -355,9 +363,15 @@ app.use(require('cookie-parser')(sessionSecret));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(bodyParser.json({ limit: '10mb' }));
 const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours of inactivity logs the user out
+// Phones stay logged in like an app. Still ends at once on password change or
+// user disable (deserializeUser), and on Logout.
+const PHONE_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_ROLL_INTERVAL_MS = 30 * 60 * 1000; // only re-extend expiry this often, not on every request
 
+const DbSessionStore = require('./utils/db-session-store');
 app.use(require('express-session')({
+    // Logins in t_web_sessions, so deploys and restarts don't log everyone out
+    store: new DbSessionStore(),
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
@@ -386,7 +400,7 @@ app.use((req, res, next) => {
         const now = Date.now();
         if (!req.session.lastRolled || now - req.session.lastRolled > SESSION_ROLL_INTERVAL_MS) {
             req.session.lastRolled = now;
-            req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+            req.session.cookie.maxAge = isPhone(req) ? PHONE_SESSION_MAX_AGE_MS : SESSION_MAX_AGE_MS;
         }
     }
     next();
@@ -773,7 +787,9 @@ app.post('/api/reports-indiv-customer', function (req, res, next) {
 app.get('/logout', function (req, res) {
     req.logout(function (err) {
         if (err) { return next(err); }
-        res.redirect('/login');
+        // out=1: the login page doesn't auto-start Face ID / fingerprint, or
+        // Logout would log straight back in (and a shared phone could never switch user)
+        res.redirect('/login?out=1');
     });
 });
 

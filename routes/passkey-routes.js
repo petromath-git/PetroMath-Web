@@ -3,7 +3,6 @@
 // with a key that never leaves the phone; we only store the public key.
 const express = require('express');
 const router = express.Router();
-const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
@@ -13,7 +12,8 @@ const {
 } = require('@simplewebauthn/server');
 const db = require('../db/db-connection');
 const PasskeyDao = require('../dao/passkey-dao');
-const { buildLoginUser, completeLogin, logFailedLogin } = require('../utils/login-flow');
+// passwordSig ties a passkey to the password in force when it was enabled
+const { buildLoginUser, completeLogin, logFailedLogin, passwordSig } = require('../utils/login-flow');
 
 const Person = db.person;
 
@@ -23,12 +23,6 @@ function relyingParty(req) {
     const rpID = req.hostname;
     const scheme = rpID === 'localhost' ? 'http://' : 'https://';
     return { rpID, origin: scheme + req.get('host') };
-}
-
-// Ties a passkey to the password in force when it was enabled: a password
-// change by any route (self, admin reset, direct SQL) makes it stop working.
-function passwordSig(person) {
-    return crypto.createHash('sha256').update(String(person.Password || '')).digest('hex');
 }
 
 function deviceLabel(ua) {
