@@ -100,6 +100,16 @@ module.exports = {
         return Product.findOne({ where });
     },
 
+    // Product ids at the location dispensed by a pump or held in a tank
+    findPumpTankProductIds: async (locationCode) => {
+        const rows = await db.sequelize.query(`
+            SELECT product_id FROM m_pump WHERE location_code = :locationCode AND product_id IS NOT NULL
+            UNION
+            SELECT product_id FROM m_tank WHERE location_code = :locationCode AND product_id IS NOT NULL
+        `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        return new Set(rows.map(r => Number(r.product_id)));
+    },
+
     isProductLinkedToPumpOrTank: async (locationCode, productId) => {
         const rows = await db.sequelize.query(`
             SELECT
