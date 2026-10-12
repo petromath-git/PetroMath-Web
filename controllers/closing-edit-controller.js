@@ -468,16 +468,17 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
 // Used to join 2T product and 2T sale data.
 const txn2TSalePromise= (closingId, locationCode) => {
     return new Promise((resolve, reject) => {
-        ProductDao.findProducts(locationCode)
-            .then((productData) => {
-                const productMap = config.PRODUCT_DETAILS_MAPPING;
+        Promise.all([ProductDao.findProducts(locationCode), ProductDao.getTwoTProductIds(locationCode)])
+            .then(([productData, twoT]) => {
+                // 2T tab tag by product id (the products come from the 2T settings)
+                const tagOf = (p) => ({ tag: Number(p.product_id) === twoT.loose ? config.LOOSE_TAG_NAME : config.POUCH_TAG_NAME });
                 TxnReadDao.get2TSalesByClosingId(closingId, locationCode)
                     .then(t_data => {
                         if (t_data && t_data.length > 0) {
                             let t_2toils = [];
                             t_data.forEach((t_2tSale) => {
                                 let t_sale = t_2tSale.t_2toils;
-                                const mapData = productMap.get(t_2tSale.product_type);
+                                const mapData = tagOf(t_2tSale);
                                 if (t_sale && t_sale.length > 0) {
                                     t_sale.forEach((sale) => {
                                         t_2toils.push({
@@ -493,7 +494,7 @@ const txn2TSalePromise= (closingId, locationCode) => {
                                         });
                                     });
                                 } else {
-                                    const mapData = productMap.get(t_2tSale.product_type);
+                                    const mapData = tagOf(t_2tSale);
                                     t_2toils.push({
                                         productId: t_2tSale.product_id,
                                         productAlias: mapData.tag,

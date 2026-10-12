@@ -108,7 +108,7 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
                 LEFT JOIN m_product pr ON ts.product_id = pr.product_id
                 WHERE c.location_code = :locationCode
                 AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-                AND pr.product_type = '2T_LOOSE'
+                AND pr.product_id = two_t_product_id(pr.location_code, 'LOOSE')
                 GROUP BY c.closing_id
             )
             SELECT 
@@ -236,8 +236,8 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
             oil_sales AS (
                 SELECT 
                     c.closing_id,
-                    COALESCE(SUM(CASE WHEN pr.product_type = '2T_LOOSE' THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as loose,
-                    COALESCE(SUM(CASE WHEN pr.product_type = '2T_POUCH' THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as p_2t
+                    COALESCE(SUM(CASE WHEN pr.product_id = two_t_product_id(pr.location_code, 'LOOSE') THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as loose,
+                    COALESCE(SUM(CASE WHEN pr.product_id = two_t_product_id(pr.location_code, 'POUCH') THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as p_2t
                 FROM t_closing c
                 LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
                 LEFT JOIN t_2toil ts ON c.closing_id = ts.closing_id
@@ -245,7 +245,7 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
                 WHERE c.location_code = :locationCode
                 AND p.Person_Name = :personName
                 AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-                AND pr.product_type IN ('2T_LOOSE', '2T_POUCH')
+                AND pr.product_id IN (two_t_product_id(pr.location_code, 'LOOSE'), two_t_product_id(pr.location_code, 'POUCH'))
                 GROUP BY c.closing_id
             )
             SELECT 
@@ -473,12 +473,15 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
                 }],
         });
     },
-    get2TSalesByClosingId: (closingId, locationCode) => {
+    get2TSalesByClosingId: async (closingId, locationCode) => {
+        // the location's 2T tab products (setting, else named 2T LOOSE / 2T POUCH)
+        const [ids] = await db.sequelize.query(
+            `SELECT two_t_product_id(:locationCode, 'LOOSE') AS loose, two_t_product_id(:locationCode, 'POUCH') AS pouch`,
+            { replacements: { locationCode }, type: Sequelize.QueryTypes.SELECT });
+        const productIds = [ids.loose, ids.pouch].filter(id => id);
         return Products.findAll({
             where: {'location_code': locationCode,
-                'product_type': {
-                    [Op.or]: [config.PRODUCT_TYPE.POUCH_2T, config.PRODUCT_TYPE.LOOSE_2T]
-                },
+                'product_id': { [Op.in]: productIds.length ? productIds : [0] },
             },
             include: [
                 {

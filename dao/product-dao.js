@@ -2,7 +2,6 @@ const db = require("../db/db-connection");
 const Product = db.product;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
-const { PRODUCT_TYPE_BY_NAME } = require("../config/app-config");
 
 // Tables that reference m_product.product_id. Any row here means the product
 // has been used and must not be deleted.
@@ -51,6 +50,16 @@ function fmtQty(qty) {
 
 module.exports = {
     normalizeUnit,
+
+    // The location's 2T tab products: setting TWO_T_LOOSE_PRODUCT /
+    // TWO_T_POUCH_PRODUCT, else the product named "2T LOOSE" / "2T POUCH"
+    // (DB functions two_t_product_id, shared with the routines and reports).
+    getTwoTProductIds: async (locationCode) => {
+        const [row] = await db.sequelize.query(
+            `SELECT two_t_product_id(:locationCode, 'LOOSE') AS loose, two_t_product_id(:locationCode, 'POUCH') AS pouch`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        return { loose: row && row.loose ? Number(row.loose) : null, pouch: row && row.pouch ? Number(row.pouch) : null };
+    },
     isPieceUnit,
     isWholeQty,
 
@@ -133,8 +142,7 @@ module.exports = {
                 'hsn_code',
                 'rgb_color',
                 'is_tank_product',
-                'is_lube_product',
-                'product_type'
+                'is_lube_product'
             ],
             order: [
                 // Pump products first (ids are integers, safe to inline)
@@ -252,10 +260,6 @@ findPumpProducts: async (locationCode) => {
         if (!product.sku_name) {
             product.sku_name = product.product_name;
         }
-        // Products the app treats specially (MS, 2T LOOSE, DSR - OIL ...) get their type from the name
-        if (product.product_type === undefined) {
-            product.product_type = PRODUCT_TYPE_BY_NAME[String(product.product_name || '').trim().toUpperCase()] || null;
-        }
         
         if (!product.sku_number) {
             product.sku_number = `SKU-${Date.now()}`;
@@ -282,7 +286,6 @@ findPumpProducts: async (locationCode) => {
         if (product.hsn_code) updateFields.hsn_code = product.hsn_code;
         if (product.is_tank_product !== undefined) updateFields.is_tank_product = product.is_tank_product;
         if (product.is_lube_product !== undefined) updateFields.is_lube_product = product.is_lube_product;
-        if (product.product_type !== undefined) updateFields.product_type = product.product_type || null;
 
         return Product.update(updateFields, {
             where: {
