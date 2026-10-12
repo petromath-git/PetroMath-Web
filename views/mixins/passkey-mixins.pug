@@ -91,7 +91,10 @@ mixin passkeyScript()
     })();
 
 //- Login page button. Hidden unless it was turned on for this phone.
-mixin passkeyLoginButton()
+//- autoStart: open Face ID / fingerprint as soon as the page loads. Never
+//- right after Logout (?out=1), nor more than once a minute, so a refused
+//- login can't loop. iPhone may insist on a tap; the button stays for that.
+mixin passkeyLoginButton(autoStart)
   style.
     .pk-login[hidden], .pk-login-msg[hidden] { display: none !important; }
     .pk-login { width: 100%; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -109,14 +112,8 @@ mixin passkeyLoginButton()
       if (!pk || !pk.isOn()) return;
       var options = null;
       function prepare() { options = null; return pk.prepareLogin().then(function (o) { options = o; }).catch(function () {}); }
-      pk.supported().then(function (ok) {
-        if (!ok) return;
-        document.getElementById('pkLoginText').textContent = 'Log in with ' + pk.label;
-        if (pk.label !== 'Face ID') document.getElementById('pkLoginIcon').className = 'bi bi-fingerprint';
-        btn.hidden = false; or.hidden = false;
-        prepare();
-      });
-      btn.addEventListener('click', function () {
+
+      function start(isAuto) {
         msg.hidden = true;
         if (!options) { prepare(); msg.textContent = 'Getting ready… tap again.'; msg.hidden = false; return; }
         var o = options; options = null;
@@ -126,13 +123,37 @@ mixin passkeyLoginButton()
         }).catch(function (err) {
           btn.disabled = false;
           if (err && err.forget) { pk.setOn(false); btn.hidden = true; or.hidden = true; }
-          // NotAllowedError = cancelled or timed out on the phone: no message needed
+          // NotAllowedError = cancelled, timed out, or (auto-start) iPhone
+          // wanting a tap first: no message needed, the button is right there
           if (err && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
             msg.textContent = err.message; msg.hidden = false;
           }
           if (!btn.hidden) prepare();
         });
+      }
+
+      var AUTO_START = !{autoStart ? 'true' : 'false'};
+      function mayAutoStart() {
+        if (!AUTO_START) return false;
+        if (/[?&]out=1/.test(location.search)) return false;
+        try {
+          var last = parseInt(sessionStorage.getItem('pm_pk_auto') || '0', 10);
+          if (Date.now() - last < 60000) return false;
+          sessionStorage.setItem('pm_pk_auto', String(Date.now()));
+        } catch (e) {}
+        return true;
+      }
+
+      pk.supported().then(function (ok) {
+        if (!ok) return;
+        document.getElementById('pkLoginText').textContent = 'Log in with ' + pk.label;
+        if (pk.label !== 'Face ID') document.getElementById('pkLoginIcon').className = 'bi bi-fingerprint';
+        btn.hidden = false; or.hidden = false;
+        prepare().then(function () {
+          if (options && mayAutoStart()) start(true);
+        });
       });
+      btn.addEventListener('click', function () { start(false); });
     })();
 
 //- One-time card after a password login on a phone (res.locals.offerPasskey)

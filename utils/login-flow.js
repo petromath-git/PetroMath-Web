@@ -1,8 +1,10 @@
 // Shared by password login (app.js) and Face ID / fingerprint login
 // (routes/passkey-routes.js), so both apply the same checks and land the
 // user on the same page.
+const crypto = require("crypto");
 const dateFormat = require("dateformat");
 const security = require("./app-security");
+const requestCache = require("./request-cache");
 const UserData = require("../value/UserData");
 const LocationDao = require("../dao/location-dao");
 const MenuAccessDao = require("../dao/menu-access-dao");
@@ -10,6 +12,12 @@ const personLocationDao = require("../dao/person-location-dao");
 const LoginLogDao = require("../dao/login-log-dao");
 const { handleVersionRouting } = require("./version-routing");
 const { isPhone } = require("./mobile-menu");
+
+// Fingerprint of the stored password hash. Logins and passkeys remember it, so a
+// password change by any route (self, admin reset, direct SQL) ends them.
+function passwordSig(person) {
+    return crypto.createHash('sha256').update(String(person.Password || '')).digest('hex');
+}
 
 // person: an m_persons row whose identity is already proven (password or passkey).
 // Returns { user } on success, or { failure: { message, Person_id, location_code } }.
@@ -38,7 +46,12 @@ async function buildLoginUser(person) {
     const personLocations = await personLocationDao.getPersonLocations(person.Person_id);
     const assignedLocations = personLocations.map(pl => pl.location_code);
 
-    return { user: new UserData(person, isAdmin, allowedMenus, menus, locationStatus.service_tier, assignedLocations) };
+    const user = new UserData(person, isAdmin, allowedMenus, menus, locationStatus.service_tier, assignedLocations);
+    user.pwd_sig = passwordSig(person); // checked on every request in deserializeUser
+    // deserializeUser caches the account for a minute; drop it so a password
+    // changed just before this login isn't compared against the old one
+    requestCache.invalidate('person:' + person.User_Name);
+    return { user };
 }
 
 // Runs after req.logIn succeeded: login log, beta access check, landing page.
@@ -96,4 +109,4 @@ async function logFailedLogin(req, attemptedUsername, failure) {
     }
 }
 
-module.exports = { buildLoginUser, completeLogin, logFailedLogin };
+module.exports = { buildLoginUser, completeLogin, logFailedLogin, passwordSig };
