@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const { Person } = require('../db/db-connection');
 const PersonDao = require('../dao/person-dao');
 const RolePermissionsDao = require('../dao/role-permissions-dao');
+const PasskeyDao = require('../dao/passkey-dao');
 
 // Render the password reset form
 exports.getPasswordResetPage = async (req, res, extraData = {}) => {
@@ -196,10 +197,18 @@ exports.changePassword = (req, res, next) => {
 };
 
 // Render the change password page (for self-service)
-exports.getChangePasswordPage = (req, res, extraData = {}) => {
+exports.getChangePasswordPage = async (req, res, extraData = {}) => {
+    // Phones with Face ID / fingerprint login on, for the off switch
+    let passkeyCount = 0;
+    try {
+        passkeyCount = (await PasskeyDao.listByPerson(req.user.Person_id)).length;
+    } catch (err) {
+        console.error('Error counting passkeys:', err);
+    }
     res.render('change-pwd', {
         title: 'Change Password',
         user: req.user,
+        passkeyCount,
         ...extraData
     });
 };

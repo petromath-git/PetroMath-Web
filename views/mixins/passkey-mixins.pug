@@ -1,0 +1,227 @@
+//- Face ID / fingerprint login (passkeys). Server side: routes/passkey-routes.js
+//- localStorage 'pm_passkey' = 'on' marks "turned on for this phone"; it only
+//- decides whether to show the login button, the server does the real check.
+
+//- Shared browser helpers: window.pmPasskey. Include once per page, before
+//- the other mixins.
+mixin passkeyScript()
+  script.
+    (function () {
+      var KEY = 'pm_passkey';
+      function b64ToBuf(s) {
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        var bin = atob(s), out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out.buffer;
+      }
+      function bufToB64(buf) {
+        var bytes = new Uint8Array(buf), bin = '';
+        for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      function post(url, body) {
+        return fetch(url, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: body ? JSON.stringify(body) : '{}'
+        }).then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) { var e = new Error(j.message || 'Something went wrong. Please try again.'); e.forget = j.forget; throw e; }
+            return j;
+          });
+        });
+      }
+      var isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+      window.pmPasskey = {
+        label: isApple ? 'Face ID' : 'fingerprint',
+        isOn: function () { try { return localStorage.getItem(KEY) === 'on'; } catch (e) { return false; } },
+        setOn: function (on) { try { on ? localStorage.setItem(KEY, 'on') : localStorage.removeItem(KEY); } catch (e) {} },
+        // This phone can check a face/finger (or its PIN) itself
+        supported: function () {
+          if (!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false);
+          return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+        },
+        // Options are fetched ahead of the tap: iPhone only opens Face ID when
+        // it's called straight from the tap, not after a network wait.
+        prepareRegister: function () { return post('/passkey/register/options'); },
+        register: function (o) {
+          var pk = Object.assign({}, o, {
+            challenge: b64ToBuf(o.challenge),
+            user: Object.assign({}, o.user, { id: b64ToBuf(o.user.id) }),
+            excludeCredentials: (o.excludeCredentials || []).map(function (c) { return Object.assign({}, c, { id: b64ToBuf(c.id) }); })
+          });
+          return navigator.credentials.create({ publicKey: pk }).then(function (cred) {
+            var r = cred.response;
+            return post('/passkey/register/verify', {
+              id: cred.id, rawId: bufToB64(cred.rawId), type: cred.type,
+              authenticatorAttachment: cred.authenticatorAttachment,
+              clientExtensionResults: cred.getClientExtensionResults(),
+              response: {
+                clientDataJSON: bufToB64(r.clientDataJSON),
+                attestationObject: bufToB64(r.attestationObject),
+                transports: r.getTransports ? r.getTransports() : []
+              }
+            });
+          });
+        },
+        prepareLogin: function () { return post('/passkey/login/options'); },
+        login: function (o) {
+          var pk = Object.assign({}, o, {
+            challenge: b64ToBuf(o.challenge),
+            allowCredentials: (o.allowCredentials || []).map(function (c) { return Object.assign({}, c, { id: b64ToBuf(c.id) }); })
+          });
+          return navigator.credentials.get({ publicKey: pk }).then(function (cred) {
+            var r = cred.response;
+            return post('/passkey/login/verify', {
+              id: cred.id, rawId: bufToB64(cred.rawId), type: cred.type,
+              authenticatorAttachment: cred.authenticatorAttachment,
+              clientExtensionResults: cred.getClientExtensionResults(),
+              response: {
+                clientDataJSON: bufToB64(r.clientDataJSON),
+                authenticatorData: bufToB64(r.authenticatorData),
+                signature: bufToB64(r.signature),
+                userHandle: r.userHandle ? bufToB64(r.userHandle) : undefined
+              }
+            });
+          });
+        },
+        disable: function () { return post('/passkey/disable'); }
+      };
+    })();
+
+//- Login page button. Hidden unless it was turned on for this phone.
+mixin passkeyLoginButton()
+  style.
+    .pk-login[hidden], .pk-login-msg[hidden] { display: none !important; }
+    .pk-login { width: 100%; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .pk-login .bi { font-size: 1.25rem; }
+    .pk-or { text-align: center; color: #6c757d; font-size: 13px; margin: 0 0 14px; }
+  .pk-login-msg.alert.alert-danger.mb-3#pkLoginMsg(hidden)
+  button.btn.btn-primary.btn-lg.pk-login#pkLoginBtn(type="button" hidden)
+    i.bi.bi-person-bounding-box#pkLoginIcon(aria-hidden="true")
+    span#pkLoginText Log in with Face ID
+  p.pk-or#pkOr(hidden) or use your password
+  script.
+    (function () {
+      var pk = window.pmPasskey, btn = document.getElementById('pkLoginBtn');
+      var msg = document.getElementById('pkLoginMsg'), or = document.getElementById('pkOr');
+      if (!pk || !pk.isOn()) return;
+      var options = null;
+      function prepare() { options = null; return pk.prepareLogin().then(function (o) { options = o; }).catch(function () {}); }
+      pk.supported().then(function (ok) {
+        if (!ok) return;
+        document.getElementById('pkLoginText').textContent = 'Log in with ' + pk.label;
+        if (pk.label !== 'Face ID') document.getElementById('pkLoginIcon').className = 'bi bi-fingerprint';
+        btn.hidden = false; or.hidden = false;
+        prepare();
+      });
+      btn.addEventListener('click', function () {
+        msg.hidden = true;
+        if (!options) { prepare(); msg.textContent = 'Getting ready… tap again.'; msg.hidden = false; return; }
+        var o = options; options = null;
+        btn.disabled = true;
+        pk.login(o).then(function (res) {
+          window.location.href = res.redirect || '/';
+        }).catch(function (err) {
+          btn.disabled = false;
+          if (err && err.forget) { pk.setOn(false); btn.hidden = true; or.hidden = true; }
+          // NotAllowedError = cancelled or timed out on the phone: no message needed
+          if (err && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+            msg.textContent = err.message; msg.hidden = false;
+          }
+          if (!btn.hidden) prepare();
+        });
+      });
+    })();
+
+//- One-time card after a password login on a phone (res.locals.offerPasskey)
+mixin passkeyOffer()
+  style.
+    .pk-offer[hidden] { display: none !important; }
+    .pk-offer { display: flex; flex-direction: column; gap: 10px; margin: 0 0 16px; padding: 14px; border-radius: 14px; background: #fff; border: 1px solid #c7d7fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06); color: #1f2328; }
+    .pk-offer-top { display: flex; gap: 12px; align-items: flex-start; }
+    .pk-offer-top > .bi { font-size: 28px; color: #1d4ed8; line-height: 1; }
+    .pk-offer-text strong { display: block; font-size: 15px; }
+    .pk-offer-text span { font-size: 13px; color: #4b5563; }
+    .pk-offer-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .pk-offer-actions button { height: 40px; padding: 0 16px; border-radius: 20px; font-size: 14px; font-weight: 700; }
+    .pk-offer-yes { border: 0; background: #1d4ed8; color: #fff; }
+    .pk-offer-no { border: 1px solid #d5d9df; background: #fff; color: #1f2328; }
+    .pk-offer-msg { font-size: 13px; color: #b42318; }
+  .pk-offer#pkOffer(hidden role="region" aria-label="Face ID or fingerprint login")
+    .pk-offer-top
+      i.bi.bi-person-bounding-box#pkOfferIcon(aria-hidden="true")
+      .pk-offer-text
+        strong#pkOfferTitle Log in with Face ID next time?
+        span#pkOfferBody Skip the password on this phone. Your face stays on your phone; PetroMath never sees it.
+    .pk-offer-msg#pkOfferMsg(hidden)
+    .pk-offer-actions#pkOfferActions
+      button.pk-offer-no#pkOfferNo(type="button") Not now
+      button.pk-offer-yes#pkOfferYes(type="button") Turn on
+  script.
+    (function () {
+      var pk = window.pmPasskey, card = document.getElementById('pkOffer');
+      if (!pk || pk.isOn()) return;
+      var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      var options = null, msg = document.getElementById('pkOfferMsg');
+      function prepare() { options = null; return pk.prepareRegister().then(function (o) { options = o; }); }
+      function done() {
+        pk.setOn(true);
+        document.getElementById('pkOfferTitle').textContent = (pk.label === 'Face ID' ? 'Face ID' : 'Fingerprint') + ' login is on';
+        document.getElementById('pkOfferBody').textContent = 'Next time, tap "Log in with ' + pk.label + '" on the login page.' +
+          (standalone ? '' : ' Tip: use the installed PetroMath app; it remembers this.');
+        document.getElementById('pkOfferActions').hidden = true;
+        msg.hidden = true;
+        setTimeout(function () { card.hidden = true; }, 6000);
+      }
+      pk.supported().then(function (ok) {
+        if (!ok) return;
+        prepare().then(function () {
+          if (pk.label !== 'Face ID') {
+            document.getElementById('pkOfferIcon').className = 'bi bi-fingerprint';
+            document.getElementById('pkOfferTitle').textContent = 'Log in with your fingerprint next time?';
+            document.getElementById('pkOfferBody').textContent = 'Skip the password on this phone. Your fingerprint stays on your phone; PetroMath never sees it.';
+          }
+          card.hidden = false;
+        }).catch(function () {});
+      });
+      document.getElementById('pkOfferNo').addEventListener('click', function () { card.hidden = true; });
+      document.getElementById('pkOfferYes').addEventListener('click', function () {
+        msg.hidden = true;
+        if (!options) { prepare().catch(function () {}); msg.textContent = 'Getting ready… tap again.'; msg.hidden = false; return; }
+        var o = options; options = null;
+        pk.register(o).then(done).catch(function (err) {
+          // Already turned on for this phone earlier
+          if (err && err.name === 'InvalidStateError') return done();
+          if (err && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+            msg.textContent = err.message; msg.hidden = false;
+          }
+          prepare().catch(function () {});
+        });
+      });
+    })();
+
+//- Off switch (Change Password page). count: this person's registered phones.
+mixin passkeyManage(count)
+  .card.mt-4#pkManage
+    .card-body
+      h6.mb-1 Face ID / fingerprint login
+      if count > 0
+        p.text-muted.mb-3(style="font-size: 14px") On for #{count} phone#{count === 1 ? '' : 's'}. Changing your password turns it off automatically.
+        button.btn.btn-outline-danger.btn-sm#pkDisableBtn(type="button") Turn off on all phones
+      else
+        p.text-muted.mb-0(style="font-size: 14px") Off. Log in with your password on your phone to get the option to turn it on.
+  script.
+    (function () {
+      var btn = document.getElementById('pkDisableBtn');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (!confirm('Turn off Face ID / fingerprint login on all your phones?')) return;
+        btn.disabled = true;
+        window.pmPasskey.disable().then(function () {
+          window.pmPasskey.setOn(false);
+          location.reload();
+        }).catch(function (err) { btn.disabled = false; alert(err.message); });
+      });
+    })();
