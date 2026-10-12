@@ -56,7 +56,8 @@ block content
                                 div.alert.alert-danger.mb-3 #{message}
                             
                             +passkeyScript()
-                            +passkeyLoginButton()
+                            //- No auto-start over an error (e.g. beta access refused), or it would loop
+                            +passkeyLoginButton(!(messages && messages.error) && !message)
 
                             form(method='POST' action='/login')
                                 div.form-group.mb-3
