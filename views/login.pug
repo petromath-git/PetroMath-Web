@@ -75,6 +75,8 @@ block content
                     div.text-center.mt-4
                         small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.
 
+    +pwaInstallHint(true)
+
     script.
         document.getElementById('togglePw').addEventListener('click', function () {
             var pw = document.getElementById('pw');

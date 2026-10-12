@@ -262,6 +262,14 @@ app.use(compression());
 
 
 
+// Installable app (PWA) files. Served ahead of express.static so they skip its
+// 7-day cache: phones must see a changed service worker or manifest right away.
+app.get(['/sw.js', '/manifest.webmanifest'], function (req, res) {
+    res.set('Cache-Control', 'no-cache');
+    res.type(req.path === '/sw.js' ? 'application/javascript' : 'application/manifest+json');
+    res.sendFile(path.join(__dirname, 'public', req.path));
+});
+
 const distPath = path.join(__dirname, 'public/dist');
 if (require('fs').existsSync(distPath)) {
     app.use(express.static(distPath, { maxAge: '7d' }));
