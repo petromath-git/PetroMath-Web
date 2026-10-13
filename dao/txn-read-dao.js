@@ -57,7 +57,7 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
                 FROM m_pump mp
                 JOIN t_reading r ON mp.pump_id = r.pump_id
                 JOIN t_closing c ON r.closing_id = c.closing_id
-                JOIN m_product prod ON mp.product_code = prod.product_name 
+                JOIN m_product prod ON prod.product_id = mp.product_id 
                                     AND mp.location_code = prod.location_code
                 WHERE c.location_code = :locationCode 
                 AND mp.product_code IS NOT NULL 
@@ -108,7 +108,7 @@ getClosingDetailsByDate: async (locationCode, fromDate, toDate) => {
                 LEFT JOIN m_product pr ON ts.product_id = pr.product_id
                 WHERE c.location_code = :locationCode
                 AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-                AND pr.product_name = '2T LOOSE'
+                AND pr.product_id = two_t_product_id(pr.location_code, 'LOOSE')
                 GROUP BY c.closing_id
             )
             SELECT 
@@ -191,7 +191,7 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
             FROM m_pump mp
             JOIN t_reading r ON mp.pump_id = r.pump_id
             JOIN t_closing c ON r.closing_id = c.closing_id
-            JOIN m_product prod ON mp.product_code = prod.product_name 
+            JOIN m_product prod ON prod.product_id = mp.product_id 
                                 AND mp.location_code = prod.location_code
             WHERE c.location_code = :locationCode 
             AND mp.product_code IS NOT NULL 
@@ -236,8 +236,8 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
             oil_sales AS (
                 SELECT 
                     c.closing_id,
-                    COALESCE(SUM(CASE WHEN pr.product_name = '2T LOOSE' THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as loose,
-                    COALESCE(SUM(CASE WHEN pr.product_name = '2T POUCH' THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as p_2t
+                    COALESCE(SUM(CASE WHEN pr.product_id = two_t_product_id(pr.location_code, 'LOOSE') THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as loose,
+                    COALESCE(SUM(CASE WHEN pr.product_id = two_t_product_id(pr.location_code, 'POUCH') THEN (ts.given_qty - ts.returned_qty) ELSE 0 END), 0) as p_2t
                 FROM t_closing c
                 LEFT JOIN m_persons p ON c.cashier_id = p.Person_id
                 LEFT JOIN t_2toil ts ON c.closing_id = ts.closing_id
@@ -245,7 +245,7 @@ getPersonsClosingDetailsByDate: async (personName, locationCode, fromDate, toDat
                 WHERE c.location_code = :locationCode
                 AND p.Person_Name = :personName
                 AND DATE(c.closing_date) BETWEEN :fromDate AND :toDate
-                AND pr.product_name IN ('2T LOOSE', '2T POUCH')
+                AND pr.product_id IN (two_t_product_id(pr.location_code, 'LOOSE'), two_t_product_id(pr.location_code, 'POUCH'))
                 GROUP BY c.closing_id
             )
             SELECT 
@@ -473,12 +473,15 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
                 }],
         });
     },
-    get2TSalesByClosingId: (closingId, locationCode) => {
+    get2TSalesByClosingId: async (closingId, locationCode) => {
+        // the location's 2T tab products (setting, else named 2T LOOSE / 2T POUCH)
+        const [ids] = await db.sequelize.query(
+            `SELECT two_t_product_id(:locationCode, 'LOOSE') AS loose, two_t_product_id(:locationCode, 'POUCH') AS pouch`,
+            { replacements: { locationCode }, type: Sequelize.QueryTypes.SELECT });
+        const productIds = [ids.loose, ids.pouch].filter(id => id);
         return Products.findAll({
             where: {'location_code': locationCode,
-                'product_name': {
-                    [Op.or]: [config.POUCH_DESC, config.LOOSE_DESC]
-                },
+                'product_id': { [Op.in]: productIds.length ? productIds : [0] },
             },
             include: [
                 {
@@ -540,11 +543,12 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
     // the controller cross-checks the total against the function itself.
     getExcessShortageBreakdown: async (closingId) => {
         const opts = { replacements: { closingId }, type: Sequelize.QueryTypes.SELECT };
+        // Products dispensed by this shift's pumps (by product_id, as CALCULATE_EXSHORTAGE)
         const pumpProductsSql = `
-            SELECT DISTINCT mp2.product_code
+            SELECT DISTINCT mp2.product_id
             FROM t_reading tr
             INNER JOIN m_pump mp2 ON tr.pump_id = mp2.pump_id
-            WHERE tr.closing_id = :closingId`;
+            WHERE mp2.product_id IS NOT NULL AND tr.closing_id = :closingId`;
         const q = (sql) => db.sequelize.query(sql, opts);
 
         const [header, readings, credits, lubeSales, pumpDiscounts, twoTOil, expenses,
@@ -568,7 +572,7 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
             q(`SELECT cl.Company_Name AS name, mp.product_name AS product, SUM(tc.qty) AS qty, SUM(tc.price * tc.qty) AS amount
                FROM t_credits tc
                INNER JOIN m_product mp ON tc.product_id = mp.product_id
-               INNER JOIN (${pumpProductsSql}) pump_products ON mp.product_name = pump_products.product_code
+               INNER JOIN (${pumpProductsSql}) pump_products ON mp.product_id = pump_products.product_id
                LEFT JOIN m_credit_list cl ON cl.creditlist_id = tc.creditlist_id
                WHERE tc.closing_id = :closingId
                  AND COALESCE(tc.off_meter_sale, 0) = 0
@@ -579,7 +583,7 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
                FROM t_cashsales cs
                INNER JOIN m_product mp ON cs.product_id = mp.product_id
                WHERE cs.closing_id = :closingId
-                 AND mp.product_name NOT IN (${pumpProductsSql})
+                 AND mp.product_id NOT IN (${pumpProductsSql})
                GROUP BY mp.product_name
                ORDER BY mp.product_name`),
 
@@ -587,7 +591,7 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
                FROM t_cashsales cs
                INNER JOIN m_product mp ON cs.product_id = mp.product_id
                WHERE cs.closing_id = :closingId
-                 AND mp.product_name IN (${pumpProductsSql})
+                 AND mp.product_id IN (${pumpProductsSql})
                GROUP BY mp.product_name
                HAVING SUM(cs.price_discount * cs.qty) <> 0
                ORDER BY mp.product_name`),
@@ -626,7 +630,7 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
                           (SELECT AVG(tr.price)
                            FROM t_reading tr
                            JOIN m_pump mp ON tr.pump_id = mp.pump_id
-                           JOIN m_product mp2 ON mp.product_code = mp2.product_name
+                           JOIN m_product mp2 ON mp2.product_id = mp.product_id
                            WHERE tr.closing_id = :closingId
                              AND mp2.product_id = tci.product_id) AS rate
                    FROM t_closing_intercompany tci

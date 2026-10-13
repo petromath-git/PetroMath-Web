@@ -34,21 +34,23 @@ router.get('/', [isLoginEnsured, security.isAdmin()], async function (req, res, 
     const locationCode = req.user.location_code;
     let products = [];
     try {
-        const [data, editableSetting, pumpLinkedNames, salesLedgers, purchaseLedgers, deletableIds, openingStatus, usedIds] = await Promise.all([
+        const [data, editableSetting, salesLedgers, purchaseLedgers, deletableIds, openingStatus, usedIds, pumpTankIds] = await Promise.all([
             ProductDao.findProducts(locationCode),
             locationConfigDao.getSetting(locationCode, PRODUCT_NAME_EDITABLE_SETTING),
-            ProductDao.findPumpLinkedProductNames(locationCode),
             getLedgersByGroup(locationCode, 'Sales Accounts'),
             getLedgersByGroup(locationCode, 'Purchase Accounts'),
             ProductDao.findDeletableProductIds(locationCode),
             openingStockDao.getLocationStatus(locationCode),
-            ProductDao.findUsedProductIds(locationCode)
+            ProductDao.findUsedProductIds(locationCode),
+            ProductDao.findPumpTankProductIds(locationCode)
         ]);
         const canEditProductName = isTruthySetting(editableSetting);
-        const pumpLinkedSet = new Set(pumpLinkedNames);
 
         data.forEach((product) => {
-            const canEditNameForRow = canEditProductName && !pumpLinkedSet.has(product.product_name);
+            // Pumps and tanks link by product_id and follow a rename (DB trigger);
+            // renaming a product with pumps/tanks is SuperUser only
+            const canEditNameForRow = canEditProductName
+                && (req.user.Role === 'SuperUser' || !pumpTankIds.has(Number(product.product_id)));
             products.push({
                 id: product.product_id,
                 name: product.product_name,
@@ -227,11 +229,18 @@ router.put('/api/:id', [isLoginEnsured, security.isAdmin()], async function (req
                 });
             }
 
-            const isLinked = await ProductDao.isProductLinkedToPumpOrTank(locationCode, existingProduct.product_name);
-            if (isLinked) {
+            const hasPumpsOrTanks = await ProductDao.isProductLinkedToPumpOrTank(locationCode, existingProduct.product_id);
+            if (hasPumpsOrTanks && req.user.Role !== 'SuperUser') {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Only SuperUser can rename a product that has pumps or tanks.'
+                });
+            }
+            // Pumps/tanks keep the name as a label in VARCHAR(50)
+            if (newProductName.length > 50 && hasPumpsOrTanks) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Product is linked to pump/tank configuration and name cannot be changed'
+                    error: 'A product with pumps or tanks can have at most 50 characters in its name.'
                 });
             }
 
@@ -305,7 +314,7 @@ router.delete('/api/:id', [isLoginEnsured, security.isAdmin()], async function (
             return res.status(404).json({ success: false, error: 'Product not found' });
         }
 
-        const blockers = await ProductDao.getDeleteBlockers(product.product_id, locationCode, product.product_name);
+        const blockers = await ProductDao.getDeleteBlockers(product.product_id, locationCode);
         if (blockers.length) {
             const detail = blockers.map(b => `${b.count} ${b.label}`).join(', ');
             return res.status(400).json({

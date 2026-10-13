@@ -399,6 +399,16 @@ const txnClosingPromise = (closingId) => {
     });
 }
 
+// The product a pump dispenses: by product_id, falling back to the name match
+// for a pump saved before product_id existed. (This used to call
+// utils.getProduct(t_data.pump_code, ...) — t_data is the list, so it always
+// returned the location's first product and a pump without a reading showed
+// that product's price.)
+const pumpProduct = (pump, productData) =>
+    productData.find(p => pump.product_id && p.product_id === pump.product_id)
+    || productData.find(p => p.product_name === pump.product_code)
+    || null;
+
 // Used to join reading and pump data - assumes location code of pumps match that of the closing data.
 const txnPumpAndReadingPromise = (closingId, locationCode) => {
     return new Promise((resolve, reject) => {
@@ -423,22 +433,24 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
                                             pumpCode: t_pump.pump_code,
                                         });
                                     });
-                                    const product = utils.getProduct(t_data.pump_code, productData);
+                                    const product = pumpProduct(t_pump, productData);
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productId: t_pump.product_id,
                                         productCode: t_pump.product_code,
-                                        productPrice: product.price,
+                                        productPrice: product ? product.price : 0,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: t_pump_readings,
                                     });
                                 } else {
-                                    const product = utils.getProduct(t_data.pump_code, productData);
+                                    const product = pumpProduct(t_pump, productData);
                                     t_pumps.push({
                                         pumpId: t_pump.pump_id,
                                         pumpCode: t_pump.pump_code,
+                                        productId: t_pump.product_id,
                                         productCode: t_pump.product_code,
-                                        productPrice: product.price,
+                                        productPrice: product ? product.price : 0,
                                         pumpOpening: t_pump.opening_reading,
                                         pumpReadings: [],
                                     });
@@ -456,16 +468,17 @@ const txnPumpAndReadingPromise = (closingId, locationCode) => {
 // Used to join 2T product and 2T sale data.
 const txn2TSalePromise= (closingId, locationCode) => {
     return new Promise((resolve, reject) => {
-        ProductDao.findProducts(locationCode)
-            .then((productData) => {
-                const productMap = config.PRODUCT_DETAILS_MAPPING;
+        Promise.all([ProductDao.findProducts(locationCode), ProductDao.getTwoTProductIds(locationCode)])
+            .then(([productData, twoT]) => {
+                // 2T tab tag by product id (the products come from the 2T settings)
+                const tagOf = (p) => ({ tag: Number(p.product_id) === twoT.loose ? config.LOOSE_TAG_NAME : config.POUCH_TAG_NAME });
                 TxnReadDao.get2TSalesByClosingId(closingId, locationCode)
                     .then(t_data => {
                         if (t_data && t_data.length > 0) {
                             let t_2toils = [];
                             t_data.forEach((t_2tSale) => {
                                 let t_sale = t_2tSale.t_2toils;
-                                const mapData = productMap.get(t_2tSale.product_name);
+                                const mapData = tagOf(t_2tSale);
                                 if (t_sale && t_sale.length > 0) {
                                     t_sale.forEach((sale) => {
                                         t_2toils.push({
@@ -481,7 +494,7 @@ const txn2TSalePromise= (closingId, locationCode) => {
                                         });
                                     });
                                 } else {
-                                    const mapData = productMap.get(t_2tSale.product_name);
+                                    const mapData = tagOf(t_2tSale);
                                     t_2toils.push({
                                         productId: t_2tSale.product_id,
                                         productAlias: mapData.tag,

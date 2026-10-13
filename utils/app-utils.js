@@ -68,22 +68,6 @@ module.exports = {
         return alias;
     },
 
-    // Get product using product_code and (product_code, <m_product>) of product's data
-    getProduct : (productCode, productData) => {
-        let data = null;
-        try {
-            productData.forEach((product) => {
-                if(product.product_code === productCode) {
-                    data = product;
-                    throw BreakException;
-                }
-            });
-        } catch (e) {
-            if (e !== BreakException) throw e;
-        }
-        return data;
-    },
-
     // Get pump's code by getting id and (id, code) of pump's data
     getPumpCode : (id, pumpData) => {
         let code = null;

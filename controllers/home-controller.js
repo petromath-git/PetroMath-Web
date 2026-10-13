@@ -838,7 +838,7 @@ const getLocationProductColumns = (locationCode) => {
         const productQuery = `
             SELECT DISTINCT mp.product_code 
             FROM m_pump mp
-            JOIN m_product prod ON mp.product_code = prod.product_name 
+            JOIN m_product prod ON prod.product_id = mp.product_id 
                                 AND mp.location_code = prod.location_code
             WHERE mp.location_code = :locationCode 
             AND mp.product_code IS NOT NULL 
@@ -878,7 +878,7 @@ const getLocationProductColumns = (locationCode) => {
                     SELECT COUNT(*) as count 
                     FROM m_product 
                     WHERE location_code = :locationCode 
-                    AND product_name = '2T LOOSE'
+                    AND product_id = two_t_product_id(:locationCode, 'LOOSE')
                 `;
                 
                 db.sequelize.query(twoTQuery, {
@@ -988,16 +988,19 @@ const productDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         let products = [], productIdAliasMapping = [], products2T = [];
         const productMap = config.PRODUCT_DETAILS_MAPPING;
-        return ProductDao.findProducts(locationCode)
-            .then(data => {
+        return Promise.all([ProductDao.findProducts(locationCode), ProductDao.getTwoTProductIds(locationCode)])
+            .then(([data, twoT]) => {
                 data.forEach((product) => {
-                    const mapData = productMap.get(product.product_name);
+                    // 2T tab products come from the location's 2T settings (by id);
+                    // MS/HSD/XMS labels from the name map
+                    const twoTTag = Number(product.product_id) === twoT.loose ? config.LOOSE_TAG_NAME
+                        : Number(product.product_id) === twoT.pouch ? config.POUCH_TAG_NAME : null;
+                    const mapData = twoTTag ? { tag: twoTTag } : productMap.get(product.product_name);
                     const productAlias = mapData ?  mapData.label ? mapData.label : product.product_name : product.product_name;
                     const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;
                     products.push(formProductData(product, productAlias, textName));
                     productIdAliasMapping.push(formProductAliasMap(product, productAlias));
-                    if(product.product_name === config.POUCH_DESC ||
-                        product.product_name === config.LOOSE_DESC) {
+                    if (twoTTag) {
                         products2T.push(formProductData(product, textName, textName));
                     }
                 });
@@ -1013,10 +1016,10 @@ const pumpProductDataPromise = (locationCode) => {
     return new Promise((resolve, reject) => {
         // First get pump product codes for this location in correct order
         db.sequelize.query(
-            `SELECT product_code, MIN(display_order) as min_order 
-                FROM m_pump 
-                WHERE location_code = :locationCode 
-                GROUP BY product_code 
+            `SELECT product_id, product_code, MIN(display_order) as min_order
+                FROM m_pump
+                WHERE location_code = :locationCode
+                GROUP BY product_id, product_code
                 ORDER BY min_order`,
             {
                 replacements: { locationCode },
@@ -1029,10 +1032,15 @@ const pumpProductDataPromise = (locationCode) => {
                     let products = [], productIdAliasMapping = [];
                     const productMap = config.PRODUCT_DETAILS_MAPPING;
                     
-                    // Process products in pump order, not product table order
+                    // Process products in pump order, not product table order.
+                    // Pumps point at their product by product_id; the name match
+                    // is only a fallback for a pump row without one.
+                    const seen = new Set();
                     pumpProductCodes.forEach((pumpProduct) => {
-                        const product = data.find(p => p.product_name === pumpProduct.product_code);
-                        if (product) {
+                        const product = data.find(p => pumpProduct.product_id && p.product_id === pumpProduct.product_id)
+                            || data.find(p => p.product_name === pumpProduct.product_code);
+                        if (product && !seen.has(product.product_id)) {
+                            seen.add(product.product_id);
                             const mapData = productMap.get(product.product_name);
                             const productAlias = mapData ? mapData.label ? mapData.label : product.product_name : product.product_name;
                             const textName = mapData ? mapData.tag ? mapData.tag : product.product_name : product.product_name;

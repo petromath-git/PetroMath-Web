@@ -72,6 +72,7 @@ const pumpDataPromise = (locationCode) => {
                 data.forEach((pump) => {
                     pumps.push({
                         pumpId: pump.pump_id,
+                        productId: pump.product_id,
                         productCode: pump.product_code,
                         pumpCode: pump.pump_code,
                         pumpClosing: pump.opening_reading,
@@ -379,7 +380,7 @@ const shiftProductsPromise = async (closingId) => {
             SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) as total_amount
         FROM t_reading tr
         JOIN m_pump p ON tr.pump_id = p.pump_id  
-        JOIN m_product mp ON p.product_code = mp.product_name 
+        JOIN m_product mp ON mp.product_id = p.product_id 
         JOIN t_closing tc ON tr.closing_id = tc.closing_id
         WHERE tr.closing_id = :closingId
         AND mp.location_code = tc.location_code

@@ -2780,7 +2780,7 @@ const validateProductPumpReadings = async (locationCode, closingId, items) => {
         const productHasPumps = await db.sequelize.query(`
             SELECT COUNT(*) as pump_count
             FROM m_pump p
-            JOIN m_product prod ON p.product_code = prod.product_name
+            JOIN m_product prod ON prod.product_id = p.product_id
             WHERE prod.product_id = :productId
             AND p.location_code = :locationCode
         `, {
@@ -2797,7 +2797,7 @@ const validateProductPumpReadings = async (locationCode, closingId, items) => {
                 SELECT COUNT(*) as reading_count
                 FROM t_reading tr
                 JOIN m_pump p ON tr.pump_id = p.pump_id
-                JOIN m_product prod ON p.product_code = prod.product_name
+                JOIN m_product prod ON prod.product_id = p.product_id
                 WHERE tr.closing_id = :closingId 
                 AND prod.product_id = :productId
                 AND p.location_code = :locationCode
