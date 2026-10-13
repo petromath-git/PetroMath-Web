@@ -15,10 +15,178 @@ mixin pwaHead()
         navigator.serviceWorker.register('/sw.js').catch(function () {});
       });
     }
+  //- Phones only: the Windows app opens PDFs in their own window with Chrome's viewer
+  if isPhone
+    +pwaDocViewer()
+
+//- Installed app only: PDFs, images and print pages that would open "in a new
+//- tab" open in a full-screen viewer over the current page instead. The
+//- installed app opens its own site's links inside the app window with no
+//- browser back button (iPhone ignores target=_blank there), so a PDF used to
+//- leave no way back. Closing the viewer returns to the page untouched.
+//- PDFs are drawn with PDF.js so every page shows and scrolls on iPhone.
+mixin pwaDocViewer()
+  style.
+    .pm-dv { position: fixed; inset: 0; z-index: 20000; display: flex; flex-direction: column; background: #525659; }
+    .pm-dv[hidden] { display: none; }
+    .pm-dv-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid #dee2e6; }
+    .pm-dv-bar button { height: 40px; border: 1px solid #d5d9df; border-radius: 20px; background: #fff; padding: 0 14px; font-size: 15px; font-weight: 700; color: #1f2328; flex-shrink: 0; }
+    .pm-dv-title { flex-grow: 1; min-width: 0; font-size: 14px; font-weight: 600; color: #1f2328; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pm-dv-body { flex-grow: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    .pm-dv-body canvas, .pm-dv-body img { display: block; width: 100%; height: auto; margin: 0 auto 10px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+    .pm-dv-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+    .pm-dv-msg { color: #fff; text-align: center; padding: 40px 16px; font-size: 15px; }
+  script.
+    (function () {
+      var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      if (!standalone) return;
+      var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+      var el = null, body = null, title = null, shareBtn = null, current = null, pdfjsLoading = null;
+
+      function ownUrl(u) {
+        try {
+          var x = new URL(u, location.href);
+          return (x.origin === location.origin || x.protocol === 'blob:') ? x.href : null;
+        } catch (e) { return null; }
+      }
+      function loadPdfJs() {
+        if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+        if (!pdfjsLoading) {
+          pdfjsLoading = new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = PDFJS + 'pdf.min.js';
+            s.onload = function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; resolve(window.pdfjsLib); };
+            s.onerror = function () { pdfjsLoading = null; reject(new Error('Could not load the PDF viewer. Check your internet.')); };
+            document.head.appendChild(s);
+          });
+        }
+        return pdfjsLoading;
+      }
+      function build() {
+        el = document.createElement('div');
+        el.className = 'pm-dv';
+        el.innerHTML = '<div class="pm-dv-bar"><button type="button" class="pm-dv-back">‹ Back</button>' +
+          '<span class="pm-dv-title"></span><button type="button" class="pm-dv-share" hidden>Share</button></div>' +
+          '<div class="pm-dv-body"></div>';
+        body = el.querySelector('.pm-dv-body');
+        title = el.querySelector('.pm-dv-title');
+        shareBtn = el.querySelector('.pm-dv-share');
+        el.querySelector('.pm-dv-back').addEventListener('click', function () { history.back(); });
+        shareBtn.addEventListener('click', function () {
+          if (current && current.file) navigator.share({ files: [current.file], title: current.file.name }).catch(function () {});
+        });
+        document.body.appendChild(el);
+      }
+      function close() {
+        if (!el || el.hidden) return;
+        el.hidden = true;
+        body.innerHTML = '';
+        current = null;
+        document.documentElement.style.overflow = '';
+      }
+      function message(text) { body.innerHTML = '<div class="pm-dv-msg"></div>'; body.firstChild.textContent = text; }
+
+      function renderPdf(buf, token) {
+        return loadPdfJs().then(function (pdfjs) {
+          return pdfjs.getDocument({ data: buf }).promise;
+        }).then(function (pdf) {
+          body.innerHTML = '';
+          var width = body.clientWidth - 20, dpr = window.devicePixelRatio || 1;
+          var chain = Promise.resolve();
+          for (var n = 1; n <= pdf.numPages; n++) {
+            (function (n) {
+              chain = chain.then(function () {
+                if (current !== token) return; // closed or replaced meanwhile
+                return pdf.getPage(n).then(function (page) {
+                  var vp = page.getViewport({ scale: (width * dpr) / page.getViewport({ scale: 1 }).width });
+                  var canvas = document.createElement('canvas');
+                  canvas.width = vp.width; canvas.height = vp.height;
+                  body.appendChild(canvas);
+                  return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                });
+              });
+            })(n);
+          }
+          return chain;
+        });
+      }
+
+      function open(url, name) {
+        if (!el) build();
+        var token = current = { url: url };
+        title.textContent = name || 'Document';
+        shareBtn.hidden = true;
+        message('Opening…');
+        el.hidden = false;
+        document.documentElement.style.overflow = 'hidden';
+        history.pushState({ pmDocViewer: true }, '');
+
+        fetch(url, { credentials: 'same-origin' }).then(function (r) {
+          if (!r.ok) throw new Error('Could not open this file (' + r.status + ').');
+          var type = (r.headers.get('content-type') || '').toLowerCase();
+          if (type.indexOf('text/html') === 0) {
+            // print pages and similar: show the page itself
+            body.innerHTML = '<iframe></iframe>';
+            body.firstChild.src = url;
+            return;
+          }
+          return r.blob().then(function (blob) {
+            if (current !== token) return;
+            var isPdf = type.indexOf('application/pdf') === 0, isImg = type.indexOf('image/') === 0;
+            if (!isPdf && !isImg) {
+              // spreadsheets etc.: hand to the phone as a download
+              history.back();
+              setTimeout(function () { location.href = url; }, 100);
+              return;
+            }
+            var fname = (name && /\.\w{2,4}$/.test(name)) ? name : (name || 'document') + (isPdf ? '.pdf' : '');
+            try {
+              var file = new File([blob], fname, { type: blob.type });
+              if (navigator.canShare && navigator.canShare({ files: [file] })) { token.file = file; shareBtn.hidden = false; }
+            } catch (e) {}
+            if (isImg) {
+              var img = new Image();
+              img.src = URL.createObjectURL(blob);
+              body.innerHTML = '';
+              body.appendChild(img);
+              return;
+            }
+            return blob.arrayBuffer().then(function (buf) { return renderPdf(buf, token); });
+          });
+        }).catch(function (err) {
+          if (current === token) message(err.message || 'Could not open this file.');
+        });
+      }
+
+      // Back (button, Android back, iPhone swipe) closes the viewer
+      window.addEventListener('popstate', close);
+
+      // Links that would open "in a new tab"
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || !e.target.closest) return;
+        var a = e.target.closest('a[target="_blank"]');
+        var url = a && ownUrl(a.href);
+        if (!url) return;
+        e.preventDefault();
+        open(url, a.getAttribute('download') || a.title || a.textContent.trim());
+      });
+      // Scripts that call window.open for our own files
+      var nativeOpen = window.open;
+      window.open = function (url) {
+        var own = url && ownUrl(url);
+        if (!own) return nativeOpen.apply(window, arguments);
+        open(own, '');
+        // stand-in for the window callers get back (focus/print/load are no-ops)
+        return { closed: false, focus: function () {}, print: function () {}, close: function () { history.back(); }, addEventListener: function () {} };
+      };
+      window.pmDocViewer = { open: open, close: close };
+    })();
 
 //- Hidden until it applies: Android Chrome gets an Install button, iPhone
 //- Safari gets the Share > Add to Home Screen steps. Never shown inside the
-//- installed app, or after it's dismissed (for 30 days).
+//- installed app, or after it's dismissed (for 30 days). Desktop Chrome/Edge
+//- get the Install button too: the Windows app keeps desktop rules (4-hour
+//- login, no Face ID), see app.js.
 //- fixed: pin to the bottom of the screen (login page) instead of in-flow.
 mixin pwaInstallHint(fixed)
   style.

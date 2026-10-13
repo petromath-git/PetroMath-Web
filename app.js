@@ -737,12 +737,21 @@ app.get('/', function (req, res) {
         return res.sendFile(path.join(__dirname, 'public', 'landing.html'));
     }
     if(req.user.Role === 'Customer') {
-        res.redirect('/home-customer');
+        return res.redirect('/home-customer');
     }
     if (req.user.Role === 'Cashier') {
         return res.redirect('/dsm-entry');
     }
     res.redirect(isPhone(req) ? '/m' : '/home');
+});
+
+// Installed app's start page (manifest start_url): like '/', but logged-out
+// users get the login page instead of the public landing page
+app.get('/app', function (req, res) {
+    if (!req.isAuthenticated()) {
+        return res.redirect('/login');
+    }
+    res.redirect('/');
 });
 
 
