@@ -3,7 +3,7 @@
   "name": "PetroMath",
   "short_name": "PetroMath",
   "description": "Fuel station management",
-  "start_url": "/m",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

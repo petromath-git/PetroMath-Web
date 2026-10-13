@@ -92,6 +92,8 @@ module.exports = {
                     (drivers.find(d => d.personId === receiptsData.helper_id) || {}).personName || '';
 
                 res.render('edit-draft-tankrcpt',{
+                    title: 'Tank Receipt',
+                    mobileReady: true,   // viewport tag + body.mobile-ready: tabs scroll, lines stack into cards
                     user: req.user,
                     config: config.APP_CONFIGS,
                     inchargers: values[0].value.inchargers,

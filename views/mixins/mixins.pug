@@ -310,6 +310,22 @@ mixin newCashFlowEntry(flow, prefix, rowCnt)
             button.close(type="button" aria-label="Close"  onclick='hideRow(\''+ trRowId + '\', "remove-cashflow-txn", ' + calculateTotalFn + ')')
                 span(aria-hidden="true") &times;
 
+//- Tank receipt entry pages (new-decant, edit-draft-tankrcpt) on phones.
+//- Line and summary tables use the shared .m-stack cards (style.css).
+mixin decantMobileStyles()
+    style.
+        @media (max-width: 767px) {
+            /* the four tabs stay in one row that scrolls sideways, instead of stacking */
+            .decant-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+            .decant-tabs > .nav-item { flex: 1 0 auto; width: auto; max-width: none; padding: 0; }
+            .decant-tabs .nav-link { white-space: nowrap; text-align: center; padding: .5rem .75rem; }
+            #v-decant_lines { flex: 0 0 100%; max-width: 100%; }
+            /* the Invoice tab's tables are built by app-scripts.js: scroll them sideways */
+            #invoiceTabContent table { display: block; overflow-x: auto; }
+            #invoicePdfUpload { max-width: 100%; }
+            #invoiceNoEditGroup { min-width: 0 !important; }
+        }
+
 //- Add new page: Dom elements to show cash sale details
 mixin addDecantLines(decantRowno,rowData)
     - var prefix = 'tankReceipts-';
@@ -327,20 +343,20 @@ mixin addDecantLines(decantRowno,rowData)
         input(type='hidden' id=prefix + "opening_dip_" + decantRowno value=rowData.opening_dip)
         input(type='hidden' id=prefix + "closing_dip_" + decantRowno value=rowData.closing_dip)
         input(type='hidden' id=prefix + "amt_" + decantRowno value=rowData.amount)
-        td
+        td(data-label='Tank')
             select.form-control(id=prefix+"tank_" + decantRowno, name=prefix+"tank_" + decantRowno, required)
                 if tanks
                     each val in tanks
-                        option(value=`${val.tankId}` selected=(val.tankId === rowData.tank_id))= val.tankCode    
-        td
+                        option(value=`${val.tankId}` selected=(val.tankId === rowData.tank_id))= val.tankCode
+        td(data-label='Quantity (KL)')
             select.form-control(id=prefix+"tankqty_" + decantRowno, name=prefix+"tankqty_" + decantRowno, required)
                 if tankQuantities && tankQuantities.length
                     each val in tankQuantities
                         option(value=val.description selected= (rowData.quantity === val.description))= val.description
-        td
+        td.m-wide(data-label='Notes')
             textarea.form-control(name=prefix + "notes_" + decantRowno id=prefix+"notes_"+ decantRowno rows=1 maxlength=500 placeholder="Optional" style="height:38px")= rowData.notes
-        td
-            button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-decant-line")')
+        td.m-actions
+            button.close(type="button" aria-label="Remove line" onclick='hideRow(\'' + trId + '\',"remove-decant-line")')
                 span(aria-hidden="true") &times;
 
 mixin addTxnTruckLoad(rowCnt)

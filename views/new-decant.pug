@@ -3,11 +3,12 @@ include mixins/mixins
 include mixins/summary-mixins
 
 block content
+    +decantMobileStyles()
     div.mb-2
         a.btn.btn-sm.btn-outline-secondary(href='/tankreceipts') &laquo; Tank Receipts
     form
         div
-            ul.nav.nav-tabs
+            ul.nav.nav-tabs.decant-tabs
                 li.nav-item.col-md.active
                     a.nav-link.active#decantheader_tab(data-toggle="tab" href="#new_decantheader" onclick=`trackMenu(this)`) Decant Header
                 li.nav-item.col-md
@@ -87,14 +88,15 @@ block content
                 // ----------------------- New Decant Lines ----------------------------
                 div.tab-pane.fade#new_decantlines
                     div.table-responsive.col-lg-10
-                        table.table-borderless(class="table" id="tankReceipts-table")
+                        //- Phones: each line is a card (.m-stack)
+                        table.table-borderless.m-stack(class="table" id="tankReceipts-table")
                             thead.thead-light
                                 tr
                                     th(scope="col") Tank
                                     th(scope="col") Quantity (KL)
                                     th(scope="col") Notes
                                     th(scope="col")
-
+                            tbody
                                 - var rowCnt = 0
                                 while rowCnt < maxDecantLines
                                     +addDecantLines(rowCnt++)
@@ -114,7 +116,7 @@ block content
                                 div.col-12#v-decant-header
                                     h6.sub-header Decant Header
                                         div.table-responsive#vis-tankheader-table
-                                            table.table.table-sm
+                                            table.table.table-sm.m-stack
                                                 thead.thead-light
                                                     tr
                                                         th(scope="col") Invoice Date
@@ -125,29 +127,30 @@ block content
                                                         th(scope="col") TT Number
                                                         th(scope="col") Driver
                                                         th(scope="col") Helper
+                                                tbody
                                                     tr
-                                                        td
+                                                        td(data-label='Invoice Date')
                                                             span(id='valDate-invoiceDate')
-                                                        td 
+                                                        td(data-label='Invoice Number')
                                                             span(id='val-invoiceno')
-                                                        td 
+                                                        td(data-label='Decant Date')
                                                             span(id='valDate-decantDate')
-                                                        td  
+                                                        td(data-label='Decant Time')
                                                             span(id='valText-decanttime')
-                                                        td 
+                                                        td(data-label='Decant Incharge')
                                                             span(id='valText-inchargeid')
-                                                        td 
+                                                        td(data-label='TT Number')
                                                             span(id='valText-ttnumber')
-                                                        td 
+                                                        td(data-label='Driver')
                                                             span(id='valText-driverid')
-                                                        td
+                                                        td(data-label='Helper')
                                                             span(id='valText-helperid')
 
                                     // Summary: Decant Lines
                                 div.col-10#v-decant_lines
                                     h6.sub-header Decant Lines
                                         div.table-responsive#vis-tankReceipts-table
-                                            table.table.table-sm
+                                            table.table.table-sm.m-stack
                                                 thead.thead-light
                                                     tr
                                                         th(scope="col") Tank

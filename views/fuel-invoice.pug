@@ -1,9 +1,26 @@
 extends layout
 
 block content
-    div.container-fluid.mt-3
+    style.
+        @media (max-width: 767px) {
+            /* 16px stops the iPhone zooming in when a field is tapped */
+            .fi-page .form-control { font-size: 16px; }
+            .fi-page.container-fluid { padding: 0; }
+            /* lines: cards sit on the page, not inside another bordered box */
+            .fi-lines-card { border: 0; background: transparent; }
+            .fi-lines-card > .card-header { background: transparent; border: 0; padding: 0 0 .5rem; }
+            .fi-lines-card > .card-body .table-responsive { overflow: visible; }
+            /* a line and its charges read as one card */
+            #fi_lines_table > tbody > tr[id^="fi_line_"] { margin-bottom: 0; border-radius: .5rem .5rem 0 0; }
+            #fi_lines_table > tbody > tr[id^="fi_charges_row_"] { grid-template-columns: minmax(0, 1fr); border-top: 1px dashed #dee2e6; border-radius: 0 0 .5rem .5rem; background: #f8f9fa !important; }
+            #fi_lines_table .fi-charges table { max-width: none !important; }
+            #fi_lines_table .fi-charges table.m-stack > tbody > tr { margin-bottom: .4rem; }
+            #fi_lines_table td.m-actions:empty { display: none; }
+            .fi-actions .btn { margin: 0 .5rem .5rem 0 !important; }
+        }
+    div.container-fluid.mt-3.fi-page
 
-        div.d-flex.align-items-center.mb-3
+        div.d-flex.flex-wrap.align-items-center.mb-3
             h5.mb-0
                 a.text-secondary(href='/lubes-invoice-home') Purchases
                 span.text-muted  /
@@ -16,12 +33,12 @@ block content
         if isNew
             div.card.mb-3
                 div.card-body.py-2
-                    div.d-flex.align-items-center
+                    div.d-flex.flex-wrap.align-items-center
                         label.font-weight-bold.mb-0.mr-3 Upload Invoice PDF
                         input#fuelInvoicePdfUpload.form-control-file(type='file' accept='.pdf' style='max-width:320px' onchange='fuelInvoiceUploadAndParse()')
                         span#fuelParseStatus.text-muted.small.ml-3
         else
-            div.mb-3.d-flex.align-items-center
+            div.mb-3.d-flex.flex-wrap.align-items-center
                 a.btn.btn-outline-secondary.btn-sm(href='/purchases/fuel-invoice/new') + Upload Another Invoice
                 a.btn.btn-outline-danger.btn-sm.ml-2(href=`/purchases/fuel-invoice/${invoice.id}/pdf` target='_blank' title='View PDF')
                     span.oi.oi-document
@@ -63,14 +80,15 @@ block content
                         input#fi_total_amount.form-control.form-control-sm(type='number' step='0.01' min='0' value=(invoice ? invoice.total_invoice_amount : '') readonly=editDisabled)
 
         //- Lines card
-        div.card.mb-3
+        div.card.mb-3.fi-lines-card
             div.card-header.py-2.d-flex.align-items-center
                 strong Lines
                 if !editDisabled
                     button.btn.btn-outline-secondary.btn-sm.ml-auto(type='button' onclick='fuelInvoiceAddLine()') + Add Line
             div.card-body.p-0
                 div.table-responsive
-                    table.table.table-sm.table-bordered.mb-0#fi_lines_table
+                    //- Phones: each line is a card (.m-stack), its charges joined underneath
+                    table.table.table-sm.table-bordered.mb-0.m-stack#fi_lines_table
                         thead.thead-light
                             tr
                                 th Invoice Product Name
@@ -84,7 +102,7 @@ block content
                                 th
                         tbody#fi_lines_body
 
-        div.mb-3
+        div.mb-3.fi-actions
             button.btn.btn-primary(type='button' onclick='fuelInvoiceSave()')
                 = editDisabled ? 'Save Mapping' : 'Save Invoice'
             a.btn.btn-secondary.ml-2(href='/lubes-invoice-home') Cancel
@@ -122,25 +140,26 @@ block content
 
             const unit = d.qty_unit || 'KL';
             const unitOpts = ['KL', 'KG'].map(u => `<option value="${u}" ${unit === u ? 'selected' : ''}>${u}</option>`).join('');
+            // data-label / m-wide / m-actions: phone card layout (.m-stack); desktop ignores them
             const row = `<tr id="fi_line_${i}">
-                <td><input type="text" class="form-control form-control-sm fi-product-name" value="${d.product_name || ''}" placeholder="As on invoice" ${ro}></td>
-                <td>
+                <td class="m-wide" data-label="Invoice Product Name"><input type="text" class="form-control form-control-sm fi-product-name" value="${d.product_name || ''}" placeholder="As on invoice" ${ro}></td>
+                <td class="m-wide" data-label="Map to Product *">
                     <select class="form-control form-control-sm fi-product-id" required>
                         <option value="">-- Select --</option>${opts}
                     </select>
                 </td>
-                <td><input type="number" class="form-control form-control-sm fi-quantity" step="0.001" min="0" value="${d.quantity || ''}" ${ro}></td>
-                <td>
+                <td data-label="Qty"><input type="number" class="form-control form-control-sm fi-quantity" step="0.001" min="0" value="${d.quantity || ''}" ${ro}></td>
+                <td data-label="Unit">
                     <select class="form-control form-control-sm fi-unit" ${ro ? 'disabled' : ''}>${unitOpts}</select>
                 </td>
-                <td><input type="number" class="form-control form-control-sm fi-rate" step="0.001" min="0" value="${d.rate_per_kl || ''}" ${ro}></td>
-                <td><input type="number" class="form-control form-control-sm fi-density" step="0.001" min="0" value="${d.density || ''}" ${ro}></td>
-                <td><input type="text" class="form-control form-control-sm fi-hsn" value="${d.hsn_code || ''}" ${ro}></td>
-                <td><input type="number" class="form-control form-control-sm fi-line-amount" step="0.01" min="0" value="${d.total_line_amount || ''}" ${ro}></td>
-                <td>${removeBtn}</td>
+                <td data-label="Rate"><input type="number" class="form-control form-control-sm fi-rate" step="0.001" min="0" value="${d.rate_per_kl || ''}" ${ro}></td>
+                <td data-label="Density"><input type="number" class="form-control form-control-sm fi-density" step="0.001" min="0" value="${d.density || ''}" ${ro}></td>
+                <td data-label="HSN Code"><input type="text" class="form-control form-control-sm fi-hsn" value="${d.hsn_code || ''}" ${ro}></td>
+                <td data-label="Amount"><input type="number" class="form-control form-control-sm fi-line-amount" step="0.01" min="0" value="${d.total_line_amount || ''}" ${ro}></td>
+                <td class="m-actions">${removeBtn}</td>
             </tr>
             <tr id="fi_charges_row_${i}">
-                <td colspan="8" class="p-2 bg-light">${buildChargesHtml(i, d.charges || [])}</td>
+                <td colspan="8" class="p-2 bg-light fi-charges">${buildChargesHtml(i, d.charges || [])}</td>
             </tr>`;
             document.getElementById('fi_lines_body').insertAdjacentHTML('beforeend', row);
         }
@@ -155,7 +174,7 @@ block content
 
             return `<div>
                 <span class="text-muted" style="font-size:0.8em;font-weight:600">CHARGES / TAX</span>
-                <table class="table table-sm table-bordered mb-1" style="max-width:520px">
+                <table class="table table-sm table-bordered mb-1 m-stack" style="max-width:520px">
                     <thead class="thead-light"><tr>
                         <th style="width:40%">Charge Type</th>
                         <th style="width:20%">Rate %</th>
@@ -175,10 +194,10 @@ block content
             const removeBtn = FI_EDIT_DISABLED ? '' :
                 `<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="document.getElementById('${cid}').remove()">&times;</button>`;
             return `<tr id="${cid}">
-                <td><input type="text" class="form-control form-control-sm fi-charge-type" value="${c.charge_type || ''}" placeholder="e.g. CGST" ${ro}></td>
-                <td><input type="number" class="form-control form-control-sm fi-charge-pct" step="0.01" value="${c.charge_pct || ''}" ${ro}></td>
-                <td><input type="number" class="form-control form-control-sm fi-charge-amount" step="0.01" value="${c.charge_amount || ''}" ${ro}></td>
-                <td class="text-center">${removeBtn}</td>
+                <td class="m-wide" data-label="Charge Type"><input type="text" class="form-control form-control-sm fi-charge-type" value="${c.charge_type || ''}" placeholder="e.g. CGST" ${ro}></td>
+                <td data-label="Rate %"><input type="number" class="form-control form-control-sm fi-charge-pct" step="0.01" value="${c.charge_pct || ''}" ${ro}></td>
+                <td data-label="Amount"><input type="number" class="form-control form-control-sm fi-charge-amount" step="0.01" value="${c.charge_amount || ''}" ${ro}></td>
+                <td class="text-center m-actions">${removeBtn}</td>
             </tr>`;
         }
 
