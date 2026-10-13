@@ -220,8 +220,10 @@ block content
                         document.querySelector('form').submit();
                     }, 2000);  // 2 seconds delay, replace with real processing time
                 });
-                
-               
+
+                // "No Transactions" page renders none of the table containers
+                if (!document.getElementById('salesSummary-table-container')) return;
+
                 document.getElementById('salesSummary-table-container').innerHTML = renderTable(salesSummaryFromServer,'Sales (Ltrs.)',['Nozzle Flow','Nozzle Count','Testing','Total Sales','Credit Sales','Digital+Cash Sales']);
                 document.getElementById('salesCollection-table-container').innerHTML = renderTransposedTable(salesCollectionFromServer,'Sales (Rs.)',['Cash','Credit','Card'],"col-sm-8 mx-auto");                
                 document.getElementById('creditsale-table-container').innerHTML = renderTable(creditSalesFromServer,'Credit Sales',['Rate','Quantity','Discount','Amount']);

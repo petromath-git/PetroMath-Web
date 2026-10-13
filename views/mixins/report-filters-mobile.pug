@@ -92,6 +92,13 @@ mixin reportFiltersMobile(opts)
                 // Customer search on phones (desktop keeps the plain dropdown)
                 if (company && window.jQuery && jQuery.fn.select2) {
                     jQuery(company).select2({ width: '100%' }).on('change', refresh);
+                    // Select2 hides the native select, so a required-but-blank pick would block
+                    // Go / PDF / Excel silently: show the filters and open the search instead
+                    company.addEventListener('invalid', function (e) {
+                        e.preventDefault();
+                        form.classList.remove('rf-collapsed');
+                        jQuery(company).select2('open');
+                    });
                 }
                 if (hasResults) form.classList.add('rf-collapsed');
                 refresh();
