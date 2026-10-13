@@ -1,5 +1,9 @@
 
-function generatePDF(currentPage,isPrint = 'N') { 
+function generatePDF(currentPage,isPrint = 'N') {
+
+    // Customer Statement / Credit Ledger: customer dropdown is required (no "All" option)
+    const companySelect = document.getElementById('company_id');
+    if (companySelect && companySelect.required && !companySelect.reportValidity()) return;
 
     const loadingOverlay = document.getElementById('loadingOverlay');
     if(loadingOverlay)
