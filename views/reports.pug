@@ -7,6 +7,7 @@ block content
         +reportFiltersMobile({ hasRange: true, hasResults: typeof creditstmt !== 'undefined' })
         script.
             function exportExcel() {
+                if (!document.getElementById('company_id').reportValidity()) return;
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '/reports/excel';
@@ -52,9 +53,9 @@ block content
                 td.rf-gap &nbsp;
                 td.rf-label Company Name:
                 td.rf-field
-                    select#company_id.form-control(name='company_id')
+                    select#company_id.form-control(name='company_id', required)
                         if credits
-                            option(value=-1, selected=company_id === -1 ? true : undefined) All
+                            option(value='', selected=!company_id ? true : undefined) Select customer
                             each val in credits
                                 option(value=`${val.id}`, selected=company_id == val.id ? true : undefined)= val.name
                 include report-print-download.pug
