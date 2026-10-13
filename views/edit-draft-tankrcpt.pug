@@ -4,6 +4,7 @@ include mixins/summary-mixins
 
 
 block content
+    +decantMobileStyles()
     div.mb-2
         a.btn.btn-sm.btn-outline-secondary(href='/tankreceipts') &laquo; Tank Receipts
 
@@ -32,7 +33,7 @@ block content
     form
         div
             if(!freezedRecord)
-                ul.nav.nav-tabs
+                ul.nav.nav-tabs.decant-tabs
                     li.nav-item.col-md.active
                         a.nav-link.active#decantheader_tab(data-toggle="tab" href="#new_decantheader" onclick=`trackMenu(this)`) Decant Header
                     li.nav-item.col-md
@@ -42,7 +43,7 @@ block content
                     li.nav-item.col-md
                         a.nav-link#invoice_tab(data-toggle="tab" href="#invoice_tab_pane" onclick="loadInvoiceTab()") Invoice
             else
-                ul.nav.nav-tabs
+                ul.nav.nav-tabs.decant-tabs
                     li.nav-item.col-md
                         a.nav-link#decantheader_tab(data-toggle="tab" href="#new_decantheader") Decant Header
                     li.nav-item.col-md
@@ -121,18 +122,18 @@ block content
                     div
                         div.col-lg-10
                             div.table-responsive
-                                table.table#tankReceipts-table
-                                    tbody.w-100
-                                        thead.thead-light
-                                            tr
-                                                th(scope="col") Tank
-                                                th(scope="col") Quantity (KL)
-                                                th(scope="col") Notes
-                                                th(scope="col")
-
-                                            - var rowCnt = 0
-                                            while rowCnt < maxDecantLines
-                                                +addDecantLines(rowCnt, decantLines[rowCnt++])
+                                //- Phones: each line is a card (.m-stack)
+                                table.table.m-stack#tankReceipts-table
+                                    thead.thead-light
+                                        tr
+                                            th(scope="col") Tank
+                                            th(scope="col") Quantity (KL)
+                                            th(scope="col") Notes
+                                            th(scope="col")
+                                    tbody
+                                        - var rowCnt = 0
+                                        while rowCnt < maxDecantLines
+                                            +addDecantLines(rowCnt, decantLines[rowCnt++])
                         div.row
                             div.col &nbsp;
                         div(align="center")
@@ -147,7 +148,7 @@ block content
                                 div.col-12#v-decant-header
                                     h6.sub-header Decant Header
                                         div.table-responsive#vis-tankheader-table
-                                            table.table.table-sm
+                                            table.table.table-sm.m-stack
                                                 thead.thead-light
                                                     tr
                                                         th(scope="col") Invoice Date
@@ -158,10 +159,12 @@ block content
                                                         th(scope="col") TT Number
                                                         th(scope="col") Driver
                                                         th(scope="col") Helper
+                                                tbody
                                                     tr
-                                                        td
+                                                        td(data-label='Invoice Date')
                                                             span(id='valDate-invoiceDate')
-                                                        td
+                                                        //- full width on phones: the admin correction box below needs the room
+                                                        td.m-wide(data-label='Invoice Number')
                                                             span(id='val-invoiceno')
                                                             //- The rest of a closed receipt is frozen, but a mistyped invoice
                                                             //- number blocks the invoice PDF upload, so admins can still fix it
@@ -174,24 +177,24 @@ block content
                                                                         button.btn.btn-primary(type='button' onclick='saveClosedInvoiceNumber()') Save
                                                                         button.btn.btn-outline-secondary(type='button' onclick='cancelInvoiceNumberEdit()') Cancel
                                                                 small.d-block#invoiceNoEditStatus
-                                                        td
+                                                        td(data-label='Decant Date')
                                                             span(id='valDate-decantDate')
-                                                        td  
+                                                        td(data-label='Decant Time')
                                                             span(id='valText-decanttime')
-                                                        td 
+                                                        td(data-label='Decant Incharge')
                                                             span(id='valText-inchargeid')
-                                                        td 
+                                                        td(data-label='TT Number')
                                                             span(id='valText-ttnumber')
-                                                        td 
+                                                        td(data-label='Driver')
                                                             span(id='valText-driverid')
-                                                        td
+                                                        td(data-label='Helper')
                                                             span(id='valText-helperid')
 
                                     //Summary: Decant Lines
                                 div.col-10#v-decant_lines
                                     h6.sub-header Decant Lines
                                         div.table-responsive#vis-tankReceipts-table
-                                            table.table.table-sm
+                                            table.table.table-sm.m-stack
                                                 thead.thead-light
                                                     tr
                                                         th(scope="col") Tank
