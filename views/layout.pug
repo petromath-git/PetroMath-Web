@@ -1,7 +1,10 @@
+include mixins/pwa-mixins
+include mixins/passkey-mixins
 doctype html
 html
   head
     title PetroMath:#{title}
+    +pwaHead()
     - var mobileReadyPages = ['Cashier Shift', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
     //- mobileReady: set by controllers whose page has its own phone layout (shift closing)
     - var hasViewport = mobileReadyPages.includes(title) || mobileReady
@@ -249,7 +252,11 @@ html
 
           div#static-snackbar.alert.alert-danger.d-md-none
           div#snackbar
-          
+
+          if offerPasskey
+            +passkeyScript()
+            +passkeyOffer()
+
           block content
 
     else

@@ -3,6 +3,9 @@ const bcrypt = require('bcrypt');
 const { Person } = require('../db/db-connection');
 const PersonDao = require('../dao/person-dao');
 const RolePermissionsDao = require('../dao/role-permissions-dao');
+const PasskeyDao = require('../dao/passkey-dao');
+const requestCache = require('../utils/request-cache');
+const { passwordSig } = require('../utils/login-flow');
 
 // Render the password reset form
 exports.getPasswordResetPage = async (req, res, extraData = {}) => {
@@ -158,6 +161,8 @@ const updatePassword = async (user, newPassword) => {
     if (!result) {
         throw new Error('Failed to update password');
     }
+    // End the user's existing logins now rather than within the minute
+    requestCache.invalidate('person:');
 };
 
 // Method to handle the actual password change (if needed separately)
@@ -196,10 +201,18 @@ exports.changePassword = (req, res, next) => {
 };
 
 // Render the change password page (for self-service)
-exports.getChangePasswordPage = (req, res, extraData = {}) => {
+exports.getChangePasswordPage = async (req, res, extraData = {}) => {
+    // Phones with Face ID / fingerprint login on, for the off switch
+    let passkeyCount = 0;
+    try {
+        passkeyCount = (await PasskeyDao.listByPerson(req.user.Person_id)).length;
+    } catch (err) {
+        console.error('Error counting passkeys:', err);
+    }
     res.render('change-pwd', {
         title: 'Change Password',
         user: req.user,
+        passkeyCount,
         ...extraData
     });
 };
@@ -234,6 +247,11 @@ exports.changeSelfPassword = async (req, res) => {
         );
 
         if (result === true) {
+            // Other logins of this user end (deserializeUser); keep this one
+            const sig = passwordSig({ Password: hashedNewPassword });
+            req.user.pwd_sig = sig;
+            if (req.session.passport && req.session.passport.user) req.session.passport.user.pwd_sig = sig;
+            requestCache.invalidate('person:');
             req.flash('success', 'Password changed successfully');
             res.redirect('/');
         } else {

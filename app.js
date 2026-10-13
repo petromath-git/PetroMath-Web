@@ -21,6 +21,7 @@ const personLocationDao = require('./dao/person-location-dao');
 const bcrypt = require('bcrypt');
 const { routeLogger } = require('./utils/route-logger');
 const requestCache = require('./utils/request-cache');
+const { buildLoginUser, completeLogin, logFailedLogin, passwordSig } = require('./utils/login-flow');
 
 
 // Passport - configuration - start....
@@ -52,44 +53,9 @@ passport.use(new LocalStrategy(
                                     console.log(`Customer ${data.User_name} logged in with universal password`);
                                 }
 
-                            let now = new Date();
-                            const today_date = dateFormat(now, "yyyy-mm-dd");
-                            
-                            if (data.effective_end_date > today_date) {
-
-                                 // Check if user's location is active and get service tier
-                                    const locationStatus = await LocationDao.isLocationActive(data.location_code);
-                                    console.log("locationStatus:", locationStatus);
-                                    if (!locationStatus.isActive) {
-                                        done(null, false, { message: 'This location is currently inactive. Please contact your administrator.' });
-                                        return;
-                                    }
-                                // Fetch menu access from DAO
-                                const role = data.Role;
-                                const location = data.location_code;
-                                const isAdmin = security.isAdminChk(data);
-
-                                const menus = await MenuAccessDao.getAllowedMenusForUser(role, location);
-                                const allowedMenus = menus.map(m => m.menu_code);
-                                const menuDetails = menus;
-
-                                // Locations this person is explicitly assigned to (m_person_location),
-                                // beyond their single home location_code above.
-                                const personLocations = await personLocationDao.getPersonLocations(data.Person_id);
-                                const assignedLocations = personLocations.map(pl => pl.location_code);
-
-                                // Construct enriched UserData
-                                const userInfo = new UserData(data, isAdmin, allowedMenus, menuDetails, locationStatus.service_tier, assignedLocations);
-
-                                return done(null, userInfo);
-                            } else {
-                                // Account is disabled
-                                done(null, false, { 
-                                    message: `${data.User_Name} Your User Account is Disabled`,
-                                    Person_id: data.Person_id,
-                                    location_code: data.location_code
-                                });
-                            }
+                            // Disabled account / inactive location checks, menus
+                            const result = await buildLoginUser(data);
+                            return result.user ? done(null, result.user) : done(null, false, result.failure);
                         } else {
                             // Password mismatch
                             done(null, false, { 
@@ -117,17 +83,25 @@ passport.serializeUser((userData, done) => {
     done(null, userData);
 });
 
-// Runs on every request. The account-active check is cached for a minute
+// Runs on every request. The account check is cached for a minute
 // (requestCache key 'person:<User_Name>'); disable/enable-user invalidate it so
 // a disabled user is still logged out on their next request.
 passport.deserializeUser(function (userInfo, done) {
     requestCache.getOrLoad('person:' + userInfo.User_Name, 60_000, () =>
-        Person.findOne({ where: { 'User_Name': userInfo.User_Name }, attributes: ['effective_end_date'] })
-            .then(user => !!user && security.isAccountActive(user.effective_end_date))
+        Person.findOne({ where: { 'User_Name': userInfo.User_Name }, attributes: ['effective_end_date', 'Password'] })
+            .then(user => ({
+                active: !!user && security.isAccountActive(user.effective_end_date),
+                pwdSig: user ? passwordSig(user) : null
+            }))
     )
-        .then(function (isActive) {
+        .then(function (person) {
             // Ends the session of a user disabled after logging in
-            if (!isActive) {
+            if (!person.active) {
+                return done(null, false);
+            }
+            // Ends every login (all phones and PCs) within a minute of a password
+            // change by any route. pwd_sig is set at login (buildLoginUser).
+            if (userInfo.pwd_sig && userInfo.pwd_sig !== person.pwdSig) {
                 return done(null, false);
             }
             done(null, userInfo);
@@ -157,7 +131,6 @@ const SupplierDao = require("./dao/supplier-dao");
 const LoginLogDao = require("./dao/login-log-dao");
 const LocationDao = require("./dao/location-dao");
 const MenuManagementDao = require("./dao/menu-management-dao");
-const { handleVersionRouting } = require('./utils/version-routing');
 
 db.sequelize.sync();
 // ORM DB - end
@@ -261,6 +234,14 @@ const compression = require('compression');
 app.use(compression());
 
 
+
+// Installable app (PWA) files. Served ahead of express.static so they skip its
+// 7-day cache: phones must see a changed service worker or manifest right away.
+app.get(['/sw.js', '/manifest.webmanifest'], function (req, res) {
+    res.set('Cache-Control', 'no-cache');
+    res.type(req.path === '/sw.js' ? 'application/javascript' : 'application/manifest+json');
+    res.sendFile(path.join(__dirname, 'public', req.path));
+});
 
 const distPath = path.join(__dirname, 'public/dist');
 if (require('fs').existsSync(distPath)) {
@@ -381,9 +362,15 @@ app.use(require('cookie-parser')(sessionSecret));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(bodyParser.json({ limit: '10mb' }));
 const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours of inactivity logs the user out
+// Phones stay logged in like an app. Still ends at once on password change or
+// user disable (deserializeUser), and on Logout.
+const PHONE_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_ROLL_INTERVAL_MS = 30 * 60 * 1000; // only re-extend expiry this often, not on every request
 
+const DbSessionStore = require('./utils/db-session-store');
 app.use(require('express-session')({
+    // Logins in t_web_sessions, so deploys and restarts don't log everyone out
+    store: new DbSessionStore(),
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
@@ -412,8 +399,21 @@ app.use((req, res, next) => {
         const now = Date.now();
         if (!req.session.lastRolled || now - req.session.lastRolled > SESSION_ROLL_INTERVAL_MS) {
             req.session.lastRolled = now;
-            req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+            req.session.cookie.maxAge = isPhone(req) ? PHONE_SESSION_MAX_AGE_MS : SESSION_MAX_AGE_MS;
         }
+    }
+    next();
+});
+
+// One-time "Use Face ID / fingerprint next time?" card on the first page after
+// a password login on a phone (flag set in POST /login). SuperUsers pass
+// through Select Location first, which doesn't show the card, so the flag
+// waits for the page after it.
+app.use((req, res, next) => {
+    if (req.session && req.session.offerPasskey && req.method === 'GET' && /text\/html/.test(req.headers.accept || '')
+        && !req.path.startsWith('/select-location')) {
+        res.locals.offerPasskey = true;
+        delete req.session.offerPasskey;
     }
     next();
 });
@@ -567,6 +567,7 @@ app.use(routeLogger({
 
 app.use('/vehicles', vehicleRoutes);
 app.use('/password', passwordRoutes);
+app.use('/passkey', require('./routes/passkey-routes'));
 app.use('/reports-tally-daybook', tallyDaybookRoutes);
 app.use('/customer', customerDashboardRoutes);
 app.use('/adjustments', adjustmentRoutes);
@@ -706,30 +707,8 @@ app.post('/login', webLoginLimiter, function(req, res, next) {
             return next(err);
         }
 
-        // Capture request info
-        const loginInfo = {
-            ip_address: req.ip,
-            user_agent: req.headers['user-agent'],
-            attempted_username: req.body.username  // Capture the attempted username
-        };
-
         if (!user) {
-            // Log failed login attempt
-            try {
-                await LoginLogDao.create({
-                    Person_id: info.Person_id || null,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'failed',
-                    failure_reason: info.message,
-                    location_code: info.location_code || null,
-                    created_by: 'SYSTEM'
-                });
-            } catch (error) {
-                console.error("Error logging failed login:", error);
-            }
-
+            await logFailedLogin(req, req.body.username, info);
             req.flash('error', info.message);
             return res.redirect('/login');
         }
@@ -739,42 +718,13 @@ app.post('/login', webLoginLimiter, function(req, res, next) {
                 return next(err);
             }
 
-            // Log successful login after successful authentication
-            try {
-                await LoginLogDao.create({
-                    Person_id: user.Person_id,
-                    ip_address: loginInfo.ip_address,
-                    user_agent: loginInfo.user_agent,
-                    attempted_username: loginInfo.attempted_username,
-                    login_status: 'success',
-                    location_code: user.location_code,
-                    created_by: user.Person_id.toString()
-                });
-            } catch (error) {
-                console.error("Error logging login:", error);
+            // Phones: offer Face ID / fingerprint on the next page (see passkeyOffer).
+            // Set after logIn, which starts a fresh session.
+            if (isPhone(req) && user.Role !== 'Customer') {
+                req.session.offerPasskey = true;
             }
 
-                 const shouldRedirect = await handleVersionRouting(user, req, res);
-		        if (shouldRedirect) {
-		                 return; // Redirect happened, stop processing
-		            }
-
-            // Cashier goes directly to credit entry page
-            if (user.Role === 'Cashier') {
-                return res.redirect('/dsm-entry');
-            }
-
-             // Check if the user is a superuser
-             if (user.Role === 'SuperUser') {
-                // Redirect to location selection page if superuser
-                return res.redirect('/select-location');
-            }
-
-            if(user.Role === 'Customer') {
-                return res.redirect('/home-customer');
-                        }
-                else{
-                    return res.redirect(isPhone(req) ? '/m' : '/home');}
+            await completeLogin(req, user, req.body.username, url => res.redirect(url));
         });
     })(req, res, next);
 });
@@ -835,7 +785,9 @@ app.post('/api/reports-indiv-customer', function (req, res, next) {
 app.get('/logout', function (req, res) {
     req.logout(function (err) {
         if (err) { return next(err); }
-        res.redirect('/login');
+        // out=1: the login page doesn't auto-start Face ID / fingerprint, or
+        // Logout would log straight back in (and a shared phone could never switch user)
+        res.redirect('/login?out=1');
     });
 });
 

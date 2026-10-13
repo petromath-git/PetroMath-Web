@@ -1,0 +1,80 @@
+//- Installable app (PWA): head tags, and the "Install app" hint.
+
+//- Goes inside `head` of every layout
+mixin pwaHead()
+  link(rel="manifest" href="/manifest.webmanifest")
+  meta(name="theme-color" content="#ffffff")
+  meta(name="mobile-web-app-capable" content="yes")
+  meta(name="apple-mobile-web-app-capable" content="yes")
+  meta(name="apple-mobile-web-app-title" content="PetroMath")
+  meta(name="apple-mobile-web-app-status-bar-style" content="default")
+  link(rel="apple-touch-icon" href="/images/app-icons/icon-180.png")
+  script.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').catch(function () {});
+      });
+    }
+
+//- Hidden until it applies: Android Chrome gets an Install button, iPhone
+//- Safari gets the Share > Add to Home Screen steps. Never shown inside the
+//- installed app, or after it's dismissed (for 30 days).
+//- fixed: pin to the bottom of the screen (login page) instead of in-flow.
+mixin pwaInstallHint(fixed)
+  style.
+    .pwa-hint { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid #e3e6ea; box-shadow: 0 2px 8px rgba(0,0,0,0.08); color: #1f2328; }
+    .pwa-hint[hidden] { display: none !important; }
+    .pwa-hint.pwa-hint-fixed { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 10000; /* above .login-container (9999) */ max-width: 520px; margin: 0 auto; }
+    .pwa-hint img { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
+    .pwa-hint-text { flex-grow: 1; min-width: 0; font-size: 13px; line-height: 1.35; }
+    .pwa-hint-text strong { display: block; font-size: 14px; }
+    .pwa-hint-install { flex-shrink: 0; height: 38px; padding: 0 16px; border: 0; border-radius: 19px; background: #1d4ed8; color: #fff; font-size: 14px; font-weight: 700; }
+    .pwa-hint-close { flex-shrink: 0; width: 32px; height: 32px; border: 0; background: none; color: #5b6470; font-size: 16px; padding: 0; }
+  .pwa-hint#pwaHint(hidden class=(fixed ? 'pwa-hint-fixed' : undefined) role="region" aria-label="Install app")
+    img(src="/images/app-icons/icon-192.png" alt="")
+    .pwa-hint-text
+      strong Get the PetroMath app
+      span#pwaHintMsg Install it on your phone for one-tap access.
+    button.pwa-hint-install#pwaHintInstall(type="button" hidden) Install
+    button.pwa-hint-close#pwaHintClose(type="button" aria-label="Dismiss")
+      i.bi.bi-x-lg(aria-hidden="true")
+  script.
+    (function () {
+      var KEY = 'pm_pwa_hint_dismissed';
+      var hint = document.getElementById('pwaHint');
+      var installBtn = document.getElementById('pwaHintInstall');
+      var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      var dismissedAt = 0;
+      try { dismissedAt = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; } catch (e) {}
+      if (standalone || Date.now() - dismissedAt < 30 * 864e5) return;
+
+      document.getElementById('pwaHintClose').addEventListener('click', function () {
+        hint.hidden = true;
+        try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+      });
+
+      // iPhone/iPad: no install prompt exists, so show the manual steps
+      var ua = navigator.userAgent;
+      var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        document.getElementById('pwaHintMsg').innerHTML =
+          'Tap <i class="bi bi-box-arrow-up" aria-label="Share"></i> Share, then <b>Add to Home Screen</b>.';
+        hint.hidden = false;
+        return;
+      }
+
+      // Android (Chrome, Samsung Internet, Edge): the browser says when it can install
+      var deferred = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferred = e;
+        installBtn.hidden = false;
+        hint.hidden = false;
+      });
+      installBtn.addEventListener('click', function () {
+        if (!deferred) return;
+        deferred.prompt();
+        deferred.userChoice.then(function () { deferred = null; hint.hidden = true; });
+      });
+      window.addEventListener('appinstalled', function () { hint.hidden = true; });
+    })();
