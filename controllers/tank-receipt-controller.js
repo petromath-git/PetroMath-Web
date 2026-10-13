@@ -60,6 +60,8 @@ module.exports = {
                 LookupDao.getLookupByType('TANK_QUANTITY', locationCode)])
                     .then((values) => {
                         res.render('new-decant', {
+                            title: 'New Tank Receipt',
+                            mobileReady: true,   // viewport tag + body.mobile-ready: tabs scroll, lines stack into cards
                             user: req.user,
                             config: config.APP_CONFIGS,
                             inchargers: values[0].value.inchargers,
@@ -452,6 +454,7 @@ const getHomeData = (req, res, next) => {
 
             res.render('tankreceipts', {
                 title: 'Tank Receipts',
+                mobileReady: true,   // viewport tag + body.mobile-ready: receipts stack into collapsible cards (m-stack)
                 user: req.user,
                 config: config.APP_CONFIGS,
                 tankReceiptsValues: receipts,

@@ -95,6 +95,8 @@ module.exports = {
                 locationConfig.getLocationConfigValue(locationCode, 'FUEL_INVOICE_EDIT_DISABLED', 'N')
             ]);
             res.render('fuel-invoice', {
+                title: 'Fuel Invoice',
+                mobileReady: true,   // viewport tag + body.mobile-ready: lines stack into cards (m-stack)
                 user: req.user,
                 invoice: null,
                 suppliers,
@@ -123,6 +125,8 @@ module.exports = {
             ]);
             if (!invoice) return res.status(404).send('Invoice not found');
             res.render('fuel-invoice', {
+                title: 'Fuel Invoice',
+                mobileReady: true,   // viewport tag + body.mobile-ready: lines stack into cards (m-stack)
                 user: req.user,
                 invoice,
                 suppliers,

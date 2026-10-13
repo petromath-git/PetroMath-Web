@@ -1,6 +1,20 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
+    style.
+        @media (max-width: 767px) {
+            /* cards sit on the page, not inside another bordered box */
+            .tr-history { border: 0; background: transparent; }
+            .tr-history > .card-header { background: transparent; border: 0; padding: 0 0 .5rem; }
+            .tr-history > .card-header form { width: 100%; }
+            .tr-history > .card-header form select { flex: 1 1 auto; }
+            /* open card: show the columns desktop hides below lg, drop the summary copy */
+            .tr-table tr.card-open > td.d-none { display: block !important; }
+            .tr-table tr.card-open > td.m-summary { display: none !important; }
+            .tr-table .tr-sum-date { display: block; font-size: .85rem; white-space: nowrap; }
+            .tr-table .tr-sum-amt { display: block; font-size: .75rem; color: #6c757d; white-space: nowrap; }
+        }
     - const fmtAmt = (n) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     - const ranges = [['this_week', 'This Week'], ['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This Financial Year'], ['last_financial_year', 'Last Financial Year'], ['custom', 'Custom Dates']];
     - const isCustom = range === 'custom';
@@ -15,7 +29,7 @@ block content
                     span &nbsp;New Tank Receipt
 
     //- ── Receipt History ──
-    div.card
+    div.card.tr-history
         div.card-header.d-flex.flex-wrap.justify-content-between.align-items-center
             strong.my-1 Receipt History
             form.form-inline.my-1(method='GET' action='/tankreceipts' id='receipts-by-date')
@@ -31,7 +45,8 @@ block content
         div.card-body.p-0
             if tankReceiptsValues && tankReceiptsValues.length > 0
                 div.table-responsive
-                    table.table.table-hover.mb-0
+                    //- Phones: each receipt is a card, collapsed to invoice no. + date; tap to open
+                    table.table.table-hover.mb-0.tr-table.m-stack.m-collapse
                         thead.thead-light
                             tr
                                 th Invoice Date
@@ -53,36 +68,40 @@ block content
                         tbody
                             each val in tankReceiptsValues
                                 tr(id=`tank-receipt-${val.ttank_id}`)
-                                    td.text-nowrap= val.invoice_date
-                                    td.text-nowrap
+                                    //- phones only: the right side of a collapsed card
+                                    td.m-summary.d-md-none
+                                        span.tr-sum-date= val.invoice_date
+                                        span.tr-sum-amt= val.closingStatus === 'CLOSED' ? 'Closed' : 'Draft'
+                                    td.text-nowrap(data-label='Invoice Date')= val.invoice_date
+                                    td.text-nowrap.m-title
                                         span= val.invoice_number
                                         if val.hasInvoice
                                             button.btn.btn-link.btn-sm.p-0.ml-1(type='button' title='View invoice' onclick=`showInvoicePreview('${val.invoice_number}')`)
                                                 span.bi.bi-file-pdf-fill.text-danger
-                                    td.text-nowrap
+                                    td.text-nowrap(data-label='Decanted On')
                                         span= val.decant_date
                                         if val.decant_time
                                             small.text-muted.ml-1= val.decant_time
-                                    td.text-nowrap= val.truck_number
-                                    td.d-none.d-lg-table-cell= val.decant_incharge
-                                    td.d-none.d-lg-table-cell= val.driver
+                                    td.text-nowrap(data-label='TT Number')= val.truck_number
+                                    td.d-none.d-lg-table-cell(data-label='Incharge')= val.decant_incharge
+                                    td.d-none.d-lg-table-cell(data-label='Driver')= val.driver
                                     if productColumns && productColumns.length > 0
                                         each col in productColumns
-                                            td.text-right= val[col.key]
+                                            td.text-right(data-label=`${col.label} (KL)`)= val[col.key]
                                     else
-                                        td.text-right= val.MS
-                                        td.text-right= val.HSD
-                                        td.text-right= val.XMS
+                                        td.text-right(data-label='MS (KL)')= val.MS
+                                        td.text-right(data-label='HSD (KL)')= val.HSD
+                                        td.text-right(data-label='XMS (KL)')= val.XMS
                                     if Number(val.amount) > 0
-                                        td.text-right.text-nowrap ₹ #{fmtAmt(val.amount)}
+                                        td.text-right.text-nowrap(data-label='Amount') ₹ #{fmtAmt(val.amount)}
                                     else
-                                        td.text-right.text-muted —
-                                    td
+                                        td.text-right.text-muted(data-label='Amount') —
+                                    td(data-label='Status')
                                         if val.closingStatus === 'CLOSED'
                                             span.badge.badge-success Closed
                                         else
                                             span.badge.badge-warning Draft
-                                    td.text-nowrap
+                                    td.text-nowrap.m-actions
                                         if val.closingStatus === 'CLOSED'
                                             a.btn.btn-sm.btn-outline-secondary.my-1(href='/edit-draft-tankrcpt?closingId=' + val.ttank_id, title='View receipt')
                                                 span.oi.oi-eye
@@ -97,6 +116,7 @@ block content
                                                     span &nbsp;Delete
             else
                 p.text-muted.text-center.my-4 No tank receipts in this date range.
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     div.modal.fade#invoicePreviewModal(tabindex='-1' role='dialog' aria-labelledby='invoicePreviewTitle' aria-hidden='true')
         div.modal-dialog.modal-lg(role='document')
