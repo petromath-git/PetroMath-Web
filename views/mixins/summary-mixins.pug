@@ -234,9 +234,9 @@ mixin summaryDecantLinesData(decantRowNo)
     - var prefix = 'tankReceipts-';
     - var trClass = 'd-md-none';
     tr(class=trClass id='vis-' + prefix + 'table-row-' + decantRowNo)
-        td
+        td(data-label='Tank')
             label(id='valText-' + prefix + 'tank_' + decantRowNo)
-        td
+        td(data-label='Quantity (KL)')
             label(id='valText-' + prefix + 'tankqty_' + decantRowNo)
-        td
+        td.m-wide(data-label='Notes')
             span(id='valText-' + prefix + 'notes_' + decantRowNo)
