@@ -88,7 +88,13 @@ module.exports = {
           route = 'reports-credit-ledger';
         }
 
-        
+        // No/invalid customer: getBalance concatenates cid into SQL, so it errors, and
+        // as an unhandled rejection that takes the Node process down.
+        if (!/^[1-9]\d*$/.test(String(cid ?? ''))) {
+          if (caller !== 'notpdf') throw new Error('No customer selected'); // PDF generator catches
+          return res.redirect('/' + route);
+        }
+
         if(req.body.fromClosingDate) {
           fromDate =req.body.fromClosingDate;
         }
@@ -251,7 +257,7 @@ module.exports = {
                         const showBalanceCol = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_BALANCE', 'Y');
                         const showCustomerInfo = await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_STMT_SHOW_CUSTOMER_INFO', 'N');
                         let statementNumber = null;
-                        if (showStatementNumber === 'Y' && cid && cid != -1) {
+                        if (showStatementNumber === 'Y') {
                             try {
                                 statementNumber = await ReportDao.createStatementRecord(
                                     locationCode, cid, fromDate, toDate,
@@ -332,6 +338,11 @@ module.exports = {
             cid = req.body.company_id;
           }
 
+          // getBalance concatenates cid into SQL
+          if (!/^[1-9]\d*$/.test(String(cid ?? ''))) {
+            return res.status(400).send('Please select a customer.');
+          }
+
           if(req.body.fromClosingDate) {
             fromDate = req.body.fromClosingDate;
           }
@@ -360,7 +371,7 @@ module.exports = {
           let totalCredits = 0;
           let runningBalance = openingBal;
           const creditstmt = [];
-          let customerName = 'All Companies';
+          let customerName = 'Customer';
 
           const formatOdometerReading = (reading) => {
             if (!reading || reading === null) return '';
@@ -407,15 +418,13 @@ module.exports = {
             return columnName;
           };
 
-          if (cid != -1) {
-            const credits = await CreditDao.findAll(locationCode);
-            const selectedCredit = credits.find((credit) => String(credit.creditlist_id) === String(cid));
+          const credits = await CreditDao.findAll(locationCode);
+          const selectedCredit = credits.find((credit) => String(credit.creditlist_id) === String(cid));
 
-            if (selectedCredit && selectedCredit.Company_Name) {
-              customerName = selectedCredit.Company_Name;
-            } else if (statementRows.length > 0 && statementRows[0].company_name) {
-              customerName = statementRows[0].company_name;
-            }
+          if (selectedCredit && selectedCredit.Company_Name) {
+            customerName = selectedCredit.Company_Name;
+          } else if (statementRows.length > 0 && statementRows[0].company_name) {
+            customerName = statementRows[0].company_name;
           }
 
           statementRows.forEach((creditstmtData) => {
@@ -541,20 +550,18 @@ module.exports = {
           });
           currentRow++;
 
-          if(cid != -1) {
-            const openingRow = sheet.getRow(currentRow);
-            columns.forEach((col, index) => {
-              if (col.key === 'Particulars') {
-                openingRow.getCell(index + 1).value = 'Opening Balance';
-              }
-              if (col.key === 'Balance (Rs.)') {
-                openingRow.getCell(index + 1).value = openingBal;
-                openingRow.getCell(index + 1).numFmt = '#,##,##0.00';
-              }
-            });
-            openingRow.font = { bold: true };
-            currentRow++;
-          }
+          const openingRow = sheet.getRow(currentRow);
+          columns.forEach((col, index) => {
+            if (col.key === 'Particulars') {
+              openingRow.getCell(index + 1).value = 'Opening Balance';
+            }
+            if (col.key === 'Balance (Rs.)') {
+              openingRow.getCell(index + 1).value = openingBal;
+              openingRow.getCell(index + 1).numFmt = '#,##,##0.00';
+            }
+          });
+          openingRow.font = { bold: true };
+          currentRow++;
 
           creditstmt.forEach((entry) => {
             const dataRow = sheet.getRow(currentRow);
@@ -579,26 +586,24 @@ module.exports = {
             currentRow++;
           });
 
-          if(cid != -1) {
-            const closingRow = sheet.getRow(currentRow);
-            columns.forEach((col, index) => {
-              if (col.key === 'Particulars') {
-                closingRow.getCell(index + 1).value = 'Closing Balance';
-              }
-              if (col.key === 'Balance (Rs.)') {
-                closingRow.getCell(index + 1).value = closingBal;
-                closingRow.getCell(index + 1).numFmt = '#,##,##0.00';
-              }
-            });
-            closingRow.font = { bold: true };
-          }
+          const closingRow = sheet.getRow(currentRow);
+          columns.forEach((col, index) => {
+            if (col.key === 'Particulars') {
+              closingRow.getCell(index + 1).value = 'Closing Balance';
+            }
+            if (col.key === 'Balance (Rs.)') {
+              closingRow.getCell(index + 1).value = closingBal;
+              closingRow.getCell(index + 1).numFmt = '#,##,##0.00';
+            }
+          });
+          closingRow.font = { bold: true };
 
           columns.forEach((col, index) => {
             sheet.getColumn(index + 1).width = col.width;
           });
 
           const buffer = await workbook.xlsx.writeBuffer();
-          const safeCustomerName = sanitizeFilenamePart(customerName, 'All_Companies');
+          const safeCustomerName = sanitizeFilenamePart(customerName, 'Customer');
           const reportPrefix = reportType === 'Creditledger' ? 'CreditLedger' : 'CreditDetail';
           const filename = `${reportPrefix}_${safeCustomerName}_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
 
