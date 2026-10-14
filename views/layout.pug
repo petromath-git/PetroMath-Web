@@ -1,10 +1,12 @@
 include mixins/pwa-mixins
 include mixins/passkey-mixins
+include mixins/form-helpers
 doctype html
 html
   head
     title PetroMath:#{title}
     +pwaHead()
+    +formHelpers()
     - var mobileReadyPages = ['Cashier Shift', 'Login', 'Select Location','Credit/Debit Adjustment Entry','Products','Tank Master','Create New Bill']
     //- mobileReady: set by controllers whose page has its own phone layout (shift closing)
     - var hasViewport = mobileReadyPages.includes(title) || mobileReady
