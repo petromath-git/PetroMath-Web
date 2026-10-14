@@ -17,6 +17,8 @@ mixin closingShortcuts()
     .ck-link { font-size: 13px; color: #6c757d; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
     .ck-link-wrap { text-align: right; margin: 4px 2px 0; }
     @media (max-width: 767px) { .ck-link-wrap { display: none; } }
+    /* sit the underline below letter tails, so it shows under g, y, p too */
+    u.ck-key { text-decoration-skip-ink: none; text-underline-offset: 0.28em; text-decoration-thickness: 1.5px; }
     @media (hover: none) { u.ck-key { text-decoration: none; } } /* touch screens: no keyboard, no underline */
     .ck-help[hidden] { display: none !important; }
     .ck-help { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
@@ -165,14 +167,18 @@ mixin closingShortcuts()
       // ── Enter: next box in the open pop-up, or on the active tab ──
       function enterScope(modal) { return modal ? modal.querySelector('.modal-body') : activePane(); }
 
-      // The box after `from` in scope; after the last box, the Save / Next » button
-      function nextBox(from, scope, modal) {
-        var boxes = all('input, select, textarea, .select2-selection[tabindex]', scope).filter(function (el) {
+      // Boxes the user types into, in screen order
+      function boxesIn(scope) {
+        return all('input, select, textarea, .select2-selection[tabindex]', scope).filter(function (el) {
           if (el.matches('.select2-hidden-accessible')) return false; // its .select2-selection stands in
           if (el.disabled || el.readOnly || el.tabIndex < 0) return false;
           if (el.tagName === 'INPUT' && /^(hidden|button|submit|reset|file|image)$/i.test(el.type)) return false;
           return visible(el);
         });
+      }
+      // The box after `from` in scope; after the last box, the Save / Next » button
+      function nextBox(from, scope, modal) {
+        var boxes = boxesIn(scope);
         var i = boxes.indexOf(from);
         if (i === -1) return undefined; // not a box we manage
         return boxes[i + 1] ||
@@ -218,4 +224,16 @@ mixin closingShortcuts()
         e.stopPropagation();
         focusBox(next);
       }, true);
+
+      // Pop-ups (credit sale, quick-add vehicle) open with the cursor in their
+      // first box. Keyboard/mouse computers only: on a phone it would pop the
+      // date picker or keyboard open unasked. Registered after the credit
+      // pop-up's own shown handler (dropdown search), so it runs after it.
+      if (window.jQuery && window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        jQuery(document).on('shown.bs.modal', '.modal', function () {
+          var body = this.querySelector('.modal-body');
+          if (!body || body.contains(document.activeElement)) return;
+          focusBox(boxesIn(body)[0]);
+        });
+      }
     })();
