@@ -17,8 +17,6 @@ mixin closingShortcuts()
     .ck-link { font-size: 13px; color: #6c757d; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
     .ck-link-wrap { text-align: right; margin: 4px 2px 0; }
     @media (max-width: 767px) { .ck-link-wrap { display: none; } }
-    /* sit the underline below letter tails, so it shows under g, y, p too */
-    u.ck-key { text-decoration-skip-ink: none; text-underline-offset: 0.28em; text-decoration-thickness: 1.5px; }
     @media (hover: none) { u.ck-key { text-decoration: none; } } /* touch screens: no keyboard, no underline */
     .ck-help[hidden] { display: none !important; }
     .ck-help { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
@@ -67,12 +65,14 @@ mixin closingShortcuts()
   script.
     (function () {
       // Tab id → access key. The letter is underlined in the tab's label.
+      // Letters with tails (g, p) hide a plain underline, so prefer others.
       var TAB_KEYS = {
         closing_tab: 'L', attendance_tab: 'T', reading_tab: 'R', sales_2t_tab: '2',
-        cash_sales_tab: 'H', credit_sales_tab: 'C', digital_sales_tab: 'G',
+        cash_sales_tab: 'H', credit_sales_tab: 'C', digital_sales_tab: 'I',
         credit_receipts_tab: 'O', employee_advance_tab: 'M', expenses_tab: 'X',
-        denoms_tab: 'U', intercompany_tab: 'I', summary_tab: 'S'
+        denoms_tab: 'U', intercompany_tab: 'Y', summary_tab: 'S'
       };
+      var DESKTOP = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
       var help = document.getElementById('ckHelp');
 
       function visible(el) { return !!(el && el.offsetParent !== null && el.getClientRects().length); }
@@ -114,10 +114,13 @@ mixin closingShortcuts()
       Object.keys(TAB_KEYS).forEach(function (id) {
         all('[id="' + id + '"]').forEach(function (link) { markKey(link, TAB_KEYS[id]); });
       });
-      all('.tab-content button').forEach(function (b) {
-        var t = b.textContent.trim();
-        if (/^Next/.test(t)) markKey(b, 'N');
-        else if (/^Add\b/.test(t)) markKey(b, 'A');
+      all('.tab-content .tab-pane').forEach(function (pane) {
+        var addMarked = false; // Alt+A presses the first Add on a tab (Add Nozzle, not Add All)
+        all('button', pane).forEach(function (b) {
+          var t = b.textContent.trim();
+          if (/^Next/.test(t)) markKey(b, 'N');
+          else if (!addMarked && /^Add\b/.test(t)) { markKey(b, 'A'); addMarked = true; }
+        });
       });
       all('.modal [data-ck-key]').forEach(function (b) { markKey(b, b.getAttribute('data-ck-key')); });
 
@@ -199,6 +202,13 @@ mixin closingShortcuts()
         if (t.hasAttribute('onkeypress') || t.hasAttribute('onkeydown') || t.closest('[data-own-enter]')) return;
         var scope = enterScope(modal);
         if (!scope || !scope.contains(t)) return;
+        // e.g. the Reading tab's nozzle dropdown: Enter presses Add Nozzle
+        var clicks = t.getAttribute('data-enter-clicks');
+        if (clicks) {
+          var btn = document.querySelector(clicks);
+          if (btn && visible(btn) && !btn.disabled) { e.preventDefault(); btn.click(); }
+          return;
+        }
         var next = nextBox(t, scope, modal);
         if (next === undefined) return;
         e.preventDefault(); // also stops Enter submitting a form
@@ -229,11 +239,36 @@ mixin closingShortcuts()
       // first box. Keyboard/mouse computers only: on a phone it would pop the
       // date picker or keyboard open unasked. Registered after the credit
       // pop-up's own shown handler (dropdown search), so it runs after it.
-      if (window.jQuery && window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      if (window.jQuery && DESKTOP) {
         jQuery(document).on('shown.bs.modal', '.modal', function () {
           var body = this.querySelector('.modal-body');
           if (!body || body.contains(document.activeElement)) return;
           focusBox(boxesIn(body)[0]);
+        });
+      }
+
+      // A newly opened tab (shortcut, click, Next) puts the cursor in its first
+      // box, so Tab/Enter carry on inside the tab instead of starting from the
+      // side menu. Desktop only; never a button (Summary has no boxes, so
+      // nothing there gets focus). Tabs switch both through Bootstrap and
+      // through activateTabDirectly(), so watch the links' class.
+      if (DESKTOP && window.MutationObserver) {
+        var focusTimer = null;
+        var observer = new MutationObserver(function (records) {
+          records.forEach(function (r) {
+            var link = r.target;
+            if (!link.classList.contains('active') || r.oldValue && /\bactive\b/.test(r.oldValue)) return;
+            clearTimeout(focusTimer);
+            focusTimer = setTimeout(function () {
+              if (topModal()) return;
+              var pane = document.querySelector(link.getAttribute('href'));
+              if (!pane || !visible(pane) || pane.contains(document.activeElement)) return;
+              focusBox(boxesIn(pane)[0]);
+            }, 150); // after the pane is shown and its tab's setup has run
+          });
+        });
+        all('ul.nav-tabs .nav-link').forEach(function (link) {
+          observer.observe(link, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
         });
       }
     })();
