@@ -7,6 +7,7 @@
 //-   Pop-ups (credit entry, quick-add vehicle): Alt + underlined letter on
 //-   their buttons (data-ck-key), Esc closes, Enter walks the boxes then Save
 //-   ?  shortcut list (when not typing in a box)
+//-   Esc  with nothing open: back to the shift list, after a confirm
 //-   Enter in a box: next box; after the last one, the Next » / Save button.
 //-   Boxes with their own Enter behaviour (onkeypress/onkeydown, e.g. smart
 //-   reading) keep it. Never lands on row x / Delete buttons.
@@ -47,6 +48,9 @@ mixin closingShortcuts()
         tr
           td #[kbd Enter]
           td Next box (after the last box: Next)
+        tr
+          td #[kbd Esc]
+          td Back to the shift list (asks first)
         tr
           td #[kbd ?]
           td This list
@@ -91,7 +95,12 @@ mixin closingShortcuts()
           return visible(b) && !b.disabled && re.test(b.textContent.trim());
         })[0] || null : null;
       }
-      function isTyping(t) { return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)); }
+      // Boxes where "?" would be typed as text (not dropdowns, number or date boxes)
+      function isTyping(t) {
+        if (!t) return false;
+        if (t.isContentEditable || t.tagName === 'TEXTAREA') return true;
+        return t.tagName === 'INPUT' && /^(text|search|email|url|tel|password|)$/i.test(t.type);
+      }
       function showHelp(on) { help.hidden = !on; }
 
       // Underline the first occurrence of `key` in el's text, and remember the key
@@ -138,6 +147,17 @@ mixin closingShortcuts()
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !help.hidden) { showHelp(false); return; }
         var modal = topModal();
+
+        // Esc with nothing open: back to the shift list, after a confirm (Enter
+        // = yes, Esc = no), like Tally. A pop-up or an open dropdown takes its
+        // own Esc first. Unsaved edits get the autosave's "Leave site?" prompt.
+        if (e.key === 'Escape') {
+          if (modal || e.defaultPrevented || document.querySelector('.select2-container--open')) return;
+          if (e.target.closest && e.target.closest('.select2-container')) return; // Esc that just closed a dropdown
+          e.preventDefault();
+          if (window.confirm('Go back to the shift list?')) window.location.href = '/home';
+          return;
+        }
 
         if (e.altKey && !e.ctrlKey && !e.metaKey) {
           var key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : (/^Digit\d$/.test(e.code) ? e.code.slice(5) : null);
@@ -270,5 +290,13 @@ mixin closingShortcuts()
         all('ul.nav-tabs .nav-link').forEach(function (link) {
           observer.observe(link, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
         });
+
+        // Opening a shift (e.g. Edit from the shift list): cursor in the first
+        // box of the tab it opens on, after the page's own setup has run
+        setTimeout(function () {
+          var pane = activePane();
+          if (!pane || topModal() || (document.activeElement && document.activeElement !== document.body)) return;
+          focusBox(boxesIn(pane)[0]);
+        }, 300);
       }
     })();
