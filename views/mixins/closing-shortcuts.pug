@@ -1,0 +1,334 @@
+//- Shift Closing keyboard shortcuts (new-closing, edit-draft-closing).
+//- Windows-style access keys: each tab and button shows its letter
+//- underlined, and Alt + that letter presses it. They click the real tab or
+//- button, so the existing checks and tab autosave run exactly as for a click.
+//-   Tabs: Alt + underlined letter (TAB_KEYS below)
+//-   Alt+N Next »   Alt+P previous tab   Alt+A the tab's "Add ..." button
+//-   Pop-ups (credit entry, quick-add vehicle): Alt + underlined letter on
+//-   their buttons (data-ck-key), Esc closes, Enter walks the boxes then Save
+//-   ?  shortcut list (when not typing in a box)
+//-   Esc  with nothing open: back to the shift list, after a confirm
+//-   Enter in a box: next box; after the last one, the Next » / Save button.
+//-   Boxes with their own Enter behaviour (onkeypress/onkeydown, e.g. smart
+//-   reading) keep it. Never lands on row x / Delete buttons.
+//- Letters avoid Alt+D/E/F (Chrome/Edge address bar and menu). No shortcut
+//- closes the shift or deletes anything.
+//- On/off: a switch in the shortcut list, remembered per user in this browser
+//- (localStorage pm_ck_off_<Person_id>). Off = none of the above (no
+//- underlines, keys, Enter moves or cursor jumps); the link stays to turn it
+//- back on. Default on.
+mixin closingShortcuts()
+  style.
+    body.ck-off u.ck-key { text-decoration: none; }
+    .ck-switch { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: #f1f3f5; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .ck-switch input { width: 18px; height: 18px; margin: 0; }
+    body.ck-off .ck-help-keys { opacity: .45; }
+    .ck-link { font-size: 13px; color: #6c757d; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
+    .ck-link-wrap { text-align: right; margin: 4px 2px 0; }
+    @media (max-width: 767px) { .ck-link-wrap { display: none; } }
+    @media (hover: none) { u.ck-key { text-decoration: none; } } /* touch screens: no keyboard, no underline */
+    .ck-help[hidden] { display: none !important; }
+    .ck-help { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+    .ck-help-box { background: #fff; border-radius: 12px; padding: 18px 20px; width: 400px; max-width: calc(100% - 32px); box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+    .ck-help-box h6 { font-weight: 700; margin-bottom: 10px; }
+    .ck-help-box .ck-sub { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #6c757d; margin: 10px 0 4px; }
+    .ck-help-box table { width: 100%; font-size: 14px; }
+    .ck-help-box td { padding: 3px 0; vertical-align: top; }
+    .ck-help-box td:first-child { white-space: nowrap; padding-right: 14px; }
+    .ck-help-box kbd { background: #f1f3f5; color: #1f2328; border: 1px solid #d5d9df; border-radius: 4px; padding: 1px 6px; font-size: 12px; box-shadow: none; }
+    .ck-help-foot { margin-top: 12px; font-size: 12px; color: #6c757d; }
+  .ck-help#ckHelp(hidden role="dialog" aria-label="Keyboard shortcuts")
+    .ck-help-box
+      h6 Keyboard shortcuts
+      label.ck-switch
+        input#ckToggle(type="checkbox" checked)
+        span Use keyboard shortcuts
+      //- dimmed while the switch is off
+      .ck-help-keys
+        table
+          tr
+            td #[kbd Alt] + #[u letter]
+            td Go to the tab with that letter underlined
+          tr
+            td #[kbd Alt] + #[kbd N]
+            td Next (saves this tab, like the button)
+          tr
+            td #[kbd Alt] + #[kbd P]
+            td Previous tab
+          tr
+            td #[kbd Alt] + #[kbd A]
+            td Add a row on this tab
+          tr
+            td #[kbd Enter]
+            td Next box (after the last box: Next)
+          tr
+            td #[kbd Esc]
+            td Back to the shift list (asks first)
+          tr
+            td #[kbd ?]
+            td This list
+        .ck-sub In the credit sale pop-up
+        table
+          tr
+            td #[kbd Alt] + #[kbd S]
+            td Save
+          tr
+            td #[kbd Alt] + #[kbd C] or #[kbd Esc]
+            td Close without saving
+          tr
+            td #[kbd Enter]
+            td Next box (after the last box: Save)
+      .ck-help-foot On a Mac use Option instead of Alt. Press Esc to close this list.
+  script.
+    (function () {
+      // Tab id → access key. The letter is underlined in the tab's label.
+      // Letters with tails (g, p) hide a plain underline, so prefer others.
+      var TAB_KEYS = {
+        closing_tab: 'L', attendance_tab: 'T', reading_tab: 'R', sales_2t_tab: '2',
+        cash_sales_tab: 'H', credit_sales_tab: 'C', digital_sales_tab: 'I',
+        credit_receipts_tab: 'O', employee_advance_tab: 'M', expenses_tab: 'X',
+        denoms_tab: 'U', intercompany_tab: 'Y', summary_tab: 'S'
+      };
+      var DESKTOP = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+      var help = document.getElementById('ckHelp');
+
+      // On/off, per user in this browser (shared PCs: each login keeps its own)
+      var PREF_KEY = 'pm_ck_off_' + !{JSON.stringify(String((user && user.Person_id) || ''))};
+      var on = true;
+      try { on = localStorage.getItem(PREF_KEY) !== '1'; } catch (err) {}
+      var toggle = document.getElementById('ckToggle'), linkBtn = null;
+      function applyOnOff() {
+        document.body.classList.toggle('ck-off', !on);
+        toggle.checked = on;
+        if (linkBtn) linkBtn.textContent = '⌨ Keyboard shortcuts' + (on ? '' : ' (off)');
+      }
+      toggle.addEventListener('change', function () {
+        on = toggle.checked;
+        try { on ? localStorage.removeItem(PREF_KEY) : localStorage.setItem(PREF_KEY, '1'); } catch (err) {}
+        applyOnOff();
+      });
+
+      function visible(el) { return !!(el && el.offsetParent !== null && el.getClientRects().length); }
+      function all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+      function tabList() {
+        var nav = all('ul.nav-tabs').filter(visible)[0];
+        return nav ? all('.nav-link', nav).filter(visible) : [];
+      }
+      function activePane() {
+        var a = document.querySelector('ul.nav-tabs .nav-link.active');
+        return a ? document.querySelector(a.getAttribute('href')) : null;
+      }
+      function topModal() { var m = all('.modal.show'); return m[m.length - 1] || null; }
+      function buttonIn(root, re) {
+        return root ? all('button', root).filter(function (b) {
+          return visible(b) && !b.disabled && re.test(b.textContent.trim());
+        })[0] || null : null;
+      }
+      // Boxes where "?" would be typed as text (not dropdowns, number or date boxes)
+      function isTyping(t) {
+        if (!t) return false;
+        if (t.isContentEditable || t.tagName === 'TEXTAREA') return true;
+        return t.tagName === 'INPUT' && /^(text|search|email|url|tel|password|)$/i.test(t.type);
+      }
+      function showHelp(on) { help.hidden = !on; }
+
+      // Underline the first occurrence of `key` in el's text, and remember the key
+      function markKey(el, key) {
+        if (!el || el.querySelector('u.ck-key')) return;
+        el.setAttribute('data-ck-key', key);
+        var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), node;
+        while ((node = walker.nextNode())) {
+          var i = node.nodeValue.toUpperCase().indexOf(key);
+          if (i === -1) continue;
+          var after = node.splitText(i);
+          after.splitText(1);
+          var u = document.createElement('u');
+          u.className = 'ck-key';
+          after.parentNode.replaceChild(u, after);
+          u.appendChild(after);
+          return;
+        }
+      }
+      Object.keys(TAB_KEYS).forEach(function (id) {
+        all('[id="' + id + '"]').forEach(function (link) { markKey(link, TAB_KEYS[id]); });
+      });
+      all('.tab-content .tab-pane').forEach(function (pane) {
+        var addMarked = false; // Alt+A presses the first Add on a tab (Add Nozzle, not Add All)
+        all('button', pane).forEach(function (b) {
+          var t = b.textContent.trim();
+          if (/^Next/.test(t)) markKey(b, 'N');
+          else if (!addMarked && /^Add\b/.test(t)) { markKey(b, 'A'); addMarked = true; }
+        });
+      });
+      all('.modal [data-ck-key]').forEach(function (b) { markKey(b, b.getAttribute('data-ck-key')); });
+
+      // "Keyboard shortcuts" link under the tabs (desktop)
+      var nav = all('ul.nav-tabs').filter(visible)[0];
+      if (nav) {
+        var wrap = document.createElement('div');
+        wrap.className = 'ck-link-wrap';
+        wrap.innerHTML = '<button type="button" class="ck-link"></button>';
+        linkBtn = wrap.firstChild;
+        linkBtn.addEventListener('click', function () { showHelp(true); });
+        nav.parentNode.insertBefore(wrap, nav.nextSibling);
+      }
+      help.addEventListener('click', function (e) { if (e.target === help) showHelp(false); });
+      applyOnOff();
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !help.hidden) { showHelp(false); return; }
+        if (!on) return; // switched off: the keyboard behaves as it always did
+        var modal = topModal();
+
+        // Esc with nothing open: back to the shift list, after a confirm (Enter
+        // = yes, Esc = no), like Tally. A pop-up or an open dropdown takes its
+        // own Esc first. Unsaved edits get the autosave's "Leave site?" prompt.
+        if (e.key === 'Escape') {
+          if (modal || e.defaultPrevented || document.querySelector('.select2-container--open')) return;
+          if (e.target.closest && e.target.closest('.select2-container')) return; // Esc that just closed a dropdown
+          e.preventDefault();
+          if (window.confirm('Go back to the shift list?')) window.location.href = '/home';
+          return;
+        }
+
+        if (e.altKey && !e.ctrlKey && !e.metaKey) {
+          var key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : (/^Digit\d$/.test(e.code) ? e.code.slice(5) : null);
+          if (!key) return;
+          var target = null, ours;
+          if (modal) {
+            // a pop-up is open: only its own buttons
+            target = all('[data-ck-key="' + key + '"]', modal).filter(visible)[0] || null;
+            ours = !!target;
+          } else {
+            var tabs = tabList(), active = document.querySelector('ul.nav-tabs .nav-link.active');
+            if (key === 'N') target = buttonIn(activePane(), /^Next/);
+            else if (key === 'A') target = buttonIn(activePane(), /^Add\b/);
+            else if (key === 'P') { var idx = tabs.indexOf(active); target = idx > 0 ? tabs[idx - 1] : null; }
+            else target = tabs.filter(function (t) { return t.getAttribute('data-ck-key') === key; })[0] || null;
+            if (target === active) target = null;
+            ours = 'NAP'.indexOf(key) !== -1 || Object.keys(TAB_KEYS).some(function (id) { return TAB_KEYS[id] === key; });
+          }
+          if (!ours) return; // not one of ours: leave it to the browser
+          e.preventDefault();
+          if (target && visible(target) && !target.disabled) target.click();
+          return;
+        }
+
+        if (e.key === '?' && !modal && !isTyping(e.target)) { e.preventDefault(); showHelp(help.hidden); return; }
+
+        if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) enterToNext(e, modal);
+      });
+
+      // ── Enter: next box in the open pop-up, or on the active tab ──
+      function enterScope(modal) { return modal ? modal.querySelector('.modal-body') : activePane(); }
+
+      // Boxes the user types into, in screen order
+      function boxesIn(scope) {
+        return all('input, select, textarea, .select2-selection[tabindex]', scope).filter(function (el) {
+          if (el.matches('.select2-hidden-accessible')) return false; // its .select2-selection stands in
+          if (el.disabled || el.readOnly || el.tabIndex < 0) return false;
+          if (el.tagName === 'INPUT' && /^(hidden|button|submit|reset|file|image)$/i.test(el.type)) return false;
+          return visible(el);
+        });
+      }
+      // The box after `from` in scope; after the last box, the Save / Next » button
+      function nextBox(from, scope, modal) {
+        var boxes = boxesIn(scope);
+        var i = boxes.indexOf(from);
+        if (i === -1) return undefined; // not a box we manage
+        return boxes[i + 1] ||
+          (modal ? all('[data-ck-key="S"], [data-ck-key="V"]', modal).filter(visible)[0] : buttonIn(scope, /^Next/)) || null;
+      }
+      function focusBox(el) {
+        if (!el) return;
+        el.focus();
+        if (el.tagName === 'INPUT' && /^(text|number|tel|search|)$/i.test(el.type) && el.select) {
+          try { el.select(); } catch (err) {}
+        }
+      }
+
+      function enterToNext(e, modal) {
+        var t = e.target;
+        if (e.defaultPrevented || !/^(INPUT|SELECT)$/.test(t.tagName)) return;
+        if (/^(button|submit|reset|file|image)$/i.test(t.type)) return;
+        if (t.hasAttribute('onkeypress') || t.hasAttribute('onkeydown') || t.closest('[data-own-enter]')) return;
+        var scope = enterScope(modal);
+        if (!scope || !scope.contains(t)) return;
+        // e.g. the Reading tab's nozzle dropdown: Enter presses Add Nozzle
+        var clicks = t.getAttribute('data-enter-clicks');
+        if (clicks) {
+          var btn = document.querySelector(clicks);
+          if (btn && visible(btn) && !btn.disabled) { e.preventDefault(); btn.click(); }
+          return;
+        }
+        var next = nextBox(t, scope, modal);
+        if (next === undefined) return;
+        e.preventDefault(); // also stops Enter submitting a form
+        focusBox(next);
+      }
+
+      // Searchable dropdowns (Select2): Enter opens an empty one (type, Enter
+      // picks); on one that already has a value it moves on instead of
+      // reopening it. Runs before Select2's own key handling (capture).
+      document.addEventListener('keydown', function (e) {
+        if (!on || e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        var sel = e.target.closest && e.target.closest('.select2-selection');
+        if (!sel) return;
+        var container = sel.closest('.select2-container');
+        var select = container && container.previousElementSibling;
+        if (!select || select.tagName !== 'SELECT' || !select.value) return;
+        if (container.classList.contains('select2-container--open')) return;
+        var modal = topModal(), scope = enterScope(modal);
+        if (!scope || !scope.contains(sel)) return;
+        var next = nextBox(sel, scope, modal);
+        if (next === undefined) return;
+        e.preventDefault();
+        e.stopPropagation();
+        focusBox(next);
+      }, true);
+
+      // Pop-ups (credit sale, quick-add vehicle) open with the cursor in their
+      // first box. Keyboard/mouse computers only: on a phone it would pop the
+      // date picker or keyboard open unasked. Registered after the credit
+      // pop-up's own shown handler (dropdown search), so it runs after it.
+      if (window.jQuery && DESKTOP) {
+        jQuery(document).on('shown.bs.modal', '.modal', function () {
+          var body = this.querySelector('.modal-body');
+          if (!on || !body || body.contains(document.activeElement)) return;
+          focusBox(boxesIn(body)[0]);
+        });
+      }
+
+      // A newly opened tab (shortcut, click, Next) puts the cursor in its first
+      // box, so Tab/Enter carry on inside the tab instead of starting from the
+      // side menu. Desktop only; never a button (Summary has no boxes, so
+      // nothing there gets focus). Tabs switch both through Bootstrap and
+      // through activateTabDirectly(), so watch the links' class.
+      if (DESKTOP && window.MutationObserver) {
+        var focusTimer = null;
+        var observer = new MutationObserver(function (records) {
+          records.forEach(function (r) {
+            var link = r.target;
+            if (!on || !link.classList.contains('active') || r.oldValue && /\bactive\b/.test(r.oldValue)) return;
+            clearTimeout(focusTimer);
+            focusTimer = setTimeout(function () {
+              if (topModal()) return;
+              var pane = document.querySelector(link.getAttribute('href'));
+              if (!pane || !visible(pane) || pane.contains(document.activeElement)) return;
+              focusBox(boxesIn(pane)[0]);
+            }, 150); // after the pane is shown and its tab's setup has run
+          });
+        });
+        all('ul.nav-tabs .nav-link').forEach(function (link) {
+          observer.observe(link, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+        });
+
+        // Opening a shift (e.g. Edit from the shift list): cursor in the first
+        // box of the tab it opens on, after the page's own setup has run
+        setTimeout(function () {
+          var pane = activePane();
+          if (!on || !pane || topModal() || (document.activeElement && document.activeElement !== document.body)) return;
+          focusBox(boxesIn(pane)[0]);
+        }, 300);
+      }
+    })();

@@ -2,6 +2,7 @@ extends layout
 include mixins/new-closing-mixins
 include mixins/summary-mixins
 include mixins/exshort-breakdown-mixin
+include mixins/closing-shortcuts
 
 block content
     style.
@@ -220,7 +221,8 @@ block content
                                         th Action
                                     tr
                                         td
-                                            select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
+                                            //- Enter here adds the chosen nozzle (closing-shortcuts.pug)
+                                            select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()" data-enter-clicks="#addNozzleBtn")
                                                 each val in pumps
                                                     option= val.pumpCode
                                         if allowSecondaryPump
@@ -229,8 +231,9 @@ block content
                                         else
                                             input#reading-price(type="hidden")
                                         td
-                                            a.btn.btn-info.btn-sm(onclick="showReadingPump()" style="margin-right: 5px;") Add Nozzle
-                                            a.btn.btn-success.btn-sm(onclick="addAllPumps()") Add All Nozzles
+                                            //- buttons, not <a> without href: those can't be reached with the Tab key
+                                            button.btn.btn-info.btn-sm#addNozzleBtn(type="button" onclick="showReadingPump()" style="margin-right: 5px;") Add Nozzle
+                                            button.btn.btn-success.btn-sm(type="button" onclick="addAllPumps()") Add All Nozzles
                     else
                         div.row.bg-warning
                             pre.text-danger= `Note: Pumps data is empty at backend.`
@@ -874,8 +877,11 @@ block content
                         label Vehicle Type
                         input.form-control.text-uppercase#quickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
                 .modal-footer
-                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
-                    button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
+                    button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Cancel
+                    button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()' data-ck-key='V') Add Vehicle
+    //- location config SHIFT_CLOSING_SHORTCUTS (default on)
+    if closingShortcuts
+        +closingShortcuts()
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/closing-autosave.js?v=${CACHE_BUST}`)
