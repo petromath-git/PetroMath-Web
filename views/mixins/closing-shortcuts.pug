@@ -1,0 +1,154 @@
+//- Shift Closing keyboard shortcuts (new-closing, edit-draft-closing).
+//- Every shortcut clicks the same button or tab a user would, so the
+//- existing checks and tab autosave run exactly as they do for a click.
+//-   Alt+N  Next »            Alt+P  previous tab      Alt+1..9  tab 1..9
+//-   Alt+A  Add row (the tab's "Add ..." button)       Alt+S     Summary
+//-   ?      help panel (when not typing in a box)
+//-   Enter  in a box: move to the next box on the tab; after the last one,
+//-          to the tab's Next » button. Boxes with their own Enter
+//-          behaviour (onkeypress/onkeydown, e.g. smart reading) keep it.
+//- No shortcut closes the shift.
+mixin closingShortcuts()
+  style.
+    .ck-link { font-size: 13px; color: #6c757d; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
+    .ck-link-wrap { text-align: right; margin: 4px 2px 0; }
+    @media (max-width: 767px) { .ck-link-wrap { display: none; } }
+    /* tab numbers while Alt is held */
+    body.ck-alt .ck-num { display: inline-block; }
+    .ck-num { display: none; min-width: 16px; margin-right: 4px; padding: 0 4px; border-radius: 4px; background: #1d4ed8; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+    .ck-help[hidden] { display: none !important; }
+    .ck-help { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
+    .ck-help-box { background: #fff; border-radius: 12px; padding: 18px 20px; width: 360px; max-width: calc(100% - 32px); box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+    .ck-help-box h6 { font-weight: 700; margin-bottom: 12px; }
+    .ck-help-box table { width: 100%; font-size: 14px; }
+    .ck-help-box td { padding: 4px 0; vertical-align: top; }
+    .ck-help-box td:first-child { white-space: nowrap; padding-right: 14px; }
+    .ck-help-box kbd { background: #f1f3f5; color: #1f2328; border: 1px solid #d5d9df; border-radius: 4px; padding: 1px 6px; font-size: 12px; box-shadow: none; }
+    .ck-help-foot { margin-top: 12px; font-size: 12px; color: #6c757d; }
+  .ck-help#ckHelp(hidden role="dialog" aria-label="Keyboard shortcuts")
+    .ck-help-box
+      h6 Keyboard shortcuts
+      table
+        tr
+          td #[kbd Alt] + #[kbd N]
+          td Next (saves this tab, like the button)
+        tr
+          td #[kbd Alt] + #[kbd P]
+          td Previous tab
+        tr
+          td #[kbd Alt] + #[kbd 1]…#[kbd 9]
+          td Go to tab 1–9 (hold Alt to see the numbers)
+        tr
+          td #[kbd Alt] + #[kbd A]
+          td Add a row on this tab
+        tr
+          td #[kbd Alt] + #[kbd S]
+          td Summary
+        tr
+          td #[kbd Enter]
+          td Next box
+        tr
+          td #[kbd ?]
+          td This list
+      .ck-help-foot On a Mac use Option instead of Alt. Press Esc to close.
+  script.
+    (function () {
+      var help = document.getElementById('ckHelp');
+
+      function visible(el) { return !!(el && el.offsetParent !== null && el.getClientRects().length); }
+      function tabList() {
+        var nav = Array.prototype.filter.call(document.querySelectorAll('ul.nav-tabs'), visible)[0];
+        return nav ? Array.prototype.filter.call(nav.querySelectorAll('.nav-link'), visible) : [];
+      }
+      function activePane() {
+        var a = document.querySelector('ul.nav-tabs .nav-link.active');
+        return a ? document.querySelector(a.getAttribute('href')) : null;
+      }
+      function buttonIn(pane, re) {
+        if (!pane) return null;
+        return Array.prototype.filter.call(pane.querySelectorAll('button'), function (b) {
+          return visible(b) && !b.disabled && re.test(b.textContent.trim());
+        })[0] || null;
+      }
+      function isTyping(t) {
+        return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      }
+      function showHelp(on) { help.hidden = !on; }
+
+      // number badges on the first 9 tabs (shown while Alt is held)
+      tabList().forEach(function (link, i) {
+        if (i < 9) {
+          var n = document.createElement('span');
+          n.className = 'ck-num'; n.textContent = String(i + 1);
+          link.insertBefore(n, link.firstChild);
+        }
+      });
+      // "Shortcuts" link under the tabs (desktop)
+      var nav = Array.prototype.filter.call(document.querySelectorAll('ul.nav-tabs'), visible)[0];
+      if (nav) {
+        var wrap = document.createElement('div');
+        wrap.className = 'ck-link-wrap';
+        wrap.innerHTML = '<button type="button" class="ck-link">⌨ Keyboard shortcuts</button>';
+        wrap.firstChild.addEventListener('click', function () { showHelp(true); });
+        nav.parentNode.insertBefore(wrap, nav.nextSibling);
+      }
+      help.addEventListener('click', function (e) { if (e.target === help) showHelp(false); });
+
+      document.addEventListener('keyup', function (e) { if (!e.altKey) document.body.classList.remove('ck-alt'); });
+      window.addEventListener('blur', function () { document.body.classList.remove('ck-alt'); });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !help.hidden) { showHelp(false); return; }
+        // anything open on top (credit entry popup, quick-add vehicle) keeps the keyboard
+        if (document.querySelector('.modal.show')) return;
+
+        if (e.key === 'Alt') { document.body.classList.add('ck-alt'); return; }
+
+        if (e.altKey && !e.ctrlKey && !e.metaKey) {
+          var tabs = tabList(), active = document.querySelector('ul.nav-tabs .nav-link.active');
+          var idx = tabs.indexOf(active), target = null;
+          if (e.code === 'KeyN') target = buttonIn(activePane(), /^Next/);
+          else if (e.code === 'KeyP') target = idx > 0 ? tabs[idx - 1] : null;
+          else if (e.code === 'KeyA') target = buttonIn(activePane(), /^Add\b/);
+          else if (e.code === 'KeyS') target = document.getElementById('summary_tab');
+          else if (/^Digit[1-9]$/.test(e.code)) target = tabs[Number(e.code.slice(5)) - 1] || null;
+          else return;
+          e.preventDefault();
+          document.body.classList.remove('ck-alt');
+          if (target && visible(target) && target !== active) target.click();
+          return;
+        }
+
+        if (e.key === '?' && !isTyping(e.target)) { e.preventDefault(); showHelp(help.hidden); return; }
+
+        if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) enterToNext(e);
+      });
+
+      // Enter: next box on the active tab
+      function enterToNext(e) {
+        var t = e.target;
+        if (e.defaultPrevented || !/^(INPUT|SELECT)$/.test(t.tagName)) return;
+        if (/^(button|submit|reset|file|image)$/i.test(t.type)) return;
+        if (t.hasAttribute('onkeypress') || t.hasAttribute('onkeydown') || t.closest('[data-own-enter]')) return;
+        var pane = activePane();
+        if (!pane || !pane.contains(t)) return;
+
+        var boxes = Array.prototype.filter.call(
+          pane.querySelectorAll('input, select, textarea, .select2-selection[tabindex]'),
+          function (el) {
+            if (el.matches('.select2-hidden-accessible')) return false; // its .select2-selection stands in
+            if (el.disabled || el.readOnly || el.tabIndex < 0) return false;
+            if (el.tagName === 'INPUT' && /^(hidden|button|submit|reset|file|image)$/i.test(el.type)) return false;
+            return visible(el);
+          });
+        var i = boxes.indexOf(t);
+        if (i === -1) return;
+        e.preventDefault(); // also stops Enter submitting a form
+        var next = boxes[i + 1] || buttonIn(pane, /^Next/);
+        if (!next) return;
+        next.focus();
+        if (next.tagName === 'INPUT' && /^(text|number|tel|search|)$/i.test(next.type) && next.select) {
+          try { next.select(); } catch (err) {}
+        }
+      }
+    })();
