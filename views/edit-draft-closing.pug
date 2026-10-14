@@ -279,7 +279,8 @@ block content
                                         th Action
                                     tr
                                         td
-                                            select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()")
+                                            //- Enter here adds the chosen nozzle (closing-shortcuts.pug)
+                                            select#reading-pump-name.form-control(onchange="updatePriceOnReadingTab()" data-enter-clicks="#addNozzleBtn")
                                                 each val in pumpInstances
                                                     option= val.pumpCode
                                         if allowSecondaryPump
@@ -288,8 +289,9 @@ block content
                                         else
                                             input#reading-price(type="hidden")
                                         td
-                                            a.btn.btn-info.btn-sm(onclick="showReadingPump()" style="margin-right: 5px;") Add Nozzle
-                                            a.btn.btn-success.btn-sm(onclick="addAllPumps()") Add All Nozzles
+                                            //- buttons, not <a> without href: those can't be reached with the Tab key
+                                            button.btn.btn-info.btn-sm#addNozzleBtn(type="button" onclick="showReadingPump()" style="margin-right: 5px;") Add Nozzle
+                                            button.btn.btn-success.btn-sm(type="button" onclick="addAllPumps()") Add All Nozzles
                     else
                         div.row.bg-warning
                             pre.text-danger= `Note: Pumps data is empty at backend.`
