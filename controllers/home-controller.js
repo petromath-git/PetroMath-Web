@@ -113,6 +113,13 @@ module.exports = {
     'N' // default - disabled
     );
 
+    // Keyboard shortcuts on the closing screen; N switches them off for everyone here
+    const closingShortcuts = await locationConfig.getLocationConfigValue(
+    locationCode,
+    'SHIFT_CLOSING_SHORTCUTS',
+    'Y' // default - on
+    );
+
         getDraftsCount(locationCode).then(data => {
             if(data < config.APP_CONFIGS.maxAllowedDrafts) {
                 Promise.allSettled([personDataPromise(locationCode),
@@ -132,6 +139,7 @@ module.exports = {
                             user: req.user,
                             mobileReady: true,
                             showExShortBreakdown: showExShortBreakdown === 'Y',
+                            closingShortcuts: closingShortcuts !== 'N',
                             config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                             cashiers: values[0].value.cashiers,
                             minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),

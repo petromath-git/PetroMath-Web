@@ -965,7 +965,9 @@ block content
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()' data-ck-key='V') Add Vehicle
-    +closingShortcuts()
+    //- location config SHIFT_CLOSING_SHORTCUTS (default on)
+    if closingShortcuts
+        +closingShortcuts()
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
     if(!freezedRecord)
