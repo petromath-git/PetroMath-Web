@@ -1233,6 +1233,59 @@ router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
     }
 });
 
+// ── Accounting Health Check ──────────────────────────────────────────────────
+// GET /gl/health-check?fy_id=&run=1 — period checks from the GL audit runbook
+// (pre-flight on source data, post-accounting, reconciliation). Setup Check
+// above covers masters; this covers a financial year's data. Read-only.
+
+const healthCheckService = require('../services/accounting-health-check-service');
+const moment = require('moment');
+
+// DD-MON-YYYY for every date cell (Date objects and 'YYYY-MM-DD…' strings).
+function formatHealthRows(rows) {
+    return rows.map(r => {
+        const out = {};
+        Object.keys(r).forEach(k => {
+            const v = r[k];
+            if (v instanceof Date) out[k] = moment(v).format('DD-MMM-YYYY');
+            else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}( |T|$)/.test(v)) out[k] = moment(v.slice(0, 10)).format('DD-MMM-YYYY');
+            else out[k] = v;
+        });
+        return out;
+    });
+}
+
+router.get('/health-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const years = await healthCheckService.getFinancialYears(locationCode);
+        const fyId  = parseInt(req.query.fy_id, 10);
+        const fy    = years.find(y => y.fy_id === fyId) || years.find(y => y.is_current) || years[0] || null;
+
+        let report = null;
+        if (fy && req.query.run === '1') {
+            report = await healthCheckService.runChecks(locationCode, fy);
+            report.results.forEach(r => { r.rows = formatHealthRows(r.rows); });
+            report.ranAt = moment().format('DD-MMM-YYYY HH:mm');
+        }
+
+        res.render('gl-health-check', {
+            title:    'Accounting Health Check',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            years,
+            fy,
+            fyLabel:  fy ? `${moment(fy.start_date).format('DD-MMM-YYYY')} to ${moment(fy.end_date).format('DD-MMM-YYYY')}` : '',
+            report,
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Health check error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/control');
+    }
+});
+
 // ── Financial Years ──────────────────────────────────────────────────────────
 // gl_journal_headers.fy_id has a hard FK to gl_financial_years, so a FY with
 // vouchers can't be deleted -- checked here first for a friendly message.
