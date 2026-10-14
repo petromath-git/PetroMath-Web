@@ -2,6 +2,7 @@ extends layout
 include mixins/new-closing-mixins
 include mixins/summary-mixins
 include mixins/exshort-breakdown-mixin
+include mixins/closing-shortcuts
 
 block content    
     - var maxCreditsRowCnt = config.maxCreditsRowCnt;
@@ -962,6 +963,7 @@ block content
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
+    +closingShortcuts()
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
     if(!freezedRecord)
