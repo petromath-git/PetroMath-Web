@@ -13,8 +13,16 @@
 //-   reading) keep it. Never lands on row x / Delete buttons.
 //- Letters avoid Alt+D/E/F (Chrome/Edge address bar and menu). No shortcut
 //- closes the shift or deletes anything.
+//- On/off: a switch in the shortcut list, remembered per user in this browser
+//- (localStorage pm_ck_off_<Person_id>). Off = none of the above (no
+//- underlines, keys, Enter moves or cursor jumps); the link stays to turn it
+//- back on. Default on.
 mixin closingShortcuts()
   style.
+    body.ck-off u.ck-key { text-decoration: none; }
+    .ck-switch { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: #f1f3f5; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .ck-switch input { width: 18px; height: 18px; margin: 0; }
+    body.ck-off .ck-help-keys { opacity: .45; }
     .ck-link { font-size: 13px; color: #6c757d; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
     .ck-link-wrap { text-align: right; margin: 4px 2px 0; }
     @media (max-width: 767px) { .ck-link-wrap { display: none; } }
@@ -32,39 +40,44 @@ mixin closingShortcuts()
   .ck-help#ckHelp(hidden role="dialog" aria-label="Keyboard shortcuts")
     .ck-help-box
       h6 Keyboard shortcuts
-      table
-        tr
-          td #[kbd Alt] + #[u letter]
-          td Go to the tab with that letter underlined
-        tr
-          td #[kbd Alt] + #[kbd N]
-          td Next (saves this tab, like the button)
-        tr
-          td #[kbd Alt] + #[kbd P]
-          td Previous tab
-        tr
-          td #[kbd Alt] + #[kbd A]
-          td Add a row on this tab
-        tr
-          td #[kbd Enter]
-          td Next box (after the last box: Next)
-        tr
-          td #[kbd Esc]
-          td Back to the shift list (asks first)
-        tr
-          td #[kbd ?]
-          td This list
-      .ck-sub In the credit sale pop-up
-      table
-        tr
-          td #[kbd Alt] + #[kbd S]
-          td Save
-        tr
-          td #[kbd Alt] + #[kbd C] or #[kbd Esc]
-          td Close without saving
-        tr
-          td #[kbd Enter]
-          td Next box (after the last box: Save)
+      label.ck-switch
+        input#ckToggle(type="checkbox" checked)
+        span Use keyboard shortcuts
+      //- dimmed while the switch is off
+      .ck-help-keys
+        table
+          tr
+            td #[kbd Alt] + #[u letter]
+            td Go to the tab with that letter underlined
+          tr
+            td #[kbd Alt] + #[kbd N]
+            td Next (saves this tab, like the button)
+          tr
+            td #[kbd Alt] + #[kbd P]
+            td Previous tab
+          tr
+            td #[kbd Alt] + #[kbd A]
+            td Add a row on this tab
+          tr
+            td #[kbd Enter]
+            td Next box (after the last box: Next)
+          tr
+            td #[kbd Esc]
+            td Back to the shift list (asks first)
+          tr
+            td #[kbd ?]
+            td This list
+        .ck-sub In the credit sale pop-up
+        table
+          tr
+            td #[kbd Alt] + #[kbd S]
+            td Save
+          tr
+            td #[kbd Alt] + #[kbd C] or #[kbd Esc]
+            td Close without saving
+          tr
+            td #[kbd Enter]
+            td Next box (after the last box: Save)
       .ck-help-foot On a Mac use Option instead of Alt. Press Esc to close this list.
   script.
     (function () {
@@ -78,6 +91,22 @@ mixin closingShortcuts()
       };
       var DESKTOP = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
       var help = document.getElementById('ckHelp');
+
+      // On/off, per user in this browser (shared PCs: each login keeps its own)
+      var PREF_KEY = 'pm_ck_off_' + !{JSON.stringify(String((user && user.Person_id) || ''))};
+      var on = true;
+      try { on = localStorage.getItem(PREF_KEY) !== '1'; } catch (err) {}
+      var toggle = document.getElementById('ckToggle'), linkBtn = null;
+      function applyOnOff() {
+        document.body.classList.toggle('ck-off', !on);
+        toggle.checked = on;
+        if (linkBtn) linkBtn.textContent = '⌨ Keyboard shortcuts' + (on ? '' : ' (off)');
+      }
+      toggle.addEventListener('change', function () {
+        on = toggle.checked;
+        try { on ? localStorage.removeItem(PREF_KEY) : localStorage.setItem(PREF_KEY, '1'); } catch (err) {}
+        applyOnOff();
+      });
 
       function visible(el) { return !!(el && el.offsetParent !== null && el.getClientRects().length); }
       function all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -138,14 +167,17 @@ mixin closingShortcuts()
       if (nav) {
         var wrap = document.createElement('div');
         wrap.className = 'ck-link-wrap';
-        wrap.innerHTML = '<button type="button" class="ck-link">⌨ Keyboard shortcuts</button>';
-        wrap.firstChild.addEventListener('click', function () { showHelp(true); });
+        wrap.innerHTML = '<button type="button" class="ck-link"></button>';
+        linkBtn = wrap.firstChild;
+        linkBtn.addEventListener('click', function () { showHelp(true); });
         nav.parentNode.insertBefore(wrap, nav.nextSibling);
       }
       help.addEventListener('click', function (e) { if (e.target === help) showHelp(false); });
+      applyOnOff();
 
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !help.hidden) { showHelp(false); return; }
+        if (!on) return; // switched off: the keyboard behaves as it always did
         var modal = topModal();
 
         // Esc with nothing open: back to the shift list, after a confirm (Enter
@@ -239,7 +271,7 @@ mixin closingShortcuts()
       // picks); on one that already has a value it moves on instead of
       // reopening it. Runs before Select2's own key handling (capture).
       document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (!on || e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
         var sel = e.target.closest && e.target.closest('.select2-selection');
         if (!sel) return;
         var container = sel.closest('.select2-container');
@@ -262,7 +294,7 @@ mixin closingShortcuts()
       if (window.jQuery && DESKTOP) {
         jQuery(document).on('shown.bs.modal', '.modal', function () {
           var body = this.querySelector('.modal-body');
-          if (!body || body.contains(document.activeElement)) return;
+          if (!on || !body || body.contains(document.activeElement)) return;
           focusBox(boxesIn(body)[0]);
         });
       }
@@ -277,7 +309,7 @@ mixin closingShortcuts()
         var observer = new MutationObserver(function (records) {
           records.forEach(function (r) {
             var link = r.target;
-            if (!link.classList.contains('active') || r.oldValue && /\bactive\b/.test(r.oldValue)) return;
+            if (!on || !link.classList.contains('active') || r.oldValue && /\bactive\b/.test(r.oldValue)) return;
             clearTimeout(focusTimer);
             focusTimer = setTimeout(function () {
               if (topModal()) return;
@@ -295,7 +327,7 @@ mixin closingShortcuts()
         // box of the tab it opens on, after the page's own setup has run
         setTimeout(function () {
           var pane = activePane();
-          if (!pane || topModal() || (document.activeElement && document.activeElement !== document.body)) return;
+          if (!on || !pane || topModal() || (document.activeElement && document.activeElement !== document.body)) return;
           focusBox(boxesIn(pane)[0]);
         }, 300);
       }
