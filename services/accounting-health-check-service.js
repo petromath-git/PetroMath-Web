@@ -1,10 +1,19 @@
 // Accounting Health Check — per location, per financial year.
 //
-// Every check here came out of the GL audit runbook (MUE, MME and MC FY 25-26):
-// each is one read-only query that returns ONLY problem rows, plus a judge that
-// turns those rows into pass / warn / fail. Codes are stable (P = pre-flight on
-// source data, A = after Create Accounting, R = reconciliation) so later phases
+// Each check is one read-only query that returns ONLY problem rows, plus a judge
+// that turns those rows into pass / warn / fail. Codes are stable (P = pre-flight
+// on source data, A = after Create Accounting, R = reconciliation) so later phases
 // can keep run history and accepted-exception notes against them.
+//
+// The checks come from the GL audit runbook (MUE, MME and MC, FY 2025-26), but
+// they must hold at EVERY location, so nothing here may assume a location's
+// names:
+//   - fuels are found by product ID through m_tank / m_pump / tank invoices,
+//     never by product name (names are open-ended: MS, XP95, XG, POWER, CNG...);
+//   - oil-company (SAP) purchases are found by amount and by what they are NOT
+//     (fees, charges, TDS, rent, interest, penalty, cash), never by one label —
+//     locations tag them OTHERS, PURCHASE, PURCHASE INVOICE, IOCL FUEL PURCHASE...;
+//   - the user-facing "why" text describes the risk, not a location's history.
 //
 // Design: "Accounting Health Check — design" (Claude Docs). Phase 1 = read-only,
 // no history, no accept-with-note.
@@ -14,24 +23,19 @@ const { getLocationConfigValue } = require('../utils/location-config');
 
 const MAX_ROWS = 500;
 
-// Ratio bands — location setting 'min,max', global '*' default, else these.
+// Bands — location setting 'min,max' (global '*' default), else these.
 const BAND_DEFAULTS = {
-    HC_MARGIN_MS:      [3.5, 4.5],
-    HC_MARGIN_HSD:     [2.2, 3.0],
-    HC_MARGIN_PREMIUM: [3.5, 5.5],
-    HC_GP_PCT_FUEL:    [3.0, 5.0],
-    HC_SALES_GST_TOL:  [0, 1]
-};
-
-// Which band a pump product's margin is judged against, by product name.
-const MARGIN_BAND_BY_PRODUCT = {
-    MS: 'HC_MARGIN_MS', HSD: 'HC_MARGIN_HSD',
-    XMS: 'HC_MARGIN_PREMIUM', XP: 'HC_MARGIN_PREMIUM', XP95: 'HC_MARGIN_PREMIUM', POWER: 'HC_MARGIN_PREMIUM'
+    HC_FUEL_MARGIN:   [1.5, 6.0],     // ₹ per litre, any fuel: catches missing / doubled invoices
+    HC_GP_PCT_FUEL:   [2.0, 5.0],     // % of fuel sales
+    HC_SALES_GST_TOL: [0, 1]          // ₹ per product-month
 };
 
 // Cashflow CREDIT labels that are internal movements and SKIP on purpose.
 const CASH_IN_SKIP_OK = ['Balance B/F', 'Collection', '2T Oil', 'Cash Receipt', 'Shift Cash Return',
                          'Cashier A/C (+)', 'Discount'];
+
+// SAP debits that are not product purchases, matched on label or bank text.
+const SAP_NOT_PURCHASE = 'LICEN[CS]E|CHARGE|TDS|RENT|INTEREST|PENALTY|INCENTIVE|COMMISSION';
 
 async function getBand(locationCode, setting) {
     const raw = await getLocationConfigValue(locationCode, setting, null);
@@ -42,21 +46,66 @@ async function getBand(locationCode, setting) {
     return BAND_DEFAULTS[setting];
 }
 
+// Optional tighter bands per fuel, by product name: HC_FUEL_MARGIN_BANDS = 'MS:3.5-4.5;HSD:2.2-3.0'.
+async function getFuelBands(locationCode) {
+    const raw = await getLocationConfigValue(locationCode, 'HC_FUEL_MARGIN_BANDS', '') || '';
+    const map = {};
+    raw.split(';').forEach(part => {
+        const m = /^\s*(.+?)\s*:\s*(-?[\d.]+)\s*-\s*(-?[\d.]+)\s*$/.exec(part);
+        if (m) map[m[1].toUpperCase()] = [parseFloat(m[2]), parseFloat(m[3])];
+    });
+    return map;
+}
+
 function q(sql, replacements) {
     return db.sequelize.query(sql, { replacements, type: db.Sequelize.QueryTypes.SELECT });
 }
 
 const sum = (rows, col) => rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0);
 
+// Fuel position per tank product for the year: opening seed + tank invoices − meter.
+// A product counts as fuel when it has a tank here; it is judged only when it was
+// bought on tank invoices or has a GL opening seed (2T loose, AdBlue etc. are not).
+const FUEL_POSITION_SQL = `
+    SELECT p.product_id, p.product_name,
+           ROUND(COALESCE(sob.opening_qty,0),0)   opening_l,
+           ROUND(COALESCE(sob.opening_value,0),2) opening_value,
+           ROUND(COALESCE(pu.litres,0),0)         purchased_l,
+           ROUND(COALESCE(pu.value,0),2)          purchase_value,
+           ROUND(COALESCE(sa.litres,0),0)         sold_l,
+           ROUND(COALESCE(sa.value,0),2)          sales_value,
+           (sob.product_id IS NOT NULL)            has_opening,
+           (pu.product_id IS NOT NULL)             has_invoices
+    FROM m_product p
+    LEFT JOIN gl_stock_opening_balance sob ON sob.product_id = p.product_id AND sob.location_code = :loc AND sob.fy_id = :fyId
+    LEFT JOIN (SELECT d.product_id,
+                      SUM(CASE WHEN d.qty_unit = 'KL' THEN d.quantity * 1000 ELSE d.quantity END) litres,
+                      SUM(d.total_line_amount + COALESCE(ch.amt,0)) value
+               FROM t_tank_invoice ti JOIN t_tank_invoice_dtl d ON d.invoice_id = ti.id
+               LEFT JOIN (SELECT invoice_dtl_id, SUM(charge_amount) amt FROM t_tank_invoice_charges GROUP BY invoice_dtl_id) ch
+                      ON ch.invoice_dtl_id = d.id
+               WHERE ti.location_id = :loc AND ti.invoice_date BETWEEN :from AND :to
+               GROUP BY d.product_id) pu ON pu.product_id = p.product_id
+    LEFT JOIN (SELECT mp.product_id, SUM(tr.closing_reading - tr.opening_reading - tr.testing) litres,
+                      SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) value
+               FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
+               JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
+               WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
+               GROUP BY mp.product_id) sa ON sa.product_id = p.product_id
+    WHERE p.location_code = :loc
+      AND p.product_id IN (SELECT tk.product_id FROM m_tank tk WHERE tk.location_code = :loc)
+    ORDER BY p.product_name`;
+
 // ── The checks ───────────────────────────────────────────────────────────────
-// run(ctx) → { rows, status?, summary?, amount? }. Without a status, any row = `severity`.
+// run(ctx) → { rows, status?, summary?, amount?, showAll? }. Without a status, any row = `severity`.
+// showAll = the rows are a full listing; only rows whose `result` is fail / warn count as problems.
 
 const CHECKS = [
     {
         code: 'P03', stage: 'PRE', severity: 'warn',
         title: 'Bank debits tagged CASH',
-        why: 'MME had 72 IOCL payments (₹6.66 Cr) tagged CASH, which put ₹6.8 Cr of cash in hand on the books.',
-        fix: 'Real cash withdrawals are fine. Anything else (oil-company payments, salary, EMI) needs retagging on the bank statement screen.',
+        why: 'A bank debit tagged CASH is booked as cash taken out of the bank into the drawer. Unless it really was a cash withdrawal, cash in hand ends up too high and the real payment or expense is missing.',
+        fix: 'Real cash withdrawals are fine. Anything else (oil-company payments, rent, salary, EMI) needs reclassifying on the bank statement screen.',
         fixUrl: '/bank-statement',
         run: async c => {
             const rows = await q(`
@@ -72,67 +121,105 @@ const CHECKS = [
     {
         code: 'P06', stage: 'PRE', severity: 'fail',
         title: 'Oil-company (SAP) purchases without a tank invoice',
-        why: 'MME and MC were missing 25 invoices (₹2.8 Cr). A missing invoice drops its litres from book stock and inflates profit.',
-        fix: 'Upload the invoice for each listed SAP debit (same date and amount). A cancellation credit means the matching invoice must not be in PetroMath.',
+        why: 'Every load on the oil company\'s statement needs its tank invoice in PetroMath. A missing invoice leaves its litres out of book stock and its cost out of purchases, so profit is overstated.',
+        fix: 'Upload the tank invoice for each listed SAP debit (same date and amount). A cancelled load must have no invoice in PetroMath.',
         fixUrl: '/tank-invoice',
         run: async c => {
-            // Purchase = any SAP debit >= 50,000 except licence fee / charges / TDS / rent / cash (ledger-name independent).
-            const missing = await q(`
-                WITH sap AS (
-                    SELECT t.t_bank_id, t.trans_date, t.debit_amount, t.ledger_name, t.remarks
-                    FROM t_bank_transaction t JOIN m_bank b ON b.bank_id = t.bank_id
-                    WHERE b.location_code = :loc AND b.is_oil_company = 'Y'
-                      AND t.trans_date BETWEEN :from AND :to AND t.debit_amount >= 50000
-                      AND COALESCE(t.ledger_name,'') NOT IN ('IOCL LICENSE FEE RECOVERY','IOCL CHARGES','TDS PAYMENT','RENT','CASH')
-                      AND COALESCE(t.remarks,'') NOT LIKE '%LICENSE FEE%'),
-                sc AS (SELECT trans_date dt, ROUND(debit_amount,0) amt, COUNT(*) n FROM sap GROUP BY 1, 2),
-                ic AS (SELECT invoice_date dt, ROUND(total_invoice_amount,0) amt, COUNT(*) n
-                       FROM t_tank_invoice WHERE location_id = :loc AND invoice_date BETWEEN :from AND :to GROUP BY 1, 2)
-                SELECT 'No invoice' issue, s.t_bank_id, s.trans_date, s.debit_amount amount, LEFT(TRIM(s.remarks), 80) remarks
-                FROM sap s
-                JOIN sc ON sc.dt = s.trans_date AND sc.amt = ROUND(s.debit_amount,0)
-                LEFT JOIN ic ON ic.dt = s.trans_date AND ic.amt = ROUND(s.debit_amount,0)
-                WHERE sc.n > COALESCE(ic.n,0)
-                ORDER BY s.trans_date`, c.r);
-            const cancelled = await q(`
-                SELECT t.t_bank_id, t.trans_date, t.credit_amount amount, LEFT(TRIM(t.remarks), 80) remarks
+            // Purchase = any SAP debit >= 50,000 that is not a fee / charge / TDS / rent / interest / penalty /
+            // cash, and not a payment to some other supplier routed through the oil-company account.
+            // Label-independent: locations tag purchases OTHERS, PURCHASE, IOCL FUEL PURCHASE, and so on.
+            const debits = await q(`
+                SELECT t.t_bank_id, DATE_FORMAT(t.trans_date,'%Y-%m-%d') trans_date, t.debit_amount amount,
+                       COALESCE(t.ledger_name,'') label, LEFT(TRIM(t.remarks), 80) remarks
                 FROM t_bank_transaction t JOIN m_bank b ON b.bank_id = t.bank_id
                 WHERE b.location_code = :loc AND b.is_oil_company = 'Y'
-                  AND t.trans_date BETWEEN :from AND :to AND t.credit_amount > 0
-                  AND UPPER(t.remarks) LIKE '%CANCELLATION OF INVOICE%'
-                ORDER BY t.trans_date`, c.r);
+                  AND t.trans_date BETWEEN :from AND :to AND t.debit_amount >= 50000
+                  AND COALESCE(t.ledger_name,'') <> 'CASH'
+                  AND UPPER(COALESCE(t.ledger_name,'')) NOT REGEXP :notPurchase
+                  AND UPPER(COALESCE(t.remarks,'')) NOT REGEXP :notPurchase
+                  AND NOT (t.external_source = 'Supplier' AND t.external_id <> COALESCE(b.supplier_id, -1))
+                ORDER BY t.trans_date, t.t_bank_id`, Object.assign({ notPurchase: SAP_NOT_PURCHASE }, c.r));
+            const credits = await q(`
+                SELECT t.t_bank_id, DATE_FORMAT(t.trans_date,'%Y-%m-%d') trans_date, t.credit_amount amount,
+                       COALESCE(t.ledger_name,'') label, LEFT(TRIM(t.remarks), 80) remarks
+                FROM t_bank_transaction t JOIN m_bank b ON b.bank_id = t.bank_id
+                WHERE b.location_code = :loc AND b.is_oil_company = 'Y' AND t.credit_amount >= 50000
+                  AND t.trans_date BETWEEN :from AND DATE_ADD(:to, INTERVAL 10 DAY)
+                ORDER BY t.trans_date, t.t_bank_id`, c.r);
+            const invoices = await q(`
+                SELECT id, invoice_number, DATE_FORMAT(invoice_date,'%Y-%m-%d') invoice_date, total_invoice_amount amount
+                FROM t_tank_invoice
+                WHERE location_id = :loc AND invoice_date BETWEEN DATE_SUB(:from, INTERVAL 3 DAY) AND DATE_ADD(:to, INTERVAL 3 DAY)
+                ORDER BY invoice_date, id`, c.r);
 
-            // A cancellation credit undoes an SAP debit of the same amount up to 10 days earlier (MC 02-Feb-26:
-            // load sent back after the tanker accident). If that debit has no invoice, the pair is settled;
-            // if it does, the cancelled load's invoice is still in PetroMath and must go.
             const days = d => Date.parse(String(d).slice(0, 10)) / 864e5;
-            const cancelRows = [];
-            for (const cn of cancelled) {
-                const i = missing.findIndex(m => parseFloat(m.amount) === parseFloat(cn.amount)
-                    && days(cn.trans_date) - days(m.trans_date) >= 0 && days(cn.trans_date) - days(m.trans_date) <= 10);
-                if (i >= 0) {
-                    cancelRows.push(Object.assign({ issue: `Cancelled load, paired with SAP debit ${missing[i].t_bank_id}: no invoice, as expected` }, cn, { result: 'info' }));
-                    missing.splice(i, 1);
-                } else {
-                    cancelRows.push(Object.assign({ issue: 'Cancellation credit: its load still has an invoice in PetroMath; delete it if the load never arrived' }, cn, { result: 'warn' }));
+            const same = (a, b) => Math.abs(parseFloat(a) - parseFloat(b)) < 1;
+            const usedInv = new Set();
+            const takeInvoice = (d, maxGap) => {
+                for (const gap of maxGap ? [0, 1, 2, 3] : [0]) {
+                    const inv = invoices.find(i => !usedInv.has(i.id) && same(i.amount, d.amount)
+                        && Math.abs(days(i.invoice_date) - days(d.trans_date)) === gap);
+                    if (inv) { usedInv.add(inv.id); return { inv, gap }; }
                 }
+                return null;
+            };
+
+            // 1. A load undone on the statement: a credit with the same label and amount up to 10 days later
+            //    that says CANCEL or repeats the debit's text (IOCL "CANCELLATION OF INVOICE"; BPCL reverses a
+            //    provisional CNG debit with an identical "Invoice" credit). A bank payment that happens to equal
+            //    a load carries different text, so it never undoes a load.
+            //    Amounts repeat (same load size every few days), so the credit pairs with the NEAREST earlier
+            //    debit: same day first, then 1 day back, and so on.
+            const undone = new Map();
+            for (const cr of credits) {
+                const gap = x => days(cr.trans_date) - days(x.trans_date);
+                const d = debits
+                    .filter(x => !undone.has(x.t_bank_id) && same(x.amount, cr.amount) && x.label === cr.label
+                        && gap(x) >= 0 && gap(x) <= 10
+                        && (/CANCEL/i.test(cr.remarks) || cr.remarks.trim().toUpperCase() === x.remarks.trim().toUpperCase()))
+                    .sort((a, b) => gap(a) - gap(b))[0];
+                if (d) undone.set(d.t_bank_id, cr);
             }
-            missing.forEach(m => { m.result = 'fail'; });
-            const open = cancelRows.filter(r => r.result === 'warn');
+
+            // 2. Every other debit takes an invoice of the same amount: same date first, then the nearest
+            //    within 3 days. Each invoice is used once, so a neighbouring load can't hide a missing one.
+            const live = debits.filter(d => !undone.has(d.t_bank_id));
+            const unmatched = live.filter(d => !takeInvoice(d, false));
+            const missing = [], timing = [];
+            for (const d of unmatched) {
+                const m = takeInvoice(d, true);
+                if (m) timing.push(Object.assign({ issue: `Timing: invoice ${m.inv.invoice_number} is dated ${m.gap} day(s) apart` }, d, { result: 'info' }));
+                else missing.push(Object.assign({ issue: 'No tank invoice' }, d, { result: 'fail' }));
+            }
+
+            // 3. An undone load should have no invoice; if a spare invoice still matches it, that invoice must go.
+            const undoneRows = [];
+            for (const d of debits.filter(x => undone.has(x.t_bank_id))) {
+                const cr = undone.get(d.t_bank_id);
+                const m = takeInvoice(d, true);
+                undoneRows.push(Object.assign({
+                    issue: m ? `Load undone by SAP line ${cr.t_bank_id} on ${cr.trans_date}, but invoice ${m.inv.invoice_number} is still in PetroMath`
+                             : `Load undone by SAP line ${cr.t_bank_id} on ${cr.trans_date}: no invoice, as expected`
+                }, d, { result: m ? 'warn' : 'info' }));
+            }
+
+            const stillInvoiced = undoneRows.filter(r => r.result === 'warn');
+            const rows = missing.concat(stillInvoiced, timing, undoneRows.filter(r => r.result === 'info'));
             return {
-                rows: missing.concat(cancelRows), showAll: true,
-                status: missing.length ? 'fail' : (open.length ? 'warn' : 'pass'),
+                rows, showAll: true,
+                status: missing.length ? 'fail' : (stillInvoiced.length ? 'warn' : 'pass'),
                 amount: sum(missing, 'amount'),
-                summary: `${missing.length} SAP purchase(s) with no invoice`
-                    + (open.length ? `, ${open.length} cancellation(s) whose invoice is still in PetroMath` : '')
-                    + (cancelRows.length - open.length ? `, ${cancelRows.length - open.length} cancelled load(s) settled` : '')
+                summary: `${missing.length} of ${live.length} SAP purchase(s) with no tank invoice`
+                    + (stillInvoiced.length ? `, ${stillInvoiced.length} undone load(s) still invoiced` : '')
+                    + (timing.length ? `, ${timing.length} matched with a 1–3 day gap` : '')
+                    + (undoneRows.length - stillInvoiced.length ? `, ${undoneRows.length - stillInvoiced.length} undone load(s) settled` : '')
             };
         }
     },
     {
         code: 'P07', stage: 'PRE', severity: 'fail',
         title: 'Tank invoices that do not add up',
-        why: 'MME\'s Nov-25 invoices counted VAT twice (₹16.5L), cutting gross profit from 3.8% to 2.4%.',
+        why: 'Purchase cost and book stock come from each invoice\'s lines and charges. When they don\'t add up to the invoice total (for example VAT counted twice, or an invoice with no lines), cost and stock are wrong.',
         fix: 'Correct the invoice lines so lines + charges equal the invoice total, or re-upload the invoice.',
         fixUrl: '/tank-invoice',
         run: async c => {
@@ -153,8 +240,8 @@ const CHECKS = [
     {
         code: 'P09', stage: 'PRE', severity: 'warn',
         title: 'Salary, advances, tanker and personal costs inside OTHERS',
-        why: 'MC had ₹19.5L of salary, staff advances, tanker costs and the proprietor\'s personal spending posted to OTHERS.',
-        fix: 'Move the lines to the right cashflow head (Salary Payout, SALARY ADVANCES, TANK TRUCK EXPENSES, To WithDrawals).',
+        why: 'Cashflow lines under the Expense head all post to OTHERS. Salary, staff advances, tanker costs, the owner\'s personal spending and taxes hidden there distort the P&L and leave advances and drawings off the balance sheet.',
+        fix: 'Move the lines to the right cashflow head: Salary Payout, Salary Advance, a tanker expense head, To WithDrawals, or a tax head.',
         fixUrl: '/cashflowhome',
         run: async c => {
             const rows = await q(`
@@ -166,7 +253,7 @@ const CHECKS = [
                                 WHEN LOWER(tct.description) REGEXP 'salary|salry|wages|(^|[^a-z])pay([^a-z]|$)|bonus' THEN 'Salary / wages'
                                 WHEN LOWER(tct.description) REGEXP '(^|[^a-z])tt([^a-z]|$)|tanker|lorry' THEN 'Tanker truck'
                                 WHEN LOWER(tct.description) REGEXP 'residence|house|home|personal|tour|withdraw' THEN 'Personal / residence'
-                                WHEN LOWER(tct.description) REGEXP 'property tax|water tax|income tax|itax|emi|loan' THEN 'Tax or loan'
+                                WHEN LOWER(tct.description) REGEXP 'property tax|water tax|income tax|itax|(^|[^a-z])emi([^a-z]|$)|loan' THEN 'Tax or loan'
                            END category
                     FROM t_cashflow_transaction tct
                     JOIN t_cashflow_closing tcc ON tcc.cashflow_id = tct.cashflow_id
@@ -181,8 +268,8 @@ const CHECKS = [
     {
         code: 'P10', stage: 'PRE', severity: 'fail',
         title: 'Labels with no GL rule, and cash-in skipped',
-        why: 'At MC, To Deposits (₹5.97L of cash brought into the drawer) was set to SKIP, so GL never saw the cash arrive.',
-        fix: 'Set a rule for each label on the Static Ledger Map screen. A cash-in label on SKIP is usually wrong unless it is an internal movement.',
+        why: 'A bank or cashflow label with no rule posts to Unclassified, or not at all. A cash-in label set to SKIP means GL never sees that cash arrive, so cash in hand is understated.',
+        fix: 'Set a rule for each label on the Static Ledger Map screen. A cash-in label on SKIP is usually wrong unless it is an internal movement between shifts.',
         fixUrl: '/gl/static-ledger-map',
         run: async c => {
             const bank = await q(`
@@ -215,7 +302,7 @@ const CHECKS = [
     {
         code: 'A01', stage: 'POST', severity: 'fail',
         title: 'GL events not processed',
-        why: 'An event in ERROR or UNPROCESSED means a sale, bank line or cashflow line is missing from the books.',
+        why: 'An event in ERROR or UNPROCESSED means a sale, receipt, bank line or cashflow line is missing from the books.',
         fix: 'Fix the cause named in the error, then run Generate Missing Events and Create Accounting again.',
         fixUrl: '/gl/control',
         run: async c => {
@@ -248,8 +335,8 @@ const CHECKS = [
     {
         code: 'A03', stage: 'POST', severity: 'warn',
         title: 'Balances parked in suspense or catch-all ledgers',
-        why: 'At MC, Volume Discount and reversal adjustments sat in General Adjustment (Suspense) instead of the P&L.',
-        fix: 'Find the source of each posting (ledger report) and give it a proper ledger or rule.',
+        why: 'Amounts in Unclassified, General Adjustment or a Suspense group were posted without a proper ledger: they belong in the P&L or the balance sheet, and the auditor will ask about each one.',
+        fix: 'Open the ledger report, find what posted each amount, and give it a proper ledger or rule.',
         fixUrl: '/gl/ledger',
         run: async c => {
             const rows = await q(`
@@ -268,12 +355,12 @@ const CHECKS = [
     },
     {
         code: 'A04', stage: 'POST', severity: 'fail',
-        title: 'Fuel sales in GL vs GST summary (meter), by month',
-        why: 'At MME, GD and CNG day bills carried 18% GST, so ₹6.37L of sales sat in output GST instead of sales.',
-        fix: 'Drill the month by day. Differences explained by credit sales billed below the pump rate are expected.',
+        title: 'Metered sales in GL vs GST summary (meter), by month',
+        why: 'Sales in GL should equal the meter reading value for every product and month. A gap means missing or stale day bills, GST wrongly charged on fuel, or day bills that exceed the meter.',
+        fix: 'Drill the month by day. Differences explained by credit sales billed below the pump rate are expected and already netted here.',
         fixUrl: '/gl/profit-loss',
         run: async c => {
-            const [lo, hi] = await getBand(c.loc, 'HC_SALES_GST_TOL');
+            const tol = (await getBand(c.loc, 'HC_SALES_GST_TOL'))[1];
             const rows = await q(`
                 SELECT * FROM (
                     SELECT k.mon, k.product_name,
@@ -286,13 +373,13 @@ const CHECKS = [
                           JOIN m_product p ON p.location_code = tc.location_code
                           LEFT JOIN gl_product_ledger_map m ON m.product_id = p.product_id AND m.location_code = p.location_code AND m.map_type = 'SALES'
                           WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                            AND p.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :loc)) k
-                    LEFT JOIN (SELECT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, mp.product_code,
+                            AND p.product_id IN (SELECT mp.product_id FROM m_pump mp WHERE mp.location_code = :loc)) k
+                    LEFT JOIN (SELECT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, mp.product_id,
                                       SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) amt
                                FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
                                JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
                                WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                               GROUP BY 1, 2) mtr ON mtr.mon = k.mon AND mtr.product_code = k.product_name
+                               GROUP BY 1, 2) mtr ON mtr.mon = k.mon AND mtr.product_id = k.product_id
                     LEFT JOIN (SELECT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, t.product_id, SUM(t.amount - t.qty * t.price) price_diff
                                FROM t_credits t JOIN t_closing tc ON tc.closing_id = t.closing_id
                                WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
@@ -308,110 +395,86 @@ const CHECKS = [
                                WHERE h.location_code = :loc AND h.voucher_date BETWEEN :from AND :to
                                GROUP BY 1, 2) gl ON gl.mon = k.mon AND gl.ledger_id = k.ledger_id) x
                 WHERE ABS(x.unexplained) > :tol
-                ORDER BY x.product_name, x.mon`, Object.assign({ tol: hi }, c.r));
-            return { rows, summary: rows.length ? `${rows.length} product-month(s) off by more than ₹${hi}` : `Every product-month within ₹${hi}` };
+                ORDER BY x.product_name, x.mon`, Object.assign({ tol }, c.r));
+            return { rows, summary: rows.length ? `${rows.length} product-month(s) off by more than ₹${tol}` : `Every product-month within ₹${tol}` };
         }
     },
     {
         code: 'A07', stage: 'POST', severity: 'warn',
         title: 'Fuel margin per litre and gross profit',
-        why: 'Margins outside the usual band point at a missing or doubled invoice, wrong opening stock, or a pricing error.',
+        why: 'A fuel\'s margin per litre normally stays in a narrow band. Far outside it usually means a missing or doubled tank invoice, a wrong opening stock, or a pricing error.',
         fix: 'Check P06 and P07 first, then the opening stock and the tank invoices for the product.',
         fixUrl: '/gl/profit-loss',
         run: async c => {
-            // Weighted average cost = (opening seed + tank invoice lines and charges) / litres; sales from the meter.
-            const prods = await q(`
-                SELECT p.product_name,
-                       ROUND(COALESCE(sa.litres,0),0) litres_sold,
-                       ROUND(COALESCE(sa.value,0),2) sales_value,
-                       ROUND((COALESCE(sob.opening_value,0) + COALESCE(pu.value,0))
-                             / NULLIF(COALESCE(sob.opening_qty,0) + COALESCE(pu.litres,0),0),3) avg_cost_per_l,
-                       ROUND(COALESCE(sa.value,0) / NULLIF(sa.litres,0),3) avg_sale_per_l
-                FROM m_product p
-                LEFT JOIN gl_stock_opening_balance sob ON sob.product_id = p.product_id AND sob.location_code = :loc AND sob.fy_id = :fyId
-                LEFT JOIN (SELECT d.product_id,
-                                  SUM(CASE WHEN d.qty_unit = 'KL' THEN d.quantity * 1000 ELSE d.quantity END) litres,
-                                  SUM(d.total_line_amount + COALESCE(ch.amt,0)) value
-                           FROM t_tank_invoice ti JOIN t_tank_invoice_dtl d ON d.invoice_id = ti.id
-                           LEFT JOIN (SELECT invoice_dtl_id, SUM(charge_amount) amt FROM t_tank_invoice_charges GROUP BY invoice_dtl_id) ch
-                                  ON ch.invoice_dtl_id = d.id
-                           WHERE ti.location_id = :loc AND ti.invoice_date BETWEEN :from AND :to
-                           GROUP BY d.product_id) pu ON pu.product_id = p.product_id
-                LEFT JOIN (SELECT mp.product_code, SUM(tr.closing_reading - tr.opening_reading - tr.testing) litres,
-                                  SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) value
-                           FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
-                           JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
-                           WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                           GROUP BY mp.product_code) sa ON sa.product_code = p.product_name
-                WHERE p.location_code = :loc
-                  AND p.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :loc)
-                  AND COALESCE(sa.litres,0) > 0
-                ORDER BY p.product_name`, c.r);
-
+            const prods = await q(FUEL_POSITION_SQL, c.r);
+            const defBand = await getBand(c.loc, 'HC_FUEL_MARGIN');
+            const fuelBands = await getFuelBands(c.loc);
             let worst = 'pass', gp = 0, sales = 0;
             const rows = [];
             for (const p of prods) {
-                const margin = p.avg_cost_per_l == null ? null : parseFloat(p.avg_sale_per_l) - parseFloat(p.avg_cost_per_l);
-                const setting = MARGIN_BAND_BY_PRODUCT[String(p.product_name).toUpperCase()];
-                const band = setting ? await getBand(c.loc, setting) : null;
+                if (parseFloat(p.sold_l) <= 0) continue;
+                const judged = Number(p.has_invoices) || Number(p.has_opening);
+                const litresIn = parseFloat(p.opening_l) + parseFloat(p.purchased_l);
+                const avgCost = judged && litresIn > 0 ? (parseFloat(p.opening_value) + parseFloat(p.purchase_value)) / litresIn : null;
+                const avgSale = parseFloat(p.sales_value) / parseFloat(p.sold_l);
+                const margin = avgCost == null ? null : avgSale - avgCost;
+                const band = fuelBands[String(p.product_name).toUpperCase()] || defBand;
                 let status = 'info';
-                if (margin == null) status = 'fail';                       // sold but never bought: no invoices, no opening
-                else if (band) status = (margin >= band[0] && margin <= band[1]) ? 'pass' : 'warn';
-                if (status === 'fail' || (status === 'warn' && worst === 'pass')) worst = status;
-                if (margin != null) { gp += margin * parseFloat(p.litres_sold); sales += parseFloat(p.sales_value); }
-                rows.push(Object.assign({}, p, {
+                if (judged && margin != null) {
+                    status = (margin >= band[0] && margin <= band[1]) ? 'pass' : 'warn';
+                    gp += margin * parseFloat(p.sold_l);
+                    sales += parseFloat(p.sales_value);
+                }
+                if (status === 'warn' && worst === 'pass') worst = 'warn';
+                rows.push({
+                    product_name: p.product_name,
+                    litres_sold: p.sold_l,
+                    avg_cost_per_l: avgCost == null ? null : Math.round(avgCost * 1000) / 1000,
+                    avg_sale_per_l: Math.round(avgSale * 1000) / 1000,
                     margin_per_l: margin == null ? null : Math.round(margin * 1000) / 1000,
-                    band: band ? `${band[0]} to ${band[1]}` : 'no band',
+                    band: judged ? `${band[0]} to ${band[1]}` : 'not bought on tank invoices: not judged',
                     result: status
-                }));
+                });
             }
             const gpBand = await getBand(c.loc, 'HC_GP_PCT_FUEL');
             const gpPct = sales ? Math.round(gp / sales * 10000) / 100 : null;
             if (gpPct != null && (gpPct < gpBand[0] || gpPct > gpBand[1]) && worst === 'pass') worst = 'warn';
             return {
                 rows, status: worst, showAll: true,
-                summary: gpPct == null ? 'No fuel sold in the period'
-                    : `Fuel gross profit ${gpPct}% of sales (band ${gpBand[0]}–${gpBand[1]}%), before stock shortage`
+                summary: gpPct == null ? 'No fuel bought on tank invoices was sold in the period'
+                    : `Fuel gross profit ${gpPct}% of fuel sales (band ${gpBand[0]}–${gpBand[1]}%), before any stock shortage`
             };
         }
     },
     {
         code: 'R02', stage: 'RECON', severity: 'fail',
         title: 'Book stock at the end of the period',
-        why: 'Book stock = opening + tank invoices − meter. A negative balance means invoices are missing; compare the rest with the dip.',
-        fix: 'Negative stock: check P06. Otherwise compare each product with the physical stock or dip at the period end.',
+        why: 'Book stock = opening + tank invoices − meter. A negative balance means invoices are missing; a fuel with no opening stock for the year gets no stock adjustment in the P&L. Compare the rest with the physical stock or dip.',
+        fix: 'Negative stock: check P06. No opening stock: enter the year\'s opening stock for the product. Otherwise compare each fuel with the physical stock at the period end.',
         fixUrl: '/tank-invoice',
         run: async c => {
-            const prods = await q(`
-                SELECT p.product_name,
-                       ROUND(COALESCE(sob.opening_qty,0),0) opening_l,
-                       ROUND(COALESCE(pu.litres,0),0) purchased_l,
-                       ROUND(COALESCE(sa.litres,0),0) sold_l,
-                       ROUND(COALESCE(sob.opening_qty,0) + COALESCE(pu.litres,0) - COALESCE(sa.litres,0),0) book_closing_l,
-                       CASE WHEN sob.product_id IS NULL THEN 'No opening stock entered' ELSE '' END note
-                FROM m_product p
-                LEFT JOIN gl_stock_opening_balance sob ON sob.product_id = p.product_id AND sob.location_code = :loc AND sob.fy_id = :fyId
-                LEFT JOIN (SELECT d.product_id, SUM(CASE WHEN d.qty_unit = 'KL' THEN d.quantity * 1000 ELSE d.quantity END) litres
-                           FROM t_tank_invoice ti JOIN t_tank_invoice_dtl d ON d.invoice_id = ti.id
-                           WHERE ti.location_id = :loc AND ti.invoice_date BETWEEN :from AND :to
-                           GROUP BY d.product_id) pu ON pu.product_id = p.product_id
-                LEFT JOIN (SELECT mp.product_code, SUM(tr.closing_reading - tr.opening_reading - tr.testing) litres
-                           FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
-                           JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
-                           WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                           GROUP BY mp.product_code) sa ON sa.product_code = p.product_name
-                WHERE p.location_code = :loc
-                  AND p.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :loc)
-                ORDER BY p.product_name`, c.r);
-            const negative = prods.filter(p => parseFloat(p.book_closing_l) < 0);
-            const noOpening = prods.filter(p => p.note);
-            prods.forEach(p => { p.result = parseFloat(p.book_closing_l) < 0 ? 'fail' : (p.note ? 'warn' : 'info'); });
+            const prods = await q(FUEL_POSITION_SQL, c.r);
+            const rows = prods
+                .filter(p => Number(p.has_invoices) || Number(p.has_opening))
+                .map(p => {
+                    const closing = parseFloat(p.opening_l) + parseFloat(p.purchased_l) - parseFloat(p.sold_l);
+                    const noOpening = !Number(p.has_opening);
+                    return {
+                        product_name: p.product_name, opening_l: p.opening_l, purchased_l: p.purchased_l, sold_l: p.sold_l,
+                        book_closing_l: Math.round(closing),
+                        note: noOpening ? 'No opening stock for the year' : '',
+                        result: closing < 0 ? 'fail' : (noOpening ? 'warn' : 'info')
+                    };
+                });
+            const negative = rows.filter(r => r.result === 'fail');
+            const noOpening = rows.filter(r => r.note);
             return {
-                rows: prods, showAll: true,
+                rows, showAll: true,
                 status: negative.length ? 'fail' : (noOpening.length ? 'warn' : 'pass'),
-                summary: negative.length ? `${negative.length} product(s) with negative book stock`
-                    : noOpening.length ? `${noOpening.length} product(s) with no opening stock for the year`
-                    : 'Book stock is positive for every fuel; compare it with the dip'
+                summary: negative.length ? `${negative.length} fuel(s) with negative book stock`
+                    : noOpening.length ? `${noOpening.length} fuel(s) with no opening stock for the year`
+                    : rows.length ? 'Book stock is positive for every fuel; compare it with the physical stock'
+                    : 'No fuel bought on tank invoices in the period'
             };
         }
     }
@@ -449,7 +512,7 @@ async function runChecks(locationCode, fy) {
         results.push({
             code: check.code, stage: check.stage, title: check.title, why: check.why, fix: check.fix, fixUrl: check.fixUrl,
             status,
-            problemCount: res.showAll ? rows.filter(r => r.result && r.result !== 'pass' && r.result !== 'info').length : rows.length,
+            problemCount: res.showAll ? rows.filter(r => r.result === 'fail' || r.result === 'warn').length : rows.length,
             amount: res.amount != null ? Math.round(res.amount * 100) / 100 : null,
             summary: res.summary || (rows.length ? `${rows.length} row(s) to review` : 'Nothing found'),
             rows: rows.slice(0, MAX_ROWS),
