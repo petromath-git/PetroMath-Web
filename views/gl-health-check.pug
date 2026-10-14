@@ -1,0 +1,105 @@
+extends layout
+include mixins/mixins
+
+block content
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.flex-wrap.mb-3
+            h4.mb-0 Accounting Health Check
+            span
+                a.btn.btn-sm.btn-outline-secondary.mr-1(href="/gl/setup-check") Setup Check
+                a.btn.btn-sm.btn-outline-secondary(href="/gl/control") GL Control &rarr;
+
+        if !fy
+            .alert.alert-warning.py-2
+                | No financial year is set up for #{user.location_code}. Add one under GL &rarr; Financial Years first.
+        else
+            form.form-inline.mb-3(method="get" action="/gl/health-check")
+                input(type="hidden" name="run" value="1")
+                label.mr-2.small.text-muted(for="fy_id") Financial year
+                select.form-control.form-control-sm.mr-2#fy_id(name="fy_id")
+                    each y in years
+                        option(value=y.fy_id selected=(y.fy_id === fy.fy_id))= y.fy_name
+                button.btn.btn-primary.btn-sm(type="submit")
+                    i.bi.bi-play-fill.mr-1
+                    | Run checks
+                span.small.text-muted.ml-3= `${user.location_code} · ${fyLabel}`
+
+            if !report
+                .alert.alert-info.py-2
+                    | Choose the financial year and press #[strong Run checks]. Each check is one read-only query over that year's data; nothing is changed.
+            else
+                - var counts = report.counts
+                if counts.fail === 0 && counts.warn === 0 && counts.error === 0
+                    .alert.alert-success.py-2
+                        i.bi.bi-check-circle-fill.mr-1
+                        | All #{report.results.length} checks passed for #{user.location_code}, #{fy.fy_name}.
+                else
+                    .alert.py-2(class=counts.fail || counts.error ? "alert-danger" : "alert-warning")
+                        i.bi.bi-exclamation-triangle-fill.mr-1
+                        | #{counts.fail} failed, #{counts.warn} to review, #{counts.pass} passed#{counts.error ? `, ${counts.error} could not run` : ''} · run at #{report.ranAt}
+
+                each stage in report.stages
+                    - var stageResults = report.results.filter(function(r){ return r.stage === stage.key; })
+                    if stageResults.length
+                        h6.mt-4.mb-2
+                            | #{stage.label}
+                            small.text-muted.ml-2= stage.hint
+
+                        each c in stageResults
+                            - var idx = c.code
+                            - var hasRows = c.rows && c.rows.length > 0
+                            - var look = { pass: ["border-success","bi-check-circle-fill text-success","badge-success","PASS"], warn: ["border-warning","bi-exclamation-triangle-fill text-warning","badge-warning","REVIEW"], fail: ["border-danger","bi-x-circle-fill text-danger","badge-danger","FAIL"], error: ["border-secondary","bi-bug-fill text-secondary","badge-secondary","ERROR"] }[c.status]
+                            .card.mb-2(class=look[0])
+                                .card-header.py-2.d-flex.justify-content-between.align-items-center.flex-wrap.bg-light(data-toggle="collapse" data-target="#detail-" + idx style="cursor:pointer")
+                                    span
+                                        i.bi.mr-2(class=look[1])
+                                        span.badge.badge-light.mr-2= c.code
+                                        strong= c.title
+                                    span.d-flex.align-items-center
+                                        span.small.text-muted.mr-2= c.summary
+                                        if c.amount
+                                            span.small.mr-2= '₹' + Number(c.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        span.badge.mr-2(class=look[2])= look[3]
+                                        i.bi.bi-chevron-down.small.text-muted
+
+                                div.collapse(id="detail-" + idx class=(c.status === 'fail' || c.status === 'error') ? "show" : "")
+                                    .card-body.py-2
+                                        p.small.mb-1
+                                            strong.mr-1 Why it matters:
+                                            | #{c.why}
+                                        p.small.mb-2
+                                            strong.mr-1 What to do:
+                                            | #{c.fix}
+                                            if c.fixUrl
+                                                a.ml-1(href=c.fixUrl) Open &rarr;
+                                        if hasRows
+                                            - var cols = Object.keys(c.rows[0])
+                                            .table-responsive(style="max-height:420px; overflow:auto")
+                                                table.table.table-sm.table-bordered.mb-0
+                                                    thead.thead-light
+                                                        tr
+                                                            each col in cols
+                                                                th.small.text-nowrap= col.replace(/_/g, ' ')
+                                                    tbody
+                                                        each r in c.rows
+                                                            tr(class=r.result === 'fail' ? 'table-danger' : (r.result === 'warn' ? 'table-warning' : ''))
+                                                                each col in cols
+                                                                    - var v = r[col]
+                                                                    if typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && col !== 'voucher_no' && !/_id$/.test(col))
+                                                                        td.small.text-right.text-nowrap= Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 })
+                                                                    else
+                                                                        td.small= v == null ? '' : v
+                                            if c.truncated
+                                                p.small.text-muted.mt-1 Showing the first 500 rows.
+                                        p.small.text-muted.mt-1.mb-0= `${c.durationMs} ms`
+
+    script.
+        document.querySelectorAll('[data-toggle="collapse"]').forEach(function(header) {
+            var target = document.querySelector(header.getAttribute('data-target'));
+            var chevron = header.querySelector('.bi-chevron-down, .bi-chevron-up');
+            if (!target || !chevron) return;
+            if (target.classList.contains('show')) chevron.className = chevron.className.replace('bi-chevron-down', 'bi-chevron-up');
+            $(target).on('show.bs.collapse', function() { chevron.className = chevron.className.replace('bi-chevron-down', 'bi-chevron-up'); });
+            $(target).on('hide.bs.collapse', function() { chevron.className = chevron.className.replace('bi-chevron-up', 'bi-chevron-down'); });
+        });
