@@ -961,8 +961,8 @@ block content
                         label Vehicle Type
                         input.form-control.text-uppercase#quickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
                 .modal-footer
-                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
-                    button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()') Add Vehicle
+                    button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Cancel
+                    button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()' data-ck-key='V') Add Vehicle
     +closingShortcuts()
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
