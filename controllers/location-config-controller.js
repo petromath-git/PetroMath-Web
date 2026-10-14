@@ -154,6 +154,7 @@ module.exports = {
             // Prepare render data (following JSON pattern for future API reusability)
             const renderData = {
                 title: 'Location Configuration',
+                mobileReady: true,
                 user: req.user,
                 activeConfigsData: JSON.stringify(formattedActiveConfigs),
                 historyConfigsData: JSON.stringify(formattedHistoryConfigs),

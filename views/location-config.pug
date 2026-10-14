@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     style.
@@ -199,32 +200,34 @@ block content
             }
         }
 
-        /* Setting Catalog: stack each row as a block instead of a 5-column table */
-        @media (max-width: 767.98px) {
-            #catalog-table thead {
-                display: none;
-            }
-            #catalog-table,
-            #catalog-table tbody,
-            #catalog-table tr,
-            #catalog-table td {
+        /* Phones (Mobile Cards): config cards start collapsed to the setting name,
+           location and current value (.config-peek); tapping opens the rest.
+           The peek only shows on a collapsed phone card. */
+        .config-peek {
+            display: none;
+        }
+        @media (max-width: 767px) {
+            body.mobile-ready .m-card.m-collapsible:not(.card-open) .config-peek {
                 display: block;
-                width: 100% !important;
+                margin-top: 0.2rem;
+                font-size: 0.85rem;
+                font-weight: 400;
+                color: #495057;
+                overflow-wrap: anywhere;
             }
-            #catalog-table tr {
-                position: relative;
-                padding: 8px 0;
-                border-bottom: 1px solid #dee2e6;
+            /* location badge on its own line under the setting name */
+            body.mobile-ready .config-card .config-info .badge {
+                display: table;
+                margin-top: 0.3rem;
             }
-            #catalog-table td {
-                border: 0;
-                padding: 2px 52px 2px 4px;
+            /* Mobile Cards use outline buttons */
+            body.mobile-ready .config-card .edit-config-btn {
+                border-color: #007bff;
+                background: #fff;
+                color: #007bff;
             }
-            #catalog-table td:last-child {
-                position: absolute;
-                top: 8px;
-                right: 4px;
-                width: auto !important;
+            /* cards line up with the search box above */
+            body.mobile-ready .mobile-cards-view > .col-12 {
                 padding: 0;
             }
         }
@@ -332,7 +335,7 @@ block content
             if activeConfigs && activeConfigs.length > 0
                 each config, index in activeConfigs
                     .col-12
-                        .card.config-card(class=config.is_global ? 'global' : 'location-specific')
+                        .card.config-card.m-card.m-collapsible(class=config.is_global ? 'global' : 'location-specific')
                             .card-header.d-flex.justify-content-between.align-items-center
                                 .config-info
                                     strong= config.setting_name
@@ -340,6 +343,7 @@ block content
                                         .badge.badge-global.mt-1 GLOBAL
                                     else
                                         .badge.badge-location.mt-1= config.location_code
+                                    .config-peek= config.setting_value
                                 .config-actions
                                     if isSuperUser || !config.is_global
                                         button.btn.btn-primary.btn-sm.edit-config-btn(
@@ -416,14 +420,15 @@ block content
                 if historyConfigs && historyConfigs.length > 0
                     each config in historyConfigs
                         .col-12
-                            .card.config-card.border-secondary
+                            .card.config-card.border-secondary.m-card.m-collapsible
                                 .card-header.bg-secondary.text-white
                                     .config-info
                                         strong= config.setting_name
                                         if config.is_global
-                                            .badge.badge-light.text-dark.mt-1 GLOBAL
+                                            .badge.badge-secondary.mt-1 GLOBAL
                                         else
-                                            .badge.badge-light.text-dark.mt-1= config.location_code
+                                            .badge.badge-secondary.mt-1= config.location_code
+                                        .config-peek= config.setting_value
                                 .card-body.p-3
                                     .row.g-2
                                         .col-12
@@ -618,7 +623,7 @@ block content
                             autocomplete="off"
                         )
                     .table-responsive
-                        table.table.table-hover.table-sm#catalog-table
+                        table.table.table-hover.table-sm.m-stack#catalog-table
                             thead.thead-light.sticky-top
                                 tr
                                     th(scope="col" style="width: 18%;") Setting Name
@@ -630,11 +635,11 @@ block content
                                 if settingCatalog && settingCatalog.length > 0
                                     each entry in settingCatalog
                                         tr
-                                            td
+                                            td.m-title
                                                 strong= entry.setting_name
-                                            td.small= entry.short_description || '—'
-                                            td.small.text-muted= entry.detailed_description || '—'
-                                            td.small
+                                            td.small.m-wide(data-label='Short description')= entry.short_description || '—'
+                                            td.small.text-muted.m-wide(data-label='Details')= entry.detailed_description || '—'
+                                            td.small(data-label='Value rule')
                                                 if entry.value_type === 'LOOKUP'
                                                     span.badge.badge-info= entry.lookup_type
                                                 else if entry.value_type === 'NUMBER'
@@ -642,7 +647,7 @@ block content
                                                         = (entry.min_value !== null ? entry.min_value : '−∞') + ' to ' + (entry.max_value !== null ? entry.max_value : '+∞')
                                                 else
                                                     span.text-muted.small free text
-                                            td
+                                            td.m-actions
                                                 button.btn.btn-sm.btn-outline-secondary.edit-description-btn(
                                                     type="button",
                                                     data-setting-name=entry.setting_name
@@ -1145,3 +1150,5 @@ block content
                 alertDiv.fadeOut().removeClass('show');
             }, 5000);
         }
+
+    +cardToggleMobile('.m-card.m-collapsible')

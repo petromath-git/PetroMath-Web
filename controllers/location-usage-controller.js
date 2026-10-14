@@ -49,6 +49,7 @@ module.exports = {
 
             res.render('location-usage-matrix', {
                 title: 'Location Usage Matrix',
+                mobileReady: true,
                 records,
                 summary,
                 activeThreshold: ACTIVE_THRESHOLD_DAYS,

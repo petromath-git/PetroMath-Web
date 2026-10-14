@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     .container-fluid.mt-3
@@ -44,7 +45,7 @@ block content
                     small.text-muted#closedHiddenNote
 
             .table-responsive
-                table.table.table-sm.table-bordered.table-hover#locationUsageTable
+                table.table.table-sm.table-bordered.table-hover.m-stack.m-collapse#locationUsageTable
                     thead.thead-dark
                         tr
                             th Location Code
@@ -61,22 +62,22 @@ block content
                     tbody
                         each rec in records
                             tr(data-location-status=rec.is_active_location ? 'active' : 'closed')
-                                td= rec.location_code
-                                td= rec.location_name
-                                td
+                                td(data-label='Code')= rec.location_code
+                                td.m-title= rec.location_name
+                                td(data-label='Location status')
                                     if rec.is_active_location
                                         span.badge.badge-info Active
                                     else
                                         span.badge.badge-dark Closed
-                                td
+                                td.m-summary(data-label='Usage')
                                     span(class=`badge ${rec.status.badgeClass}`)= rec.status.label
-                                td.text-right= rec.total_shifts
-                                td.text-right= rec.closed_shifts
-                                td.text-right= rec.draft_shifts
-                                td.text-right= rec.shifts_last_30_days
-                                td= rec.first_shift_date
-                                td= rec.last_shift_date
-                                td.text-right= rec.days_since_last_shift != null ? rec.days_since_last_shift : '-'
+                                td.text-right(data-label='Total shifts')= rec.total_shifts
+                                td.text-right(data-label='Closed')= rec.closed_shifts
+                                td.text-right(data-label='Draft')= rec.draft_shifts
+                                td.text-right(data-label='Last 30 days')= rec.shifts_last_30_days
+                                td(data-label='First shift')= rec.first_shift_date
+                                td(data-label='Last shift')= rec.last_shift_date
+                                td.text-right(data-label='Days since last')= rec.days_since_last_shift != null ? rec.days_since_last_shift : '-'
         else
             .alert.alert-info No locations found.
 
@@ -101,3 +102,5 @@ block content
             toggle.addEventListener('change', applyFilter);
             applyFilter();
         });
+
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
