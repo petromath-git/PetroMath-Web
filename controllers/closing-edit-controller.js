@@ -143,6 +143,13 @@ module.exports = {
                 'N' // default - disabled
             );
 
+            // Keyboard shortcuts on the closing screen; N switches them off for everyone here
+            const closingShortcuts = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'SHIFT_CLOSING_SHORTCUTS',
+                'Y' // default - on
+            );
+
         if(closingId) {
             Promise.allSettled([homeController.personDataPromise(locationCode),
                 txnClosingPromise(closingId),
@@ -173,6 +180,7 @@ module.exports = {
                         user: req.user,
                         mobileReady: true,
                         showExShortBreakdown: showExShortBreakdown === 'Y',
+                        closingShortcuts: closingShortcuts !== 'N',
                         config: { ...config.APP_CONFIGS, maxCreditReceiptsRowCnt },
                         currentDate: utils.currentDate(),
                         minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
