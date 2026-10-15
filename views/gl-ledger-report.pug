@@ -47,9 +47,11 @@ block content
         if !ledger
             .alert.alert-info.py-2 Select a ledger to view its account statement.
         else
-            .mb-2
+            .mb-2.d-flex.align-items-center
                 span.font-weight-bold= ledger.ledger_name
                 span.text-muted.ml-2.small= ledger.group_name + ' — ' + ledger.group_nature
+                if allowManualOb && monthRows.length
+                    button.btn.btn-sm.btn-outline-primary.ml-auto(type="button" data-toggle="modal" data-target="#monthlyBalModal") Monthly Balances
 
             - const fmt = (n) => Math.abs(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})
             - const balLabel = (n) => n >= 0 ? fmt(n) + ' Dr' : fmt(n) + ' Cr'
@@ -122,6 +124,35 @@ block content
                                 td.text-right= fmt(periodCr)
                                 td.text-right= balLabel(closingBalance)
 
+            if allowManualOb && monthRows.length
+                #monthlyBalModal.modal.fade(tabindex="-1" role="dialog")
+                    .modal-dialog.modal-lg(role="document")
+                        .modal-content
+                            .modal-header.py-2
+                                div
+                                    h6.modal-title.mb-0 Monthly Balances — #{ledger.ledger_name}
+                                    .small.text-muted
+                                        | Starting from #{systemObNet !== null ? 'manual' : 'system'} opening #{balLabel(obNet)}
+                                button.close(type="button" data-dismiss="modal") &times;
+                            .modal-body.p-0
+                                .table-responsive
+                                    table.table.table-sm.table-bordered.mb-0#monthlyBalTable
+                                        thead.thead-light
+                                            tr
+                                                th Month
+                                                th.text-right Opening
+                                                th.text-right Debit (₹)
+                                                th.text-right Credit (₹)
+                                                th.text-right Closing
+                                        tbody
+                                            each m in monthRows
+                                                tr
+                                                    td.text-nowrap= m.label
+                                                    td.text-right.text-nowrap= balLabel(m.opening)
+                                                    td.text-right= m.dr > 0 ? fmt(m.dr) : ''
+                                                    td.text-right= m.cr > 0 ? fmt(m.cr) : ''
+                                                    td.text-right.text-nowrap.font-weight-bold= balLabel(m.closing)
+
     script.
         $(document).ready(function() {
             $('#ledgerSelect').select2({
@@ -147,4 +178,4 @@ block content
         });
 
     style.
-        #ledgerTable { font-size: 0.8rem; }
+        #ledgerTable, #monthlyBalTable { font-size: 0.8rem; }

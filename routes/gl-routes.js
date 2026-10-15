@@ -223,7 +223,7 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
     const ledgerId = req.query.ledger_id ? parseInt(req.query.ledger_id) : null;
 
     let ledger = null, entries = [], obNet = 0, periodDr = 0, periodCr = 0;
-    let allowManualOb = false, systemObNet = null;
+    let allowManualOb = false, systemObNet = null, monthRows = [];
     // Audit aid: an opening balance typed on screen (e.g. from the SAP / bank
     // statement) replaces the system opening for this view only — not saved.
     const manualObRaw  = (req.query.manual_ob || '').toString().replace(/,/g, '').trim();
@@ -268,6 +268,7 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
             const rows = await db.sequelize.query(`
                 SELECT
                     DATE_FORMAT(h.voucher_date, '%d-%b-%Y') AS voucher_date,
+                    DATE_FORMAT(h.voucher_date, '%Y-%m') AS voucher_ym,
                     h.voucher_no,
                     h.voucher_type,
                     h.is_reversal,
@@ -281,6 +282,22 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
                   AND h.voucher_date  BETWEEN :fromDate AND :toDate
                 ORDER BY h.voucher_date, h.voucher_id, l.line_no
             `, { replacements: { ledgerId, locationCode, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT });
+
+            // Month buckets covering [fromDate, toDate]
+            const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const fmtD = (ymd) => `${ymd.substring(8, 10)}-${MON[parseInt(ymd.substring(5, 7)) - 1]}-${ymd.substring(0, 4)}`;
+            const monthTotals = {};
+            for (let y = parseInt(fromDate.substring(0, 4)), mo = parseInt(fromDate.substring(5, 7));
+                 `${y}-${String(mo).padStart(2, '0')}` <= toDate.substring(0, 7);
+                 mo === 12 ? (y++, mo = 1) : mo++) {
+                const ym = `${y}-${String(mo).padStart(2, '0')}`;
+                const monthEnd = `${ym}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}`;
+                const start = fromDate > `${ym}-01` ? fromDate : `${ym}-01`;
+                const end   = toDate < monthEnd ? toDate : monthEnd;
+                const full  = start === `${ym}-01` && end === monthEnd;
+                monthRows.push({ ym, label: full ? `${MON[mo - 1]}-${y}` : `${fmtD(start)} to ${fmtD(end)}` });
+                monthTotals[ym] = { dr: 0, cr: 0 };
+            }
 
             // Compute running balance
             let running = obNet;
@@ -300,6 +317,23 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
                     cr_amount:    cr,
                     balance:      running
                 });
+                if (monthTotals[row.voucher_ym]) {
+                    monthTotals[row.voucher_ym].dr += dr;
+                    monthTotals[row.voucher_ym].cr += cr;
+                }
+            }
+
+            // Month-wise closing (audit cross-check against SAP / bank statements).
+            // First/last rows are clipped to the selected range, so a range shorter
+            // than a month is a single row with its actual dates.
+            let bal = obNet;
+            for (const m of monthRows) {
+                const t = monthTotals[m.ym];
+                m.opening = bal;
+                m.dr = t.dr;
+                m.cr = t.cr;
+                bal += t.dr - t.cr;
+                m.closing = bal;
             }
         }
 
@@ -320,6 +354,7 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
             manualOb:     allowManualOb ? manualObRaw : '',
             manualObSide,
             systemObNet,
+            monthRows,
             VOUCHER_TYPES
         });
     } catch (err) {
