@@ -212,6 +212,87 @@ router.get('/day-book', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNT
     }
 });
 
+// ── Statement balances for a ledger (audit cross-check) ───────────────────────
+// Finds the uploaded statement (t_bank_statement_actual) behind a GL ledger,
+// using the same mapping the accounting engine posts with: BANK ledger ->
+// m_bank.bank_id, SUPPLIER ledger -> the oil-company account with that
+// supplier_id. Returns null when there is no single statement to compare.
+//
+// Files are uploaded oldest-first or newest-first, so each file's direction is
+// detected from how its balances chain. Balances are returned in book terms
+// (Dr positive): a bank balance is money held (Dr); an oil-company SOA balance
+// is what we owe (Cr), so it is negated.
+async function loadStatementBook(ledger, locationCode) {
+    let banks = [];
+    if (ledger.source_type === 'BANK' && ledger.source_id) {
+        banks = await db.sequelize.query(`
+            SELECT bank_id, account_nickname, is_oil_company FROM m_bank
+            WHERE bank_id = :id AND location_code = :locationCode
+        `, { replacements: { id: ledger.source_id, locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+    } else if (ledger.source_type === 'SUPPLIER' && ledger.source_id) {
+        banks = await db.sequelize.query(`
+            SELECT bank_id, account_nickname, is_oil_company FROM m_bank
+            WHERE supplier_id = :id AND location_code = :locationCode AND is_oil_company = 'Y'
+        `, { replacements: { id: ledger.source_id, locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+    }
+    if (!banks.length) return null;
+
+    const rows = await db.sequelize.query(`
+        SELECT actual_stmt_id, bank_id, DATE_FORMAT(txn_date, '%Y-%m-%d') AS d,
+               COALESCE(credit_amount, 0) AS cr, COALESCE(debit_amount, 0) AS dr,
+               balance_amount AS bal, COALESCE(source_file, '') AS f
+        FROM t_bank_statement_actual
+        WHERE bank_id IN (:ids) AND balance_amount IS NOT NULL
+        ORDER BY actual_stmt_id
+    `, { replacements: { ids: banks.map(b => b.bank_id) }, type: db.Sequelize.QueryTypes.SELECT });
+
+    const withData = banks.filter(b => rows.some(r => r.bank_id === b.bank_id));
+    if (withData.length !== 1) return withData.length ? { ambiguous: withData.map(b => b.account_nickname) } : null;
+    const bank = withData[0];
+    const isOil = bank.is_oil_company === 'Y';
+    // Movement that a row adds to the statement balance, in statement terms
+    const move = (r) => isOil ? (+r.dr - +r.cr) : (+r.cr - +r.dr);
+
+    // Group by file, put each file in statement (chronological) order
+    const files = {};
+    for (const r of rows) {
+        if (r.bank_id !== bank.bank_id) continue;
+        (files[r.f] = files[r.f] || []).push(r);
+    }
+    // Per date, the closing balance from the most recently uploaded file covering it
+    const dayClose = {};
+    const fileList = Object.values(files).sort((a, b) => a[a.length - 1].actual_stmt_id - b[b.length - 1].actual_stmt_id);
+    let first = null;   // earliest row in statement order (to back out an opening)
+    for (const list of fileList) {
+        let fwd = 0, back = 0;
+        for (let i = 1; i < list.length; i++) {
+            if (Math.abs(+list[i - 1].bal + move(list[i]) - +list[i].bal) < 0.01) fwd++;
+            if (Math.abs(+list[i].bal + move(list[i - 1]) - +list[i - 1].bal) < 0.01) back++;
+        }
+        const ordered = back > fwd ? list.slice().reverse() : list;
+        for (const r of ordered) dayClose[r.d] = +r.bal;   // last row of a day wins
+        const f0 = ordered[0];
+        if (!first || f0.d < first.d) first = f0;
+    }
+    const dates = Object.keys(dayClose).sort();
+    const toBook = (bal) => isOil ? -bal : bal;
+
+    // Statement balance at the end of `ymd` (book terms), or null if before the statement starts
+    const closingAt = (ymd) => {
+        let lo = 0, hi = dates.length - 1, idx = -1;
+        while (lo <= hi) { const mid = (lo + hi) >> 1; if (dates[mid] <= ymd) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+        if (idx >= 0) return toBook(dayClose[dates[idx]]);
+        // Before the first statement date: back out the first row's movement
+        return toBook(+first.bal - move(first));
+    };
+    return {
+        nickname: bank.account_nickname,
+        firstDate: dates[0],
+        lastDate: dates[dates.length - 1],
+        closingAt
+    };
+}
+
 // ── Ledger Report ─────────────────────────────────────────────────────────────
 // GET /gl/ledger?ledger_id=&from_date=&to_date=
 
@@ -223,12 +304,19 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
     const ledgerId = req.query.ledger_id ? parseInt(req.query.ledger_id) : null;
 
     let ledger = null, entries = [], obNet = 0, periodDr = 0, periodCr = 0;
+    let allowManualOb = false, systemObNet = null, monthRows = [], stmt = null;
+    // Audit aid: an opening balance typed on screen (e.g. from the SAP / bank
+    // statement) replaces the system opening for this view only — not saved.
+    const manualObRaw  = (req.query.manual_ob || '').toString().replace(/,/g, '').trim();
+    const manualObSide = req.query.manual_ob_side === 'CR' ? 'CR' : 'DR';
 
     try {
+        allowManualOb = (await getLocationConfigValue(locationCode, 'GL_LEDGER_MANUAL_OPENING', 'N')) === 'Y';
+
         if (ledgerId) {
             // Fetch ledger meta
             const ledgerRows = await db.sequelize.query(`
-                SELECT l.ledger_id, l.ledger_name, g.group_name, g.group_nature
+                SELECT l.ledger_id, l.ledger_name, l.source_type, l.source_id, g.group_name, g.group_nature
                 FROM gl_ledgers l
                 JOIN gl_ledger_groups g ON g.group_id = l.group_id
                 WHERE l.ledger_id = :ledgerId AND l.location_code = :locationCode
@@ -251,10 +339,17 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
 
             obNet = parseFloat(obRows[0].ob_dr) - parseFloat(obRows[0].ob_cr);
 
+            const manualAmt = parseFloat(manualObRaw);
+            if (allowManualOb && manualObRaw !== '' && !isNaN(manualAmt)) {
+                systemObNet = obNet;
+                obNet = manualObSide === 'CR' ? -Math.abs(manualAmt) : Math.abs(manualAmt);
+            }
+
             // Period entries
             const rows = await db.sequelize.query(`
                 SELECT
                     DATE_FORMAT(h.voucher_date, '%d-%b-%Y') AS voucher_date,
+                    DATE_FORMAT(h.voucher_date, '%Y-%m') AS voucher_ym,
                     h.voucher_no,
                     h.voucher_type,
                     h.is_reversal,
@@ -268,6 +363,22 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
                   AND h.voucher_date  BETWEEN :fromDate AND :toDate
                 ORDER BY h.voucher_date, h.voucher_id, l.line_no
             `, { replacements: { ledgerId, locationCode, fromDate, toDate }, type: db.Sequelize.QueryTypes.SELECT });
+
+            // Month buckets covering [fromDate, toDate]
+            const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const fmtD = (ymd) => `${ymd.substring(8, 10)}-${MON[parseInt(ymd.substring(5, 7)) - 1]}-${ymd.substring(0, 4)}`;
+            const monthTotals = {};
+            for (let y = parseInt(fromDate.substring(0, 4)), mo = parseInt(fromDate.substring(5, 7));
+                 `${y}-${String(mo).padStart(2, '0')}` <= toDate.substring(0, 7);
+                 mo === 12 ? (y++, mo = 1) : mo++) {
+                const ym = `${y}-${String(mo).padStart(2, '0')}`;
+                const monthEnd = `${ym}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}`;
+                const start = fromDate > `${ym}-01` ? fromDate : `${ym}-01`;
+                const end   = toDate < monthEnd ? toDate : monthEnd;
+                const full  = start === `${ym}-01` && end === monthEnd;
+                monthRows.push({ ym, end, label: full ? `${MON[mo - 1]}-${y}` : `${fmtD(start)} to ${fmtD(end)}` });
+                monthTotals[ym] = { dr: 0, cr: 0 };
+            }
 
             // Compute running balance
             let running = obNet;
@@ -287,6 +398,46 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
                     cr_amount:    cr,
                     balance:      running
                 });
+                if (monthTotals[row.voucher_ym]) {
+                    monthTotals[row.voucher_ym].dr += dr;
+                    monthTotals[row.voucher_ym].cr += cr;
+                }
+            }
+
+            // Month-wise closing (audit cross-check against SAP / bank statements).
+            // First/last rows are clipped to the selected range, so a range shorter
+            // than a month is a single row with its actual dates.
+            let bal = obNet;
+            for (const m of monthRows) {
+                const t = monthTotals[m.ym];
+                m.opening = bal;
+                m.dr = t.dr;
+                m.cr = t.cr;
+                bal += t.dr - t.cr;
+                m.closing = bal;
+            }
+
+            // Statement side of the Monthly Balances popup
+            if (allowManualOb) {
+                const sb = await loadStatementBook(ledger, locationCode);
+                if (sb && sb.ambiguous) {
+                    stmt = { ambiguous: sb.ambiguous.join(', ') };
+                } else if (sb) {
+                    const dayBefore = new Date(Date.UTC(+fromDate.substring(0, 4), +fromDate.substring(5, 7) - 1, +fromDate.substring(8, 10) - 1))
+                        .toISOString().substring(0, 10);
+                    stmt = {
+                        nickname:  sb.nickname,
+                        firstDate: fmtD(sb.firstDate),
+                        lastDate:  fmtD(sb.lastDate),
+                        opening:   sb.closingAt(dayBefore)
+                    };
+                    for (const m of monthRows) {
+                        if (m.end < sb.firstDate) continue;    // statement not started yet
+                        m.stmtClosing = sb.closingAt(m.end);
+                        m.stmtPartial = m.end > sb.lastDate;   // statement ends before this row's end
+                        m.diff = Math.round((m.closing - m.stmtClosing) * 100) / 100;
+                    }
+                }
             }
         }
 
@@ -303,6 +454,12 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
             periodDr,
             periodCr,
             closingBalance: obNet + periodDr - periodCr,
+            allowManualOb,
+            manualOb:     allowManualOb ? manualObRaw : '',
+            manualObSide,
+            systemObNet,
+            monthRows,
+            stmt,
             VOUCHER_TYPES
         });
     } catch (err) {
