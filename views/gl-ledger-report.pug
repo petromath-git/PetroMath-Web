@@ -133,6 +133,16 @@ block content
                                     h6.modal-title.mb-0 Monthly Balances — #{ledger.ledger_name}
                                     .small.text-muted
                                         | Starting from #{systemObNet !== null ? 'manual' : 'system'} opening #{balLabel(obNet)}
+                                    if stmt && stmt.ambiguous
+                                        .small.text-warning More than one statement is linked to this ledger (#{stmt.ambiguous}) — statement comparison not shown.
+                                    else if stmt
+                                        .small.text-muted
+                                            | Statement: #{stmt.nickname} (#{stmt.firstDate} to #{stmt.lastDate})
+                                            if stmt.opening !== null && stmt.opening !== undefined
+                                                |  · opening #{balLabel(stmt.opening)}
+                                                if Math.abs(stmt.opening - obNet) >= 0.005
+                                                    |  ·
+                                                    a.ml-1(href=`/gl/ledger?ledger_id=${ledgerId}&from_date=${fromDate}&to_date=${toDate}&manual_ob=${Math.abs(stmt.opening).toFixed(2)}&manual_ob_side=${stmt.opening < 0 ? 'CR' : 'DR'}&show_monthly=1`) Use statement opening
                                 button.close(type="button" data-dismiss="modal") &times;
                             .modal-body.p-0
                                 .table-responsive
@@ -144,6 +154,9 @@ block content
                                                 th.text-right Debit (₹)
                                                 th.text-right Credit (₹)
                                                 th.text-right Closing
+                                                if stmt && !stmt.ambiguous
+                                                    th.text-right Statement Closing
+                                                    th.text-right Difference
                                         tbody
                                             each m in monthRows
                                                 tr
@@ -152,9 +165,23 @@ block content
                                                     td.text-right= m.dr > 0 ? fmt(m.dr) : ''
                                                     td.text-right= m.cr > 0 ? fmt(m.cr) : ''
                                                     td.text-right.text-nowrap.font-weight-bold= balLabel(m.closing)
+                                                    if stmt && !stmt.ambiguous
+                                                        if m.stmtClosing === undefined
+                                                            td.text-right.text-muted —
+                                                            td
+                                                        else
+                                                            td.text-right.text-nowrap(title=(m.stmtPartial ? 'Statement ends ' + stmt.lastDate : ''))
+                                                                = balLabel(m.stmtClosing)
+                                                                if m.stmtPartial
+                                                                    | *
+                                                            td.text-right.text-nowrap(class=(Math.abs(m.diff) >= 0.005 ? 'text-danger font-weight-bold' : 'text-success'))
+                                                                = Math.abs(m.diff) >= 0.005 ? balLabel(m.diff) : '✓'
+                                if stmt && !stmt.ambiguous && monthRows.some(m => m.stmtPartial)
+                                    .small.text-muted.px-3.py-1 * Statement uploaded only up to #{stmt.lastDate}.
 
     script.
         $(document).ready(function() {
+            if (/[?&]show_monthly=1/.test(location.search)) $('#monthlyBalModal').modal('show');
             $('#ledgerSelect').select2({
                 placeholder: '— Search ledger —',
                 allowClear: true,
