@@ -300,6 +300,84 @@ const CHECKS = [
         }
     },
     {
+        code: 'P11', stage: 'PRE', severity: 'fail',
+        title: 'Oil-company purchase lines that post to GL',
+        why: 'The tank invoice already books each load as a purchase. If the matching debit on the oil company\'s statement also posts (for example to OTHERS or an expense), every load is counted twice and profit is understated by the full purchase value.',
+        fix: 'Give these statement lines a purchase label whose rule is SKIP (as PURCHASE INVOICE / IOCL FUEL PURCHASE are elsewhere), or set the label\'s rule to SKIP on the Static Ledger Map screen.',
+        fixUrl: '/gl/static-ledger-map',
+        run: async c => {
+            // Same purchase rule as P06; GL itself skips labels mapped to a Purchase Accounts ledger.
+            const rows = await q(`
+                SELECT COALESCE(t.ledger_name,'') label, s.treatment, COALESCE(gl.ledger_name,'(none)') posts_to,
+                       COALESCE(g.group_name,'') group_name, COUNT(*) n, ROUND(SUM(t.debit_amount),2) amount,
+                       MIN(t.trans_date) first_day, MAX(t.trans_date) last_day
+                FROM t_bank_transaction t
+                JOIN m_bank b ON b.bank_id = t.bank_id AND b.is_oil_company = 'Y'
+                JOIN gl_static_ledger_map s ON s.location_code = b.location_code AND s.ledger_name = t.ledger_name
+                LEFT JOIN gl_ledgers gl ON gl.ledger_id = s.gl_ledger_id
+                LEFT JOIN gl_ledger_groups g ON g.group_id = gl.group_id
+                WHERE b.location_code = :loc AND t.trans_date BETWEEN :from AND :to AND t.debit_amount >= 50000
+                  AND COALESCE(t.ledger_name,'') <> 'CASH'
+                  AND UPPER(COALESCE(t.ledger_name,'')) NOT REGEXP :notPurchase
+                  AND UPPER(COALESCE(t.remarks,'')) NOT REGEXP :notPurchase
+                  AND (LOWER(t.external_source) = 'static' OR t.external_source IS NULL)
+                  AND s.treatment = 'POST' AND COALESCE(g.group_name,'') <> 'Purchase Accounts'
+                GROUP BY 1, 2, 3, 4
+                ORDER BY amount DESC`, Object.assign({ notPurchase: SAP_NOT_PURCHASE }, c.r));
+            return { rows, amount: sum(rows, 'amount') };
+        }
+    },
+    {
+        code: 'P12', stage: 'PRE', severity: 'fail',
+        title: 'Payments to the oil company booked in the P&L or twice',
+        why: 'A payment from the bank to the oil company must reduce what is owed to it, and must post once: from the bank\'s statement, with the oil company\'s copy tagged to that bank (GL skips it). A payment label posting to an expense ledger understates profit by every rupee paid; an untagged copy on the oil company\'s statement posts the payment a second time.',
+        fix: 'Point the bank-side payment label at the oil company\'s supplier ledger on the Static Ledger Map screen, and tag the oil company\'s copy of each payment to the paying bank on the oil-company statement screen.',
+        fixUrl: '/gl/static-ledger-map',
+        run: async c => {
+            // (a) bank debits that reappear as a credit on the oil-company statement (same amount, within 3 days)
+            //     but whose label posts to an income / expense ledger
+            const expensed = await q(`
+                SELECT 'Payment booked as P&L' issue, b.bank_name, t.ledger_name label, gl.ledger_name posts_to, g.group_name,
+                       COUNT(*) n, ROUND(SUM(t.debit_amount),2) amount, MIN(t.trans_date) first_day, MAX(t.trans_date) last_day
+                FROM t_bank_transaction t
+                JOIN m_bank b ON b.bank_id = t.bank_id AND COALESCE(b.is_oil_company,'N') <> 'Y'
+                JOIN gl_static_ledger_map s ON s.location_code = b.location_code AND s.ledger_name = t.ledger_name AND s.treatment = 'POST'
+                JOIN gl_ledgers gl ON gl.ledger_id = s.gl_ledger_id
+                JOIN gl_ledger_groups g ON g.group_id = gl.group_id AND g.group_nature IN ('INCOME','EXPENSES')
+                WHERE b.location_code = :loc AND t.trans_date BETWEEN :from AND :to AND t.debit_amount >= 50000
+                  AND (LOWER(t.external_source) = 'static' OR t.external_source IS NULL)
+                  AND EXISTS (SELECT 1 FROM t_bank_transaction o JOIN m_bank ob ON ob.bank_id = o.bank_id
+                              WHERE ob.location_code = :loc AND ob.is_oil_company = 'Y' AND o.credit_amount = t.debit_amount
+                                AND o.trans_date BETWEEN DATE_SUB(t.trans_date, INTERVAL 3 DAY) AND DATE_ADD(t.trans_date, INTERVAL 3 DAY))
+                GROUP BY 1, 2, 3, 4, 5`, c.r);
+            // (b) a credit on the oil-company statement (it always reduces what is owed to the oil company) that is
+            //     not tagged to a bank and not on SKIP, while a payment from our bank of the same amount within
+            //     3 days ALSO reduces what is owed to that same oil company: the payment posts twice. A bank debit
+            //     posting elsewhere (e.g. repaying a dealer-finance loan that paid the oil company) is not a duplicate.
+            const twice = await q(`
+                SELECT 'Oil-company copy not tagged to the bank' issue, ob.bank_name, o.ledger_name label,
+                       COALESCE(s.treatment,'no rule') posts_to, '' group_name,
+                       COUNT(*) n, ROUND(SUM(o.credit_amount),2) amount, MIN(o.trans_date) first_day, MAX(o.trans_date) last_day
+                FROM t_bank_transaction o
+                JOIN m_bank ob ON ob.bank_id = o.bank_id AND ob.is_oil_company = 'Y'
+                LEFT JOIN gl_static_ledger_map s ON s.location_code = ob.location_code AND s.ledger_name = o.ledger_name
+                WHERE ob.location_code = :loc AND o.trans_date BETWEEN :from AND :to AND o.credit_amount >= 50000
+                  AND o.ledger_name IS NOT NULL
+                  AND COALESCE(LOWER(o.external_source),'') NOT IN ('bank', 'supplier')
+                  AND COALESCE(s.treatment,'') <> 'SKIP'
+                  AND EXISTS (SELECT 1 FROM t_bank_transaction t JOIN m_bank b ON b.bank_id = t.bank_id
+                              LEFT JOIN gl_static_ledger_map ts ON ts.location_code = b.location_code AND ts.ledger_name = t.ledger_name
+                              LEFT JOIN gl_ledgers tl ON tl.ledger_id = ts.gl_ledger_id
+                              WHERE b.location_code = :loc AND COALESCE(b.is_oil_company,'N') <> 'Y' AND t.debit_amount = o.credit_amount
+                                AND t.trans_date BETWEEN DATE_SUB(o.trans_date, INTERVAL 3 DAY) AND DATE_ADD(o.trans_date, INTERVAL 3 DAY)
+                                AND ((LOWER(t.external_source) = 'supplier' AND t.external_id = ob.supplier_id)
+                                     OR (ts.treatment = 'POST' AND tl.source_type = 'SUPPLIER' AND tl.source_id = ob.supplier_id)))
+                GROUP BY 1, 2, 3, 4`, c.r);
+            const rows = expensed.concat(twice);
+            return { rows, amount: sum(rows, 'amount') };
+        }
+    },
+    {
         code: 'A01', stage: 'POST', severity: 'fail',
         title: 'GL events not processed',
         why: 'An event in ERROR or UNPROCESSED means a sale, receipt, bank line or cashflow line is missing from the books.',
