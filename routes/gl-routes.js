@@ -223,8 +223,15 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
     const ledgerId = req.query.ledger_id ? parseInt(req.query.ledger_id) : null;
 
     let ledger = null, entries = [], obNet = 0, periodDr = 0, periodCr = 0;
+    let allowManualOb = false, systemObNet = null;
+    // Audit aid: an opening balance typed on screen (e.g. from the SAP / bank
+    // statement) replaces the system opening for this view only — not saved.
+    const manualObRaw  = (req.query.manual_ob || '').toString().replace(/,/g, '').trim();
+    const manualObSide = req.query.manual_ob_side === 'CR' ? 'CR' : 'DR';
 
     try {
+        allowManualOb = (await getLocationConfigValue(locationCode, 'GL_LEDGER_MANUAL_OPENING', 'N')) === 'Y';
+
         if (ledgerId) {
             // Fetch ledger meta
             const ledgerRows = await db.sequelize.query(`
@@ -250,6 +257,12 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
             `, { replacements: { ledgerId, locationCode, fromDate }, type: db.Sequelize.QueryTypes.SELECT });
 
             obNet = parseFloat(obRows[0].ob_dr) - parseFloat(obRows[0].ob_cr);
+
+            const manualAmt = parseFloat(manualObRaw);
+            if (allowManualOb && manualObRaw !== '' && !isNaN(manualAmt)) {
+                systemObNet = obNet;
+                obNet = manualObSide === 'CR' ? -Math.abs(manualAmt) : Math.abs(manualAmt);
+            }
 
             // Period entries
             const rows = await db.sequelize.query(`
@@ -303,6 +316,10 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
             periodDr,
             periodCr,
             closingBalance: obNet + periodDr - periodCr,
+            allowManualOb,
+            manualOb:     allowManualOb ? manualObRaw : '',
+            manualObSide,
+            systemObNet,
             VOUCHER_TYPES
         });
     } catch (err) {

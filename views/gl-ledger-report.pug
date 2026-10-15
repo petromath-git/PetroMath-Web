@@ -32,6 +32,15 @@ block content
             .col-auto
                 label.small.mb-1 To Date
                 input.form-control.form-control-sm#glTo(type="date" name="to_date" value=toDate)
+            if allowManualOb
+                .col-auto
+                    label.small.mb-1(title="Not saved — e.g. the SAP / bank statement opening, to compare closing balances") Opening Balance (manual)
+                    .input-group.input-group-sm
+                        input.form-control.form-control-sm(type="number" step="0.01" min="0" name="manual_ob" value=manualOb placeholder="System" style="width:130px")
+                        .input-group-append
+                            select.form-control.form-control-sm(name="manual_ob_side" style="width:60px")
+                                option(value="DR" selected=(manualObSide !== 'CR')) Dr
+                                option(value="CR" selected=(manualObSide === 'CR')) Cr
             .col-auto.align-self-end
                 button.btn.btn-primary.btn-sm(type="submit") View
 
@@ -48,8 +57,14 @@ block content
             .row.mb-3
                 .col-3
                     .card.text-center.py-2
-                        .small.text-muted Opening Balance
+                        .small.text-muted
+                            | Opening Balance
+                            if systemObNet !== null
+                                |
+                                span.badge.badge-warning.ml-1 Manual
                         strong(class=(obNet >= 0 ? 'text-dark' : 'text-danger'))= balLabel(obNet)
+                        if systemObNet !== null
+                            .small.text-muted System: #{balLabel(systemObNet)}
                 .col-3
                     .card.text-center.py-2
                         .small.text-muted Period DR (₹)
@@ -79,7 +94,7 @@ block content
                                 th.text-right(style="width:120px") Balance
                         tbody
                             tr.table-light.font-weight-bold
-                                td(colspan="6") Opening Balance
+                                td(colspan="6")= systemObNet !== null ? 'Opening Balance (manual — not saved)' : 'Opening Balance'
                                 td.text-right= balLabel(obNet)
                             each e in entries
                                 tr(class=(e.is_reversal === 'Y' ? 'table-warning' : ''))
