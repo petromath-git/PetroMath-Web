@@ -126,7 +126,7 @@ block content
 
             if allowManualOb && monthRows.length
                 #monthlyBalModal.modal.fade(tabindex="-1" role="dialog")
-                    .modal-dialog.modal-lg(role="document")
+                    .modal-dialog.modal-xl(role="document")
                         .modal-content
                             .modal-header.py-2
                                 div
@@ -159,8 +159,9 @@ block content
                                                     th.text-right Difference
                                         tbody
                                             each m in monthRows
-                                                tr
-                                                    td.text-nowrap= m.label
+                                                tr(data-ym=m.ym)
+                                                    td.text-nowrap
+                                                        a.mb-daily-link(href="#" title="Show this month day by day" data-start=m.start data-end=m.end data-opening=m.opening.toFixed(2) data-label=m.label data-ym=m.ym)= m.label
                                                     td.text-right.text-nowrap= balLabel(m.opening)
                                                     td.text-right= m.dr > 0 ? fmt(m.dr) : ''
                                                     td.text-right= m.cr > 0 ? fmt(m.cr) : ''
@@ -178,10 +179,13 @@ block content
                                                                 = Math.abs(m.diff) >= 0.005 ? balLabel(m.diff) : '✓'
                                 if stmt && !stmt.ambiguous && monthRows.some(m => m.stmtPartial)
                                     .small.text-muted.px-3.py-1 * Statement uploaded only up to #{stmt.lastDate}.
+                                .small.text-muted.px-3.py-1 Click a month to see it day by day.
+                                #mbDaily.border-top.d-none(data-ledger=ledgerId)
 
     script.
         $(document).ready(function() {
             if (/[?&]show_monthly=1/.test(location.search)) $('#monthlyBalModal').modal('show');
+            initMonthlyDrill();
             $('#ledgerSelect').select2({
                 placeholder: '— Search ledger —',
                 allowClear: true,
@@ -204,5 +208,113 @@ block content
             });
         });
 
+        // ── Monthly Balances → one month day by day ──
+        function initMonthlyDrill() {
+            var $box = $('#mbDaily');
+            if (!$box.length) return;
+            var MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+            var current = null, showAll = false, showSmall = false;
+            var SMALL = 1;   // paise rounding on invoices (book in paise, SAP in whole rupees)
+
+            function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+            function fmt(n) { return Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+            function bal(n) { return fmt(n) + (n >= 0 ? ' Dr' : ' Cr'); }
+            function amt(n) { return n > 0 ? fmt(n) : ''; }
+            function dmy(ymd) { return ymd.substring(8, 10) + '-' + MON[+ymd.substring(5, 7) - 1] + '-' + ymd.substring(0, 4); }
+            function signed(n) { return (n > 0 ? '+' : '−') + fmt(n); }
+
+            function entriesHtml(d) {
+                var gl = (d.glEntries || []).map(function(e) {
+                    return '<tr><td class="text-nowrap">' + esc(e.voucher_no) + '</td><td>' + esc(e.narration) + '</td>' +
+                        '<td class="text-right">' + amt(e.dr) + '</td><td class="text-right">' + amt(e.cr) + '</td></tr>';
+                }).join('') || '<tr><td colspan="4" class="text-muted">No entries</td></tr>';
+                var st = (d.stmtEntries || []).map(function(e) {
+                    return '<tr><td>' + esc(e.description) + '</td>' +
+                        '<td class="text-right">' + amt(e.dr) + '</td><td class="text-right">' + amt(e.cr) + '</td></tr>';
+                }).join('') || '<tr><td colspan="3" class="text-muted">No entries</td></tr>';
+                return '<tr class="mb-daily-detail"><td colspan="7" class="bg-light p-2"><div class="row">' +
+                    '<div class="col-md-6"><div class="small font-weight-bold mb-1">PetroMath</div>' +
+                    '<table class="table table-sm table-bordered bg-white mb-0"><thead><tr><th>Voucher</th><th>Particulars</th><th class="text-right">Dr</th><th class="text-right">Cr</th></tr></thead><tbody>' + gl + '</tbody></table></div>' +
+                    '<div class="col-md-6"><div class="small font-weight-bold mb-1">Statement</div>' +
+                    '<table class="table table-sm table-bordered bg-white mb-0"><thead><tr><th>Description</th><th class="text-right">Dr</th><th class="text-right">Cr</th></tr></thead><tbody>' + st + '</tbody></table></div>' +
+                    '</div></td></tr>';
+            }
+
+            function render() {
+                var data = current.data;
+                var anyChange = data.days.filter(function(d) { return d.change && Math.abs(d.change) >= 0.005; });
+                var changed = anyChange.filter(function(d) { return showSmall || Math.abs(d.change) >= SMALL; });
+                var smallCount = anyChange.length - anyChange.filter(function(d) { return Math.abs(d.change) >= SMALL; }).length;
+                var html = '<div class="d-flex align-items-center px-3 pt-2 pb-1">' +
+                    '<strong>' + esc(current.label) + ' — day by day</strong>';
+                if (data.hasStmt) {
+                    html += '<label class="small mb-0 ml-3"><input type="checkbox" id="mbDailySmall"' + (showSmall ? ' checked' : '') + '> Include changes under ₹1</label>' +
+                        '<label class="small mb-0 ml-3"><input type="checkbox" id="mbDailyAll"' + (showAll ? ' checked' : '') + '> Show all days</label>';
+                }
+                html += '<a href="#" class="small ml-auto" id="mbDailyClose">Close</a></div>';
+                if (data.hasStmt && !showAll) {
+                    var note = !changed.length
+                        ? '<span class="text-success">No new difference in this period ✓</span>'
+                        : 'Days where the difference changes (' + changed.length + '). A change reversed the next day is usually the same entry posted a day apart.';
+                    if (!showSmall && smallCount) note += ' ' + smallCount + ' day(s) with paise rounding under ₹1 hidden.';
+                    html += '<div class="px-3 pb-1 small text-muted">' + note + '</div>';
+                }
+                var rows = (data.hasStmt && !showAll) ? changed : data.days;
+                if (rows.length) {
+                    html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0" id="mbDailyTable"><thead class="thead-light"><tr>' +
+                        '<th>Date</th><th class="text-right">Debit (₹)</th><th class="text-right">Credit (₹)</th><th class="text-right">Closing</th>' +
+                        (data.hasStmt ? '<th class="text-right">Statement Closing</th><th class="text-right">Difference</th><th class="text-right">Change</th>' : '') +
+                        '</tr></thead><tbody>';
+                    rows.forEach(function(d) {
+                        var isChange = d.change && Math.abs(d.change) >= (showSmall ? 0.005 : SMALL);
+                        html += '<tr' + (isChange ? ' class="table-warning"' : '') + '><td class="text-nowrap">' + dmy(d.date) + '</td>' +
+                            '<td class="text-right">' + amt(d.dr) + '</td><td class="text-right">' + amt(d.cr) + '</td>' +
+                            '<td class="text-right text-nowrap font-weight-bold">' + bal(d.closing) + '</td>';
+                        if (data.hasStmt) {
+                            if (d.stmtClosing === undefined) {
+                                html += '<td class="text-right text-muted">—</td><td></td><td></td>';
+                            } else {
+                                html += '<td class="text-right text-nowrap">' + bal(d.stmtClosing) + (d.date > data.stmtLastDate ? ' *' : '') + '</td>' +
+                                    '<td class="text-right text-nowrap ' + (Math.abs(d.diff) >= 0.005 ? 'text-danger' : 'text-success') + '">' + (Math.abs(d.diff) >= 0.005 ? bal(d.diff) : '✓') + '</td>' +
+                                    '<td class="text-right text-nowrap font-weight-bold">' + (isChange ? signed(d.change) : '') + '</td>';
+                            }
+                        }
+                        html += '</tr>';
+                        if (isChange) html += entriesHtml(d);
+                    });
+                    html += '</tbody></table></div>';
+                }
+                $box.html(html).removeClass('d-none');
+            }
+
+            $('#monthlyBalTable').on('click', '.mb-daily-link', function(e) {
+                e.preventDefault();
+                var $a = $(this);
+                $('#monthlyBalTable tr').removeClass('table-active');
+                $a.closest('tr').addClass('table-active');
+                $box.removeClass('d-none').html('<div class="p-3 small text-muted">Loading…</div>');
+                $.getJSON('/gl/ledger/daily', {
+                    ledger_id: $box.data('ledger'),
+                    start: $a.data('start'),
+                    end: $a.data('end'),
+                    opening: $a.data('opening')
+                }).done(function(data) {
+                    current = { label: $a.data('label'), data: data };
+                    showAll = false;
+                    render();
+                    $box[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }).fail(function(xhr) {
+                    $box.html('<div class="p-3 small text-danger">' + esc((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load') + '</div>');
+                });
+            });
+            $box.on('change', '#mbDailyAll', function() { showAll = this.checked; render(); });
+            $box.on('change', '#mbDailySmall', function() { showSmall = this.checked; render(); });
+            $box.on('click', '#mbDailyClose', function(e) {
+                e.preventDefault();
+                $box.addClass('d-none').empty();
+                $('#monthlyBalTable tr').removeClass('table-active');
+            });
+        }
+
     style.
-        #ledgerTable, #monthlyBalTable { font-size: 0.8rem; }
+        #ledgerTable, #monthlyBalTable, #mbDaily { font-size: 0.8rem; }
