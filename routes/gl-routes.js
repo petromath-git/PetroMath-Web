@@ -240,7 +240,7 @@ async function loadStatementBook(ledger, locationCode) {
     const rows = await db.sequelize.query(`
         SELECT actual_stmt_id, bank_id, DATE_FORMAT(txn_date, '%Y-%m-%d') AS d,
                COALESCE(credit_amount, 0) AS cr, COALESCE(debit_amount, 0) AS dr,
-               balance_amount AS bal, COALESCE(source_file, '') AS f
+               balance_amount AS bal, COALESCE(source_file, '') AS f, description
         FROM t_bank_statement_actual
         WHERE bank_id IN (:ids) AND balance_amount IS NOT NULL
         ORDER BY actual_stmt_id
@@ -261,6 +261,7 @@ async function loadStatementBook(ledger, locationCode) {
     }
     // Per date, the closing balance from the most recently uploaded file covering it
     const dayClose = {};
+    const dayRows = {};   // per date, that file's rows in statement order (daily drill-down)
     const fileList = Object.values(files).sort((a, b) => a[a.length - 1].actual_stmt_id - b[b.length - 1].actual_stmt_id);
     let first = null;   // earliest row in statement order (to back out an opening)
     for (const list of fileList) {
@@ -270,6 +271,9 @@ async function loadStatementBook(ledger, locationCode) {
             if (Math.abs(+list[i].bal + move(list[i - 1]) - +list[i - 1].bal) < 0.01) back++;
         }
         const ordered = back > fwd ? list.slice().reverse() : list;
+        const fileDays = {};
+        for (const r of ordered) (fileDays[r.d] = fileDays[r.d] || []).push(r);
+        Object.assign(dayRows, fileDays);
         for (const r of ordered) dayClose[r.d] = +r.bal;   // last row of a day wins
         const f0 = ordered[0];
         if (!first || f0.d < first.d) first = f0;
@@ -289,7 +293,15 @@ async function loadStatementBook(ledger, locationCode) {
         nickname: bank.account_nickname,
         firstDate: dates[0],
         lastDate: dates[dates.length - 1],
-        closingAt
+        closingAt,
+        // Statement rows on `ymd` in book terms: a statement credit is a book Dr for
+        // both a bank (money in) and an oil-company SOA (we owe less), and vice versa
+        rowsOn: (ymd) => (dayRows[ymd] || []).map(r => ({
+            description: r.description,
+            dr: +r.cr,
+            cr: +r.dr,
+            balance: toBook(+r.bal)
+        }))
     };
 }
 
@@ -376,7 +388,7 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
                 const start = fromDate > `${ym}-01` ? fromDate : `${ym}-01`;
                 const end   = toDate < monthEnd ? toDate : monthEnd;
                 const full  = start === `${ym}-01` && end === monthEnd;
-                monthRows.push({ ym, end, label: full ? `${MON[mo - 1]}-${y}` : `${fmtD(start)} to ${fmtD(end)}` });
+                monthRows.push({ ym, start, end, label: full ? `${MON[mo - 1]}-${y}` : `${fmtD(start)} to ${fmtD(end)}` });
                 monthTotals[ym] = { dr: 0, cr: 0 };
             }
 
@@ -466,6 +478,83 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTIN
         console.error('Ledger report error:', err);
         req.flash('error', 'Failed to load Ledger Report: ' + err.message);
         res.redirect('/gl/day-book');
+    }
+});
+
+// ── Ledger Report: one month day by day vs the statement ─────────────────────
+// GET /gl/ledger/daily?ledger_id=&start=&end=&opening=
+// Drill-down from a Monthly Balances row. `opening` is that row's opening (book
+// terms, Dr +), so the days add up to the row exactly. Returns every day with its
+// closing and statement closing; days where the difference changes carry their
+// GL and statement entries so the cause can be read off directly.
+router.get('/ledger/daily', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    const ledgerId = parseInt(req.query.ledger_id);
+    const start    = String(req.query.start || '');
+    const end      = String(req.query.end || '');
+    const opening  = parseFloat(req.query.opening);
+    const ymdRe    = /^\d{4}-\d{2}-\d{2}$/;
+
+    try {
+        if ((await getLocationConfigValue(locationCode, 'GL_LEDGER_MANUAL_OPENING', 'N')) !== 'Y') {
+            return res.status(403).json({ error: 'Not enabled for this location' });
+        }
+        if (!ledgerId || !ymdRe.test(start) || !ymdRe.test(end) || start > end || isNaN(opening)) {
+            return res.status(400).json({ error: 'Invalid parameters' });
+        }
+
+        const ledgerRows = await db.sequelize.query(`
+            SELECT ledger_id, ledger_name, source_type, source_id
+            FROM gl_ledgers WHERE ledger_id = :ledgerId AND location_code = :locationCode
+        `, { replacements: { ledgerId, locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+        if (!ledgerRows.length) return res.status(404).json({ error: 'Ledger not found' });
+
+        const lines = await db.sequelize.query(`
+            SELECT DATE_FORMAT(h.voucher_date, '%Y-%m-%d') AS d, h.voucher_no, h.voucher_type,
+                   COALESCE(l.narration, h.narration) AS narration, l.dr_amount, l.cr_amount
+            FROM gl_journal_lines l
+            JOIN gl_journal_headers h ON h.voucher_id = l.voucher_id
+            WHERE l.ledger_id = :ledgerId AND h.location_code = :locationCode
+              AND h.voucher_date BETWEEN :start AND :end
+            ORDER BY h.voucher_date, h.voucher_id, l.line_no
+        `, { replacements: { ledgerId, locationCode, start, end }, type: db.Sequelize.QueryTypes.SELECT });
+        const byDay = {};
+        for (const l of lines) (byDay[l.d] = byDay[l.d] || []).push({
+            voucher_no: l.voucher_no, voucher_type: l.voucher_type, narration: l.narration,
+            dr: parseFloat(l.dr_amount || 0), cr: parseFloat(l.cr_amount || 0)
+        });
+
+        const sb = await loadStatementBook(ledgerRows[0], locationCode);
+        const hasStmt = !!(sb && !sb.ambiguous);
+        const addDay = (ymd, n) => new Date(Date.UTC(+ymd.substring(0, 4), +ymd.substring(5, 7) - 1, +ymd.substring(8, 10) + n))
+            .toISOString().substring(0, 10);
+
+        const r2 = (n) => Math.round(n * 100) / 100;
+        let bal = opening;
+        let prevDiff = hasStmt ? r2(opening - sb.closingAt(addDay(start, -1))) : null;
+        const days = [];
+        for (let d = start; d <= end; d = addDay(d, 1)) {
+            const gl = byDay[d] || [];
+            const dr = gl.reduce((s, x) => s + x.dr, 0);
+            const cr = gl.reduce((s, x) => s + x.cr, 0);
+            bal += dr - cr;
+            const day = { date: d, dr, cr, closing: bal };
+            if (hasStmt && d >= sb.firstDate) {
+                day.stmtClosing = sb.closingAt(d);
+                day.diff = r2(bal - day.stmtClosing);
+                day.change = r2(day.diff - prevDiff);
+                prevDiff = day.diff;
+                if (Math.abs(day.change) >= 0.005) {
+                    day.glEntries = gl;
+                    day.stmtEntries = sb.rowsOn(d);
+                }
+            }
+            days.push(day);
+        }
+        res.json({ hasStmt, stmtLastDate: hasStmt ? sb.lastDate : null, days });
+    } catch (err) {
+        console.error('Ledger daily error:', err);
+        res.status(500).json({ error: 'Failed to load daily balances' });
     }
 });
 
