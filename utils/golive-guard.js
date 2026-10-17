@@ -1,5 +1,6 @@
 // Go-live guard for screens that save dated bank entries.
-// Go-live = the location's first shift (see locationDao.getGoLiveDate); the
+// Go-live = the location's first shift, or an earlier GOLIVE_DATE location
+// setting (see locationDao.getGoLiveDate); the
 // golive-date-guard.sql triggers enforce the same rule in the database.
 const moment = require('moment');
 const locationDao = require('../dao/location-dao');
