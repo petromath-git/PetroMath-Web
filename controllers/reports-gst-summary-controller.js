@@ -4,6 +4,30 @@ const moment = require('moment');
 var locationdao = require("../dao/report-dao");
 var personDao = require("../dao/person-dao");
 
+// Fuel at the value actually charged: meter value, less billed below the pump
+// price, plus off-meter credit sales (getFuelBillAdjustments). 'amount' is the
+// figure to report; the parts are kept for the breakdown columns.
+async function getFuelSales(locationCode, fromDate, toDate) {
+  const [meterRows, adjRows] = await Promise.all([
+    GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate),
+    GstSummaryDao.getFuelBillAdjustments(locationCode, fromDate, toDate)
+  ]);
+  const adj = new Map(adjRows.map(a => [a.product, a]));
+  return meterRows.map(row => {
+    const a = adj.get(row.product) || {};
+    const meter = parseFloat(row.amount || 0);
+    const discount = parseFloat(a.discount || 0);
+    const offMeter = parseFloat(a.off_meter_amount || 0);
+    return Object.assign({}, row, {
+      litres: parseFloat(row.litres || 0) + parseFloat(a.off_meter_qty || 0),
+      meter_amount: meter,
+      discount,
+      off_meter_amount: offMeter,
+      amount: meter + discount + offMeter
+    });
+  });
+}
+
 
 
 module.exports = {
@@ -51,7 +75,7 @@ module.exports = {
       
        // Retrieve purchase data, fuel sales data, and non-fuel sales data concurrently.
       const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
-      const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
+      const salesDataPromise = getFuelSales(locationCode, fromDate, toDate);
       const nonFuelSalesDataPromise = GstSummaryDao.getNonFuelSalesConsolidated(locationCode, fromDate, toDate);
       const nonFuelB2BSalesByBillPromise = GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, fromDate, toDate);
       const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
@@ -80,9 +104,12 @@ module.exports = {
         const salesSummaryList = [];
         salesData.forEach((salesRow) => {
           salesSummaryList.push({
-            'Product': salesRow.product,   // Ensure your DAO returns a column named "product"
-            'Volume (Ltrs)': salesRow.litres,       // Total litres sold for the product
-            'Amount': salesRow.amount        // Total sales amount for the product
+            'Product': salesRow.product,
+            'Volume (Ltrs)': salesRow.litres,               // meter litres + off-meter litres
+            'Meter Value': salesRow.meter_amount.toFixed(2),
+            'Billed Below Pump Price': salesRow.discount.toFixed(2),
+            'Off-meter Sales': salesRow.off_meter_amount.toFixed(2),
+            'Amount': salesRow.amount.toFixed(2)             // value actually charged: the figure to file
           });
         });
         
@@ -178,7 +205,7 @@ module.exports = {
 
         // Fetch all data
         const purchaseDataPromise = GstSummaryDao.getpurchasesummary(locationCode, fromDate, toDate);
-        const salesDataPromise = GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate);
+        const salesDataPromise = getFuelSales(locationCode, fromDate, toDate);
         const nonFuelB2BSalesByBillPromise = GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, fromDate, toDate);
         const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
         const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
@@ -221,7 +248,7 @@ module.exports = {
         currentRow++;
         
         const fuelSalesHeaderRow = salesSheet.getRow(currentRow);
-        fuelSalesHeaderRow.values = ['Product', 'Volume (Ltrs)', 'Amount'];
+        fuelSalesHeaderRow.values = ['Product', 'Volume (Ltrs)', 'Meter Value', 'Billed Below Pump Price', 'Off-meter Sales', 'Amount'];
         fuelSalesHeaderRow.font = { bold: true };
         fuelSalesHeaderRow.eachCell((cell) => {
             cell.border = {
@@ -243,11 +270,13 @@ module.exports = {
             const dataRow = salesSheet.getRow(currentRow);
             dataRow.getCell(1).value = row.product; // Text
             dataRow.getCell(2).value = toNumber(row.litres); // Number
-            dataRow.getCell(3).value = toNumber(row.amount); // Number
-            
+            dataRow.getCell(3).value = toNumber(row.meter_amount);
+            dataRow.getCell(4).value = toNumber(row.discount);
+            dataRow.getCell(5).value = toNumber(row.off_meter_amount);
+            dataRow.getCell(6).value = toNumber(row.amount); // value actually charged
+
             // Format number columns to 2 decimals
-            dataRow.getCell(2).numFmt = '#,##0.00';
-            dataRow.getCell(3).numFmt = '#,##0.00';
+            for (let i = 2; i <= 6; i++) dataRow.getCell(i).numFmt = '#,##0.00';
             
             dataRow.eachCell((cell) => {
                 cell.border = {
