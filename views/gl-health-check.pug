@@ -74,7 +74,11 @@ block content
                                             if c.fixUrl
                                                 a.ml-1(href=c.fixUrl) Open &rarr;
                                         if hasRows
-                                            - var cols = Object.keys(c.rows[0])
+                                            - var cols = Object.keys(c.rows[0]).filter(function(k){ return k.charAt(0) !== '_'; })
+                                            if c.drill
+                                                p.small.text-muted.mb-1
+                                                    i.bi.bi-hand-index.mr-1
+                                                    | Year totals first, then each month. Click a month row to drill down to its days, then a day to its bills.
                                             .table-responsive(style="max-height:420px; overflow:auto")
                                                 table.table.table-sm.table-bordered.mb-0
                                                     thead.thead-light
@@ -83,7 +87,9 @@ block content
                                                                 th.small.text-nowrap= col.replace(/_/g, ' ')
                                                     tbody
                                                         each r in c.rows
-                                                            tr(class=r.result === 'fail' ? 'table-danger' : (r.result === 'warn' ? 'table-warning' : ''))
+                                                            tr(class=[r.result === 'fail' ? 'table-danger' : (r.result === 'warn' ? 'table-warning' : ''), r._drill ? 'hc-drill' : '']
+                                                               data-code=r._drill ? c.code : null data-drill=r._drill ? JSON.stringify(r._drill) : null
+                                                               style=r._drill ? 'cursor:pointer' : null)
                                                                 each col in cols
                                                                     - var v = r[col]
                                                                     if typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && col !== 'voucher_no' && !/_id$/.test(col))
@@ -93,6 +99,116 @@ block content
                                             if c.truncated
                                                 p.small.text-muted.mt-1 Showing the first 500 rows.
                                         p.small.text-muted.mt-1.mb-0= `${c.durationMs} ms`
+
+    if fy
+        .modal.fade#hcDrillModal(tabindex="-1" role="dialog" aria-hidden="true")
+            .modal-dialog.modal-xl.modal-dialog-scrollable(role="document")
+                .modal-content
+                    .modal-header.py-2
+                        h6.modal-title.mb-0
+                            button.btn.btn-sm.btn-outline-secondary.mr-2.d-none#hcDrillBack(type="button" aria-label="Back")
+                                i.bi.bi-arrow-left
+                            span#hcDrillTitle
+                        button.close(type="button" data-dismiss="modal" aria-label="Close")
+                            span(aria-hidden="true") &times;
+                    .modal-body.p-2#hcDrillBody
+
+        script.
+            (function() {
+                var fyId = !{JSON.stringify(fy.fy_id)};
+                var stack = [];
+                var NUM_COLS = ['qty', 'gst_summary', 'billed_below_price', 'gl', 'unexplained'];
+                var body = document.getElementById('hcDrillBody');
+                var titleEl = document.getElementById('hcDrillTitle');
+                var backBtn = document.getElementById('hcDrillBack');
+
+                function fmt(v) {
+                    return Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+                }
+                function el(tag, cls, text) {
+                    var e = document.createElement(tag);
+                    if (cls) e.className = cls;
+                    if (text != null) e.textContent = text;
+                    return e;
+                }
+                function message(cls, text) {
+                    body.innerHTML = '';
+                    body.appendChild(el('div', cls, text));
+                }
+                function render(view) {
+                    titleEl.textContent = view.title;
+                    backBtn.classList.toggle('d-none', stack.length < 2);
+                    body.innerHTML = '';
+                    if (!view.rows.length) { body.appendChild(el('p', 'small text-muted m-2', 'Nothing to show.')); return; }
+                    var cols = Object.keys(view.rows[0]).filter(function(k) { return k.charAt(0) !== '_' && k !== 'result'; });
+                    var totals = {};
+                    var wrap = el('div', 'table-responsive');
+                    var table = el('table', 'table table-sm table-bordered mb-0');
+                    var thead = el('thead', 'thead-light'), htr = el('tr');
+                    cols.forEach(function(c) {
+                        htr.appendChild(el('th', 'small text-nowrap' + (NUM_COLS.indexOf(c) >= 0 ? ' text-right' : ''), c.replace(/_/g, ' ')));
+                    });
+                    thead.appendChild(htr);
+                    table.appendChild(thead);
+                    var tbody = el('tbody');
+                    view.rows.forEach(function(r) {
+                        var tr = el('tr', r.result === 'fail' ? 'table-danger' : '');
+                        cols.forEach(function(c) {
+                            var v = r[c];
+                            if (NUM_COLS.indexOf(c) >= 0 && v != null && v !== '') {
+                                tr.appendChild(el('td', 'small text-right text-nowrap', fmt(v)));
+                                if (c !== 'qty') totals[c] = (totals[c] || 0) + Number(v);
+                            } else {
+                                tr.appendChild(el('td', 'small', v == null ? '' : String(v)));
+                            }
+                        });
+                        if (r._drill) {
+                            tr.style.cursor = 'pointer';
+                            tr.addEventListener('click', function() { load(r._drill); });
+                        }
+                        tbody.appendChild(tr);
+                    });
+                    var ttr = el('tr', 'font-weight-bold');
+                    cols.forEach(function(c, i) {
+                        if (totals[c] != null) ttr.appendChild(el('td', 'small text-right text-nowrap', fmt(Math.round(totals[c] * 100) / 100)));
+                        else ttr.appendChild(el('td', 'small', i === 0 ? 'Total' : ''));
+                    });
+                    tbody.appendChild(ttr);
+                    table.appendChild(tbody);
+                    wrap.appendChild(table);
+                    body.appendChild(wrap);
+                    if (view.level === 'day') body.appendChild(el('p', 'small text-muted mt-2 mb-0', 'Click a day to see its bills and vouchers.'));
+                }
+                function load(params) {
+                    var code = params.code || (stack.length ? stack[0].code : '');
+                    var qs = new URLSearchParams({ fy_id: fyId, code: code, mon: params.mon || '', key: params.key || '', day: params.day || '' });
+                    message('small text-muted m-2', 'Loading…');
+                    fetch('/gl/health-check/drill?' + qs.toString(), { credentials: 'same-origin' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(view) {
+                            if (view.error) { message('alert alert-danger py-2 m-2', view.error); return; }
+                            stack.push({ code: code, view: view });
+                            render(view);
+                        })
+                        .catch(function(err) { message('alert alert-danger py-2 m-2', 'Could not load: ' + err.message); });
+                }
+                backBtn.addEventListener('click', function() {
+                    if (stack.length < 2) return;
+                    stack.pop();
+                    render(stack[stack.length - 1].view);
+                });
+                document.querySelectorAll('tr.hc-drill').forEach(function(tr) {
+                    tr.addEventListener('click', function() {
+                        stack = [];
+                        var params = JSON.parse(tr.getAttribute('data-drill'));
+                        params.code = tr.getAttribute('data-code');
+                        titleEl.textContent = '';
+                        backBtn.classList.add('d-none');
+                        $('#hcDrillModal').modal('show');
+                        load(params);
+                    });
+                });
+            })();
 
     script.
         document.querySelectorAll('[data-toggle="collapse"]').forEach(function(header) {
