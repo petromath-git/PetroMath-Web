@@ -223,16 +223,13 @@ module.exports = {
     },
 
     // Go-live date (YYYY-MM-DD) = date of the first shift; falls back to
-    // m_location.start_date when no shift exists yet; null if neither.
-    // Mirrors the get_location_golive_date() SQL function used by the guard triggers.
+    // m_location.start_date when no shift exists yet; null if neither. A
+    // GOLIVE_DATE location setting earlier than that takes precedence.
+    // Uses the get_location_golive_date() SQL function so the screens and the
+    // guard triggers always agree.
     getGoLiveDate: async function (locationCode) {
         const rows = await db.sequelize.query(`
-            SELECT COALESCE(
-                (SELECT DATE_FORMAT(DATE(MIN(closing_date)), '%Y-%m-%d')
-                 FROM t_closing WHERE location_code = :locationCode),
-                (SELECT DATE_FORMAT(MIN(DATE(start_date)), '%Y-%m-%d')
-                 FROM m_location WHERE location_code = :locationCode AND start_date > '1971-01-01')
-            ) AS golive
+            SELECT DATE_FORMAT(get_location_golive_date(:locationCode), '%Y-%m-%d') AS golive
         `, { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT });
         return rows[0] ? rows[0].golive : null;
     },
