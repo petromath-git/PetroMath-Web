@@ -97,6 +97,38 @@ module.exports = {
     return result;
   },
 
+  // Fuel is reported at the value actually charged (CGST Act s.15: the price
+  // actually paid), which is what the books hold: the meter value from
+  // getSalesConsolidated, less what metered credit and cash bills were billed
+  // below the pump price, plus off-meter credit sales (not on the meter at all).
+  // Keyed by product name, as getSalesConsolidated's rows are.
+  getFuelBillAdjustments: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT mp.product_name AS product,
+             SUM(CASE WHEN s.off_meter = 0 THEN s.amount - s.qty * s.price ELSE 0 END) AS discount,
+             SUM(CASE WHEN s.off_meter = 1 THEN s.qty ELSE 0 END)                       AS off_meter_qty,
+             SUM(CASE WHEN s.off_meter = 1 THEN s.amount ELSE 0 END)                    AS off_meter_amount
+      FROM (
+        SELECT closing_id, product_id, qty, price, amount, COALESCE(off_meter_sale, 0) AS off_meter FROM t_credits
+        UNION ALL
+        SELECT closing_id, product_id, qty, price, amount, 0 FROM t_cashsales
+      ) s
+      JOIN t_closing tc ON tc.closing_id = s.closing_id
+      JOIN m_product mp ON mp.product_id = s.product_id
+      WHERE tc.closing_status = 'CLOSED'
+        AND tc.location_code = :locationCode
+        AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND COALESCE(mp.is_lube_product, 0) = 0
+        AND mp.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode)
+      GROUP BY mp.product_name;
+    `;
+
+    return db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT,
+    });
+  },
+
   getNonFuelSalesConsolidated: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT product, SUM(total_qty) AS total_qty, SUM(total_amount) AS total_amount
@@ -170,10 +202,8 @@ module.exports = {
         mp.product_name                                                               AS \`Product\`,
         SUM(tc.qty)                                                                   AS \`Qty\`,
         SUM(tc.amount)                                                                AS \`Amount\`,
-        ROUND(SUM(tc.amount * COALESCE(mp.cgst_percent, 0)
-              / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))), 2) AS \`CGST\`,
-        ROUND(SUM(tc.amount * COALESCE(mp.sgst_percent, 0)
-              / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))), 2) AS \`SGST\`
+        ROUND(SUM(COALESCE(tc.cgst_amount, tc.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))), 2) AS \`CGST\`,
+        ROUND(SUM(COALESCE(tc.sgst_amount, tc.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))), 2) AS \`SGST\`
       FROM t_credits tc
       JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
       LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
@@ -216,11 +246,11 @@ module.exports = {
         -- Credit sales where customer has no GSTIN
         SELECT
           mp.product_name,
-          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
+          CONCAT(COALESCE(tc.cgst_percent, mp.cgst_percent, 0) + COALESCE(tc.sgst_percent, mp.sgst_percent, 0), '%') AS gst_rate,
           SUM(tc.qty) AS total_qty,
           SUM(tc.amount) AS total_amount,
-          SUM(tc.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-          SUM(tc.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+          SUM(COALESCE(tc.cgst_amount, tc.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_cgst,
+          SUM(COALESCE(tc.sgst_amount, tc.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_sgst
         FROM t_credits tc
         JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
         LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
@@ -235,18 +265,18 @@ module.exports = {
                 SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode
             )
           )
-        GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
+        GROUP BY mp.product_name, gst_rate
 
         UNION ALL
 
         -- Cash sales
         SELECT
           mp.product_name,
-          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_rate,
+          CONCAT(COALESCE(tcs.cgst_percent, mp.cgst_percent, 0) + COALESCE(tcs.sgst_percent, mp.sgst_percent, 0), '%') AS gst_rate,
           SUM(tcs.qty) AS total_qty,
           SUM(tcs.amount) AS total_amount,
-          SUM(tcs.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-          SUM(tcs.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+          SUM(COALESCE(tcs.cgst_amount, tcs.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_cgst,
+          SUM(COALESCE(tcs.sgst_amount, tcs.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_sgst
         FROM t_cashsales tcs
         JOIN t_closing tcl ON tcs.closing_id = tcl.closing_id
         JOIN m_product mp ON tcs.product_id = mp.product_id
@@ -259,7 +289,7 @@ module.exports = {
                 SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode
             )
           )
-        GROUP BY mp.product_name, mp.cgst_percent, mp.sgst_percent
+        GROUP BY mp.product_name, gst_rate
 
         UNION ALL
 
@@ -305,16 +335,16 @@ module.exports = {
       FROM (
         -- Packed lube sales via t_credits / t_cashsales
         SELECT
-          CONCAT(COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0), '%') AS gst_category,
+          CONCAT(COALESCE(s.cgst_percent, mp.cgst_percent, 0) + COALESCE(s.sgst_percent, mp.sgst_percent, 0), '%') AS gst_category,
           SUM(s.qty) AS total_qty,
           SUM(s.amount) AS total_amount,
-          SUM(s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_cgst,
-          SUM(s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS total_sgst
+          SUM(COALESCE(s.cgst_amount, s.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_cgst,
+          SUM(COALESCE(s.sgst_amount, s.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0)))) AS total_sgst
         FROM (
-          SELECT closing_id, product_id, qty, amount
+          SELECT closing_id, product_id, qty, amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount
           FROM t_credits
           UNION ALL
-          SELECT closing_id, product_id, qty, amount
+          SELECT closing_id, product_id, qty, amount, cgst_percent, sgst_percent, cgst_amount, sgst_amount
           FROM t_cashsales
         ) s
         JOIN t_closing tc ON s.closing_id = tc.closing_id

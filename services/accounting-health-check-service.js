@@ -96,6 +96,341 @@ const FUEL_POSITION_SQL = `
       AND p.product_id IN (SELECT tk.product_id FROM m_tank tk WHERE tk.location_code = :loc)
     ORDER BY p.product_name`;
 
+// ── Sales and output GST: GST Summary vs GL ─────────────────────────────────
+// The GST return is filed from the GST Summary report, so its side is worked out
+// exactly as that report does (report-gst-summary-dao.js):
+//   - fuel (a pump product, not a lube): the value actually charged = meter litres
+//     × pump price, less what bills were billed below the pump price, plus
+//     off-meter credit sales; no tax;
+//   - everything else: credit and cash bills at the billed amount and the GST
+//     stored on the bill (the rate in force at the sale), plus lube lines on
+//     ACTIVE day bills at their stored tax.
+// The GL side is what the CREDIT_SALE / CASH_SALE / DAY_BILL vouchers posted.
+// Both are broken down to one line per bill and sales ledger, so a month can be
+// drilled to a day and a day to the bills and vouchers behind every rupee.
+// A fuel's meter is split over its bills at the pump price; whatever the bills
+// don't cover (or over-cover) is its own line. "Billed below price" is shown for
+// information only: both sides hold the billed amount.
+
+const SALE_SOURCES = ['CREDIT_SALE', 'CASH_SALE', 'DAY_BILL'];
+const r2 = n => Math.round((n || 0) * 100) / 100;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monLabel = m => `${MONTHS[+m.slice(5, 7) - 1]}-${m.slice(0, 4)}`;
+const fmtRs = n => '₹' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function salesGstLines(loc, from, to) {
+    const r = { loc, from, to };
+    const products = await q(`
+        SELECT p.product_id, p.product_name,
+               COALESCE(p.cgst_percent,0) + COALESCE(p.sgst_percent,0) rate,
+               COALESCE(p.is_lube_product,0) is_lube,
+               (COALESCE(p.is_lube_product,0) = 0
+                AND p.product_name IN (SELECT mp.product_code FROM m_pump mp WHERE mp.location_code = :loc)) is_fuel,
+               ms.ledger_id sales_ledger_id, ls.ledger_name sales_ledger,
+               mc.ledger_id cgst_ledger_id, mg.ledger_id sgst_ledger_id
+        FROM m_product p
+        LEFT JOIN gl_product_ledger_map ms ON ms.location_code = p.location_code AND ms.product_id = p.product_id AND ms.map_type = 'SALES'
+        LEFT JOIN gl_ledgers ls ON ls.ledger_id = ms.ledger_id
+        LEFT JOIN gl_product_ledger_map mc ON mc.location_code = p.location_code AND mc.product_id = p.product_id AND mc.map_type = 'OUTPUT_CGST'
+        LEFT JOIN gl_product_ledger_map mg ON mg.location_code = p.location_code AND mg.product_id = p.product_id AND mg.map_type = 'OUTPUT_SGST'
+        WHERE p.location_code = :loc`, r);
+    const prod = new Map(products.map(p => [p.product_id, p]));
+    const prodByName = new Map(products.map(p => [p.product_name, p]));
+    const salesLedgers = new Map(), gstLedgers = new Set();
+    products.forEach(p => {
+        if (p.sales_ledger_id) salesLedgers.set(p.sales_ledger_id, p.sales_ledger);
+        if (p.cgst_ledger_id) gstLedgers.add(p.cgst_ledger_id);
+        if (p.sgst_ledger_id) gstLedgers.add(p.sgst_ledger_id);
+    });
+
+    const shiftWhere = `tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to`;
+    const [meter, credits, cash, dayBills, gl] = await Promise.all([
+        q(`SELECT DATE_FORMAT(tc.closing_date,'%Y-%m-%d') d, mp.product_code product_name,
+                  SUM(tr.closing_reading - tr.opening_reading - tr.testing) qty,
+                  SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) amount
+           FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
+           JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
+           WHERE ${shiftWhere}
+           GROUP BY 1, 2`, r),
+        q(`SELECT DATE_FORMAT(tc.closing_date,'%Y-%m-%d') d, t.tcredit_id id, t.product_id, t.bill_no ref,
+                  COALESCE(cl.Company_Name,'') party, t.qty, t.price, t.amount,
+                  COALESCE(t.cgst_amount,0) + COALESCE(t.sgst_amount,0) tax, t.cgst_amount + t.sgst_amount tax_stored,
+                  t.cgst_percent + t.sgst_percent bill_rate, COALESCE(t.off_meter_sale,0) off_meter
+           FROM t_credits t JOIN t_closing tc ON tc.closing_id = t.closing_id
+           LEFT JOIN m_credit_list cl ON cl.creditlist_id = t.creditlist_id
+           WHERE ${shiftWhere}`, r),
+        q(`SELECT DATE_FORMAT(tc.closing_date,'%Y-%m-%d') d, c.cashsales_id id, c.product_id, c.bill_no ref,
+                  COALESCE(c.customer_name,'') party, c.qty, c.price, c.amount,
+                  COALESCE(c.cgst_amount,0) + COALESCE(c.sgst_amount,0) tax, c.cgst_amount + c.sgst_amount tax_stored,
+                  c.cgst_percent + c.sgst_percent bill_rate, 0 off_meter
+           FROM t_cashsales c JOIN t_closing tc ON tc.closing_id = c.closing_id
+           WHERE ${shiftWhere}`, r),
+        q(`SELECT DATE_FORMAT(d.bill_date,'%Y-%m-%d') d, d.day_bill_id id, d.status, it.product_id,
+                  SUM(it.quantity) qty, SUM(it.total_amount) amount, SUM(it.cgst_amount + it.sgst_amount) tax
+           FROM t_day_bill d JOIN t_day_bill_header h ON h.day_bill_id = d.day_bill_id
+           JOIN t_day_bill_items it ON it.header_id = h.header_id
+           WHERE d.location_code = :loc AND d.bill_date BETWEEN :from AND :to
+           GROUP BY d.day_bill_id, d.bill_date, d.status, it.product_id`, r),
+        (salesLedgers.size || gstLedgers.size) ? q(`
+           SELECT DATE_FORMAT(h.voucher_date,'%Y-%m-%d') d, h.source_type, h.source_id, jl.ledger_id,
+                  MAX(h.voucher_type = 'SALES') is_sales_voucher, MIN(h.voucher_no) voucher_no,
+                  COUNT(DISTINCT h.voucher_id) vouchers, SUM(jl.cr_amount - jl.dr_amount) amt
+           FROM gl_journal_headers h JOIN gl_journal_lines jl ON jl.voucher_id = h.voucher_id
+           WHERE h.location_code = :loc AND h.voucher_date BETWEEN :from AND :to AND jl.ledger_id IN (:ledgers)
+           GROUP BY 1, 2, 3, 4`, Object.assign({ ledgers: [...salesLedgers.keys(), ...gstLedgers] }, r)) : []
+    ]);
+
+    // GL by bill: sales ledger lines keyed source+ledger, output GST lines keyed source.
+    const glSales = new Map(), glGst = new Map();
+    for (const g of gl) {
+        const key = `${g.source_type}:${g.source_id}`;
+        const amt = parseFloat(g.amt) || 0;
+        if (salesLedgers.has(g.ledger_id)) {
+            const k = `${key}:${g.ledger_id}`;
+            const e = glSales.get(k) || { d: g.d, source_type: g.source_type, source_id: g.source_id, ledger_id: g.ledger_id, voucher_no: g.voucher_no, amt: 0, used: false };
+            e.amt += amt;
+            glSales.set(k, e);
+        } else if (gstLedgers.has(g.ledger_id) && (SALE_SOURCES.includes(g.source_type) || Number(g.is_sales_voucher))) {
+            // output GST ledgers also take payments and set-offs: only sales vouchers count here
+            const e = glGst.get(key) || { d: g.d, source_type: g.source_type, source_id: g.source_id, voucher_no: g.voucher_no, amt: 0, used: false };
+            e.amt += amt;
+            glGst.set(key, e);
+        }
+    }
+
+    const lines = [];
+    const ledgerKey = p => (p && p.sales_ledger_id) ? String(p.sales_ledger_id) : 'NONE';
+    const gstKey = p => p ? `GST:${parseFloat(p.rate)}` : 'GST:?';
+    const takeSales = (src, id, ledgerId) => {
+        const e = glSales.get(`${src}:${id}:${ledgerId}`);
+        if (!e) return null;
+        e.used = true;
+        return e;
+    };
+    const takeGst = (src, id) => {
+        const e = glGst.get(`${src}:${id}`);
+        if (!e) return null;
+        e.used = true;
+        return e;
+    };
+    const fuelBilled = new Map();      // `${d}|${product_id}` → { qty, value } of bills at the pump price
+
+    // Credit and cash bills
+    const bills = credits.map(b => Object.assign({ src: 'CREDIT_SALE', label: 'Credit bill' }, b))
+        .concat(cash.map(b => Object.assign({ src: 'CASH_SALE', label: 'Cash bill' }, b)));
+    for (const b of bills) {
+        const p = prod.get(b.product_id);
+        const amount = parseFloat(b.amount) || 0, tax = parseFloat(b.tax) || 0, qty = parseFloat(b.qty) || 0;
+        const isFuel = p && Number(p.is_fuel);
+        const g = p && p.sales_ledger_id ? takeSales(b.src, b.id, p.sales_ledger_id) : null;
+        const gt = takeGst(b.src, b.id);
+        const glAmt = g ? g.amt : 0, glTax = gt ? gt.amt : 0;
+        const base = { d: b.d, source: b.label, ref: b.ref || '', product: p ? p.product_name : `#${b.product_id}`, party: b.party, qty,
+                       voucher: [g && g.voucher_no, gt && !g && gt.voucher_no].filter(Boolean).join(', ') };
+        const notes = [];
+        if (!g && Math.abs(amount - tax) >= 0.01) notes.push('No GL voucher in this period');
+        let gstSide = 0, explained = 0, gstTax = 0, rateKey = gstKey(p);
+        if (isFuel) {
+            gstSide = amount;                            // the value actually charged
+            if (Number(b.off_meter)) {
+                notes.push('Off-meter sale');
+            } else {
+                const atRate = qty * (parseFloat(b.price) || 0);
+                explained = amount - atRate;
+                if (Math.abs(explained) >= 0.5) notes.push(`Billed ${fmtRs(explained)} ${explained < 0 ? 'below' : 'above'} the pump price`);
+                const k = `${b.d}|${b.product_id}`;
+                const f = fuelBilled.get(k) || { qty: 0, value: 0 };
+                f.qty += qty; f.value += atRate;
+                fuelBilled.set(k, f);
+            }
+            if (tax >= 0.01) notes.push(`GST of ${fmtRs(tax)} stored on a fuel bill`);
+        } else {
+            // the GST stored on the bill; the product's current rate only if the bill has none
+            const rate = p ? parseFloat(p.rate) : 0;
+            const billRate = b.bill_rate != null ? parseFloat(b.bill_rate) : rate;
+            gstTax = b.tax_stored != null ? parseFloat(b.tax_stored) : amount * rate / (100 + rate);
+            gstSide = amount - gstTax;
+            rateKey = `GST:${billRate}`;
+            if (Math.abs(billRate - rate) >= 0.01) notes.push(`Billed at ${billRate}% GST; the product is now ${rate}%`);
+        }
+        if (g && Math.abs(glAmt - (amount - tax)) >= 0.5) notes.push('GL voucher differs from the bill: re-create accounting for the day');
+        lines.push(Object.assign({ key: ledgerKey(p), gst_summary: gstSide, explained, gl: glAmt, note: notes.join('; ') }, base));
+        if (gstTax || tax || glTax) {
+            lines.push(Object.assign({ key: rateKey, gst_summary: gstTax, explained: 0, gl: glTax,
+                note: Math.abs(gstTax - glTax) < 0.5 ? notes.filter(n => /GST/.test(n)).join('; ')
+                    : isFuel ? 'Fuel: the GST Summary has no tax on it'
+                    : 'GL output GST differs from the bill: re-create accounting for the day' }, base));
+        }
+    }
+
+    // Day bills: one line per day bill and sales ledger (vouchers post per ledger, not per product)
+    const dbGroups = new Map();
+    for (const it of dayBills) {
+        const p = prod.get(it.product_id);
+        const k = `${it.id}:${ledgerKey(p)}`;
+        const grp = dbGroups.get(k) || { d: it.d, id: it.id, status: it.status, p, products: [], qty: 0, amount: 0, tax: 0, gstSide: 0, gstTax: 0, fuel: false };
+        const amount = parseFloat(it.amount) || 0, tax = parseFloat(it.tax) || 0, qty = parseFloat(it.qty) || 0;
+        grp.products.push(p ? p.product_name : `#${it.product_id}`);
+        grp.qty += qty; grp.amount += amount; grp.tax += tax;
+        if (p && Number(p.is_fuel)) {
+            grp.fuel = true;
+            grp.gstSide += amount;                       // the meter's share at the pump price
+            const fk = `${it.d}|${it.product_id}`;
+            const f = fuelBilled.get(fk) || { qty: 0, value: 0 };
+            f.qty += qty; f.value += amount;
+            fuelBilled.set(fk, f);
+        } else if (p && Number(p.is_lube) && it.status === 'ACTIVE') {
+            grp.gstSide += amount - tax;
+            grp.gstTax += tax;
+        }
+        dbGroups.set(k, grp);
+    }
+    for (const grp of dbGroups.values()) {
+        const g = grp.p && grp.p.sales_ledger_id ? takeSales('DAY_BILL', grp.id, grp.p.sales_ledger_id) : null;
+        const glAmt = g ? g.amt : 0;
+        const notes = [];
+        if (!g && Math.abs(grp.amount - grp.tax) >= 0.01) notes.push('No GL voucher in this period');
+        if (grp.fuel && grp.tax >= 0.01) notes.push(`GST of ${fmtRs(grp.tax)} split out of fuel on the day bill`);
+        if (grp.status !== 'ACTIVE') notes.push(`Day bill is ${grp.status}`);
+        if (!grp.fuel && grp.gstSide === 0 && grp.amount) notes.push('Not a lube: the GST Summary leaves day-bill lines of this product out');
+        if (g && Math.abs(glAmt - (grp.amount - grp.tax)) >= 0.5) notes.push('GL voucher differs from the day bill: re-create accounting for the day');
+        lines.push({ d: grp.d, source: 'Day bill', ref: `#${grp.id}`, product: [...new Set(grp.products)].join(', '), party: '',
+                     qty: grp.qty, key: ledgerKey(grp.p), gst_summary: grp.gstSide, explained: 0, gl: glAmt,
+                     voucher: g ? g.voucher_no : '', note: notes.join('; ') });
+    }
+    // Day-bill output GST, per rate bucket (one line per day bill and rate)
+    const dbTax = new Map();
+    for (const it of dayBills) {
+        const p = prod.get(it.product_id);
+        const tax = parseFloat(it.tax) || 0;
+        if (!tax) continue;
+        const k = `${it.id}|${gstKey(p)}`;
+        const e = dbTax.get(k) || { d: it.d, id: it.id, key: gstKey(p), products: [], tax: 0, gstTax: 0, fuel: false };
+        e.products.push(p ? p.product_name : `#${it.product_id}`);
+        e.tax += tax;
+        if (p && Number(p.is_fuel)) e.fuel = true;
+        else if (p && Number(p.is_lube) && it.status === 'ACTIVE') e.gstTax += tax;
+        dbTax.set(k, e);
+    }
+    const dbTaxByBill = new Map();
+    for (const e of dbTax.values()) dbTaxByBill.set(e.id, (dbTaxByBill.get(e.id) || []).concat(e));
+    for (const [id, parts] of dbTaxByBill) {
+        const gt = takeGst('DAY_BILL', id);
+        let glLeft = gt ? gt.amt : 0;
+        const total = parts.reduce((s, e) => s + e.tax, 0);
+        parts.forEach((e, i) => {
+            // GL keeps one GST line set per voucher: share it over rate buckets by the stored tax
+            const glTax = i === parts.length - 1 ? glLeft : (gt ? gt.amt * e.tax / total : 0);
+            glLeft -= glTax;
+            lines.push({ d: e.d, source: 'Day bill', ref: `#${id}`, product: [...new Set(e.products)].join(', '), party: '', qty: null,
+                         key: e.key, gst_summary: e.gstTax, explained: 0, gl: glTax, voucher: gt ? gt.voucher_no : '',
+                         note: e.fuel ? 'GST split out of fuel on the day bill: the GST Summary has no tax on fuel' : '' });
+        });
+    }
+
+    // Meter not covered by bills, per fuel and day
+    for (const m of meter) {
+        const p = prodByName.get(m.product_name);
+        if (!p || !Number(p.is_fuel)) continue;
+        const f = fuelBilled.get(`${m.d}|${p.product_id}`) || { qty: 0, value: 0 };
+        fuelBilled.delete(`${m.d}|${p.product_id}`);
+        const gap = (parseFloat(m.amount) || 0) - f.value;
+        if (Math.abs(gap) < 0.01) continue;
+        lines.push({ d: m.d, source: 'Meter', ref: '', product: p.product_name, party: '', qty: (parseFloat(m.qty) || 0) - f.qty,
+                     key: ledgerKey(p), gst_summary: gap, explained: 0, gl: 0, voucher: '',
+                     note: Math.abs(gap) < 0.5 ? 'Rounding'
+                         : gap > 0 ? 'Meter value not covered by bills: day bill missing or out of date'
+                         : 'Bills exceed the meter: day bill over-billed' });
+    }
+    // Fuel bills on a day with no meter reading for that fuel (the GST Summary has no value for them)
+    for (const [k, f] of fuelBilled) {
+        const [d, pid] = k.split('|');
+        const p = prod.get(parseInt(pid, 10));
+        if (Math.abs(f.value) < 0.01) continue;
+        lines.push({ d, source: 'Meter', ref: '', product: p ? p.product_name : pid, party: '', qty: -f.qty,
+                     key: ledgerKey(p), gst_summary: -f.value, explained: 0, gl: 0, voucher: '',
+                     note: 'Fuel billed on a day with no meter reading for it' });
+    }
+
+    // GL on these ledgers that no bill accounts for (manual journals, deleted bills, other sources)
+    for (const e of glSales.values()) {
+        if (e.used || Math.abs(e.amt) < 0.01) continue;
+        lines.push({ d: e.d, source: `GL ${e.source_type}`, ref: e.source_id ? `#${e.source_id}` : '', product: '', party: '', qty: null,
+                     key: String(e.ledger_id), gst_summary: 0, explained: 0, gl: e.amt, voucher: e.voucher_no,
+                     note: SALE_SOURCES.includes(e.source_type) ? 'GL voucher whose bill is no longer there (or is in another period)' : 'Posted to the sales ledger outside the sales vouchers' });
+    }
+    for (const e of glGst.values()) {
+        if (e.used || Math.abs(e.amt) < 0.01) continue;
+        lines.push({ d: e.d, source: `GL ${e.source_type}`, ref: e.source_id ? `#${e.source_id}` : '', product: '', party: '', qty: null,
+                     key: 'GST:?', gst_summary: 0, explained: 0, gl: e.amt, voucher: e.voucher_no,
+                     note: SALE_SOURCES.includes(e.source_type) ? 'GL output GST whose bill is no longer there (or is in another period)' : 'Sales voucher posting output GST with no bill' });
+    }
+
+    lines.forEach(l => { l.unexplained = l.gl - l.gst_summary; });
+    const keyLabel = key => {
+        if (key === 'NONE') return '(no sales ledger mapped)';
+        if (key === 'GST:?') return 'Output GST (no bill)';
+        if (key.startsWith('GST:')) return `Output GST @ ${key.slice(4)}%`;
+        return salesLedgers.get(parseInt(key, 10)) || `Ledger #${key}`;
+    };
+    const fuelLedgers = new Set(products.filter(p => Number(p.is_fuel)).map(p => ledgerKey(p)));
+    const keyKind = key => key.startsWith('GST:') ? 'Output GST' : (fuelLedgers.has(key) ? 'Fuel sales' : 'GST goods sales');
+    return { lines, keyLabel, keyKind };
+}
+
+// Sums lines by a grouping function; keeps first-seen order of groups.
+function rollUp(lines, groupOf) {
+    const map = new Map();
+    for (const l of lines) {
+        const k = groupOf(l);
+        const e = map.get(k) || { k, gst_summary: 0, explained: 0, gl: 0, unexplained: 0 };
+        e.gst_summary += l.gst_summary; e.explained += l.explained; e.gl += l.gl; e.unexplained += l.unexplained;
+        map.set(k, e);
+    }
+    return [...map.values()];
+}
+
+const keyOrder = (kind, label) => ({ 'Fuel sales': 0, 'GST goods sales': 1, 'Output GST': 2 }[kind] + '|' + label);
+
+const SALES_GST_CODE = 'A04';
+
+// Drill-down for the sales check: a month → its days; a day → its bills and vouchers.
+async function drillSalesGst(locationCode, fy, params) {
+    const mon = /^\d{4}-\d{2}$/.test(params.mon || '') ? params.mon : null;
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(params.day || '') ? params.day : null;
+    const key = String(params.key || '');
+    if (!mon || !/^(\d+|NONE|GST:[\d.?]+)$/.test(key)) throw new Error('Bad drill-down parameters');
+    const monStart = `${mon}-01`;
+    const monEnd = new Date(Date.UTC(+mon.slice(0, 4), +mon.slice(5, 7), 0)).toISOString().slice(0, 10);
+    const from = day || (monStart > fy.start_date ? monStart : fy.start_date);
+    const to = day || (monEnd < fy.end_date ? monEnd : fy.end_date);
+    if (from < fy.start_date || to > fy.end_date) throw new Error('Date is outside the financial year');
+
+    const tol = (await getBand(locationCode, 'HC_SALES_GST_TOL'))[1];
+    const { lines, keyLabel } = await salesGstLines(locationCode, from, to);
+    const mine = lines.filter(l => l.key === key);
+    const title = `${keyLabel(key)} · ${day ? day.split('-').reverse().join('-') : monLabel(mon)}`;
+
+    if (!day) {
+        const rows = rollUp(mine, l => l.d).sort((a, b) => a.k < b.k ? -1 : 1).map(e => ({
+            day: e.k, gst_summary: r2(e.gst_summary), billed_below_price: r2(e.explained), gl: r2(e.gl), unexplained: r2(e.unexplained),
+            result: Math.abs(e.unexplained) > Math.max(tol, 0.5) ? 'fail' : '',
+            _drill: { mon, key, day: e.k }
+        }));
+        return { title, level: 'day', rows };
+    }
+    const rows = mine
+        .sort((a, b) => Math.abs(b.unexplained) - Math.abs(a.unexplained))
+        .map(l => ({
+            source: l.source, bill: l.ref, product: l.product, party: l.party,
+            qty: l.qty == null ? null : Math.round(l.qty * 1000) / 1000,
+            gst_summary: r2(l.gst_summary), billed_below_price: r2(l.explained), gl: r2(l.gl), unexplained: r2(l.unexplained),
+            voucher: l.voucher || '', note: l.note,
+            result: Math.abs(l.unexplained) >= 0.5 ? 'fail' : ''
+        }));
+    return { title, level: 'bill', rows };
+}
+
 // ── The checks ───────────────────────────────────────────────────────────────
 // run(ctx) → { rows, status?, summary?, amount?, showAll? }. Without a status, any row = `severity`.
 // showAll = the rows are a full listing; only rows whose `result` is fail / warn count as problems.
@@ -432,49 +767,38 @@ const CHECKS = [
         }
     },
     {
-        code: 'A04', stage: 'POST', severity: 'fail',
-        title: 'Metered sales in GL vs GST summary (meter), by month',
-        why: 'Sales in GL should equal the meter reading value for every product and month. A gap means missing or stale day bills, GST wrongly charged on fuel, or day bills that exceed the meter.',
-        fix: 'Drill the month by day. Differences explained by credit sales billed below the pump rate are expected and already netted here.',
-        fixUrl: '/gl/profit-loss',
+        code: SALES_GST_CODE, stage: 'POST', severity: 'fail',
+        title: 'Sales and output GST: GST Summary vs GL, by month',
+        why: 'The GST return is filed from the GST Summary; the books are the GL. For every month, each sales ledger (fuel, oil and other GST goods) and the output GST at each rate should agree. The auditor compares the two, and any gap has to be explained bill by bill.',
+        fix: 'Click a month to see its days, and a day to see every bill and voucher with a note on what is wrong. Fuel is taken at the value actually charged (meter less what was billed below the pump price, plus off-meter sales), as the GST Summary reports it; "billed below price" is shown for information only.',
+        fixUrl: '/reports-gst-summary',
+        drill: true,
         run: async c => {
             const tol = (await getBand(c.loc, 'HC_SALES_GST_TOL'))[1];
-            const rows = await q(`
-                SELECT * FROM (
-                    SELECT k.mon, k.product_name,
-                           ROUND(COALESCE(mtr.amt,0),2) gst_summary,
-                           ROUND(COALESCE(gl.amt,0),2) gl_sales,
-                           ROUND(COALESCE(cr.price_diff,0),2) credit_below_rate,
-                           ROUND(COALESCE(gl.amt,0) - COALESCE(mtr.amt,0) + COALESCE(db.gst_amt,0) - COALESCE(cr.price_diff,0),2) unexplained
-                    FROM (SELECT DISTINCT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, p.product_id, p.product_name, m.ledger_id
-                          FROM t_closing tc
-                          JOIN m_product p ON p.location_code = tc.location_code
-                          LEFT JOIN gl_product_ledger_map m ON m.product_id = p.product_id AND m.location_code = p.location_code AND m.map_type = 'SALES'
-                          WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                            AND p.product_id IN (SELECT mp.product_id FROM m_pump mp WHERE mp.location_code = :loc)) k
-                    LEFT JOIN (SELECT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, mp.product_id,
-                                      SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) amt
-                               FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
-                               JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
-                               WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                               GROUP BY 1, 2) mtr ON mtr.mon = k.mon AND mtr.product_id = k.product_id
-                    LEFT JOIN (SELECT DATE_FORMAT(tc.closing_date,'%Y-%m') mon, t.product_id, SUM(t.amount - t.qty * t.price) price_diff
-                               FROM t_credits t JOIN t_closing tc ON tc.closing_id = t.closing_id
-                               WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
-                                 AND COALESCE(t.off_meter_sale,0) = 0
-                               GROUP BY 1, 2) cr ON cr.mon = k.mon AND cr.product_id = k.product_id
-                    LEFT JOIN (SELECT DATE_FORMAT(d.bill_date,'%Y-%m') mon, it.product_id, SUM(it.cgst_amount + it.sgst_amount) gst_amt
-                               FROM t_day_bill d JOIN t_day_bill_header h ON h.day_bill_id = d.day_bill_id
-                               JOIN t_day_bill_items it ON it.header_id = h.header_id
-                               WHERE d.location_code = :loc AND d.bill_date BETWEEN :from AND :to
-                               GROUP BY 1, 2) db ON db.mon = k.mon AND db.product_id = k.product_id
-                    LEFT JOIN (SELECT DATE_FORMAT(h.voucher_date,'%Y-%m') mon, jl.ledger_id, SUM(jl.cr_amount - jl.dr_amount) amt
-                               FROM gl_journal_headers h JOIN gl_journal_lines jl ON jl.voucher_id = h.voucher_id
-                               WHERE h.location_code = :loc AND h.voucher_date BETWEEN :from AND :to
-                               GROUP BY 1, 2) gl ON gl.mon = k.mon AND gl.ledger_id = k.ledger_id) x
-                WHERE ABS(x.unexplained) > :tol
-                ORDER BY x.product_name, x.mon`, Object.assign({ tol }, c.r));
-            return { rows, summary: rows.length ? `${rows.length} product-month(s) off by more than ₹${tol}` : `Every product-month within ₹${tol}` };
+            const { lines, keyLabel, keyKind } = await salesGstLines(c.loc, c.r.from, c.r.to);
+            const months = rollUp(lines, l => `${l.d.slice(0, 7)}|${l.key}`);
+            const rowOf = (e, mon, key) => ({
+                month: mon === 'Year' ? 'Year total' : monLabel(mon), kind: keyKind(key), ledger: keyLabel(key),
+                gst_summary: r2(e.gst_summary), billed_below_price: r2(e.explained), gl: r2(e.gl), unexplained: r2(e.unexplained)
+            });
+            const rows = months.map(e => {
+                const [mon, key] = e.k.split('|');
+                return Object.assign(rowOf(e, mon, key), {
+                    result: Math.abs(e.unexplained) > tol ? 'fail' : '',
+                    _drill: { mon, key }, _sort: keyOrder(keyKind(key), keyLabel(key)) + '|' + mon
+                });
+            }).sort((a, b) => a._sort < b._sort ? -1 : 1);
+            const totals = rollUp(lines, l => l.key).map(e => Object.assign(rowOf(e, 'Year', e.k), { result: '', _sort: keyOrder(keyKind(e.k), keyLabel(e.k)) }))
+                .sort((a, b) => a._sort < b._sort ? -1 : 1);
+            const bad = rows.filter(x => x.result === 'fail');
+            rows.forEach(x => delete x._sort);
+            totals.forEach(x => delete x._sort);
+            return {
+                rows: totals.concat(rows), showAll: true,          // year totals first: the auditor's view
+                status: bad.length ? 'fail' : 'pass',
+                amount: bad.reduce((s, x) => s + Math.abs(x.unexplained), 0),
+                summary: bad.length ? `${bad.length} ledger-month(s) off by more than ₹${tol}` : `Every ledger-month within ₹${tol}`
+            };
         }
     },
     {
@@ -589,7 +913,7 @@ async function runChecks(locationCode, fy) {
         const status = res.status || (rows.length ? check.severity : 'pass');
         results.push({
             code: check.code, stage: check.stage, title: check.title, why: check.why, fix: check.fix, fixUrl: check.fixUrl,
-            status,
+            drill: !!check.drill, status,
             problemCount: res.showAll ? rows.filter(r => r.result === 'fail' || r.result === 'warn').length : rows.length,
             amount: res.amount != null ? Math.round(res.amount * 100) / 100 : null,
             summary: res.summary || (rows.length ? `${rows.length} row(s) to review` : 'Nothing found'),
@@ -603,4 +927,4 @@ async function runChecks(locationCode, fy) {
     return { results, counts, stages: STAGES };
 }
 
-module.exports = { runChecks, getFinancialYears, CHECKS, STAGES };
+module.exports = { runChecks, getFinancialYears, drillSalesGst, SALES_GST_CODE, CHECKS, STAGES };

@@ -1532,6 +1532,24 @@ router.get('/health-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACC
     }
 });
 
+// GET /gl/health-check/drill?fy_id=&code=A04&mon=YYYY-MM&key=&day= — a check row's
+// days (mon) or bills (mon + day), as JSON for the drill-down modal.
+router.get('/health-check/drill', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        if (req.query.code !== healthCheckService.SALES_GST_CODE) return res.status(400).json({ error: 'This check has no drill-down' });
+        const years = await healthCheckService.getFinancialYears(locationCode);
+        const fy = years.find(y => y.fy_id === parseInt(req.query.fy_id, 10));
+        if (!fy) return res.status(400).json({ error: 'Financial year not found' });
+        const out = await healthCheckService.drillSalesGst(locationCode, fy, req.query);
+        out.rows = formatHealthRows(out.rows);
+        res.json(out);
+    } catch (err) {
+        console.error('Health check drill error:', err);
+        res.status(400).json({ error: err.message });
+    }
+});
+
 // ── Financial Years ──────────────────────────────────────────────────────────
 // gl_journal_headers.fy_id has a hard FK to gl_financial_years, so a FY with
 // vouchers can't be deleted -- checked here first for a friendly message.
