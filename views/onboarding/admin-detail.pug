@@ -439,10 +439,13 @@ block content
                         if (!hints.length) { el.innerHTML = '<p class="text-muted small mb-0">No location config settings found.</p>'; return; }
                         // Pre-fill new-location column from brand template (IOCL→MUE, BPCL→SFS)
                         var tmplCol = OB_RO_BRAND === 'IOCL' ? 'MUE' : (OB_RO_BRAND === 'BPCL' ? 'SFS' : null);
+                        // These hold a product_id of the template location — never copy them
+                        // (a copied DSR_OIL_PRODUCT switched on 2T Oil cashflow lines at SHR/KAF)
+                        var NO_PREFILL = ['DSR_OIL_PRODUCT', 'TWO_T_LOOSE_PRODUCT', 'TWO_T_POUCH_PRODUCT'];
                         var h = '<div class="table-responsive mt-1"><table class="table table-sm table-bordered mb-0" style="font-size:12px" id="configHintsTable">';
                         h += '<thead class="thead-light"><tr><th>Setting</th><th>Default</th><th>MUE<br><small class="font-weight-normal text-muted">IOCL</small></th><th>SFS<br><small class="font-weight-normal text-muted">BPCL</small></th><th>AACBE</th><th style="min-width:110px">New Location</th></tr></thead><tbody>';
                         hints.forEach(function(row) {
-                            var prefill = tmplCol ? (row[tmplCol] || '') : '';
+                            var prefill = (tmplCol && NO_PREFILL.indexOf(row.name) === -1) ? (row[tmplCol] || '') : '';
                             h += '<tr>';
                             h += '<td>' + row.name + '</td>';
                             h += '<td>' + (row['*'] || '<span class="text-muted">—</span>') + '</td>';
