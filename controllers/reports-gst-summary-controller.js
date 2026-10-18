@@ -4,9 +4,10 @@ const moment = require('moment');
 var locationdao = require("../dao/report-dao");
 var personDao = require("../dao/person-dao");
 
-// Fuel at the value actually charged: meter value, less billed below the pump
-// price, plus off-meter credit sales (getFuelBillAdjustments). 'amount' is the
-// figure to report; the parts are kept for the breakdown columns.
+// Fuel at the pump price, as the books post it: meter value plus off-meter credit
+// sales (getFuelBillAdjustments). Bills charged below the pump price are a
+// discount in the books, not less sales. 'amount' is the figure to report; the
+// parts are kept for the breakdown columns.
 async function getFuelSales(locationCode, fromDate, toDate) {
   const [meterRows, adjRows] = await Promise.all([
     GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate),
@@ -16,14 +17,12 @@ async function getFuelSales(locationCode, fromDate, toDate) {
   return meterRows.map(row => {
     const a = adj.get(row.product) || {};
     const meter = parseFloat(row.amount || 0);
-    const discount = parseFloat(a.discount || 0);
     const offMeter = parseFloat(a.off_meter_amount || 0);
     return Object.assign({}, row, {
       litres: parseFloat(row.litres || 0) + parseFloat(a.off_meter_qty || 0),
       meter_amount: meter,
-      discount,
       off_meter_amount: offMeter,
-      amount: meter + discount + offMeter
+      amount: meter + offMeter
     });
   });
 }
@@ -107,9 +106,8 @@ module.exports = {
             'Product': salesRow.product,
             'Volume (Ltrs)': salesRow.litres,               // meter litres + off-meter litres
             'Meter Value': salesRow.meter_amount.toFixed(2),
-            'Billed Below Pump Price': salesRow.discount.toFixed(2),
             'Off-meter Sales': salesRow.off_meter_amount.toFixed(2),
-            'Amount': salesRow.amount.toFixed(2)             // value actually charged: the figure to file
+            'Amount': salesRow.amount.toFixed(2)             // the figure to file
           });
         });
         
@@ -248,7 +246,7 @@ module.exports = {
         currentRow++;
         
         const fuelSalesHeaderRow = salesSheet.getRow(currentRow);
-        fuelSalesHeaderRow.values = ['Product', 'Volume (Ltrs)', 'Meter Value', 'Billed Below Pump Price', 'Off-meter Sales', 'Amount'];
+        fuelSalesHeaderRow.values = ['Product', 'Volume (Ltrs)', 'Meter Value', 'Off-meter Sales', 'Amount'];
         fuelSalesHeaderRow.font = { bold: true };
         fuelSalesHeaderRow.eachCell((cell) => {
             cell.border = {
@@ -271,12 +269,11 @@ module.exports = {
             dataRow.getCell(1).value = row.product; // Text
             dataRow.getCell(2).value = toNumber(row.litres); // Number
             dataRow.getCell(3).value = toNumber(row.meter_amount);
-            dataRow.getCell(4).value = toNumber(row.discount);
-            dataRow.getCell(5).value = toNumber(row.off_meter_amount);
-            dataRow.getCell(6).value = toNumber(row.amount); // value actually charged
+            dataRow.getCell(4).value = toNumber(row.off_meter_amount);
+            dataRow.getCell(5).value = toNumber(row.amount);
 
             // Format number columns to 2 decimals
-            for (let i = 2; i <= 6; i++) dataRow.getCell(i).numFmt = '#,##0.00';
+            for (let i = 2; i <= 5; i++) dataRow.getCell(i).numFmt = '#,##0.00';
             
             dataRow.eachCell((cell) => {
                 cell.border = {
