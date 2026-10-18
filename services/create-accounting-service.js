@@ -348,12 +348,12 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
         INSERT INTO gl_accounting_events
             (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
         SELECT lh.location_code, fy.fy_id, 'LUBES_INVOICE', lh.lubes_hdr_id, 'CREATE',
-               lh.invoice_date, 'UNPROCESSED', :createdBy
+               DATE(lh.invoice_date), 'UNPROCESSED', :createdBy
         FROM t_lubes_inv_hdr lh
         JOIN gl_financial_years fy ON fy.location_code = lh.location_code
-            AND lh.invoice_date BETWEEN fy.start_date AND fy.end_date
+            AND DATE(lh.invoice_date) BETWEEN fy.start_date AND fy.end_date
         WHERE lh.location_code = :locationCode
-          AND lh.invoice_date BETWEEN :fromDate AND :toDate
+          AND DATE(lh.invoice_date) BETWEEN :fromDate AND :toDate
           AND NOT EXISTS (
               SELECT 1 FROM gl_accounting_events e
               WHERE e.source_type = 'LUBES_INVOICE' AND e.source_id = lh.lubes_hdr_id
