@@ -2287,6 +2287,21 @@ router.post('/tally-import/create', [isLoginEnsured, security.isAdmin()], async 
 // (gl_journal_headers.reversal_of_voucher_id) must be removed together, and
 // the NO ACTION constraints on gl_journal_headers/gl_accounting_events don't
 // allow ordering a single statement around that.
+// Correction Queue entries for the deleted vouchers/events go too: a delete is
+// always followed by a fresh run, so they would only point at vouchers that no
+// longer exist (whole-location wipe clears every entry for the location).
+
+const CORRECTION_QUEUE_IN_SCOPE = `
+    q.location_code = :locationCode
+    AND (:fromDate IS NULL
+         OR EXISTS (SELECT 1 FROM gl_journal_headers h
+                    WHERE h.voucher_id = q.voucher_id AND h.location_code = :locationCode
+                      AND h.voucher_date BETWEEN :fromDate AND :toDate
+                      AND (:includeManual = 1 OR h.source_type != 'MANUAL_JOURNAL'))
+         OR EXISTS (SELECT 1 FROM gl_accounting_events e
+                    WHERE e.source_type = q.source_type AND e.source_id = q.source_id
+                      AND e.location_code = :locationCode
+                      AND e.event_date BETWEEN :fromDate AND :toDate))`;
 
 async function countDeletableAccounting(locationCode, fromDate, toDate, includeManual) {
     const params = { locationCode, fromDate: fromDate || null, toDate: toDate || null, includeManual: includeManual ? 1 : 0 };
@@ -2318,7 +2333,11 @@ async function countDeletableAccounting(locationCode, fromDate, toDate, includeM
         ) x
     `, { replacements: params, type: db.Sequelize.QueryTypes.SELECT });
 
-    return { headers: parseInt(headers), lines: parseInt(line_count), events: parseInt(events) };
+    const [{ queue }] = await db.sequelize.query(`
+        SELECT COUNT(*) AS queue FROM gl_correction_queue q WHERE ${CORRECTION_QUEUE_IN_SCOPE}
+    `, { replacements: params, type: db.Sequelize.QueryTypes.SELECT });
+
+    return { headers: parseInt(headers), lines: parseInt(line_count), events: parseInt(events), queue: parseInt(queue) };
 }
 
 async function deleteAccounting(locationCode, fromDate, toDate, includeManual) {
@@ -2327,6 +2346,11 @@ async function deleteAccounting(locationCode, fromDate, toDate, includeManual) {
 
     try {
         await db.sequelize.query('SET FOREIGN_KEY_CHECKS=0', { transaction: t });
+
+        // Before the events/headers it matches on are gone
+        await db.sequelize.query(`
+            DELETE q FROM gl_correction_queue q WHERE ${CORRECTION_QUEUE_IN_SCOPE}
+        `, { replacements: params, transaction: t, type: db.Sequelize.QueryTypes.DELETE });
 
         await db.sequelize.query(`
             DELETE e FROM gl_accounting_events e
