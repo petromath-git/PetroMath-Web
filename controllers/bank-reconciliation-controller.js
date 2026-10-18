@@ -652,6 +652,9 @@ uploadBankStatement: async (req, res) => {
         } else if (isHtmlFile(req.file.buffer)) {
             await debugLog(locationCode, 'HTML-XLS detected (SAP download), using HTML parser');
             data = parseHtmlXlsToData(req.file.buffer);
+        } else if (!isRealBinaryWorkbook(req.file.buffer)) {
+            await debugLog(locationCode, 'Plain-text file detected (not a real binary workbook), using literal tab/newline parser to preserve original date text');
+            data = parsePlainTextToData(req.file.buffer);
         } else {
             const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
@@ -1256,6 +1259,23 @@ function columnToIndex(column) {
         result = result * 26 + (col.charCodeAt(i) - 64);
     }
     return result - 1;
+}
+
+// Some bank exports carry a .xls extension but are plain tab-delimited text
+// (e.g. SBI). XLSX.read() reformats their date text ("1 Mar 2026" -> "3/1/26",
+// then read as 3-Jan), so anything that isn't a real binary workbook is split
+// literally instead. Same handling as transaction-upload-controller.js.
+function isRealBinaryWorkbook(buffer) {
+    if (buffer.length < 4) return false;
+    const b0 = buffer[0], b1 = buffer[1], b2 = buffer[2], b3 = buffer[3];
+    const isZip = b0 === 0x50 && b1 === 0x4b; // "PK" — .xlsx (OOXML)
+    const isOle = b0 === 0xd0 && b1 === 0xcf && b2 === 0x11 && b3 === 0xe0; // legacy binary .xls
+    return isZip || isOle;
+}
+
+function parsePlainTextToData(buffer) {
+    const text = buffer.toString('utf8');
+    return text.split(/\r\n|\r|\n/).map(line => line.split('\t'));
 }
 
 function isHtmlFile(buffer) {
