@@ -855,7 +855,7 @@ block content
                 const wrap = document.getElementById('delPreviewResult');
                 const body = document.getElementById('delPreviewBody');
                 const total = data.headers + data.lines + data.events;
-                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) will be permanently deleted for ${from} → ${to}.`;
+                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) will be permanently deleted for ${from} → ${to}, along with <strong>${data.queue}</strong> Correction Queue entr${data.queue === 1 ? 'y' : 'ies'}.`;
                 wrap.style.display = '';
                 document.getElementById('delConfirmWrap').style.display = total > 0 ? '' : 'none';
                 document.getElementById('delConfirmText').value = '';
@@ -886,7 +886,7 @@ block content
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s).`);
+                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s), ${data.queue} Correction Queue entr${data.queue === 1 ? 'y' : 'ies'}.`);
                     document.getElementById('delPreviewResult').style.display = 'none';
                     document.getElementById('delConfirmWrap').style.display = 'none';
                 } else {
@@ -908,7 +908,7 @@ block content
                 const wrap = document.getElementById('wipePreviewResult');
                 const body = document.getElementById('wipePreviewBody');
                 const total = data.headers + data.lines + data.events;
-                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) exist for this location and will ALL be permanently deleted.`;
+                body.innerHTML = `<strong>${data.headers}</strong> voucher(s), <strong>${data.lines}</strong> journal line(s) and <strong>${data.events}</strong> event(s) exist for this location and will ALL be permanently deleted, along with <strong>${data.queue}</strong> Correction Queue entr${data.queue === 1 ? 'y' : 'ies'}.`;
                 wrap.style.display = '';
                 document.getElementById('wipeConfirmWrap').style.display = total > 0 ? '' : 'none';
                 document.getElementById('wipeConfirmText').value = '';
@@ -937,7 +937,7 @@ block content
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s).`);
+                    alert(`Deleted ${data.headers} voucher(s), ${data.lines} line(s), ${data.events} event(s), ${data.queue} Correction Queue entr${data.queue === 1 ? 'y' : 'ies'}.`);
                     document.getElementById('wipePreviewResult').style.display = 'none';
                     document.getElementById('wipeConfirmWrap').style.display = 'none';
                 } else {
