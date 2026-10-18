@@ -488,6 +488,48 @@ function balanceLinesForRounding(lines) {
     }
 }
 
+// Fuel = a pump product that is not a lube (as the GST Summary and A04 decide it).
+// Needs :locationCode and the bill's product as p.
+const IS_FUEL_SQL = `(COALESCE(p.is_lube_product, 0) = 0
+            AND p.product_name IN (SELECT mp.product_code FROM m_pump mp WHERE mp.location_code = :locationCode))`;
+
+const FUEL_DISCOUNT_LEDGER = 'DISCOUNT ON FUEL SALES';
+
+// Fuel bills post Sales at litres × pump price, the meter value the GST Summary
+// and the GST return carry, so fuel sales tie to the meter. What the bill was
+// charged below the pump price is a discount: DR DISCOUNT ON FUEL SALES (CR when
+// billed above, i.e. paise rounding). Only bills with no GST (lines = party DR +
+// Sales CR); call after balanceLinesForRounding, on paise values.
+async function postFuelAtPumpPrice(lines, row, locationCode, narration, processedBy) {
+    if (!Number(row.is_fuel) || lines.length !== 2) return;
+    const atPumpPrice = Math.round(parseFloat(row.qty) * parseFloat(row.price) * 100) / 100;
+    if (!(atPumpPrice > 0)) return;
+    const diff = Math.round((atPumpPrice - lines[1].cr_amount) * 100) / 100;
+    if (diff === 0) return;
+    const ledgerId = await resolveFuelDiscountLedger(locationCode, processedBy);
+    lines[1].cr_amount = atPumpPrice;
+    lines.push({ ledger_id: ledgerId, dr_amount: diff > 0 ? diff : 0, cr_amount: diff < 0 ? -diff : 0, narration });
+}
+
+// Created in the location's Indirect Expenses group the first time a fuel bill needs it.
+async function resolveFuelDiscountLedger(locationCode, processedBy) {
+    const found = await resolveLedgerByName(locationCode, FUEL_DISCOUNT_LEDGER);
+    if (found) return found.ledger_id;
+    const [group] = await db.sequelize.query(`
+        SELECT group_id FROM gl_ledger_groups
+        WHERE location_code = :locationCode AND group_name = 'Indirect Expenses'
+        LIMIT 1
+    `, { replacements: { locationCode }, type: QueryTypes.SELECT });
+    if (!group) throw new Error(`No 'Indirect Expenses' ledger group for location ${locationCode} — needed for ${FUEL_DISCOUNT_LEDGER}`);
+    await db.sequelize.query(`
+        INSERT IGNORE INTO gl_ledgers (location_code, ledger_name, group_id, source_type, active_flag, created_by, updated_by)
+        VALUES (:locationCode, :ledgerName, :groupId, 'SYSTEM', 'Y', :user, :user)
+    `, { replacements: { locationCode, ledgerName: FUEL_DISCOUNT_LEDGER, groupId: group.group_id, user: processedBy || 'system' } });
+    const created = await resolveLedgerByName(locationCode, FUEL_DISCOUNT_LEDGER);
+    if (!created) throw new Error(`Could not create ledger ${FUEL_DISCOUNT_LEDGER} for location ${locationCode}`);
+    return created.ledger_id;
+}
+
 // Customer DR (total) → Sales CR (base) + Output CGST CR + Output SGST CR
 
 async function processCreditSaleEvent(event, processedBy) {
@@ -501,17 +543,19 @@ async function processCreditSaleEvent(event, processedBy) {
             tc.creditlist_id,
             cl.Company_Name AS customer_name,
             tc.qty,
+            tc.price,
             tc.amount,
             tc.base_amount,
             tc.cgst_amount,
             tc.sgst_amount,
-            tc.bill_no
+            tc.bill_no,
+            ${IS_FUEL_SQL} AS is_fuel
         FROM t_credits tc
         JOIN m_product p       ON p.product_id     = tc.product_id
         JOIN m_credit_list cl  ON cl.creditlist_id  = tc.creditlist_id
         WHERE tc.tcredit_id = :tcreditId
     `, {
-        replacements: { tcreditId },
+        replacements: { tcreditId, locationCode: location_code },
         type: QueryTypes.SELECT
     });
 
@@ -549,6 +593,7 @@ async function processCreditSaleEvent(event, processedBy) {
     }
 
     balanceLinesForRounding(lines);
+    await postFuelAtPumpPrice(lines, row, location_code, narration, processedBy);
 
     const vid = await createVoucher({
         locationCode: location_code,
@@ -578,16 +623,18 @@ async function processCashSaleEvent(event, processedBy) {
             cs.product_id,
             p.product_name,
             cs.qty,
+            cs.price,
             cs.amount,
             cs.base_amount,
             cs.cgst_amount,
             cs.sgst_amount,
-            cs.bill_no
+            cs.bill_no,
+            ${IS_FUEL_SQL} AS is_fuel
         FROM t_cashsales cs
         JOIN m_product p ON p.product_id = cs.product_id
         WHERE cs.cashsales_id = :cashsalesId
     `, {
-        replacements: { cashsalesId },
+        replacements: { cashsalesId, locationCode: location_code },
         type: QueryTypes.SELECT
     });
 
@@ -630,6 +677,7 @@ async function processCashSaleEvent(event, processedBy) {
     }
 
     balanceLinesForRounding(lines);
+    await postFuelAtPumpPrice(lines, row, location_code, narration, processedBy);
 
     const vid = await createVoucher({
         locationCode: location_code,

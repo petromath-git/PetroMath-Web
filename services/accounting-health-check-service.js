@@ -99,9 +99,9 @@ const FUEL_POSITION_SQL = `
 // ── Sales and output GST: GST Summary vs GL ─────────────────────────────────
 // The GST return is filed from the GST Summary report, so its side is worked out
 // exactly as that report does (report-gst-summary-dao.js):
-//   - fuel (a pump product, not a lube): the value actually charged = meter litres
-//     × pump price, less what bills were billed below the pump price, plus
-//     off-meter credit sales; no tax;
+//   - fuel (a pump product, not a lube): meter litres × pump price, plus off-meter
+//     credit sales at litres × pump price; no tax. The GL posts fuel bills at the
+//     pump price too, with what was billed below it in DISCOUNT ON FUEL SALES;
 //   - everything else: credit and cash bills at the billed amount and the GST
 //     stored on the bill (the rate in force at the sale), plus lube lines on
 //     ACTIVE day bills at their stored tax.
@@ -110,7 +110,7 @@ const FUEL_POSITION_SQL = `
 // drilled to a day and a day to the bills and vouchers behind every rupee.
 // A fuel's meter is split over its bills at the pump price; whatever the bills
 // don't cover (or over-cover) is its own line. "Billed below price" is shown for
-// information only: both sides hold the billed amount.
+// information only: both sides hold the pump-price value.
 
 const SALE_SOURCES = ['CREDIT_SALE', 'CASH_SALE', 'DAY_BILL'];
 const r2 = n => Math.round((n || 0) * 100) / 100;
@@ -230,12 +230,15 @@ async function salesGstLines(loc, from, to) {
         const notes = [];
         if (!g && Math.abs(amount - tax) >= 0.01) notes.push('No GL voucher in this period');
         let gstSide = 0, explained = 0, gstTax = 0, rateKey = gstKey(p);
+        let expectedGl = amount - tax;
         if (isFuel) {
-            gstSide = amount;                            // the value actually charged
+            const atRate = qty * (parseFloat(b.price) || 0);
+            // at the pump price, as the GL posts a fuel bill with no GST on it
+            gstSide = tax < 0.01 && atRate > 0 ? atRate : amount;
+            expectedGl = tax < 0.01 && atRate > 0 ? atRate : amount - tax;
             if (Number(b.off_meter)) {
                 notes.push('Off-meter sale');
             } else {
-                const atRate = qty * (parseFloat(b.price) || 0);
                 explained = amount - atRate;
                 if (Math.abs(explained) >= 0.5) notes.push(`Billed ${fmtRs(explained)} ${explained < 0 ? 'below' : 'above'} the pump price`);
                 const k = `${b.d}|${b.product_id}`;
@@ -253,7 +256,7 @@ async function salesGstLines(loc, from, to) {
             rateKey = `GST:${billRate}`;
             if (Math.abs(billRate - rate) >= 0.01) notes.push(`Billed at ${billRate}% GST; the product is now ${rate}%`);
         }
-        if (g && Math.abs(glAmt - (amount - tax)) >= 0.5) notes.push('GL voucher differs from the bill: re-create accounting for the day');
+        if (g && Math.abs(glAmt - expectedGl) >= 0.5) notes.push('GL voucher differs from the bill: re-create accounting for the day');
         lines.push(Object.assign({ key: ledgerKey(p), gst_summary: gstSide, explained, gl: glAmt, note: notes.join('; ') }, base));
         if (gstTax || tax || glTax) {
             lines.push(Object.assign({ key: rateKey, gst_summary: gstTax, explained: 0, gl: glTax,
@@ -770,7 +773,7 @@ const CHECKS = [
         code: SALES_GST_CODE, stage: 'POST', severity: 'fail',
         title: 'Sales and output GST: GST Summary vs GL, by month',
         why: 'The GST return is filed from the GST Summary; the books are the GL. For every month, each sales ledger (fuel, oil and other GST goods) and the output GST at each rate should agree. The auditor compares the two, and any gap has to be explained bill by bill.',
-        fix: 'Click a month to see its days, and a day to see every bill and voucher with a note on what is wrong. Fuel is taken at the value actually charged (meter less what was billed below the pump price, plus off-meter sales), as the GST Summary reports it; "billed below price" is shown for information only.',
+        fix: 'Click a month to see its days, and a day to see every bill and voucher with a note on what is wrong. Fuel is taken at the pump price (meter plus off-meter sales), as the GST Summary reports it and the GL posts it; what bills were charged below the pump price is in DISCOUNT ON FUEL SALES, and "billed below price" is shown for information only.',
         fixUrl: '/reports-gst-summary',
         drill: true,
         run: async c => {

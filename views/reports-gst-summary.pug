@@ -92,8 +92,8 @@ block content
                 // 1. Fuel Sales Summary
                 document.getElementById('FuelSales-table-container').innerHTML = renderTable(
                     salesSummaryFromServer,
-                    'Fuel Sales (Amount = value actually charged)',
-                    ['Volume (Ltrs)', 'Meter Value', 'Billed Below Pump Price', 'Off-meter Sales', 'Amount'],
+                    'Fuel Sales (at pump price)',
+                    ['Volume (Ltrs)', 'Meter Value', 'Off-meter Sales', 'Amount'],
                     "col-sm-8 mx-auto"
                 );
                 

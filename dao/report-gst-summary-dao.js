@@ -97,25 +97,21 @@ module.exports = {
     return result;
   },
 
-  // Fuel is reported at the value actually charged (CGST Act s.15: the price
-  // actually paid), which is what the books hold: the meter value from
-  // getSalesConsolidated, less what metered credit and cash bills were billed
-  // below the pump price, plus off-meter credit sales (not on the meter at all).
-  // Keyed by product name, as getSalesConsolidated's rows are.
+  // Fuel is reported at the pump price, as the books post it: the meter value
+  // from getSalesConsolidated plus off-meter credit sales (not on the meter at
+  // all) at litres x pump price. What a bill was charged below the pump price is
+  // a discount in the books, not less sales. Keyed by product name, as
+  // getSalesConsolidated's rows are.
   getFuelBillAdjustments: async (locationCode, reportFromDate, reportToDate) => {
     const query = `
       SELECT mp.product_name AS product,
-             SUM(CASE WHEN s.off_meter = 0 THEN s.amount - s.qty * s.price ELSE 0 END) AS discount,
-             SUM(CASE WHEN s.off_meter = 1 THEN s.qty ELSE 0 END)                       AS off_meter_qty,
-             SUM(CASE WHEN s.off_meter = 1 THEN s.amount ELSE 0 END)                    AS off_meter_amount
-      FROM (
-        SELECT closing_id, product_id, qty, price, amount, COALESCE(off_meter_sale, 0) AS off_meter FROM t_credits
-        UNION ALL
-        SELECT closing_id, product_id, qty, price, amount, 0 FROM t_cashsales
-      ) s
+             SUM(s.qty)           AS off_meter_qty,
+             SUM(s.qty * s.price) AS off_meter_amount
+      FROM t_credits s
       JOIN t_closing tc ON tc.closing_id = s.closing_id
       JOIN m_product mp ON mp.product_id = s.product_id
-      WHERE tc.closing_status = 'CLOSED'
+      WHERE COALESCE(s.off_meter_sale, 0) = 1
+        AND tc.closing_status = 'CLOSED'
         AND tc.location_code = :locationCode
         AND DATE(tc.closing_date) BETWEEN :reportFromDate AND :reportToDate
         AND COALESCE(mp.is_lube_product, 0) = 0
