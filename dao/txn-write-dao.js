@@ -12,6 +12,7 @@ const TxnDigitalSales = db.txn_digital_sales;
 const CashReceipts = db.credit_receipts;
 const EmployeeLedger = db.employee_ledger;
 const locationConfigDao = require('./location-config-dao');
+const DigitalReconMatchDao = require('./digital-recon-match-dao');
 
 module.exports = {
     saveClosingData: (data) => {
@@ -113,7 +114,9 @@ saveReadings: (data) => {
             "credit_bill_date", "odometer_reading", "off_meter_sale", "updated_by", "updation_date"]});
     return salesTxn;
     },
-    saveDigitalSales: (data) => {
+    saveDigitalSales: async (data) => {
+    await DigitalReconMatchDao.clearForChangedRows('t_digital_sales', data,
+        ['amount', 'vendor_id', 'transaction_date']);
     const salesTxn = TxnDigitalSales.bulkCreate(data, {
         returning: true,
         updateOnDuplicate: ["vendor_id", "amount", "transaction_date", "notes", "updated_by", "updation_date"]
@@ -124,7 +127,8 @@ saveReadings: (data) => {
         const saleTxn = TxnCreditSales.destroy({ where: { tcredit_id: saleId } });
         return saleTxn;
     },
-    deleteDigitalSaleById: (digitalSalesId) => {
+    deleteDigitalSaleById: async (digitalSalesId) => {
+    await DigitalReconMatchDao.clearForRows('t_digital_sales', digitalSalesId);
     const salesTxn = TxnDigitalSales.destroy({ where: { digital_sales_id: digitalSalesId } });
     return salesTxn;
     },
@@ -145,6 +149,8 @@ saveReadings: (data) => {
         if (claimed) {
             throw new Error('One or more receipts are already part of a cashflow/day close and cannot be edited from the closing screen.');
         }
+        await DigitalReconMatchDao.clearForChangedRows('t_receipts', updateRows,
+            ['amount', 'creditlist_id', 'digital_creditlist_id', 'receipt_date']);
     }
 
     const locationCode = newRows.length > 0 ? newRows[0].location_code : undefined;
@@ -172,6 +178,7 @@ saveReadings: (data) => {
     if (receipt && (receipt.cashflow_date !== null || receipt.pending_cashflow_id !== null)) {
         throw new Error('This receipt is already part of a cashflow/day close and cannot be deleted from the closing screen.');
     }
+    await DigitalReconMatchDao.clearForRows('t_receipts', receiptId);
     const receiptTxn = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
     return receiptTxn;
     },
