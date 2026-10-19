@@ -37,6 +37,59 @@
 
 const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
+const { AsyncLocalStorage } = require('async_hooks');
+
+// One engine run (processEvents / reprocessQueuedCorrections). Each event is written in its own
+// transaction — one disk flush per event instead of one per statement — and voucher numbers and
+// ledger lookups are remembered for the run instead of re-read for every voucher.
+const runContext = new AsyncLocalStorage();
+
+function newRunContext() {
+    return { transaction: null, voucherNos: new Map(), lookups: new Map() };
+}
+
+// Every query in this file goes through here, so it joins the event's transaction when there is one.
+function query(sql, options) {
+    const ctx = runContext.getStore();
+    return db.sequelize.query(sql, ctx && ctx.transaction ? { ...options, transaction: ctx.transaction } : options);
+}
+
+// Another writer (a manual journal, a second run) can take the voucher number this run counted up to.
+function isVoucherNoClash(err) {
+    const parent = err && err.parent;
+    return !!parent && parent.code === 'ER_DUP_ENTRY' && /uniq_voucher_no/.test(parent.sqlMessage || '');
+}
+
+async function processEventInTransaction(ctx, event, processedBy) {
+    return runContext.run(ctx, async () => {
+        for (let attempt = 1; ; attempt++) {
+            ctx.transaction = await db.sequelize.transaction();
+            try {
+                const result = await processEvent(event, processedBy);
+                await ctx.transaction.commit();
+                return result;
+            } catch (err) {
+                await ctx.transaction.rollback();
+                // Numbers handed out and ledgers created inside the rolled-back transaction are gone with it.
+                ctx.voucherNos.clear();
+                ctx.lookups.clear();
+                if (attempt === 1 && isVoucherNoClash(err)) continue;
+                throw err;
+            } finally {
+                ctx.transaction = null;
+            }
+        }
+    });
+}
+
+// Remembers a found ledger for the run. A miss is not remembered: the ledger may be created later in the run.
+async function cachedLookup(key, lookup) {
+    const ctx = runContext.getStore();
+    if (ctx && ctx.lookups.has(key)) return ctx.lookups.get(key);
+    const value = await lookup();
+    if (ctx && value != null) ctx.lookups.set(key, value);
+    return value;
+}
 
 const VOUCHER_PREFIXES = {
     SALES:    'SAL',
@@ -60,7 +113,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
     const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
 
     const [events, openShiftDates, openBowserDates] = await Promise.all([
-        db.sequelize.query(`
+        query(`
             SELECT * FROM gl_accounting_events
             WHERE location_code = :locationCode
               AND event_date BETWEEN :fromDate AND :toDate
@@ -74,6 +127,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
     log.info(`Create Accounting started: ${locationCode} ${fromDate} → ${toDate}, ${events.length} unprocessed events`);
 
     const summary = { processed: 0, errors: 0, skipped: 0, blocked: 0, blockedDates: [], details: [] };
+    const ctx = newRunContext();
 
     for (const event of events) {
         const eventDate = typeof event.event_date === 'string'
@@ -97,7 +151,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
         }
 
         try {
-            const result = await processEvent(event, processedBy);
+            const result = await processEventInTransaction(ctx, event, processedBy);
             summary.processed += result.voucherCount;
             log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
             summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
@@ -118,7 +172,7 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
 async function reprocessEvents(locationCode, fromDate, toDate, processedBy, logger) {
     const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
 
-    const [, affectedRows] = await db.sequelize.query(`
+    const [, affectedRows] = await query(`
         UPDATE gl_accounting_events
         SET event_status  = 'UNPROCESSED',
             event_type    = 'UPDATE',
@@ -147,7 +201,7 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
     const log = logger || { info: () => {}, debug: () => {}, error: () => {} };
     const summary = { processed: 0, errors: 0, details: [] };
 
-    const queueRows = await db.sequelize.query(`
+    const queueRows = await query(`
         SELECT queue_id, source_type, source_id
         FROM gl_correction_queue
         WHERE queue_id IN (:queueIds) AND status = 'PENDING'
@@ -157,9 +211,10 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
 
     const uniqueEvents = [...new Map(queueRows.map(r => [`${r.source_type}#${r.source_id}`, r])).values()];
     log.info(`Reprocessing ${uniqueEvents.length} queued correction(s) from ${queueRows.length} queue entr(y/ies)`);
+    const ctx = newRunContext();
 
     for (const { source_type, source_id } of uniqueEvents) {
-        await db.sequelize.query(`
+        await query(`
             UPDATE gl_accounting_events
             SET event_status  = 'UNPROCESSED',
                 event_type    = 'UPDATE',
@@ -171,7 +226,7 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
               AND event_status IN ('PROCESSED', 'ERROR')
         `, { replacements: { source_type, source_id }, type: QueryTypes.UPDATE });
 
-        const [event] = await db.sequelize.query(`
+        const [event] = await query(`
             SELECT * FROM gl_accounting_events
             WHERE source_type = :source_type AND source_id = :source_id AND event_status = 'UNPROCESSED'
             ORDER BY event_id DESC LIMIT 1
@@ -180,7 +235,7 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
         if (!event) continue;
 
         try {
-            const result = await processEvent(event, processedBy);
+            const result = await processEventInTransaction(ctx, event, processedBy);
             summary.processed += result.voucherCount;
             log.debug(`REPROCESSED ${source_type}#${source_id} → ${result.voucherCount} voucher(s)`);
             summary.details.push({ source_type, source_id, status: 'PROCESSED' });
@@ -192,7 +247,7 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
         }
     }
 
-    await db.sequelize.query(`
+    await query(`
         UPDATE gl_correction_queue
         SET status = 'REPROCESSED', resolved_by = :processedBy, resolved_date = NOW()
         WHERE queue_id IN (:queueIds) AND status = 'PENDING'
@@ -216,7 +271,7 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
     log.info(`Generate Events started: ${locationCode} ${fromDate} → ${toDate}`);
 
     const run = async (sourceType, sql) => {
-        const [, meta] = await db.sequelize.query(sql, {
+        const [, meta] = await query(sql, {
             replacements: { locationCode, fromDate, toDate, createdBy },
             type: QueryTypes.INSERT
         });
@@ -515,13 +570,13 @@ async function postFuelAtPumpPrice(lines, row, locationCode, narration, processe
 async function resolveFuelDiscountLedger(locationCode, processedBy) {
     const found = await resolveLedgerByName(locationCode, FUEL_DISCOUNT_LEDGER);
     if (found) return found.ledger_id;
-    const [group] = await db.sequelize.query(`
+    const [group] = await query(`
         SELECT group_id FROM gl_ledger_groups
         WHERE location_code = :locationCode AND group_name = 'Indirect Expenses'
         LIMIT 1
     `, { replacements: { locationCode }, type: QueryTypes.SELECT });
     if (!group) throw new Error(`No 'Indirect Expenses' ledger group for location ${locationCode} — needed for ${FUEL_DISCOUNT_LEDGER}`);
-    await db.sequelize.query(`
+    await query(`
         INSERT IGNORE INTO gl_ledgers (location_code, ledger_name, group_id, source_type, active_flag, created_by, updated_by)
         VALUES (:locationCode, :ledgerName, :groupId, 'SYSTEM', 'Y', :user, :user)
     `, { replacements: { locationCode, ledgerName: FUEL_DISCOUNT_LEDGER, groupId: group.group_id, user: processedBy || 'system' } });
@@ -535,7 +590,7 @@ async function resolveFuelDiscountLedger(locationCode, processedBy) {
 async function processCreditSaleEvent(event, processedBy) {
     const { location_code, fy_id, source_id: tcreditId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             tc.tcredit_id,
             tc.product_id,
@@ -617,7 +672,7 @@ async function processCreditSaleEvent(event, processedBy) {
 async function processCashSaleEvent(event, processedBy) {
     const { location_code, fy_id, source_id: cashsalesId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             cs.cashsales_id,
             cs.product_id,
@@ -705,7 +760,7 @@ async function processDayBillEvent(event, processedBy) {
     const voucherIds = [];
 
     // Fetch all headers for this day bill
-    const headers = await db.sequelize.query(`
+    const headers = await query(`
         SELECT
             dbh.header_id,
             dbh.bill_type,
@@ -744,7 +799,7 @@ async function processDayBillEvent(event, processedBy) {
         }
 
         // Fetch line items for this header
-        const items = await db.sequelize.query(`
+        const items = await query(`
             SELECT
                 dbi.product_id,
                 p.product_name,
@@ -841,7 +896,7 @@ async function processDayBillEvent(event, processedBy) {
 async function processBankTxnEvent(event, processedBy) {
     const { location_code, fy_id, source_id: tBankId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             tbt.t_bank_id,
             tbt.bank_id,
@@ -956,7 +1011,7 @@ async function processBankTxnEvent(event, processedBy) {
 async function processBowserCreditSaleEvent(event, processedBy) {
     const { location_code, fy_id, source_id: creditId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             bc.credit_id,
             bc.product_id,
@@ -1010,7 +1065,7 @@ async function processBowserCreditSaleEvent(event, processedBy) {
 async function processBowserCashSaleEvent(event, processedBy) {
     const { location_code, fy_id, source_id: cashsaleId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             bcs.cashsale_id,
             bcs.product_id,
@@ -1065,7 +1120,7 @@ async function processBowserCashSaleEvent(event, processedBy) {
 async function processBowserDigitalSaleEvent(event, processedBy) {
     const { location_code, fy_id, source_id: digitalId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT
             bds.digital_id,
             bds.digital_vendor_id,
@@ -1124,7 +1179,7 @@ async function processBowserDigitalSaleEvent(event, processedBy) {
 async function processLubesInvoiceEvent(event, processedBy) {
     const { location_code, fy_id, source_id: lubesHdrId, event_date } = event;
 
-    const hdrs = await db.sequelize.query(`
+    const hdrs = await query(`
         SELECT
             h.lubes_hdr_id,
             h.closing_status,
@@ -1151,7 +1206,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
     // charged at the time). Falls back to reverse-calculating from the product master's
     // CURRENT rate only for older lines saved before GST capture existed (taxable_value
     // IS NULL) -- unchanged from the previous behavior for that historical data.
-    const lines_rows = await db.sequelize.query(`
+    const lines_rows = await query(`
         SELECT
             l.lubes_line_id,
             l.product_id,
@@ -1245,7 +1300,7 @@ async function processLubesInvoiceEvent(event, processedBy) {
 async function processTankInvoiceEvent(event, processedBy) {
     const { location_code, fy_id, source_id: invoiceId, event_date } = event;
 
-    const hdrs = await db.sequelize.query(`
+    const hdrs = await query(`
         SELECT
             ti.id,
             ti.invoice_number,
@@ -1268,7 +1323,7 @@ async function processTankInvoiceEvent(event, processedBy) {
     let totalCr = 0;
 
     // All charges (VAT, ADDITIONAL_VAT, DELIVERY_CHARGE, ...) per line — folded into that line's purchase amount
-    const chargeRows = await db.sequelize.query(`
+    const chargeRows = await query(`
         SELECT c.invoice_dtl_id, SUM(c.charge_amount) AS charge_amount
         FROM t_tank_invoice_charges c
         JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id
@@ -1279,7 +1334,7 @@ async function processTankInvoiceEvent(event, processedBy) {
     const chargesByDtl = new Map(chargeRows.map(r => [r.invoice_dtl_id, parseFloat(r.charge_amount)]));
 
     // Product purchase lines
-    const dtlRows = await db.sequelize.query(`
+    const dtlRows = await query(`
         SELECT
             d.id AS dtl_id,
             d.product_id,
@@ -1345,7 +1400,7 @@ async function processTankInvoiceEvent(event, processedBy) {
 async function processCashflowTxnEvent(event, processedBy) {
     const { location_code, fy_id, source_id: transactionId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT tct.transaction_id, tct.type, tct.description, tct.amount, tct.calc_flag,
                tct.entry_type, mah.account_head_name
         FROM t_cashflow_transaction tct
@@ -1413,7 +1468,7 @@ async function processCashflowTxnEvent(event, processedBy) {
 async function processAdjustmentEvent(event, processedBy) {
     const { location_code, fy_id, source_id: adjustmentId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT adjustment_id, description, external_id, external_source, ledger_name,
                debit_amount, credit_amount, adjustment_type, status, reference_no
         FROM t_adjustments
@@ -1481,7 +1536,7 @@ async function processAdjustmentEvent(event, processedBy) {
 async function processCreditReceiptEvent(event, processedBy) {
     const { location_code, fy_id, source_id: receiptId, event_date } = event;
 
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT tr.treceipt_id, tr.receipt_no, tr.receipt_type, tr.amount,
                tr.creditlist_id, tr.digital_creditlist_id, tr.source_txn_id, tr.source_split_id,
                cl.Company_Name  AS customer_name,
@@ -1579,7 +1634,7 @@ async function resolveAdjustmentTypeLedger(adjustmentType, locationCode, referen
     if (adjustmentType === 'REVERSAL') {
         const m = /^REV-(\d+)$/.exec(referenceNo || '');
         if (m) {
-            const orig = await db.sequelize.query(`
+            const orig = await query(`
                 SELECT adjustment_type FROM t_adjustments WHERE adjustment_id = :originalId
             `, { replacements: { originalId: parseInt(m[1], 10) }, type: QueryTypes.SELECT });
 
@@ -1591,7 +1646,7 @@ async function resolveAdjustmentTypeLedger(adjustmentType, locationCode, referen
         const info = await resolveLedgerByName(locationCode, 'Opening Balance Equity');
         if (info) return info.ledger_id;
     } else if (/^\d+$/.test(adjustmentType)) {
-        const lookupRows = await db.sequelize.query(`
+        const lookupRows = await query(`
             SELECT description FROM m_lookup WHERE lookup_type = 'ADJUSTMENT_TYPE' AND lookup_id = :adjustmentType LIMIT 1
         `, { replacements: { adjustmentType }, type: QueryTypes.SELECT });
 
@@ -1680,7 +1735,7 @@ async function resolveCounterpartLedger(txn, locationCode, eventId, processedBy)
 }
 
 async function buildSplitLines(tBankId, bankLedgerId, bankIsDr, txnAmount, narration, locationCode) {
-    const splits = await db.sequelize.query(`
+    const splits = await query(`
         SELECT split_id, amount, ledger_name, external_id, external_source, remarks
         FROM t_bank_transaction_splits
         WHERE t_bank_id = :tBankId
@@ -1768,7 +1823,7 @@ async function createVoucher({ locationCode, fyId, voucherType, voucherDate, sou
 
     const voucherNo = await generateVoucherNo(locationCode, fyId, voucherType);
 
-    const [voucherId] = await db.sequelize.query(`
+    const [voucherId] = await query(`
         INSERT INTO gl_journal_headers
             (location_code, fy_id, voucher_type, voucher_date, voucher_no,
              narration, source_type, source_id, is_reversal, is_exported,
@@ -1782,24 +1837,31 @@ async function createVoucher({ locationCode, fyId, voucherType, voucherDate, sou
         type: QueryTypes.INSERT
     });
 
-    for (let i = 0; i < lines.length; i++) {
-        const { ledger_id, dr_amount = 0, cr_amount = 0, narration: lineNarration = null } = lines[i];
-        await db.sequelize.query(`
-            INSERT INTO gl_journal_lines
-                (voucher_id, line_no, ledger_id, dr_amount, cr_amount, narration, created_by)
-            VALUES
-                (:voucherId, :lineNo, :ledgerId, :drAmount, :crAmount, :lineNarration, :postedBy)
-        `, {
-            replacements: { voucherId, lineNo: i + 1, ledgerId: ledger_id, drAmount: dr_amount, crAmount: cr_amount, lineNarration, postedBy },
-            type: QueryTypes.INSERT
-        });
-    }
+    await insertJournalLines(voucherId, lines, postedBy);
 
     return voucherId;
 }
 
+// All of a voucher's lines in one INSERT, numbered 1..n in the order given.
+async function insertJournalLines(voucherId, lines, createdBy) {
+    if (!lines.length) return;
+    const replacements = { voucherId, createdBy };
+    const values = lines.map((line, i) => {
+        replacements[`ledgerId${i}`]  = line.ledger_id;
+        replacements[`drAmount${i}`]  = line.dr_amount || 0;
+        replacements[`crAmount${i}`]  = line.cr_amount || 0;
+        replacements[`narration${i}`] = line.narration || null;
+        return `(:voucherId, ${i + 1}, :ledgerId${i}, :drAmount${i}, :crAmount${i}, :narration${i}, :createdBy)`;
+    });
+    await query(`
+        INSERT INTO gl_journal_lines
+            (voucher_id, line_no, ledger_id, dr_amount, cr_amount, narration, created_by)
+        VALUES ${values.join(',\n               ')}
+    `, { replacements, type: QueryTypes.INSERT });
+}
+
 async function reverseExistingVouchers(locationCode, sourceType, sourceId, reversedBy) {
-    const existing = await db.sequelize.query(`
+    const existing = await query(`
         SELECT voucher_id, voucher_type, voucher_date, fy_id, narration
         FROM gl_journal_headers
         WHERE location_code = :locationCode
@@ -1812,7 +1874,7 @@ async function reverseExistingVouchers(locationCode, sourceType, sourceId, rever
     });
 
     for (const v of existing) {
-        const lines = await db.sequelize.query(`
+        const lines = await query(`
             SELECT ledger_id, cr_amount AS dr_amount, dr_amount AS cr_amount
             FROM gl_journal_lines
             WHERE voucher_id = :voucherId
@@ -1823,7 +1885,7 @@ async function reverseExistingVouchers(locationCode, sourceType, sourceId, rever
 
         const voucherNo = await generateVoucherNo(locationCode, v.fy_id, v.voucher_type);
 
-        const [reversalId] = await db.sequelize.query(`
+        const [reversalId] = await query(`
             INSERT INTO gl_journal_headers
                 (location_code, fy_id, voucher_type, voucher_date, voucher_no,
                  narration, source_type, source_id, is_reversal, reversal_of_voucher_id,
@@ -1848,83 +1910,86 @@ async function reverseExistingVouchers(locationCode, sourceType, sourceId, rever
             type: QueryTypes.INSERT
         });
 
-        for (let i = 0; i < lines.length; i++) {
-            const { ledger_id, dr_amount, cr_amount } = lines[i];
-            await db.sequelize.query(`
-                INSERT INTO gl_journal_lines
-                    (voucher_id, line_no, ledger_id, dr_amount, cr_amount, created_by)
-                VALUES (:reversalId, :lineNo, :ledgerId, :drAmount, :crAmount, :reversedBy)
-            `, {
-                replacements: { reversalId, lineNo: i + 1, ledgerId: ledger_id, drAmount: dr_amount, crAmount: cr_amount, reversedBy },
-                type: QueryTypes.INSERT
-            });
-        }
+        await insertJournalLines(reversalId, lines, reversedBy);
     }
 }
 
+// Reads the highest number once per run and series, then counts up from it.
 async function generateVoucherNo(locationCode, fyId, voucherType) {
     const prefix = VOUCHER_PREFIXES[voucherType] || 'JNL';
-    const result = await db.sequelize.query(`
-        SELECT COALESCE(MAX(
-            CAST(SUBSTRING(voucher_no, LOCATE('-', voucher_no) + 1) AS UNSIGNED)
-        ), 0) + 1 AS next_no
-        FROM gl_journal_headers
-        WHERE location_code = :locationCode
-          AND fy_id         = :fyId
-          AND voucher_type  = :voucherType
-          AND voucher_no IS NOT NULL
-    `, {
-        replacements: { locationCode, fyId, voucherType },
-        type: QueryTypes.SELECT
-    });
-    const nextNo = result[0].next_no;
+    const ctx = runContext.getStore();
+    const key = `${locationCode}|${fyId}|${voucherType}`;
+    let nextNo = ctx ? ctx.voucherNos.get(key) : undefined;
+    if (nextNo === undefined) {
+        const result = await query(`
+            SELECT COALESCE(MAX(
+                CAST(SUBSTRING(voucher_no, LOCATE('-', voucher_no) + 1) AS UNSIGNED)
+            ), 0) + 1 AS next_no
+            FROM gl_journal_headers
+            WHERE location_code = :locationCode
+              AND fy_id         = :fyId
+              AND voucher_type  = :voucherType
+              AND voucher_no IS NOT NULL
+        `, {
+            replacements: { locationCode, fyId, voucherType },
+            type: QueryTypes.SELECT
+        });
+        nextNo = Number(result[0].next_no);
+    }
+    if (ctx) ctx.voucherNos.set(key, nextNo + 1);
     return `${prefix}-${String(nextNo).padStart(4, '0')}`;
 }
 
 // ─── Ledger Resolvers ─────────────────────────────────────────────────────────
 
 async function resolveLedger(locationCode, sourceType, sourceId) {
-    const rows = await db.sequelize.query(`
-        SELECT ledger_id FROM gl_ledgers
-        WHERE location_code = :locationCode
-          AND source_type   = :sourceType
-          AND source_id     = :sourceId
-        LIMIT 1
-    `, {
-        replacements: { locationCode, sourceType, sourceId },
-        type: QueryTypes.SELECT
+    return cachedLookup(`ledger|${locationCode}|${sourceType}|${sourceId}`, async () => {
+        const rows = await query(`
+            SELECT ledger_id FROM gl_ledgers
+            WHERE location_code = :locationCode
+              AND source_type   = :sourceType
+              AND source_id     = :sourceId
+            LIMIT 1
+        `, {
+            replacements: { locationCode, sourceType, sourceId },
+            type: QueryTypes.SELECT
+        });
+        return rows[0] ? rows[0].ledger_id : null;
     });
-    return rows[0] ? rows[0].ledger_id : null;
 }
 
 async function resolveProductLedger(locationCode, productId, mapType) {
-    const rows = await db.sequelize.query(`
-        SELECT ledger_id FROM gl_product_ledger_map
-        WHERE location_code = :locationCode
-          AND product_id    = :productId
-          AND map_type      = :mapType
-        LIMIT 1
-    `, {
-        replacements: { locationCode, productId, mapType },
-        type: QueryTypes.SELECT
+    return cachedLookup(`product|${locationCode}|${productId}|${mapType}`, async () => {
+        const rows = await query(`
+            SELECT ledger_id FROM gl_product_ledger_map
+            WHERE location_code = :locationCode
+              AND product_id    = :productId
+              AND map_type      = :mapType
+            LIMIT 1
+        `, {
+            replacements: { locationCode, productId, mapType },
+            type: QueryTypes.SELECT
+        });
+        return rows[0] ? rows[0].ledger_id : null;
     });
-    return rows[0] ? rows[0].ledger_id : null;
 }
 
 async function resolveLedgerByName(locationCode, ledgerName) {
-    const rows = await db.sequelize.query(`
-        SELECT l.ledger_id, g.group_name
-        FROM gl_ledgers l
-        JOIN gl_ledger_groups g ON g.group_id = l.group_id
-        WHERE l.location_code = :locationCode
-          AND l.ledger_name   = :ledgerName
-          AND l.active_flag   = 'Y'
-        LIMIT 1
-    `, {
-        replacements: { locationCode, ledgerName },
-        type: QueryTypes.SELECT
+    return cachedLookup(`name|${locationCode}|${ledgerName}`, async () => {
+        const rows = await query(`
+            SELECT l.ledger_id, g.group_name
+            FROM gl_ledgers l
+            JOIN gl_ledger_groups g ON g.group_id = l.group_id
+            WHERE l.location_code = :locationCode
+              AND l.ledger_name   = :ledgerName
+              AND l.active_flag   = 'Y'
+            LIMIT 1
+        `, {
+            replacements: { locationCode, ledgerName },
+            type: QueryTypes.SELECT
+        });
+        return rows[0] || null;
     });
-    return rows[0] || null;
 }
 
 // Resolves a Static (free-text) bank-transaction ledger_name via the explicit
@@ -1948,13 +2013,14 @@ async function resolveLedgerByName(locationCode, ledgerName) {
 // (see AccountHeadsDao.createAccountHead) — an unmapped label here is a
 // genuine gap to go fix at the source, not something to paper over.
 async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true, fallbackLedgerName = 'Unclassified Bank Transaction') {
-    const rows = await db.sequelize.query(`
-        SELECT treatment, gl_ledger_id, bank_id FROM gl_static_ledger_map
-        WHERE location_code = :locationCode AND ledger_name = :ledgerName
-        LIMIT 1
-    `, { replacements: { locationCode, ledgerName }, type: QueryTypes.SELECT });
-
-    const mapped = rows[0];
+    const mapped = await cachedLookup(`static|${locationCode}|${ledgerName}`, async () => {
+        const rows = await query(`
+            SELECT treatment, gl_ledger_id, bank_id FROM gl_static_ledger_map
+            WHERE location_code = :locationCode AND ledger_name = :ledgerName
+            LIMIT 1
+        `, { replacements: { locationCode, ledgerName }, type: QueryTypes.SELECT });
+        return rows[0] || null;
+    });
     if (allowSkip && mapped?.treatment === 'SKIP') return { treatment: 'SKIP', ledgerId: null, isContra: false };
 
     if (mapped?.treatment === 'CONTRA' && mapped.bank_id) {
@@ -1971,18 +2037,20 @@ async function resolveStaticLedger(locationCode, ledgerName, allowSkip = true, f
 }
 
 async function resolveCashLedger(locationCode) {
-    const rows = await db.sequelize.query(`
-        SELECT l.ledger_id FROM gl_ledgers l
-        JOIN gl_ledger_groups g ON g.group_id = l.group_id
-        WHERE l.location_code = :locationCode
-          AND g.group_name    = 'Cash-in-Hand'
-          AND l.active_flag   = 'Y'
-        LIMIT 1
-    `, {
-        replacements: { locationCode },
-        type: QueryTypes.SELECT
+    return cachedLookup(`cash|${locationCode}`, async () => {
+        const rows = await query(`
+            SELECT l.ledger_id FROM gl_ledgers l
+            JOIN gl_ledger_groups g ON g.group_id = l.group_id
+            WHERE l.location_code = :locationCode
+              AND g.group_name    = 'Cash-in-Hand'
+              AND l.active_flag   = 'Y'
+            LIMIT 1
+        `, {
+            replacements: { locationCode },
+            type: QueryTypes.SELECT
+        });
+        return rows[0] ? rows[0].ledger_id : null;
     });
-    return rows[0] ? rows[0].ledger_id : null;
 }
 
 // ─── Shift Gate ───────────────────────────────────────────────────────────────
@@ -1991,7 +2059,7 @@ async function resolveCashLedger(locationCode) {
 // DAY_BILL) are skipped for these dates — left UNPROCESSED until the shift closes.
 
 async function getOpenShiftDates(locationCode, fromDate, toDate) {
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT DISTINCT DATE_FORMAT(closing_date, '%Y-%m-%d') AS blocked_date
         FROM t_closing
         WHERE location_code  = :locationCode
@@ -2005,7 +2073,7 @@ async function getOpenShiftDates(locationCode, fromDate, toDate) {
 }
 
 async function getOpenBowserDates(locationCode, fromDate, toDate) {
-    const rows = await db.sequelize.query(`
+    const rows = await query(`
         SELECT DISTINCT DATE_FORMAT(closing_date, '%Y-%m-%d') AS blocked_date
         FROM t_bowser_closing
         WHERE location_code = :locationCode
@@ -2021,7 +2089,7 @@ async function getOpenBowserDates(locationCode, fromDate, toDate) {
 // ─── Event Status Helpers ─────────────────────────────────────────────────────
 
 async function markEventProcessed(eventId, voucherId, processedBy) {
-    await db.sequelize.query(`
+    await query(`
         UPDATE gl_accounting_events
         SET event_status  = 'PROCESSED',
             voucher_id    = :voucherId,
@@ -2035,7 +2103,7 @@ async function markEventProcessed(eventId, voucherId, processedBy) {
 }
 
 async function markEventError(eventId, errorMessage) {
-    await db.sequelize.query(`
+    await query(`
         UPDATE gl_accounting_events
         SET event_status  = 'ERROR',
             error_message = :errorMessage,
