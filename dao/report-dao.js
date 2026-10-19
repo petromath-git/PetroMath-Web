@@ -302,6 +302,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         INNER JOIN t_closing tc ON tds.closing_id = tc.closing_id
         INNER JOIN m_credit_list mcl ON tds.vendor_id = mcl.creditlist_id
         WHERE tc.location_code = :locationCode
+          AND tc.closing_status = 'CLOSED'   -- draft shifts can still change; recon only closed ones
           AND DATE(COALESCE(tds.transaction_date, tc.closing_date)) BETWEEN :fromDate AND :toDate
           AND (
               tds.vendor_id = :vendorId
@@ -471,6 +472,7 @@ getDigitalStmt: async (locationCode, fromDate, toDate, vendorId) => {
         JOIN t_bowser_closing bcl ON bcl.bowser_closing_id = bds.bowser_closing_id
         JOIN m_credit_list    mcl ON mcl.creditlist_id     = bds.digital_vendor_id
         WHERE bcl.location_code = :locationCode
+          AND bcl.status = 'CLOSED'
           AND DATE(bcl.closing_date) BETWEEN :fromDate AND :toDate
           AND (
               bds.digital_vendor_id = :vendorId
