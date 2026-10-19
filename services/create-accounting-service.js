@@ -39,13 +39,16 @@ const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 const { AsyncLocalStorage } = require('async_hooks');
 
-// One engine run (processEvents / reprocessQueuedCorrections). Each event is written in its own
-// transaction — one disk flush per event instead of one per statement — and voucher numbers and
-// ledger lookups are remembered for the run instead of re-read for every voucher.
+// One engine run (processEvents / reprocessQueuedCorrections). Events are written in batches of
+// EVENTS_PER_COMMIT per transaction — one disk flush per batch — each event behind its own savepoint,
+// so a failing event is undone alone. Voucher numbers and ledger lookups are remembered for the run
+// instead of re-read for every voucher. A crash mid-batch loses only that batch: its events stay
+// UNPROCESSED for the next run.
 const runContext = new AsyncLocalStorage();
+const EVENTS_PER_COMMIT = 200;
 
 function newRunContext() {
-    return { transaction: null, voucherNos: new Map(), lookups: new Map() };
+    return { transaction: null, eventsInBatch: 0, voucherNos: new Map(), lookups: new Map() };
 }
 
 // Every query in this file goes through here, so it joins the event's transaction when there is one.
@@ -60,26 +63,49 @@ function isVoucherNoClash(err) {
     return !!parent && parent.code === 'ER_DUP_ENTRY' && /uniq_voucher_no/.test(parent.sqlMessage || '');
 }
 
-async function processEventInTransaction(ctx, event, processedBy) {
-    return runContext.run(ctx, async () => {
-        for (let attempt = 1; ; attempt++) {
-            ctx.transaction = await db.sequelize.transaction();
-            try {
-                const result = await processEvent(event, processedBy);
-                await ctx.transaction.commit();
-                return result;
-            } catch (err) {
-                await ctx.transaction.rollback();
-                // Numbers handed out and ledgers created inside the rolled-back transaction are gone with it.
-                ctx.voucherNos.clear();
-                ctx.lookups.clear();
-                if (attempt === 1 && isVoucherNoClash(err)) continue;
-                throw err;
-            } finally {
-                ctx.transaction = null;
+// Call inside runContext.run(ctx, …): every query of the event, and the error mark when it fails,
+// then joins the batch's transaction.
+async function processEventInBatch(ctx, event, processedBy) {
+    if (!ctx.transaction) ctx.transaction = await db.sequelize.transaction();
+    for (let attempt = 1; ; attempt++) {
+        const savepoint = `gl_event_${event.event_id}_${attempt}`;
+        await query(`SAVEPOINT ${savepoint}`);
+        try {
+            const result = await processEvent(event, processedBy);
+            await query(`RELEASE SAVEPOINT ${savepoint}`);
+            return result;
+        } catch (err) {
+            await query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+            // Numbers handed out and ledgers created after the savepoint are gone with it.
+            ctx.voucherNos.clear();
+            ctx.lookups.clear();
+            if (attempt === 1 && isVoucherNoClash(err)) {
+                // A fresh transaction, so the retry sees the other writer's voucher number.
+                await commitBatch(ctx);
+                ctx.transaction = await db.sequelize.transaction();
+                continue;
             }
+            throw err;
         }
-    });
+    }
+}
+
+async function commitBatchIfFull(ctx) {
+    if (ctx.transaction && ++ctx.eventsInBatch >= EVENTS_PER_COMMIT) await commitBatch(ctx);
+}
+
+async function commitBatch(ctx) {
+    const t = ctx.transaction;
+    ctx.transaction = null;
+    ctx.eventsInBatch = 0;
+    if (t) await t.commit();
+}
+
+async function rollbackBatch(ctx) {
+    const t = ctx.transaction;
+    ctx.transaction = null;
+    ctx.eventsInBatch = 0;
+    if (t) await t.rollback();
 }
 
 // Remembers a found ledger for the run. A miss is not remembered: the ledger may be created later in the run.
@@ -129,39 +155,48 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
     const summary = { processed: 0, errors: 0, skipped: 0, blocked: 0, blockedDates: [], details: [] };
     const ctx = newRunContext();
 
-    for (const event of events) {
-        const eventDate = typeof event.event_date === 'string'
-            ? event.event_date.substring(0, 10)
-            : event.event_date.toISOString().substring(0, 10);
-
-        if (SHIFT_BOUND_TYPES.has(event.source_type) && openShiftDates.has(eventDate)) {
-            summary.blocked++;
-            if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
-            log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — shift on ${eventDate} is DRAFT`);
-            summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Shift on ${eventDate} is still DRAFT` });
-            continue;
-        }
-
-        if (BOWSER_BOUND_TYPES.has(event.source_type) && openBowserDates.has(eventDate)) {
-            summary.blocked++;
-            if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
-            log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — bowser on ${eventDate} is DRAFT`);
-            summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Bowser closing on ${eventDate} is still DRAFT` });
-            continue;
-        }
-
+    await runContext.run(ctx, async () => {
         try {
-            const result = await processEventInTransaction(ctx, event, processedBy);
-            summary.processed += result.voucherCount;
-            log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
-            summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
+            for (const event of events) {
+                const eventDate = typeof event.event_date === 'string'
+                    ? event.event_date.substring(0, 10)
+                    : event.event_date.toISOString().substring(0, 10);
+
+                if (SHIFT_BOUND_TYPES.has(event.source_type) && openShiftDates.has(eventDate)) {
+                    summary.blocked++;
+                    if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
+                    log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — shift on ${eventDate} is DRAFT`);
+                    summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Shift on ${eventDate} is still DRAFT` });
+                    continue;
+                }
+
+                if (BOWSER_BOUND_TYPES.has(event.source_type) && openBowserDates.has(eventDate)) {
+                    summary.blocked++;
+                    if (!summary.blockedDates.includes(eventDate)) summary.blockedDates.push(eventDate);
+                    log.debug(`BLOCKED event_id=${event.event_id} ${event.source_type}#${event.source_id} — bowser on ${eventDate} is DRAFT`);
+                    summary.details.push({ event_id: event.event_id, status: 'BLOCKED', reason: `Bowser closing on ${eventDate} is still DRAFT` });
+                    continue;
+                }
+
+                try {
+                    const result = await processEventInBatch(ctx, event, processedBy);
+                    summary.processed += result.voucherCount;
+                    log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
+                    summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
+                } catch (err) {
+                    await markEventError(event.event_id, err.message);
+                    summary.errors++;
+                    log.error(`ERROR event_id=${event.event_id} ${event.source_type}#${event.source_id}: ${err.message}`);
+                    summary.details.push({ event_id: event.event_id, status: 'ERROR', message: err.message });
+                }
+                await commitBatchIfFull(ctx);
+            }
+            await commitBatch(ctx);
         } catch (err) {
-            await markEventError(event.event_id, err.message);
-            summary.errors++;
-            log.error(`ERROR event_id=${event.event_id} ${event.source_type}#${event.source_id}: ${err.message}`);
-            summary.details.push({ event_id: event.event_id, status: 'ERROR', message: err.message });
+            await rollbackBatch(ctx);
+            throw err;
         }
-    }
+    });
 
     log.info(`Create Accounting done — processed=${summary.processed} blocked=${summary.blocked} errors=${summary.errors} skipped=${summary.skipped}`);
     if (summary.blockedDates.length) log.info(`Blocked dates (DRAFT shifts): ${summary.blockedDates.join(', ')}`);
@@ -213,39 +248,48 @@ async function reprocessQueuedCorrections(queueIds, processedBy, logger) {
     log.info(`Reprocessing ${uniqueEvents.length} queued correction(s) from ${queueRows.length} queue entr(y/ies)`);
     const ctx = newRunContext();
 
-    for (const { source_type, source_id } of uniqueEvents) {
-        await query(`
-            UPDATE gl_accounting_events
-            SET event_status  = 'UNPROCESSED',
-                event_type    = 'UPDATE',
-                voucher_id    = NULL,
-                error_message = NULL,
-                processed_at  = NULL,
-                processed_by  = NULL
-            WHERE source_type = :source_type AND source_id = :source_id
-              AND event_status IN ('PROCESSED', 'ERROR')
-        `, { replacements: { source_type, source_id }, type: QueryTypes.UPDATE });
-
-        const [event] = await query(`
-            SELECT * FROM gl_accounting_events
-            WHERE source_type = :source_type AND source_id = :source_id AND event_status = 'UNPROCESSED'
-            ORDER BY event_id DESC LIMIT 1
-        `, { replacements: { source_type, source_id }, type: QueryTypes.SELECT });
-
-        if (!event) continue;
-
+    await runContext.run(ctx, async () => {
         try {
-            const result = await processEventInTransaction(ctx, event, processedBy);
-            summary.processed += result.voucherCount;
-            log.debug(`REPROCESSED ${source_type}#${source_id} → ${result.voucherCount} voucher(s)`);
-            summary.details.push({ source_type, source_id, status: 'PROCESSED' });
+            for (const { source_type, source_id } of uniqueEvents) {
+                await query(`
+                    UPDATE gl_accounting_events
+                    SET event_status  = 'UNPROCESSED',
+                        event_type    = 'UPDATE',
+                        voucher_id    = NULL,
+                        error_message = NULL,
+                        processed_at  = NULL,
+                        processed_by  = NULL
+                    WHERE source_type = :source_type AND source_id = :source_id
+                      AND event_status IN ('PROCESSED', 'ERROR')
+                `, { replacements: { source_type, source_id }, type: QueryTypes.UPDATE });
+
+                const [event] = await query(`
+                    SELECT * FROM gl_accounting_events
+                    WHERE source_type = :source_type AND source_id = :source_id AND event_status = 'UNPROCESSED'
+                    ORDER BY event_id DESC LIMIT 1
+                `, { replacements: { source_type, source_id }, type: QueryTypes.SELECT });
+
+                if (!event) continue;
+
+                try {
+                    const result = await processEventInBatch(ctx, event, processedBy);
+                    summary.processed += result.voucherCount;
+                    log.debug(`REPROCESSED ${source_type}#${source_id} → ${result.voucherCount} voucher(s)`);
+                    summary.details.push({ source_type, source_id, status: 'PROCESSED' });
+                } catch (err) {
+                    await markEventError(event.event_id, err.message);
+                    summary.errors++;
+                    log.error(`ERROR reprocessing ${source_type}#${source_id}: ${err.message}`);
+                    summary.details.push({ source_type, source_id, status: 'ERROR', message: err.message });
+                }
+                await commitBatchIfFull(ctx);
+            }
+            await commitBatch(ctx);
         } catch (err) {
-            await markEventError(event.event_id, err.message);
-            summary.errors++;
-            log.error(`ERROR reprocessing ${source_type}#${source_id}: ${err.message}`);
-            summary.details.push({ source_type, source_id, status: 'ERROR', message: err.message });
+            await rollbackBatch(ctx);
+            throw err;
         }
-    }
+    });
 
     await query(`
         UPDATE gl_correction_queue
