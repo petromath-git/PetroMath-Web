@@ -40,15 +40,16 @@ const { QueryTypes } = require('sequelize');
 const { AsyncLocalStorage } = require('async_hooks');
 
 // One engine run (processEvents / reprocessQueuedCorrections). Events are written in batches of
-// EVENTS_PER_COMMIT per transaction — one disk flush per batch — each event behind its own savepoint,
-// so a failing event is undone alone. Voucher numbers and ledger lookups are remembered for the run
-// instead of re-read for every voucher. A crash mid-batch loses only that batch: its events stay
-// UNPROCESSED for the next run.
+// EVENTS_PER_COMMIT per transaction — one disk flush per batch — and their PROCESSED marks go in one
+// UPDATE at commit. processEvents runs a batch with no savepoints; if any event fails, the batch is
+// rolled back and redone with a savepoint per event, so only the failing event is undone. Voucher
+// numbers and ledger lookups are remembered for the run instead of re-read for every voucher. A crash
+// mid-batch loses only that batch: its events stay UNPROCESSED for the next run.
 const runContext = new AsyncLocalStorage();
 const EVENTS_PER_COMMIT = 200;
 
 function newRunContext() {
-    return { transaction: null, eventsInBatch: 0, voucherNos: new Map(), lookups: new Map() };
+    return { transaction: null, eventsInBatch: 0, pendingMarks: [], voucherNos: new Map(), lookups: new Map() };
 }
 
 // Every query in this file goes through here, so it joins the event's transaction when there is one.
@@ -69,6 +70,7 @@ async function processEventInBatch(ctx, event, processedBy) {
     if (!ctx.transaction) ctx.transaction = await db.sequelize.transaction();
     for (let attempt = 1; ; attempt++) {
         const savepoint = `gl_event_${event.event_id}_${attempt}`;
+        const marksBefore = ctx.pendingMarks.length;
         await query(`SAVEPOINT ${savepoint}`);
         try {
             const result = await processEvent(event, processedBy);
@@ -76,7 +78,8 @@ async function processEventInBatch(ctx, event, processedBy) {
             return result;
         } catch (err) {
             await query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-            // Numbers handed out and ledgers created after the savepoint are gone with it.
+            // Marks, numbers handed out and ledgers created after the savepoint are gone with it.
+            ctx.pendingMarks.length = marksBefore;
             ctx.voucherNos.clear();
             ctx.lookups.clear();
             if (attempt === 1 && isVoucherNoClash(err)) {
@@ -90,11 +93,38 @@ async function processEventInBatch(ctx, event, processedBy) {
     }
 }
 
+// One batch of processEvents. Fast path: the whole batch in one transaction, no savepoints. If an
+// event fails, the batch is rolled back and redone the careful way, a savepoint per event.
+async function processBatch(ctx, events, processedBy, record) {
+    ctx.transaction = await db.sequelize.transaction();
+    const results = [];
+    try {
+        for (const event of events) results.push(await processEvent(event, processedBy));
+        await commitBatch(ctx);
+    } catch (fastErr) {
+        await rollbackBatch(ctx);
+        ctx.voucherNos.clear();
+        ctx.lookups.clear();
+        for (const event of events) {
+            try {
+                record(event, await processEventInBatch(ctx, event, processedBy));
+            } catch (err) {
+                await markEventError(event.event_id, err.message);
+                record(event, null, err);
+            }
+        }
+        await commitBatch(ctx);
+        return;
+    }
+    events.forEach((event, i) => record(event, results[i]));
+}
+
 async function commitBatchIfFull(ctx) {
     if (ctx.transaction && ++ctx.eventsInBatch >= EVENTS_PER_COMMIT) await commitBatch(ctx);
 }
 
 async function commitBatch(ctx) {
+    if (ctx.transaction) await flushProcessedMarks(ctx);
     const t = ctx.transaction;
     ctx.transaction = null;
     ctx.eventsInBatch = 0;
@@ -105,7 +135,35 @@ async function rollbackBatch(ctx) {
     const t = ctx.transaction;
     ctx.transaction = null;
     ctx.eventsInBatch = 0;
+    ctx.pendingMarks = [];
     if (t) await t.rollback();
+}
+
+// The batch's PROCESSED marks in one UPDATE per processedBy, inside the batch's transaction.
+async function flushProcessedMarks(ctx) {
+    const marks = ctx.pendingMarks;
+    ctx.pendingMarks = [];
+    const byUser = new Map();
+    for (const m of marks) {
+        if (!byUser.has(m.processedBy)) byUser.set(m.processedBy, []);
+        byUser.get(m.processedBy).push(m);
+    }
+    for (const [processedBy, group] of byUser) {
+        const replacements = { processedBy, eventIds: group.map(m => m.eventId) };
+        const cases = group.map((m, i) => {
+            replacements[`e${i}`] = m.eventId;
+            replacements[`v${i}`] = m.voucherId;
+            return `WHEN :e${i} THEN :v${i}`;
+        });
+        await query(`
+            UPDATE gl_accounting_events
+            SET event_status  = 'PROCESSED',
+                voucher_id    = CASE event_id ${cases.join(' ')} END,
+                processed_at  = NOW(),
+                processed_by  = :processedBy
+            WHERE event_id IN (:eventIds)
+        `, { replacements, type: QueryTypes.UPDATE });
+    }
 }
 
 // Remembers a found ledger for the run. A miss is not remembered: the ledger may be created later in the run.
@@ -155,8 +213,21 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
     const summary = { processed: 0, errors: 0, skipped: 0, blocked: 0, blockedDates: [], details: [] };
     const ctx = newRunContext();
 
+    const record = (event, result, err) => {
+        if (err) {
+            summary.errors++;
+            log.error(`ERROR event_id=${event.event_id} ${event.source_type}#${event.source_id}: ${err.message}`);
+            summary.details.push({ event_id: event.event_id, status: 'ERROR', message: err.message });
+            return;
+        }
+        summary.processed += result.voucherCount;
+        log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
+        summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
+    };
+
     await runContext.run(ctx, async () => {
         try {
+            let batch = [];
             for (const event of events) {
                 const eventDate = typeof event.event_date === 'string'
                     ? event.event_date.substring(0, 10)
@@ -178,20 +249,13 @@ async function processEvents(locationCode, fromDate, toDate, processedBy, logger
                     continue;
                 }
 
-                try {
-                    const result = await processEventInBatch(ctx, event, processedBy);
-                    summary.processed += result.voucherCount;
-                    log.debug(`PROCESSED event_id=${event.event_id} ${event.source_type}#${event.source_id} → ${result.voucherCount} voucher(s)`);
-                    summary.details.push({ event_id: event.event_id, status: 'PROCESSED', vouchers: result.voucherCount });
-                } catch (err) {
-                    await markEventError(event.event_id, err.message);
-                    summary.errors++;
-                    log.error(`ERROR event_id=${event.event_id} ${event.source_type}#${event.source_id}: ${err.message}`);
-                    summary.details.push({ event_id: event.event_id, status: 'ERROR', message: err.message });
+                batch.push(event);
+                if (batch.length >= EVENTS_PER_COMMIT) {
+                    await processBatch(ctx, batch, processedBy, record);
+                    batch = [];
                 }
-                await commitBatchIfFull(ctx);
             }
-            await commitBatch(ctx);
+            if (batch.length) await processBatch(ctx, batch, processedBy, record);
         } catch (err) {
             await rollbackBatch(ctx);
             throw err;
@@ -2132,7 +2196,13 @@ async function getOpenBowserDates(locationCode, fromDate, toDate) {
 
 // ─── Event Status Helpers ─────────────────────────────────────────────────────
 
+// Inside a batch the mark waits for the batch's commit (flushProcessedMarks); outside one it is written now.
 async function markEventProcessed(eventId, voucherId, processedBy) {
+    const ctx = runContext.getStore();
+    if (ctx && ctx.transaction) {
+        ctx.pendingMarks.push({ eventId, voucherId, processedBy });
+        return;
+    }
     await query(`
         UPDATE gl_accounting_events
         SET event_status  = 'PROCESSED',
