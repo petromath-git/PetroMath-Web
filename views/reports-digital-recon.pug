@@ -127,7 +127,8 @@ block content
                         key !== 'unique_id' &&
                         key !== 'source_table' &&
                         key !== 'source_id' &&
-                        key !== 'manual_recon_flag') {
+                        key !== 'manual_recon_flag' &&
+                        key !== 'saved_match_id') {
                         let widthStyle = (key === 'Narration') ? "max-width:220px;" : "";
                         result += `<th class='text-center' style='border: 1px solid #dee2e6; ${widthStyle}'>${key}</th>`;
                     }
@@ -165,7 +166,10 @@ block content
 
                 const matchId = row.match_id || '';
                 const matchIdClass = matchId ? 'text-primary font-weight-bold' : 'text-muted';
-                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${matchId || '-'}</td>`;
+                const unmatchBtn = row.saved_match_id
+                    ? ` <button type='button' class='btn btn-link btn-sm p-0 ms-1 text-danger' title='Unmatch this group' onclick='unmatchGroup("${row.saved_match_id}")'><i class='bi bi-x-circle'></i></button>`
+                    : '';
+                result += `<td class='text-center ${matchIdClass}' style='border: 1px solid #dee2e6; vertical-align: middle;'>${matchId || '-'}${unmatchBtn}</td>`;
 
                 Object.keys(row).forEach(key => {
                     if (key !== 'companyName' &&
@@ -176,7 +180,8 @@ block content
                         key !== 'unique_id' &&
                         key !== 'source_table' &&
                         key !== 'source_id' &&
-                        key !== 'manual_recon_flag') {
+                        key !== 'manual_recon_flag' &&
+                        key !== 'saved_match_id') {
                         let dataValue = row[key];
                         const isAmount = numberColumns.includes(key);
                         const isUnreconciled = !row.reconciled;
@@ -226,6 +231,35 @@ block content
 
             result += "</tbody></table></div>";
             return result;
+        }
+
+        // Unmatch a saved group: all its rows go back to unreconciled
+        async function unmatchGroup(matchId) {
+            const groupRows = creditstmtFromServer.filter(r => String(r.saved_match_id) === String(matchId));
+            const debit = groupRows.reduce((s, r) => s + parseFloat(r.Debit || 0), 0);
+            const credit = groupRows.reduce((s, r) => s + parseFloat(r.Credit || 0), 0);
+            const msg = `Unmatch group ${matchId}?\n\n` +
+                `${groupRows.length} row(s) in this period - Debit ₹${debit.toFixed(2)}, Credit ₹${credit.toFixed(2)}.\n` +
+                `All rows of the group (including any outside this period) become unreconciled, and its saved difference is removed.`;
+            if (!confirm(msg)) return;
+
+            try {
+                const response = await fetch('/digital-recon/unmatch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ matchId })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(`Unmatched ${result.rows} row(s).`);
+                    location.reload();
+                } else {
+                    alert(result.message || result.error || 'Unknown error');
+                }
+            } catch (err) {
+                console.error('Unmatch Error:', err);
+                alert('Server error while removing match');
+            }
         }
 
         async function submitManualMatch() {

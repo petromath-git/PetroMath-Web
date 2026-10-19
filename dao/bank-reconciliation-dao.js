@@ -1,6 +1,7 @@
 const db = require("../db/db-connection");
 const Sequelize = db.Sequelize;
 const { debugLog } = require('../utils/debug-logger');
+const DigitalReconMatchDao = require('./digital-recon-match-dao');
 
 module.exports = {
     
@@ -262,35 +263,8 @@ getBanksForReconciliation: async (locationCode) => {
                 }
             );
 
-            // Step 2: Clear recon_match_id from linked records
-            if (reconIds.length > 0) {
-                await db.sequelize.query(
-                    `UPDATE t_digital_sales SET recon_match_id = NULL WHERE recon_match_id IN (:reconIds)`,
-                    {
-                        replacements: { reconIds },
-                        type: db.Sequelize.QueryTypes.UPDATE,
-                        transaction: t
-                    }
-                );
-
-                await db.sequelize.query(
-                    `UPDATE t_adjustments SET recon_match_id = NULL WHERE recon_match_id IN (:reconIds)`,
-                    {
-                        replacements: { reconIds },
-                        type: db.Sequelize.QueryTypes.UPDATE,
-                        transaction: t
-                    }
-                );
-
-                await db.sequelize.query(
-                    `UPDATE t_receipts SET recon_match_id = NULL WHERE recon_match_id IN (:reconIds)`,
-                    {
-                        replacements: { reconIds },
-                        type: db.Sequelize.QueryTypes.UPDATE,
-                        transaction: t
-                    }
-                );
-            }
+            // Step 2: Unmatch the whole Digital Recon group of each deleted receipt
+            await DigitalReconMatchDao.clearMatchGroups(reconIds, t);
 
             // Step 3: Log to audit trail BEFORE deleting
             await db.sequelize.query(

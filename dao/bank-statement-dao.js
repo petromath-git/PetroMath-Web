@@ -1,5 +1,6 @@
 const db = require("../db/db-connection");
 const { QueryTypes } = require('sequelize');
+const DigitalReconMatchDao = require('./digital-recon-match-dao');
 
 module.exports = {
     // Get regular bank accounts for a location (NOT oil company banks)
@@ -325,6 +326,7 @@ saveTransaction: async (transactionData) => {
         const t = await db.sequelize.transaction();
         try {
             // Delete receipts linked to this transaction (covers both direct and split-created receipts)
+            await DigitalReconMatchDao.clearForBankTxnReceipts(tBankId, t);
             await db.sequelize.query(
                 `DELETE FROM t_receipts WHERE source_txn_id = :tBankId`,
                 { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
@@ -644,6 +646,7 @@ saveTransaction: async (transactionData) => {
             // Remove the original receipt created at upload time (source_split_id IS NULL),
             // as well as any receipts from a prior re-split (source_split_id IS NOT NULL).
             // This prevents double-counting when the full-amount receipt coexists with split receipts.
+            await DigitalReconMatchDao.clearForBankTxnReceipts(tBankId, t);
             await db.sequelize.query(
                 `DELETE FROM t_receipts WHERE source_txn_id = :tBankId`,
                 { replacements: { tBankId }, type: QueryTypes.DELETE, transaction: t }
@@ -761,6 +764,7 @@ saveTransaction: async (transactionData) => {
         const t = await db.sequelize.transaction();
         try {
             // Remove only split-created receipts (identified by source_split_id)
+            await DigitalReconMatchDao.clearForBankTxnReceipts(tBankId, t, { splitsOnly: true });
             await db.sequelize.query(
                 `DELETE FROM t_receipts
                  WHERE source_split_id IN (
