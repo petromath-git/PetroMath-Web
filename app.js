@@ -1101,6 +1101,10 @@ app.post('/digital-recon/save-difference', isLoginEnsured, function (req, res, n
     digitalReconreportsController.saveDifferenceAndMatch(req, res);
 });
 
+app.post('/digital-recon/unmatch', isLoginEnsured, function (req, res, next) {
+    digitalReconreportsController.unmatch(req, res);
+});
+
 app.post('/digital-recon/get-differences', isLoginEnsured, function (req, res, next) {
     digitalReconreportsController.getDifferences(req, res, next);
 });

@@ -4,6 +4,7 @@ const Credit = db.credit;
 const { Op } = require("sequelize");
 const Sequelize = require("sequelize");
 const locationConfigDao = require('../dao/location-config-dao');
+const DigitalReconMatchDao = require('./digital-recon-match-dao');
 
 
 module.exports = {
@@ -76,7 +77,9 @@ module.exports = {
 },
 
 
-    update: (receipt) => {
+    update: async (receipt) => {
+        await DigitalReconMatchDao.clearForChangedRows('t_receipts', [receipt],
+            ['amount', 'creditlist_id', 'digital_creditlist_id', 'receipt_date']);
         return CashReceipts.update(receipt, {
             where: {'treceipt_id': receipt.treceipt_id},
         });
@@ -94,7 +97,8 @@ module.exports = {
         });
     },
 
-    delete: (receiptId) => {
+    delete: async (receiptId) => {
+        await DigitalReconMatchDao.clearForRows('t_receipts', receiptId);
         const deleteStatus = CashReceipts.destroy({ where: { treceipt_id: receiptId } });
         return deleteStatus;
     }
