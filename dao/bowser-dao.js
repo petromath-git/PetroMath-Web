@@ -1,5 +1,6 @@
 'use strict';
 const db = require('../db/db-connection');
+const DigitalReconMatchDao = require('./digital-recon-match-dao');
 
 module.exports = {
 
@@ -230,6 +231,7 @@ module.exports = {
         if (closing.status !== 'DRAFT') throw Object.assign(new Error('Only DRAFT closings can be deleted.'), { statusCode: 400 });
 
         await db.sequelize.query(`DELETE FROM t_bowser_credits       WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
+        await DigitalReconMatchDao.clearForBowserClosing(bowserClosingId);
         await db.sequelize.query(`DELETE FROM t_bowser_digital_sales  WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
         await db.sequelize.query(`DELETE FROM t_bowser_cashsales      WHERE bowser_closing_id = :bowserClosingId`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
         await db.sequelize.query(`DELETE FROM t_bowser_closing        WHERE bowser_closing_id = :bowserClosingId AND status = 'DRAFT'`, { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE });
@@ -315,6 +317,7 @@ module.exports = {
     },
 
     saveDigitalItems: async (bowserClosingId, items, createdBy) => {
+        await DigitalReconMatchDao.clearForBowserClosing(bowserClosingId);
         await db.sequelize.query(
             `DELETE FROM t_bowser_digital_sales WHERE bowser_closing_id = :bowserClosingId`,
             { replacements: { bowserClosingId }, type: db.Sequelize.QueryTypes.DELETE }

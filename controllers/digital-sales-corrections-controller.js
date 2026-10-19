@@ -1,6 +1,7 @@
 // controllers/digital-sales-corrections-controller.js
 const db = require('../db/db-connection');
 const rolePermissionsDao = require('../dao/role-permissions-dao');
+const DigitalReconMatchDao = require('../dao/digital-recon-match-dao');
 
 module.exports = {
     // Render the main page
@@ -246,6 +247,11 @@ module.exports = {
                 return res.status(400).json({ 
                     error: 'Invalid or inactive digital vendor' 
                 });
+            }
+
+            // Moving the sale to another vendor breaks its Digital Recon match
+            if (String(transaction.current_vendor_id) !== String(newVendorId)) {
+                await DigitalReconMatchDao.clearForRows('t_digital_sales', digitalSalesId);
             }
 
             // Update the vendor

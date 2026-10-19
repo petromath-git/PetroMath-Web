@@ -8,6 +8,7 @@ var CreditDao = require("../dao/credits-dao");
 const moment = require('moment');
 const locationConfig = require('../utils/location-config');
 const db = require("../db/db-connection");
+const DigitalReconMatchDao = require("../dao/digital-recon-match-dao");
 
 
 
@@ -456,8 +457,13 @@ function fifthPassShiftOffsetReconciliation(
    🧩 EXECUTION SEQUENCE
   --------------------------------------------------------------*/
   const creditTransactions = processedData.filter(tx => tx.CreditAmount !== null);
-  const matchedDebitIds = new Set();
-  const matchedCreditIds = new Set();
+  // Rows already matched in the DB must never be pulled into an auto match
+  const matchedDebitIds = new Set(
+    processedData.filter(tx => tx.reconciled && tx.DebitAmount !== null).map(tx => tx.unique_id)
+  );
+  const matchedCreditIds = new Set(
+    processedData.filter(tx => tx.reconciled && tx.CreditAmount !== null).map(tx => tx.unique_id)
+  );
 
   firstPassReconciliation(creditTransactions, processedData, matchedDebitIds);
   secondPassReconciliation(creditTransactions, processedData, matchedDebitIds);
@@ -576,7 +582,8 @@ function fifthPassShiftOffsetReconciliation(
         possibleMatch: transaction.possibleMatch || null, // Add possible match hint
         source_table: transaction.source_table,
         source_id: transaction.source_id,
-        manual_recon_flag: transaction.manual_recon_flag_db || 0
+        manual_recon_flag: transaction.manual_recon_flag_db || 0,
+        saved_match_id: transaction.recon_match_id_db || null
       }));
 
     const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
@@ -829,6 +836,39 @@ exports.saveDifferenceAndMatch = async (req, res) => {
     }
 };
 
+
+// Unmatch a saved match group: every row of the group goes back to unreconciled
+// and the group's saved difference (if any) is dropped.
+exports.unmatch = async (req, res) => {
+    try {
+        const matchId = String(req.body.matchId || '').trim();
+        const locationCode = req.user.location_code;
+
+        if (!/^\d+$/.test(matchId)) {
+            return res.status(400).json({ success: false, message: 'Invalid match id' });
+        }
+        if (!(await DigitalReconMatchDao.matchBelongsToLocation(matchId, locationCode))) {
+            return res.status(404).json({ success: false, message: 'Match not found for this location' });
+        }
+
+        const t = await db.sequelize.transaction();
+        let rows;
+        try {
+            rows = await DigitalReconMatchDao.clearMatchGroups([matchId], t);
+            await t.commit();
+        } catch (err) {
+            await t.rollback();
+            throw err;
+        }
+
+        await debugLog(locationCode, 'unmatch', { matchId, rows, by: req.user.Person_id });
+        res.json({ success: true, rows });
+
+    } catch (error) {
+        console.error('Error in unmatch:', error);
+        res.status(500).json({ success: false, message: 'Error removing match', error: error.message });
+    }
+};
 
 exports.getDifferences = async (req, res) => {
     try {
