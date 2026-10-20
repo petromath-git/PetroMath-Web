@@ -42,6 +42,8 @@ block content
     input(type='hidden' id='user' name='user' value= user)
     input(type='hidden' id='closing_hiddenId' value= closingData.closingId)
 
+    +shiftContextBar(closingData.closingStatus)
+
     form.closing-page
         div
             if(!freezedRecord)
