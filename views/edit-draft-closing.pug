@@ -5,7 +5,8 @@ include mixins/exshort-breakdown-mixin
 include mixins/closing-shortcuts
 
 block content    
-    - var maxCreditsRowCnt = config.maxCreditsRowCnt;
+    //- Saved credit lines plus a few blank ones; more come from #credit-row-template
+    - var creditRowCnt = (t_credits ? t_credits.length : 0) + config.creditBlankRowCnt;
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
     - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
@@ -453,7 +454,7 @@ block content
                                                 th.col-sale(scope="col") Sale
                                                 th.col-actions(scope="col") Actions
                                             - var rowCnt = 0
-                                            while rowCnt < maxCreditsRowCnt
+                                            while rowCnt < creditRowCnt
                                                 +addCredits(rowCnt, t_credits[rowCnt++])
                     div.row.mt-2
                         div.col-12.d-flex.align-items-center.justify-content-end
@@ -469,6 +470,16 @@ block content
                     div.row
                         div.col(align="center")
                             button.btn.btn-info(type="button", onClick="handleAddCreditRowClick()") Add credits
+                    //- One blank credit line (and its Summary row), copied by ensureFreeCreditRow()
+                    //- in credit-entry-modal.js with __ROW__ set to the next line number
+                    template#credit-row-template
+                        table
+                            tbody
+                                +addCredits('__ROW__')
+                    template#credit-summary-row-template
+                        table
+                            tbody
+                                +summaryCreditsData('__ROW__')
 
                     div.row
                         div.col &nbsp;
@@ -778,7 +789,7 @@ block content
                                                             th(scope="col")
 
                                                     - var rowCnt = 0
-                                                        while rowCnt < maxCreditsRowCnt
+                                                        while rowCnt < creditRowCnt
                                                             +summaryCreditsData(rowCnt++)
                                                         tr
                                                             td(colspan=5)
