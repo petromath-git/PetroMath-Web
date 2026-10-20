@@ -71,7 +71,10 @@ function initVehicleSelect2ForModal(rowNo) {
         width: '100%',
         minimumInputLength: 0,
         theme: 'default',
-        dropdownParent: $('#creditEntryModal')
+        // Inside .modal-content, not the .modal itself: a click that starts on the box and
+        // ends on the dropdown is delivered to their common ancestor, and Bootstrap closes
+        // the modal when that ancestor is the .modal (it treats it as a backdrop click).
+        dropdownParent: $('#creditEntryModal .modal-content')
     });
 }
 
