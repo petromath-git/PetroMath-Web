@@ -705,26 +705,28 @@ mixin addNewAttendance(rowNo, rowData)
 //- #cashierDate) and the shift number from #closing_hiddenId, which a new shift only
 //- gets once it is first saved (by the tab save or autosave), hence the light poll.
 mixin shiftContextBar(status)
+    //- Kept quiet on purpose (small grey text, like the autosave status line): there when you
+    //- look for it, without competing with the tabs. White background only so it stays readable
+    //- when pinned over scrolled content.
     style.
-        .shift-context-bar { position: sticky; top: 0; z-index: 1019; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; background: #fff; border: 1px solid #dee2e6; border-left: 4px solid #007bff; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,.06); }
-        .shift-context-bar .shift-ctx-item { white-space: nowrap; }
-        .shift-context-bar .shift-ctx-label { color: #6c757d; font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; margin-right: 5px; }
-        .shift-context-bar .shift-ctx-value { font-weight: 600; }
+        .shift-context-bar { position: sticky; top: 0; z-index: 1019; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; background: #fff; padding: 4px 2px; margin-bottom: 4px; font-size: 0.8rem; color: #6c757d; }
+        .shift-context-bar a { color: #6c757d; margin-right: 6px; }
+        .shift-context-bar a:hover { color: #007bff; }
+        .shift-context-bar .shift-ctx-sep { color: #ced4da; }
     .shift-context-bar#shiftContextBar
-        a.btn.btn-sm.btn-outline-primary(href='/home' title='Back to the shift list')
+        a(href='/home' title='Back to the shift list')
             i.bi.bi-arrow-left.mr-1
             | Shifts
-        span.shift-ctx-item
-            span.shift-ctx-label Shift
-            span.shift-ctx-value#shiftCtxId New
-        span.shift-ctx-item
-            span.shift-ctx-label Cashier
-            span.shift-ctx-value#shiftCtxCashier
-        span.shift-ctx-item
-            span.shift-ctx-label Date
-            span.shift-ctx-value#shiftCtxDate
+        span
+            | Shift 
+            span#shiftCtxId New
+        span.shift-ctx-sep ·
+        span#shiftCtxCashier
+        span.shift-ctx-sep ·
+        span#shiftCtxDate
         if status
-            span.badge(class=(status === 'CLOSED' ? 'badge-secondary' : 'badge-warning'))= status === 'CLOSED' ? 'Closed' : 'Draft'
+            span.shift-ctx-sep ·
+            span= status === 'CLOSED' ? 'Closed' : 'Draft'
     script.
         (function () {
             function setText(id, text) {
