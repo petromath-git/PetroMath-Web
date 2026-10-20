@@ -699,3 +699,49 @@ mixin addNewAttendance(rowNo, rowData)
         td.card-remove
             button.close(type="button" aria-label="Close" onclick='hideRow(\'' + trId + '\',"remove-attendance")')
                 span(aria-hidden="true") &times;
+
+//- Which shift is open, kept in view on every tab, plus a way back to the shift list.
+//- Cashier and date are read live from the Closing tab's fields (#cashierId,
+//- #cashierDate) and the shift number from #closing_hiddenId, which a new shift only
+//- gets once it is first saved (by the tab save or autosave), hence the light poll.
+mixin shiftContextBar(status)
+    style.
+        .shift-context-bar { position: sticky; top: 0; z-index: 1019; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; background: #fff; border: 1px solid #dee2e6; border-left: 4px solid #007bff; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,.06); }
+        .shift-context-bar .shift-ctx-item { white-space: nowrap; }
+        .shift-context-bar .shift-ctx-label { color: #6c757d; font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; margin-right: 5px; }
+        .shift-context-bar .shift-ctx-value { font-weight: 600; }
+    .shift-context-bar#shiftContextBar
+        a.btn.btn-sm.btn-outline-primary(href='/home' title='Back to the shift list')
+            i.bi.bi-arrow-left.mr-1
+            | Shifts
+        span.shift-ctx-item
+            span.shift-ctx-label Shift
+            span.shift-ctx-value#shiftCtxId New
+        span.shift-ctx-item
+            span.shift-ctx-label Cashier
+            span.shift-ctx-value#shiftCtxCashier
+        span.shift-ctx-item
+            span.shift-ctx-label Date
+            span.shift-ctx-value#shiftCtxDate
+        if status
+            span.badge(class=(status === 'CLOSED' ? 'badge-secondary' : 'badge-warning'))= status === 'CLOSED' ? 'Closed' : 'Draft'
+    script.
+        (function () {
+            function setText(id, text) {
+                var el = document.getElementById(id);
+                if (el && el.textContent !== text) el.textContent = text;
+            }
+            function refresh() {
+                var closingId = document.getElementById('closing_hiddenId');
+                var cashier = document.getElementById('cashierId');
+                var date = document.getElementById('cashierDate');
+                setText('shiftCtxId', closingId && closingId.value ? '#' + closingId.value : 'New');
+                setText('shiftCtxCashier', cashier && cashier.selectedIndex >= 0 ? cashier.options[cashier.selectedIndex].text : '');
+                setText('shiftCtxDate', date && date.value
+                    ? (typeof formatDateDDMonYYYY === 'function' ? formatDateDDMonYYYY(date.value) : date.value)
+                    : '');
+            }
+            document.addEventListener('DOMContentLoaded', refresh);
+            document.addEventListener('change', refresh);
+            setInterval(refresh, 2000);
+        })();
