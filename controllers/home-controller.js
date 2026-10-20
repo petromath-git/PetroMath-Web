@@ -1146,6 +1146,7 @@ const vehicleDataPromise = (locationCode) => {
                         vehicleId: vehicle.vehicle_id,
                         vehicleNumber: vehicle.vehicle_number,
                         vehicleType: vehicle.vehicle_type,
+                        productId: vehicle.product_id,
                         companyName: vehicle.company_name
                     });
                 });
