@@ -3149,8 +3149,8 @@ $(document).ready(function() {
         vehicleDataByCredit = vehicleData;
     }
     
-    // Initialize Select2 for existing rows
-    initializeVehicleSelect2();
+    // Vehicle boxes are set up when a credit line opens in the pop-up
+    // (initVehicleSelect2ForModal in credit-entry-modal.js), not for every line on load
 });
 
 

@@ -89,10 +89,35 @@ function findNextAvailableCreditRow() {
     return null;
 }
 
+// The page renders the shift's saved lines plus a few blank ones (it used to carry 300,
+// each with its own copy of the party and product lists). When no blank line is left,
+// add one from #credit-row-template, numbered after the last line, with its Summary row.
+function ensureFreeCreditRow() {
+    if (findNextAvailableCreditRow() !== null) return;
+    var rowNo = document.querySelectorAll('tr[id^="credit-table-row-"]').length;
+    var lastRow = document.getElementById('credit-table-row-' + (rowNo - 1));
+    var lastSummaryRow = document.getElementById('vis-credit-table-row-' + (rowNo - 1));
+    insertTemplateRows('credit-row-template', rowNo, lastRow);
+    insertTemplateRows('credit-summary-row-template', rowNo, lastSummaryRow);
+}
+
+function insertTemplateRows(templateId, rowNo, afterRow) {
+    var template = document.getElementById(templateId);
+    if (!template || !afterRow) return;
+    var holder = document.createElement('template');
+    holder.innerHTML = template.innerHTML.split('__ROW__').join(String(rowNo));
+    var anchor = afterRow;
+    holder.content.querySelectorAll('tbody > tr').forEach(function (tr) {
+        anchor.parentNode.insertBefore(tr, anchor.nextSibling);
+        anchor = tr;
+    });
+}
+
 // "Add credits" button: reuses the existing showAddedCreditRow() to find/enable the
 // next free row and keep its side effects (default product price, total, etc.), then
 // immediately opens that row in the modal.
 function handleAddCreditRowClick() {
+    ensureFreeCreditRow();
     var rowNo = findNextAvailableCreditRow();
     showAddedCreditRow();
     if (rowNo === null) return; // showAddedCreditRow already alerted "max reached"
