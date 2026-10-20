@@ -32,6 +32,9 @@ const PRODUCTS = PRODUCT_2T.concat(PRODUCT_PUMPS);
 
 // config related to sales
 const MAX_CREDITS_ROW_CNT = 300;
+// Shift closing renders the saved credit lines plus this many blank ones; more are
+// added in the browser when they run out (credit-entry-modal.js), so there is no cap
+const CREDIT_BLANK_ROW_CNT = 20;
 const MAX_DIGITAL_ROW_CNT = 20;
 const MAX_CREDIT_RECEIPTS_ROW_CNT = 20;
 const MAX_EMPLOYEE_ADVANCE_ROW_CNT = 20;
@@ -223,6 +226,7 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
   // config related to sales
   APP_CONFIGS: {
       maxCreditsRowCnt: MAX_CREDITS_ROW_CNT,
+      creditBlankRowCnt: CREDIT_BLANK_ROW_CNT,
       maxDigitalSalesRowCnt:MAX_DIGITAL_ROW_CNT,
       maxCreditReceiptsRowCnt: MAX_CREDIT_RECEIPTS_ROW_CNT,
       maxEmployeeAdvanceRowCnt: MAX_EMPLOYEE_ADVANCE_ROW_CNT,
