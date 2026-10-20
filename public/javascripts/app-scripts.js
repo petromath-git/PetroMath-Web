@@ -3149,10 +3149,38 @@ $(document).ready(function() {
         vehicleDataByCredit = vehicleData;
     }
     
-    // Initialize Select2 for existing rows
-    initializeVehicleSelect2();
+    // Vehicle boxes are set up when a credit line opens in the pop-up
+    // (initVehicleSelect2ForModal in credit-entry-modal.js), not for every line on load
 });
 
+
+// DESKTOP_ZOOM puts CSS zoom on <body>. Select2 places its dropdown using jQuery
+// .offset() (zoomed screen px) but writes the result back as CSS px inside the zoomed
+// body, so the dropdown lands higher than the box - the further down the page, the
+// bigger the gap. Inside a modal it then overlaps the box itself, and a click that
+// starts on the box and ends on the dropdown is delivered to the modal backdrop,
+// closing the modal. Re-align the dropdown to the box after Select2 positions it.
+(function patchSelect2ForBodyZoom() {
+    if (typeof jQuery === 'undefined' || !jQuery.fn.select2 || !jQuery.fn.select2.amd) return;
+    var AttachBody = jQuery.fn.select2.amd.require('select2/dropdown/attachBody');
+    var originalPosition = AttachBody.prototype._positionDropdown;
+    AttachBody.prototype._positionDropdown = function () {
+        originalPosition.apply(this, arguments);
+        var holder = this.$dropdownContainer[0];
+        var box = this.$container[0];
+        if (!holder || !box || !box.offsetWidth) return;
+        var boxRect = box.getBoundingClientRect();
+        var scale = boxRect.width / box.offsetWidth;
+        if (Math.abs(scale - 1) < 0.01) return;
+        var holderRect = holder.getBoundingClientRect();
+        var dropdown = this.$dropdown[0];
+        var wantTop = dropdown.classList.contains('select2-dropdown--above')
+            ? boxRect.top - dropdown.getBoundingClientRect().height
+            : boxRect.bottom;
+        holder.style.top = (parseFloat(holder.style.top) + (wantTop - holderRect.top) / scale) + 'px';
+        holder.style.left = (parseFloat(holder.style.left) + (boxRect.left - holderRect.left) / scale) + 'px';
+    };
+})();
 
 function initializeVehicleSelect2() {
     $('.select2-vehicle').select2({
@@ -3165,6 +3193,35 @@ function initializeVehicleSelect2() {
     
     // REMOVED: Vehicle-first auto-population event handler
     // Users must select credit party first, then vehicles will be available
+}
+
+// Picking a vehicle selects its fuel (Vehicle Master) as the line's product. Listens to
+// select2:select, which fires only on a user pick, so loading a saved line or reloading
+// the vehicle list never overwrites the saved product.
+$(document).on('select2:select', '.select2-vehicle', function () {
+    const match = this.id.match(/^(.*)vehicle-(\d+)$/);
+    if (match) applyVehicleFuel(match[1], match[2], this.value);
+});
+
+function applyVehicleFuel(prefix, rowNo, vehicleId) {
+    const vehicle = Object.values(vehicleDataByCredit).flat().find(v => v.vehicleId == vehicleId);
+    const productSelect = document.getElementById(prefix + 'product-' + rowNo);
+    if (!vehicle || !vehicle.productId || !productSelect || productSelect.value == vehicle.productId) return;
+    // Only if the fuel is in this page's product list (sold at this location)
+    if (!Array.from(productSelect.options).some(o => o.value == vehicle.productId)) return;
+    productSelect.value = vehicle.productId;
+    productSelect.dispatchEvent(new Event('change'));
+}
+
+// Fuels for the Quick Add Vehicle pop-up: this page's products that a pump sells
+function fillQuickVehicleFuelOptions() {
+    const fuelSelect = document.getElementById('quickVehicleProduct');
+    if (!fuelSelect) return;
+    fuelSelect.innerHTML = '';
+    fuelSelect.appendChild(new Option('Not set', ''));
+    (window.productValuesData || [])
+        .filter(p => (window.pumpsData || []).some(pump => pumpSellsProduct(pump, p)))
+        .forEach(p => fuelSelect.appendChild(new Option(p.productAlias || p.productName, p.productId)));
 }
 
 
@@ -3222,6 +3279,7 @@ function openAddVehicleModal(prefix, rowNo) {
 
     document.getElementById('quickVehicleNumber').value = '';
     document.getElementById('quickVehicleType').value = '';
+    fillQuickVehicleFuelOptions();
     document.getElementById('quickVehicleDupMsg').classList.add('d-none');
     const saveBtn = document.getElementById('quickAddVehicleSaveBtn');
     saveBtn.disabled = false;
@@ -3238,6 +3296,7 @@ function quickSaveVehicle(force) {
 
     const vehicleNumber = document.getElementById('quickVehicleNumber').value.trim().toUpperCase();
     const vehicleType = document.getElementById('quickVehicleType').value.trim().toUpperCase();
+    const productId = document.getElementById('quickVehicleProduct')?.value || null;
 
     if (!vehicleNumber) {
         document.getElementById('quickVehicleNumber').focus();
@@ -3256,18 +3315,19 @@ function quickSaveVehicle(force) {
             creditlist_id: _quickAddVehicleContext.creditListId,
             vehicle_number: vehicleNumber,
             vehicle_type: vehicleType,
+            product_id: productId,
             force: !!force
         })
     })
     .then(r => r.json())
     .then(d => {
         if (d.success) {
-            const { vehicleId, vehicleNumber: vNum, vehicleType: vType } = d.vehicle;
+            const { vehicleId, vehicleNumber: vNum, vehicleType: vType, productId: vProductId } = d.vehicle;
 
             // Update in-memory cache so other rows in this session see it too
             const cid = _quickAddVehicleContext.creditListId;
             if (!vehicleDataByCredit[cid]) vehicleDataByCredit[cid] = [];
-            vehicleDataByCredit[cid].push({ vehicleId, vehicleNumber: vNum, vehicleType: vType });
+            vehicleDataByCredit[cid].push({ vehicleId, vehicleNumber: vNum, vehicleType: vType, productId: vProductId });
 
             // Add option to dropdown and auto-select it
             const vehicleSelect = document.getElementById(
@@ -3276,6 +3336,7 @@ function quickSaveVehicle(force) {
             const label = vType ? `${vNum} (${vType})` : vNum;
             const option = new Option(label, vehicleId, true, true);
             $(vehicleSelect).append(option).trigger('change');
+            applyVehicleFuel(_quickAddVehicleContext.prefix, _quickAddVehicleContext.rowNo, vehicleId);
 
             $('#quickAddVehicleModal').modal('hide');
         } else if (d.warning) {

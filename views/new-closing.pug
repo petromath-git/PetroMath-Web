@@ -6,7 +6,8 @@ include mixins/closing-shortcuts
 
 block content
     style.
-    - var maxCreditsRowCnt = config.maxCreditsRowCnt;
+    //- A few blank credit lines; more come from #credit-row-template
+    - var creditRowCnt = config.creditBlankRowCnt;
     - var maxCashSalesRowCnt = config.maxCashSalesRowCnt;
     - var maxExpensesRowCnt = config.maxExpensesRowCnt;
     - var maxDigitalSalesRowCnt = config.maxDigitalSalesRowCnt;
@@ -18,6 +19,8 @@ block content
     input(type='hidden' id='currency_hiddenValue' value= currency)
     input(type='hidden' id='denominationValuesJson_hiddenValue' value= denominationValuesJson)
     input(type='hidden' id='productIdAliasMapping_hiddenValue' value= productIdAliasMapping)
+
+    +shiftContextBar()
 
     form.closing-page
         div
@@ -392,7 +395,7 @@ block content
                                                 th.col-sale(scope="col") Sale
                                                 th.col-actions(scope="col") Actions
                                             - var rowCnt = 0
-                                            while rowCnt < maxCreditsRowCnt
+                                            while rowCnt < creditRowCnt
                                                 +addCredits(rowCnt++)
                     div.row.mt-2
                         div.col-12.d-flex.align-items-center.justify-content-end
@@ -407,6 +410,16 @@ block content
                     div.row
                         div.col(align="center")
                             button.btn.btn-info(type="button", onClick="handleAddCreditRowClick()") Add credits
+                    //- One blank credit line (and its Summary row), copied by ensureFreeCreditRow()
+                    //- in credit-entry-modal.js with __ROW__ set to the next line number
+                    template#credit-row-template
+                        table
+                            tbody
+                                +addCredits('__ROW__')
+                    template#credit-summary-row-template
+                        table
+                            tbody
+                                +summaryCreditsData('__ROW__')
 
                     div.row
                         div.col &nbsp;
@@ -693,7 +706,7 @@ block content
                                                         th(scope="col")
 
                                                 - var rowCnt = 0
-                                                while rowCnt < maxCreditsRowCnt
+                                                while rowCnt < creditRowCnt
                                                     +summaryCreditsData(rowCnt++)
                                                 tr
                                                     td(colspan=4)
@@ -876,6 +889,10 @@ block content
                     .form-group
                         label Vehicle Type
                         input.form-control.text-uppercase#quickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                    .form-group
+                        label Fuel
+                        //- Options filled from this page's fuels in openAddVehicleModal (app-scripts.js)
+                        select.form-control#quickVehicleProduct
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()' data-ck-key='V') Add Vehicle
