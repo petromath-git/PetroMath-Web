@@ -154,6 +154,13 @@ function openCreditRowModal(rowNo, isNew) {
     });
     moveCreditVehicleWrapToSlot(rowNo);
     moveCreditOffMeterToSlot(rowNo);
+    // A new line reuses a hidden row, which may hold the vehicle list of the party it
+    // had before it was discarded/deleted (the row reset clears values, not options).
+    // Rebuild it for the current party - none selected means no vehicles to pick.
+    if (isNew && typeof updateCreditAndLoadVehicles === 'function') {
+        var partyEl = creditFieldEl(rowNo, 'creditparty');
+        if (partyEl) updateCreditAndLoadVehicles(partyEl, 'credit-', rowNo);
+    }
     initVehicleSelect2ForModal(rowNo);
 }
 
