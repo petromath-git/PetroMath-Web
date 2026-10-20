@@ -42,7 +42,11 @@ html
     
     if desktopZoom
       style.
-        @media (max-width: 1600px) { body { zoom: #{desktopZoom}; } }
+        @media (max-width: 1600px) {
+          body { zoom: #{desktopZoom}; }
+          /* Bootstrap sizes the backdrop in 100vw/100vh, which the zoom shrinks; pin its edges instead (as .modal does) */
+          .modal-backdrop { width: auto; height: auto; right: 0; bottom: 0; }
+        }
 
     if isPreviewing
       style.
