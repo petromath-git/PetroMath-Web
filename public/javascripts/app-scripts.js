@@ -3154,6 +3154,34 @@ $(document).ready(function() {
 });
 
 
+// DESKTOP_ZOOM puts CSS zoom on <body>. Select2 places its dropdown using jQuery
+// .offset() (zoomed screen px) but writes the result back as CSS px inside the zoomed
+// body, so the dropdown lands higher than the box - the further down the page, the
+// bigger the gap. Inside a modal it then overlaps the box itself, and a click that
+// starts on the box and ends on the dropdown is delivered to the modal backdrop,
+// closing the modal. Re-align the dropdown to the box after Select2 positions it.
+(function patchSelect2ForBodyZoom() {
+    if (typeof jQuery === 'undefined' || !jQuery.fn.select2 || !jQuery.fn.select2.amd) return;
+    var AttachBody = jQuery.fn.select2.amd.require('select2/dropdown/attachBody');
+    var originalPosition = AttachBody.prototype._positionDropdown;
+    AttachBody.prototype._positionDropdown = function () {
+        originalPosition.apply(this, arguments);
+        var holder = this.$dropdownContainer[0];
+        var box = this.$container[0];
+        if (!holder || !box || !box.offsetWidth) return;
+        var boxRect = box.getBoundingClientRect();
+        var scale = boxRect.width / box.offsetWidth;
+        if (Math.abs(scale - 1) < 0.01) return;
+        var holderRect = holder.getBoundingClientRect();
+        var dropdown = this.$dropdown[0];
+        var wantTop = dropdown.classList.contains('select2-dropdown--above')
+            ? boxRect.top - dropdown.getBoundingClientRect().height
+            : boxRect.bottom;
+        holder.style.top = (parseFloat(holder.style.top) + (wantTop - holderRect.top) / scale) + 'px';
+        holder.style.left = (parseFloat(holder.style.left) + (boxRect.left - holderRect.left) / scale) + 'px';
+    };
+})();
+
 function initializeVehicleSelect2() {
     $('.select2-vehicle').select2({
         placeholder: 'Search vehicle number...',
