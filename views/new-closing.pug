@@ -876,6 +876,10 @@ block content
                     .form-group
                         label Vehicle Type
                         input.form-control.text-uppercase#quickVehicleType(type='text' maxlength='50' placeholder='e.g., Car, Truck, Bike')
+                    .form-group
+                        label Fuel
+                        //- Options filled from this page's fuels in openAddVehicleModal (app-scripts.js)
+                        select.form-control#quickVehicleProduct
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Cancel
                     button.btn.btn-success#quickAddVehicleSaveBtn(type='button' onclick='quickSaveVehicle()' data-ck-key='V') Add Vehicle

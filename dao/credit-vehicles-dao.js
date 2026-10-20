@@ -166,6 +166,7 @@ module.exports = {
             v.creditlist_id,
             v.vehicle_number,
             v.vehicle_type,
+            v.product_id,
             c.Company_Name as company_name
         FROM m_creditlist_vehicles v
         INNER JOIN m_credit_list c ON v.creditlist_id = c.creditlist_id

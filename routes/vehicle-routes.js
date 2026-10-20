@@ -193,10 +193,19 @@ router.get('/disabled/:creditlist_id', [isLoginEnsured, security.hasPermission('
 // Quick-add vehicle from closing page (returns JSON)
 router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD_VEHICLE')], async function(req, res) {
     try {
-        const { creditlist_id, vehicle_number, vehicle_type, force } = req.body;
+        const { creditlist_id, vehicle_number, vehicle_type, product_id, force } = req.body;
         const cleanNumber = (vehicle_number || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (!cleanNumber) {
             return res.status(400).json({ success: false, error: 'Vehicle number is required' });
+        }
+        // Fuel is optional; when given it must be a product of this location
+        let productId = null;
+        if (product_id) {
+            const product = await ProductDao.findById(product_id, req.user.location_code);
+            if (!product) {
+                return res.status(400).json({ success: false, error: 'Selected fuel is not valid for this location' });
+            }
+            productId = product.product_id;
         }
         const existing = await CreditVehiclesDao.findByNumberAndCustomer(cleanNumber, creditlist_id);
         if (existing) {
@@ -227,7 +236,7 @@ router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD
             creditlist_id,
             vehicle_number: cleanNumber,
             vehicle_type: (vehicle_type || '').trim().toUpperCase() || null,
-            product_id: null,
+            product_id: productId,
             notes: '',
             created_by: req.user.Person_id,
             updated_by: req.user.Person_id,
@@ -241,7 +250,8 @@ router.post('/api/quick-add', [isLoginEnsured, security.hasPermission('QUICK_ADD
             vehicle: {
                 vehicleId: created.vehicle_id,
                 vehicleNumber: cleanNumber,
-                vehicleType: (vehicle_type || '').trim().toUpperCase() || ''
+                vehicleType: (vehicle_type || '').trim().toUpperCase() || '',
+                productId
             }
         });
     } catch (error) {
