@@ -115,29 +115,18 @@ module.exports = {
 
     // ---- Bank holidays ----
 
-    findHolidays: (locationCode) =>
-        q(`SELECT holiday_id, DATE_FORMAT(holiday_date, '%Y-%m-%d') AS holiday_date, description,
-                  DATEDIFF(holiday_date, CURDATE()) AS days_left
-           FROM m_bank_holiday WHERE location_code = :locationCode
-           ORDER BY holiday_date`, { locationCode }),
-
-    findUpcomingHolidays: (locationCode, days) =>
-        q(`SELECT DATE_FORMAT(holiday_date, '%Y-%m-%d') AS holiday_date, description,
-                  DATEDIFF(holiday_date, CURDATE()) AS days_left
-           FROM m_bank_holiday
-           WHERE location_code = :locationCode AND holiday_date BETWEEN CURDATE() AND CURDATE() + INTERVAL :days DAY
-           ORDER BY holiday_date`, { locationCode, days }),
-
     holidayExists: async (locationCode, holidayDate) => {
         const rows = await q(`SELECT 1 FROM m_bank_holiday WHERE location_code = :locationCode AND holiday_date = :holidayDate`,
             { locationCode, holidayDate });
         return rows.length > 0;
     },
 
-    createHoliday: (locationCode, holidayDate, description, personId) =>
-        run(`INSERT INTO m_bank_holiday (location_code, holiday_date, description, created_by)
-             VALUES (:locationCode, :holidayDate, :description, :personId)`,
-            { locationCode, holidayDate, description, personId }, { type: QueryTypes.INSERT }),
+    // Reading (hand rows + RBI list + 2nd/4th Saturdays) is in services/bank-holiday-service.js.
+    // hidden = true: "not a holiday here" — removes the automatic holiday on that date.
+    createHoliday: (locationCode, holidayDate, description, personId, hidden = false) =>
+        run(`INSERT INTO m_bank_holiday (location_code, holiday_date, description, hidden_flag, created_by)
+             VALUES (:locationCode, :holidayDate, :description, :hiddenFlag, :personId)`,
+            { locationCode, holidayDate, description, hiddenFlag: hidden ? 'Y' : 'N', personId }, { type: QueryTypes.INSERT }),
 
     // BULKDELETE (not DELETE) makes Sequelize 5 return the affected row count
     deleteHoliday: (holidayId, locationCode) =>

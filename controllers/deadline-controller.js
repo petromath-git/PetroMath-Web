@@ -3,6 +3,7 @@
 const moment = require('moment');
 const DeadlineDao = require('../dao/deadline-dao');
 const pushService = require('../services/push-service');
+const BankHolidays = require('../services/bank-holiday-service');
 
 const MAX_TITLE = 200;
 const MAX_REFERENCE = 100;
@@ -93,6 +94,11 @@ async function validateItem(body) {
     return { categoryId, title, referenceNo: referenceNo || null, dueDate, repeatMonths, remindDays, notes: notes || null };
 }
 
+function decorateHoliday(h) {
+    const m = moment(h.date, 'YYYY-MM-DD');
+    return { ...h, date_display: fmtDate(h.date), day_name: m.format('ddd'), days_left: m.diff(moment().startOf('day'), 'days') };
+}
+
 const fail = (res, status, error) => res.status(status).json({ success: false, error });
 
 module.exports = {
@@ -102,10 +108,16 @@ module.exports = {
     getPage: async (req, res, next) => {
         try {
             const locationCode = req.user.location_code;
+            // First visit works out the location's state (and fetches RBI's list); never blocks the page
+            const region = await BankHolidays.ensureRegion(locationCode).catch(err => {
+                console.error('Deadline page: bank holiday region failed:', err.message);
+                return null;
+            });
+            const thisYear = moment().year();
             const [items, categories, holidays, references] = await Promise.all([
                 DeadlineDao.findItems(locationCode),
                 DeadlineDao.getCategories(),
-                DeadlineDao.findHolidays(locationCode),
+                BankHolidays.getHolidays(locationCode, `${thisYear - 1}-01-01`, `${thisYear + 1}-12-31`),
                 DeadlineDao.getReferenceSuggestions(locationCode),
             ]);
             const list = items.map(decorate);
@@ -121,7 +133,9 @@ module.exports = {
                 categories,
                 repeatOptions: REPEAT_OPTIONS,
                 references: references.map(r => r.reference_no),
-                holidays: holidays.map(h => ({ ...h, days_left: Number(h.days_left), date_display: fmtDate(h.holiday_date), day_name: moment(h.holiday_date, 'YYYY-MM-DD').format('ddd') })),
+                holidays: holidays.map(decorateHoliday),
+                holidayRegion: region,
+                rbiOffices: BankHolidays.RBI_OFFICES,
                 today: moment().format('YYYY-MM-DD'),
                 // Reminder came from another location (multi-location admins)
                 pushLocation: req.query.loc && req.query.loc !== locationCode ? String(req.query.loc).slice(0, 45) : null,
@@ -229,11 +243,61 @@ module.exports = {
             if (await DeadlineDao.holidayExists(locationCode, holidayDate)) {
                 return fail(res, 400, `${fmtDate(holidayDate)} is already in the calendar.`);
             }
+            const auto = await BankHolidays.getHolidays(locationCode, holidayDate, holidayDate);
+            if (auto.length) {
+                return fail(res, 400, `${fmtDate(holidayDate)} is already a bank holiday (${auto[0].description}).`);
+            }
             await DeadlineDao.createHoliday(locationCode, holidayDate, description, req.user.Person_id);
             res.json({ success: true });
         } catch (e) {
             console.error('Error adding bank holiday:', e);
             fail(res, 500, 'Error saving holiday.');
+        }
+    },
+
+    // "Not a holiday here": hides an RBI / 2nd-4th Saturday holiday for this location
+    hideHoliday: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const holidayDate = parseDate(req.body.holiday_date);
+            if (!holidayDate) return fail(res, 400, 'Enter a valid date.');
+            const auto = await BankHolidays.getHolidays(locationCode, holidayDate, holidayDate);
+            if (!auto.length || auto[0].source === 'MANUAL' || auto[0].source === 'HIDDEN') {
+                return fail(res, 400, 'Only automatic holidays can be hidden. Delete a hand-entered one instead.');
+            }
+            await DeadlineDao.createHoliday(locationCode, holidayDate, auto[0].description.slice(0, 200), req.user.Person_id, true);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Error hiding bank holiday:', e);
+            fail(res, 500, 'Error saving holiday.');
+        }
+    },
+
+    // Body: rbi_office ('' = work it out automatically again)
+    setHolidayRegion: async (req, res) => {
+        try {
+            const office = clean(req.body.rbi_office);
+            if (office && !BankHolidays.RBI_OFFICES.includes(office)) return fail(res, 400, 'Pick an RBI office from the list.');
+            const region = await BankHolidays.setRegion(req.user.location_code, office, req.user.Person_id);
+            res.json({ success: true, region });
+        } catch (e) {
+            console.error('Error setting bank holiday region:', e);
+            fail(res, 500, 'Error saving.');
+        }
+    },
+
+    // Fetch RBI's list again now (normally monthly)
+    refreshHolidays: async (req, res) => {
+        try {
+            const region = await BankHolidays.getRegion(req.user.location_code);
+            if (!region || !region.rbi_office) return fail(res, 400, 'Pick the RBI office first.');
+            const results = await BankHolidays.syncOffice(region.rbi_office, { force: true });
+            const failed = results.filter(r => r.status === 'FAILED');
+            if (failed.length === results.length) return fail(res, 502, 'Could not reach RBI: ' + failed[0].error);
+            res.json({ success: true, results });
+        } catch (e) {
+            console.error('Error refreshing bank holidays:', e);
+            fail(res, 500, 'Error fetching holidays.');
         }
     },
 
@@ -250,18 +314,14 @@ module.exports = {
 
     // Home page / DSR widget: overdue + due-soon items, and bank holidays in the next 7 days
     getAttentionSummary: async (locationCode) => {
+        const today = moment().format('YYYY-MM-DD');
         const [items, holidays] = await Promise.all([
             DeadlineDao.findAttentionItems(locationCode),
-            DeadlineDao.findUpcomingHolidays(locationCode, 7),
+            BankHolidays.getHolidays(locationCode, today, moment().add(7, 'days').format('YYYY-MM-DD')),
         ]);
         return {
             items: items.map(decorate),
-            holidays: holidays.map(h => ({
-                date_display: fmtDate(h.holiday_date),
-                day_name: moment(h.holiday_date, 'YYYY-MM-DD').format('ddd'),
-                description: h.description,
-                days_left: Number(h.days_left),
-            })),
+            holidays: holidays.filter(h => h.source !== 'HIDDEN').map(decorateHoliday),
         };
     },
 };
