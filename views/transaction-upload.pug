@@ -408,6 +408,7 @@ block content
         let portalAccounts = {};
         let portalToday = null;
         let portalHealthState = null;   // { status: OK | UNREACHABLE | CHANGED, message }
+        let portalServerStopMessage = null;   // set when IOCL logins are paused server-wide
 
         function ymdToDisplay(ymd) {
             if (!ymd) return '';
@@ -425,6 +426,7 @@ block content
                 portalToday = data.today;
                 data.accounts.forEach(a => { portalAccounts[a.bank_id] = a; });
                 portalHealthState = data.portal_health || null;
+                portalServerStopMessage = data.server_stop_message || null;
                 updatePortalPullBox();
             } catch (e) {
                 console.warn('Portal accounts not loaded', e);
@@ -457,7 +459,10 @@ block content
             let limitNote = ` ${acc.logins_left_today} of ${acc.daily_limit} IOCL logins left today.`;
             let blocked = false;
             let warn = false;
-            if (portalHealthState && portalHealthState.status === 'CHANGED') {
+            if (portalServerStopMessage) {
+                limitNote = ' ' + portalServerStopMessage;
+                blocked = true;
+            } else if (portalHealthState && portalHealthState.status === 'CHANGED') {
                 limitNote = ' ' + portalHealthState.message;
                 blocked = true;
             } else if (acc.paused) {
