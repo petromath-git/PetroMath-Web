@@ -10,11 +10,25 @@
 // fed to the existing IOCL SAP Account Statement template (template_id 2) unchanged.
 const XLSX = require('xlsx');
 const { getBrowser } = require('../utils/browserHelper');
+const { getLocationConfigValue } = require('../utils/location-config');
 
-const PORTAL_BASE = 'https://utkarsh.indianoil.co.in';
-const LOGIN_URL = `${PORTAL_BASE}/sdmspro/auth/login`;
-const STATEMENT_PAGE_URL = `${PORTAL_BASE}/sdmspro/accounts/account-summary`;
+// Portal address comes from location config '*' IOCL_PORTAL_BASE_URL so a domain move is a settings
+// change. Redirects (e.g. the old sdms.indianoil.in) are followed by the browser anyway, and the APIs
+// below are called relative to whichever origin the login page ended up on.
+const DEFAULT_PORTAL_BASE = 'https://utkarsh.indianoil.co.in';
 const STATEMENT_API_PATH = '/xepp-api/dealer-account/fetch-statement';
+const CAPTCHA_API_PATH = '/xepp-api/auth/samadhan/captcha-challenge';
+const LOGIN_API_PART = '/xepp-api/auth/samadhan/login';
+
+async function portalUrls() {
+    const raw = await getLocationConfigValue('*', 'IOCL_PORTAL_BASE_URL', DEFAULT_PORTAL_BASE);
+    const base = String(raw || DEFAULT_PORTAL_BASE).trim().replace(/\/+$/, '');
+    return {
+        base,
+        login: `${base}/sdmspro/auth/login`,
+        statementPage: `${base}/sdmspro/accounts/account-summary`
+    };
+}
 
 const EXCEL_HEADER = ['PLANT', 'ITEM TEXT', 'DOCUMENT TYPE', 'DOCUMENT NUMBER', 'DATE', 'MATERIAL GROUP',
     'QUANTITY', 'UNIT', 'DEBIT', 'CREDIT', 'BALANCE'];
@@ -47,8 +61,12 @@ function solveMathQuestion(text) {
     }
 }
 
-async function login(page, username, password) {
-    await page.goto(LOGIN_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+async function login(page, username, password, urls) {
+    try {
+        await page.goto(urls.login, { waitUntil: 'networkidle2', timeout: 60000 });
+    } catch (e) {
+        throw new PortalError(`Could not reach the IOCL portal (${urls.base}). It may be down for maintenance; please try later.`, 'UNREACHABLE');
+    }
 
     const question = await page.evaluate(() => document.body.innerText);
     const answer = solveMathQuestion(question);
@@ -66,7 +84,7 @@ async function login(page, username, password) {
     await new Promise(r => setTimeout(r, 800));
 
     const loginResponse = page.waitForResponse(
-        r => r.url().includes('/xepp-api/auth/samadhan/login') && r.request().method() === 'POST',
+        r => r.url().includes(LOGIN_API_PART) && r.request().method() === 'POST',
         { timeout: 30000 }
     ).catch(() => null);
 
@@ -80,24 +98,32 @@ async function login(page, username, password) {
         throw new PortalError('IOCL login button not found. The portal may have changed.', 'LOGIN_PAGE_CHANGED');
     }
 
+    // Only IOCL's own answer to the sign-in request decides "wrong password" (LOGIN_FAILED, which
+    // counts towards pausing pulls). Anything else is the page or portal misbehaving, not the password.
     const resp = await loginResponse;
-    if (resp && resp.status() >= 400) {
-        let msg = '';
-        try { msg = (await resp.json()).message || ''; } catch (e) { /* ignore */ }
+    if (!resp) {
+        throw new PortalError('The IOCL login page did not send the sign-in request. The portal may have changed.', 'LOGIN_PAGE_CHANGED');
+    }
+    let body = null;
+    try { body = await resp.json(); } catch (e) { /* not JSON */ }
+    if (resp.status() >= 500) {
+        throw new PortalError(`The IOCL portal had an error while signing in (HTTP ${resp.status()}). Please try later.`, 'UNREACHABLE');
+    }
+    if (resp.status() >= 400 || !body || !body.token) {
+        const msg = body && (body.message || body.error) ? String(body.message || body.error) : '';
         throw new PortalError(`IOCL portal rejected the login${msg ? ': ' + msg : ''}. Check the username and password.`, 'LOGIN_FAILED');
     }
 
     try {
         await page.waitForFunction(() => location.href.includes('/dashboard'), { timeout: 30000 });
     } catch (e) {
-        const screenText = await page.evaluate(() => document.body.innerText.slice(0, 300)).catch(() => '');
-        throw new PortalError(`IOCL login did not complete. ${screenText.replace(/\s+/g, ' ').trim()}`.trim(), 'LOGIN_FAILED');
+        throw new PortalError('Signed in to IOCL, but the portal did not open its dashboard. The portal may have changed.', 'LOGIN_PAGE_CHANGED');
     }
 }
 
-async function fetchStatementJson(page, fromDate, toDate) {
+async function fetchStatementJson(page, fromDate, toDate, urls) {
     // Load the statement screen so the API call goes out with the same origin/referer as the portal.
-    await page.goto(STATEMENT_PAGE_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    await page.goto(urls.statementPage, { waitUntil: 'networkidle2', timeout: 60000 });
 
     const result = await page.evaluate(async (apiPath, from, to) => {
         const token = localStorage.getItem('accessToken');
@@ -173,6 +199,7 @@ function buildWorkbookBuffer(rows) {
  */
 function pullStatement({ username, password, fromDate, toDate }) {
     return serialize(async () => {
+        const urls = await portalUrls();
         const browser = await getBrowser();
         const context = await browser.createBrowserContext();
         try {
@@ -180,8 +207,8 @@ function pullStatement({ username, password, fromDate, toDate }) {
             await page.setViewport({ width: 1366, height: 900 });
             page.setDefaultTimeout(60000);
 
-            await login(page, username, password);
-            const { json, roCode, partnerName } = await fetchStatementJson(page, fromDate, toDate);
+            await login(page, username, password, urls);
+            const { json, roCode, partnerName } = await fetchStatementJson(page, fromDate, toDate, urls);
 
             const rows = toExcelRows(json);
             return {
@@ -199,8 +226,74 @@ function pullStatement({ username, password, fromDate, toDate }) {
     });
 }
 
+/**
+ * Health check WITHOUT logging in (uses none of the daily logins): does the portal still look the way
+ * the pull expects? Returns { status: 'OK' | 'UNREACHABLE' | 'CHANGED', detail }.
+ */
+function checkHealth() {
+    return serialize(async () => {
+        const urls = await portalUrls();
+        const browser = await getBrowser();
+        const context = await browser.createBrowserContext();
+        try {
+            const page = await context.newPage();
+            try {
+                await page.goto(urls.login, { waitUntil: 'networkidle2', timeout: 45000 });
+            } catch (e) {
+                return { status: 'UNREACHABLE', detail: `Login page did not load from ${urls.base}: ${e.message}`.slice(0, 500) };
+            }
+
+            const shape = await page.evaluate(() => ({
+                text: document.body.innerText,
+                inputs: document.querySelectorAll('input').length,
+                signIn: [...document.querySelectorAll('button')].some(b => /sign in/i.test(b.innerText)),
+                finalUrl: location.href
+            }));
+            const problems = [];
+            if (shape.inputs < 3) problems.push(`expected 3 login fields, found ${shape.inputs}`);
+            if (!shape.signIn) problems.push('no "Sign in" button');
+            if (solveMathQuestion(shape.text) === null) problems.push('security question not in the expected "a x b = ?" form');
+
+            // APIs the pull depends on, called the same way the portal does (no credentials)
+            const api = await page.evaluate(async (captchaPath, statementPath) => {
+                const out = {};
+                try {
+                    const r = await fetch(captchaPath);
+                    const t = await r.text();
+                    out.captcha = { status: r.status, hasKey: /publicKey/.test(t) };
+                } catch (e) { out.captcha = { error: String(e) }; }
+                try {
+                    const r = await fetch(statementPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                    out.statement = { status: r.status };
+                } catch (e) { out.statement = { error: String(e) }; }
+                return out;
+            }, CAPTCHA_API_PATH, STATEMENT_API_PATH);
+
+            const serverDown = [api.captcha, api.statement].some(x => x.error || x.status >= 500);
+            if (!api.captcha.error && api.captcha.status < 500 && !(api.captcha.status === 200 && api.captcha.hasKey)) {
+                problems.push(`login security API answered ${api.captcha.status} without its key`);
+            }
+            // Without a session the statement API must refuse (401/403); 404 means it moved
+            if (!api.statement.error && api.statement.status < 500 && ![401, 403].includes(api.statement.status)) {
+                problems.push(`statement API answered ${api.statement.status} (expected 401 without login)`);
+            }
+
+            if (problems.length) {
+                return { status: 'CHANGED', detail: `${shape.finalUrl}: ${problems.join('; ')}`.slice(0, 500) };
+            }
+            if (serverDown) {
+                return { status: 'UNREACHABLE', detail: `Portal APIs not answering: ${JSON.stringify(api)}`.slice(0, 500) };
+            }
+            return { status: 'OK', detail: `Login page and APIs as expected (${shape.finalUrl})` };
+        } finally {
+            await context.close().catch(() => {});
+        }
+    });
+}
+
 module.exports = {
     pullStatement,
+    checkHealth,
     PortalError,
     // exported for tests
     solveMathQuestion,
