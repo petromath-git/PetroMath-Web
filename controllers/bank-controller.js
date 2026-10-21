@@ -52,11 +52,13 @@ module.exports = {
                 'DISABLE_BANK_MASTER'
             );
 
+            // Oil company (SAP) accounts live on their own master: /oil-company-accounts
             res.render('bank-master', {
                 title: 'Bank Master',
                 mobileReady: true,   // table stacks into cards on phones (m-stack)
                 user: req.user,
-                banks: banks,
+                masterMode: 'BANK',
+                banks: banks.filter(b => b.is_oil_company !== 'Y'),
                 templates: templates,
                 canEdit: canEdit,
                 canAdd: canAdd,
@@ -77,7 +79,8 @@ module.exports = {
             res.render('bank-master-enable', {
                 title: 'Disabled Banks',
                 user: req.user,
-                banks: banks
+                masterMode: 'BANK',
+                banks: banks.filter(b => b.is_oil_company !== 'Y')
             });
         } catch (error) {
             console.error('Error loading disabled banks page:', error);
@@ -149,6 +152,7 @@ module.exports = {
 
     // Create new bank
     createBank: async (req, res) => {
+        const backTo = req.body.is_oil_company === 'Y' ? '/oil-company-accounts' : '/bank-master';
         try {
             const locationCode = req.user.location_code;
             const accountNumber = req.body.account_number;
@@ -173,7 +177,7 @@ module.exports = {
                 
                 if (existing && existing.length > 0) {
                     req.flash('error', `Account number "${accountNumber}" with IFSC "${ifscCode}" already exists for ${existing[0].bank_name}`);
-                    return res.redirect('/bank-master');
+                    return res.redirect(backTo);
                 }
             }
 
@@ -213,11 +217,11 @@ module.exports = {
 
             await BankDao.create(bankData);
             req.flash('success', 'Bank created successfully');
-            res.redirect('/bank-master');
+            res.redirect(backTo);
         } catch (error) {
             console.error('Error creating bank:', error);
             req.flash('error', 'Error creating bank');
-            res.redirect('/bank-master');
+            res.redirect(backTo);
         }
     },
 

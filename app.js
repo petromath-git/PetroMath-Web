@@ -287,6 +287,7 @@ const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes
 const bankStatementRoutes = require('./routes/bank-statement-routes');
 const bankMasterRoutes = require('./routes/bank-master-routes');
 const expenseMasterRoutes = require('./routes/expense-master-routes');
+const oilCompanyAccountRoutes = require('./routes/oil-company-account-routes');
 const locationConfigRoutes = require('./routes/location-config-routes');
 const accountHeadsRoutes = require("./routes/account-heads-routes");
 const digitalVendorsRoutes = require('./routes/digital-vendors-routes');
@@ -595,6 +596,7 @@ app.use('/oil-company-statement', oilCompanyStatementRoutes);
 app.use('/bank-statement', bankStatementRoutes); 
 app.use('/bank-master', bankMasterRoutes);
 app.use('/expense-master', expenseMasterRoutes);
+app.use('/oil-company-accounts', oilCompanyAccountRoutes);
 app.use('/location-config', locationConfigRoutes);
 app.use("/account-heads", accountHeadsRoutes);
 app.use('/digital-vendors', digitalVendorsRoutes);
