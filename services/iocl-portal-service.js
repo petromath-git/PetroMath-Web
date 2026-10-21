@@ -255,27 +255,28 @@ function checkHealth() {
             if (solveMathQuestion(shape.text) === null) problems.push('security question not in the expected "a x b = ?" form');
 
             // APIs the pull depends on, called the same way the portal does (no credentials)
-            const api = await page.evaluate(async (captchaPath, statementPath) => {
-                const out = {};
-                try {
-                    const r = await fetch(captchaPath);
-                    const t = await r.text();
-                    out.captcha = { status: r.status, hasKey: /publicKey/.test(t) };
-                } catch (e) { out.captcha = { error: String(e) }; }
-                try {
-                    const r = await fetch(statementPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-                    out.statement = { status: r.status };
-                } catch (e) { out.statement = { error: String(e) }; }
-                return out;
-            }, CAPTCHA_API_PATH, STATEMENT_API_PATH);
+            // Only the public API the login page itself calls (the security-question challenge).
+            // The statement API is deliberately NOT probed: unauthenticated POSTs to it get dropped by
+            // IOCL's firewall, and hammering a protected endpoint daily isn't something to do from a
+            // dealer's server. A changed statement API shows up as a clear error at pull time.
+            // Up to 3 tries 2 s apart so one dropped request doesn't warn every dealer.
+            const api = await page.evaluate(async (captchaPath) => {
+                const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+                let last;
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        const r = await fetch(captchaPath);
+                        last = { status: r.status, hasKey: /publicKey/.test(await r.text()) };
+                        if (last.status < 500) break;
+                    } catch (e) { last = { error: String(e) }; }
+                    await sleep(2000);
+                }
+                return { captcha: last };
+            }, CAPTCHA_API_PATH);
 
-            const serverDown = [api.captcha, api.statement].some(x => x.error || x.status >= 500);
-            if (!api.captcha.error && api.captcha.status < 500 && !(api.captcha.status === 200 && api.captcha.hasKey)) {
+            const serverDown = !!(api.captcha.error || api.captcha.status >= 500);
+            if (!serverDown && !(api.captcha.status === 200 && api.captcha.hasKey)) {
                 problems.push(`login security API answered ${api.captcha.status} without its key`);
-            }
-            // Without a session the statement API must refuse (401/403); 404 means it moved
-            if (!api.statement.error && api.statement.status < 500 && ![401, 403].includes(api.statement.status)) {
-                problems.push(`statement API answered ${api.statement.status} (expected 401 without login)`);
             }
 
             if (problems.length) {
