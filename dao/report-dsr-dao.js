@@ -131,13 +131,21 @@ getMonthlyOfftake: async (locationCode, reportDate) => {
 
 
 getDeadline: async (locationCode, reportDate) => {
+    // Open deadlines that are overdue or inside their reminder window (m_deadline_item)
     const result = await db.sequelize.query(`
-        select tv.deadline_date,DAYNAME(td.deadline_date) day,tv.message
-                                          from t_deadline_v tv,t_deadline td
-                                         where tv.display_warning = 'Y' AND td.t_deadline_id = tv.t_deadline_id 
-                                              and tv.location_code = :location
+        select DATE_FORMAT(di.due_date, '%d-%b-%Y') deadline_date, DAYNAME(di.due_date) day,
+               CONCAT(di.title, COALESCE(CONCAT(' (', di.reference_no, ')'), ''), ' - ',
+                      CASE WHEN DATEDIFF(di.due_date, CURDATE()) < 0 THEN CONCAT('overdue by ', -DATEDIFF(di.due_date, CURDATE()), ' days')
+                           WHEN DATEDIFF(di.due_date, CURDATE()) = 0 THEN 'due today'
+                           WHEN DATEDIFF(di.due_date, CURDATE()) = 1 THEN 'due tomorrow'
+                           ELSE CONCAT('due in ', DATEDIFF(di.due_date, CURDATE()), ' days') END) message
+          from m_deadline_item di
+         where di.location_code = :location
+           and di.status = 'OPEN'
+           and DATEDIFF(di.due_date, CURDATE()) <= di.remind_days
+         order by di.due_date
     `, {
-        replacements: { location: locationCode, closeDate: reportDate },
+        replacements: { location: locationCode },
         type: Sequelize.QueryTypes.SELECT
     });
     return result;

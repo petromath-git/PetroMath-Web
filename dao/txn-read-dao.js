@@ -12,7 +12,6 @@ const Pumps = db.pump;
 const Products = db.product;
 const Expenses = db.expense;
 const TxnAttendance = db.txn_attendance;
-const TxnDeadlineViews = db.txn_deadline_views;
 const TxnDigitalSales = db.txn_digital_sales;
 const CashReceipts = db.credit_receipts;
 const EmployeeLedger = db.employee_ledger;
@@ -408,16 +407,6 @@ getMostRecentClosingDate: async (locationCode, dayCount = 1) => {
             replacements: { locationCode, cutoff },
             type: db.Sequelize.QueryTypes.SELECT
         });
-    },
-
-    getDeadlineWarningMessage: (locationCode) => {
-        return TxnDeadlineViews.findAll({
-            attributes: ['message', 'deadline_date'],
-             where: { [Op.and]: [
-             { location_code: locationCode },
-               { display_warning: 'Y'}
-             ]}
-        })
     },
 
     getDraftClosingsCount: (locationCode, noOfDays) => {
