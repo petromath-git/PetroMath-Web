@@ -6,6 +6,9 @@ block content
     - const isOil = masterMode === 'OIL'
     - const masterBase = isOil ? '/oil-company-accounts' : '/bank-master'
     - const showPortal = isOil && portalEnabled
+    - const hasOilAccount = isOil && banks && banks.length > 0
+    - const showAdd = canAdd && !hasOilAccount
+    - const showDelete = canDisable && !isOil
     - const isIoclTpl = (b) => isOil && ioclBankIds && ioclBankIds.includes(b.bank_id)
 
     mixin portalLoginCell(bank)
@@ -41,13 +44,14 @@ block content
                     if isOil
                         small.text-muted Oil company (SAP) accounts. Real bank accounts are in Bank Master.
                 .col-12.col-md-auto.banks-header-buttons
-                    if canAdd
+                    if showAdd
                         button.btn.btn-success.btn-sm#addBankBtn(type="button", data-toggle="modal", data-target="#addBankModal")
                             i.bi.bi-plus-circle.mr-1
                             = isOil ? 'Add Account' : 'Add Bank'
-                    button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick=`window.location.href='${masterBase}/enable'`)
-                        i.bi.bi-eye-slash.mr-1
-                        | View Disabled
+                    if !isOil
+                        button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick=`window.location.href='${masterBase}/enable'`)
+                            i.bi.bi-eye-slash.mr-1
+                            | View Disabled
                     button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
                         i.bi.bi-arrow-clockwise.mr-1
                         | Refresh
@@ -86,12 +90,10 @@ block content
                             if !isOil
                                 th CC Limit
                             th Ledger Name
-                            if !isOil
-                                th Internal
                             th Statement Template
                             if showPortal
                                 th Portal Login
-                            if canEdit || canDisable
+                            if canEdit || showDelete
                                 th Actions
                     tbody
                         if banks && banks.length > 0
@@ -107,10 +109,6 @@ block content
                                     if !isOil
                                         td(data-label="CC Limit")= bank.cc_limit ? bank.cc_limit.toLocaleString() : '-'
                                     td.m-wide(data-label="Ledger Name")= bank.ledger_name || '-'
-                                    if !isOil
-                                        td(data-label="Internal")
-                                            span.badge(class=bank.internal_flag === 'Y' ? 'badge-info' : 'badge-secondary')
-                                                = bank.internal_flag === 'Y' ? 'Yes' : 'No'
                                     td.m-wide(data-label="Statement Template")
                                         - const tpl = bank.template_id ? templates.find(t => t.template_id === bank.template_id) : null
                                         if tpl
@@ -120,12 +118,12 @@ block content
                                     if showPortal
                                         td.m-wide(data-label="Portal Login")
                                             +portalLoginCell(bank)
-                                    if canEdit || canDisable
+                                    if canEdit || showDelete
                                         td.m-actions
                                             if canEdit
                                                 button.btn.btn-outline-primary.btn-sm.edit-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-pencil
-                                            if canDisable
+                                            if showDelete
                                                 button.btn.btn-outline-danger.btn-sm.ml-1.disable-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-trash
                         else
@@ -164,22 +162,14 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Type
                                 input.form-control(type="text", name="type")
-                            .col-md-6.mb-3
+                            .col-md-6.mb-3(class=isOil ? 'd-none' : '')
                                 label.form-label CC Limit
                                 input.form-control(type="number", name="cc_limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
                                 input.form-control(type="text", name="ledger_name")
-                            //- Each master implies the account kind; banks default to internal, oil accounts never are
+                            //- The screen decides the kind: Bank Master = internal bank, Oil Company Accounts = oil (server enforces)
                             input(type="hidden", name="is_oil_company", value=isOil ? 'Y' : 'N')
-                            if isOil
-                                input(type="hidden", name="internal_flag", value="N")
-                            else
-                                .col-md-6.mb-3
-                                    label.form-label Internal Account
-                                    select.form-control(name="internal_flag")
-                                        option(value="Y" selected) Yes
-                                        option(value="N") No
                             .col-md-6.mb-3
                                 label.form-label Statement Template
                                 select.form-control(name="template_id")
@@ -220,18 +210,12 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Type
                                 input.form-control(type="text", name="type", id="edit-type")
-                            .col-md-6.mb-3
+                            .col-md-6.mb-3(class=isOil ? 'd-none' : '')
                                 label.form-label CC Limit
                                 input.form-control(type="number", name="cc_limit", id="edit-cc-limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
                                 input.form-control(type="text", name="ledger_name", id="edit-ledger-name")
-                            .col-md-6.mb-3
-                                label.form-label Internal Account
-                                select.form-control(name="internal_flag", id="edit-internal-flag")
-                                    option(value="N") No
-                                    option(value="Y") Yes
-                            input(type="hidden", name="is_oil_company", id="edit-oil-company", value=isOil ? 'Y' : 'N')
                             .col-md-6.mb-3
                                 label.form-label Statement Template
                                 select.form-control(name="template_id", id="edit-template-id")
@@ -457,8 +441,6 @@ block content
             document.getElementById('edit-type').value = bank.type || '';
             document.getElementById('edit-cc-limit').value = bank.cc_limit || '';
             document.getElementById('edit-ledger-name').value = bank.ledger_name || '';
-            document.getElementById('edit-internal-flag').value = bank.internal_flag;
-            document.getElementById('edit-oil-company').value = bank.is_oil_company;
             document.getElementById('edit-template-id').value = bank.template_id || '';
 
             $('#editBankModal').modal('show');
@@ -467,9 +449,6 @@ block content
         // Save bank edit
         function saveBankEdit() {
             const bankId = document.getElementById('edit-bank-id').value;
-             // Get values and handle empty strings for ENUM fields
-            const internalFlag = document.getElementById('edit-internal-flag').value;
-            const isOilCompany = document.getElementById('edit-oil-company').value;
 
             const formData = {
                 bank_name: document.getElementById('edit-bank-name').value,
@@ -480,8 +459,6 @@ block content
                 type: document.getElementById('edit-type').value,
                 cc_limit: document.getElementById('edit-cc-limit').value,
                 ledger_name: document.getElementById('edit-ledger-name').value,
-                internal_flag: internalFlag || 'N',
-                is_oil_company: isOilCompany || 'N',
                 template_id: document.getElementById('edit-template-id').value || null
             };
             

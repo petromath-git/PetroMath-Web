@@ -132,8 +132,7 @@ module.exports = {
                 cc_limit: req.body.cc_limit ? parseInt(req.body.cc_limit, 10) : null,
                 ledger_name: req.body.ledger_name || null,
                 account_nickname: req.body.account_nickname || null,
-                internal_flag: req.body.internal_flag || 'N',
-                is_oil_company: req.body.is_oil_company || 'N',
+                // internal_flag / is_oil_company are fixed at creation (Bank Master vs Oil Company Accounts)
                 template_id: req.body.template_id ? parseInt(req.body.template_id, 10) : null,
                 updated_by: req.user.Person_id,
                 updation_date: new Date()
@@ -152,11 +151,28 @@ module.exports = {
 
     // Create new bank
     createBank: async (req, res) => {
-        const backTo = req.body.is_oil_company === 'Y' ? '/oil-company-accounts' : '/bank-master';
+        // The screen decides the kind: Oil Company Accounts posts is_oil_company=Y, Bank Master doesn't.
+        // Bank Master accounts are always internal; oil company accounts never are.
+        const isOil = req.body.is_oil_company === 'Y';
+        const backTo = isOil ? '/oil-company-accounts' : '/bank-master';
         try {
             const locationCode = req.user.location_code;
             const accountNumber = req.body.account_number;
             const ifscCode = req.body.ifsc_code;
+
+            // One oil company account per location
+            if (isOil) {
+                const oilAccounts = await db.sequelize.query(
+                    `SELECT bank_id FROM m_bank
+                     WHERE location_code = :locationCode AND is_oil_company = 'Y' AND active_flag = 'Y'
+                     LIMIT 1`,
+                    { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+                );
+                if (oilAccounts.length > 0) {
+                    req.flash('error', 'This location already has an oil company account. Edit the existing one instead.');
+                    return res.redirect(backTo);
+                }
+            }
 
             // Check for duplicate: same account number + same IFSC code
             if (accountNumber && ifscCode) {
@@ -207,8 +223,8 @@ module.exports = {
                 ledger_name: req.body.ledger_name || null,
                 account_nickname: req.body.account_nickname || null,
                 location_id: locationId,
-                internal_flag: req.body.internal_flag || 'N',
-                is_oil_company: req.body.is_oil_company || 'N',
+                internal_flag: isOil ? 'N' : 'Y',
+                is_oil_company: isOil ? 'Y' : 'N',
                 template_id: req.body.template_id ? parseInt(req.body.template_id, 10) : null,
                 active_flag: 'Y',
                 created_by: req.user.Person_id,
@@ -231,7 +247,15 @@ module.exports = {
     disableBank: async (req, res) => {
         try {
             const bankId = req.params.id;
-             await BankDao.disableBank(bankId, req.user.Person_id);
+            const bank = await BankDao.findById(bankId);
+            if (!bank || bank.location_code !== req.user.location_code) {
+                return res.status(404).json({ success: false, error: 'Bank not found' });
+            }
+            // Oil company accounts can be edited but never removed
+            if (bank.is_oil_company === 'Y') {
+                return res.status(400).json({ success: false, error: 'Oil company accounts cannot be deleted. Edit the account instead.' });
+            }
+            await BankDao.disableBank(bankId, req.user.Person_id);
             res.json({ success: true, message: 'Bank disabled successfully' });
         } catch (error) {
             console.error('Error disabling bank:', error);
