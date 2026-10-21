@@ -138,6 +138,8 @@ db.sequelize.sync();
 // Platform billing monthly auto-generation - start
 require('./services/platform-billing-scheduler').start();
 // Platform billing monthly auto-generation - end
+// IOCL e-Mitra portal daily health check (no login) - see services/oil-portal-health-scheduler.js
+require('./services/oil-portal-health-scheduler').start();
 
 // Router business
 const HomeController = require("./controllers/home-controller");

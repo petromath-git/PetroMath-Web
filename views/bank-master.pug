@@ -31,7 +31,7 @@ block content
             else if login && login.last_pull_status === 'FAILED'
                 div.text-danger(style="font-size:0.8em" title=login.last_pull_message) Last pull failed
             if login
-                div.text-muted(style="font-size:0.75em")= `${login.loginsToday} of ${login.dailyLimit} IOCL logins used today`
+                div.text-muted(style="font-size:0.75em" title="IOCL portal logins used today (pulls + Check & Save), limit per account per day")= `${login.loginsToday}/${login.dailyLimit} logins today`
 
     // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
@@ -47,6 +47,25 @@ block content
                     h4.mb-2.mb-md-0.text-primary= isOil ? 'Oil Company Accounts' : 'Bank Master'
                     if isOil
                         small.text-muted Oil company (SAP) accounts. Real bank accounts are in Bank Master.
+                    if showPortal
+                        - const fmtDT = (d) => { if (!d) return ''; const x = new Date(d); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${String(x.getDate()).padStart(2,'0')}-${m[x.getMonth()]}-${x.getFullYear()} ${String(x.getHours()).padStart(2,'0')}:${String(x.getMinutes()).padStart(2,'0')}`; }
+                        div.mt-1(style="font-size:0.8em")
+                            if !portalHealth
+                                span.text-muted IOCL portal check: not run yet
+                            else if portalHealth.status === 'OK'
+                                span.text-success(title=portalHealth.detail)
+                                    i.bi.bi-check-circle.mr-1
+                                    | IOCL portal check OK · #{fmtDT(portalHealth.checked_at)}
+                            else if portalHealth.status === 'UNREACHABLE'
+                                span.text-warning(title=portalHealth.detail)
+                                    i.bi.bi-exclamation-triangle.mr-1
+                                    | IOCL portal was unreachable at #{fmtDT(portalHealth.checked_at)}; pulls may fail
+                            else
+                                span.text-danger(title=portalHealth.detail)
+                                    i.bi.bi-x-octagon.mr-1
+                                    | IOCL changed its portal (since #{fmtDT(portalHealth.status_since)}); pulls are paused until PetroMath is updated
+                            if canCheckPortalHealth
+                                button.btn.btn-link.btn-sm.p-0.ml-2.align-baseline#portalHealthCheckBtn(type="button", style="font-size:1em") Check now
                 .col-12.col-md-auto.banks-header-buttons
                     if showAdd
                         button.btn.btn-success.btn-sm#addBankBtn(type="button", data-toggle="modal", data-target="#addBankModal")
@@ -336,6 +355,23 @@ block content
                 });
             });
         });
+
+        // SuperUser: run the no-login IOCL portal check now
+        const portalHealthCheckBtn = document.getElementById('portalHealthCheckBtn');
+        if (portalHealthCheckBtn) {
+            portalHealthCheckBtn.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Checking IOCL portal...';
+                try {
+                    const res = await fetch('/oil-company-accounts/api/portal-health/check', { method: 'POST' });
+                    const data = await res.json().catch(() => ({ success: false, error: 'Unexpected response' }));
+                    alert(data.success ? `IOCL portal: ${data.status}\n${data.detail}` : (data.error || 'Check failed'));
+                } catch (e) {
+                    alert('Could not reach the server');
+                }
+                location.reload();
+            });
+        }
 
         function openPortalLogin(data) {
             const bankIdEl = document.getElementById('portal-bank-id');

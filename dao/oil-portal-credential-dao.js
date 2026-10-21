@@ -80,6 +80,44 @@ module.exports = {
         );
     },
 
+    // ---- Portal health (m_oil_portal_health): one row per portal, written by the health check ----
+
+    getPortalHealth: async (portalCode) => {
+        const rows = await db.sequelize.query(
+            `SELECT portal_code, status, detail, checked_at, status_since, last_ok_at,
+                    TIMESTAMPDIFF(MINUTE, checked_at, NOW()) AS minutes_since_check
+             FROM m_oil_portal_health WHERE portal_code = :portalCode`,
+            { replacements: { portalCode }, type: QueryTypes.SELECT }
+        );
+        return rows[0] || null;
+    },
+
+    savePortalHealth: (portalCode, status, detail) => {
+        return db.sequelize.query(
+            `INSERT INTO m_oil_portal_health (portal_code, status, detail, checked_at, status_since, last_ok_at)
+             VALUES (:portalCode, :status, :detail, NOW(), NOW(), IF(:status = 'OK', NOW(), NULL))
+             ON DUPLICATE KEY UPDATE
+                status_since = IF(status = VALUES(status), status_since, NOW()),
+                last_ok_at   = IF(VALUES(status) = 'OK', NOW(), last_ok_at),
+                status       = VALUES(status),
+                detail       = VALUES(detail),
+                checked_at   = NOW()`,
+            { replacements: { portalCode, status, detail: String(detail || '').slice(0, 500) }, type: QueryTypes.INSERT }
+        );
+    },
+
+    // Is the IOCL pull switched on anywhere? (no point checking the portal otherwise)
+    isPortalPullEnabledAnywhere: async () => {
+        const rows = await db.sequelize.query(
+            `SELECT 1 FROM m_location_config
+             WHERE setting_name = 'IOCL_PORTAL_PULL_ENABLED' AND UPPER(setting_value) = 'Y'
+               AND CURDATE() BETWEEN effective_start_date AND effective_end_date
+             LIMIT 1`,
+            { type: QueryTypes.SELECT }
+        );
+        return rows.length > 0;
+    },
+
     // ---- Portal login attempt log (t_oil_portal_login_attempt) ----
 
     startAttempt: async ({ bankId, locationCode, purpose, fromDate, toDate, userId }) => {
