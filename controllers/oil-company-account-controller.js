@@ -25,6 +25,44 @@ const PULL_FAIL_STOP = 2;             // consecutive rejected logins -> pulls pa
 const SAVE_FAIL_STOP_TODAY = 3;       // rejected logins today -> stop trying new passwords until tomorrow
 const inFlight = new Set();           // bank_ids with a portal login running in this process
 
+// Server-wide (all dealers share this server's IP towards IOCL):
+const GLOBAL_LOGIN_GAP_MS = 30 * 1000;   // at least 30 s between any two IOCL logins from this server
+const GLOBAL_MAX_WAIT_MS = 20 * 1000;    // wait up to 20 s for a slot, otherwise ask to retry
+const SERVER_STOP_ACCOUNTS = 3;          // this many different accounts failing...
+const SERVER_STOP_WINDOW_MIN = 60;       // ...within this window stops all IOCL logins until it clears
+let nextGlobalSlotAt = 0;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Claim the next server-wide login slot (synchronous, so concurrent requests can't share one)
+function claimGlobalSlot() {
+    const now = Date.now();
+    const start = Math.max(now, nextGlobalSlotAt);
+    const wait = start - now;
+    if (wait > GLOBAL_MAX_WAIT_MS) return { retryInSecs: Math.ceil(wait / 1000) };
+    const previous = nextGlobalSlotAt;
+    nextGlobalSlotAt = start + GLOBAL_LOGIN_GAP_MS;
+    return { wait, undo: () => { if (nextGlobalSlotAt === start + GLOBAL_LOGIN_GAP_MS) nextGlobalSlotAt = previous; } };
+}
+
+// If IOCL logins for several dealers failed recently, IOCL may be limiting this server: stop all
+// logins rather than push harder. Clears by itself once the failures age out of the window.
+let lastServerStopLogAt = 0;
+async function getServerStop() {
+    const rows = await credentialDao.getRecentFailingAccounts(SERVER_STOP_WINDOW_MIN);
+    if (rows.length < SERVER_STOP_ACCOUNTS) return null;
+    const secsLeft = Math.max(60, SERVER_STOP_WINDOW_MIN * 60 - Number(rows[SERVER_STOP_ACCOUNTS - 1].secs_ago));
+    const resumeAt = new Date(Date.now() + secsLeft * 1000)
+        .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+    if (Date.now() - lastServerStopLogAt > 10 * 60 * 1000) {
+        lastServerStopLogAt = Date.now();
+        console.error(`IOCL PULL SERVER-WIDE STOP: logins for ${rows.length} accounts failed in the last ${SERVER_STOP_WINDOW_MIN} min (bank_ids ${rows.map(r => r.bank_id).join(', ')}). Pulls resume about ${resumeAt} IST.`);
+    }
+    return {
+        resumeAt,
+        message: `IOCL portal logins are paused on this server: logins for several dealers failed in the last hour, which can mean IOCL is limiting access. Pulls resume automatically around ${resumeAt}. Please upload the Excel downloaded from the portal meanwhile.`
+    };
+}
+
 const getIoclHealth = () => credentialDao.getPortalHealth(portalHealth.PORTAL_IOCL).catch(() => null);
 const healthChangedMsg = (h) => `IOCL changed its portal (noticed ${h.status_since ? new Date(h.status_since).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-') : 'recently'}), so the pull is paused until PetroMath is updated. Please upload the Excel downloaded from the portal instead.`;
 
@@ -40,9 +78,11 @@ async function reserveAttempt({ bankId, locationCode, purpose, fromDate, toDate,
     }
     inFlight.add(bankId);
     try {
-        const [st, health] = await Promise.all([credentialDao.getAttemptStats(bankId), getIoclHealth()]);
+        const [st, health, serverStop] = await Promise.all([credentialDao.getAttemptStats(bankId), getIoclHealth(), getServerStop()]);
         let error = null;
-        if (health && health.status === 'CHANGED') {
+        if (serverStop) {
+            error = serverStop.message;
+        } else if (health && health.status === 'CHANGED') {
             error = healthChangedMsg(health);
         } else if (st.running) {
             error = 'An IOCL portal login for this account is already running. Please wait for it to finish.';
@@ -59,7 +99,20 @@ async function reserveAttempt({ bankId, locationCode, purpose, fromDate, toDate,
             inFlight.delete(bankId);
             return { error };
         }
-        const attemptId = await credentialDao.startAttempt({ bankId, locationCode, purpose, fromDate, toDate, userId });
+        // Space logins across all dealers on this server
+        const slot = claimGlobalSlot();
+        if (slot.retryInSecs) {
+            inFlight.delete(bankId);
+            return { error: `The IOCL portal is busy with other pulls from this server. Please try again in ${fmtWait(slot.retryInSecs)}.` };
+        }
+        let attemptId;
+        try {
+            if (slot.wait > 0) await sleep(slot.wait);
+            attemptId = await credentialDao.startAttempt({ bankId, locationCode, purpose, fromDate, toDate, userId });
+        } catch (e) {
+            slot.undo();
+            throw e;
+        }
         return { attemptId };
     } catch (e) {
         inFlight.delete(bankId);
@@ -293,9 +346,10 @@ module.exports = {
                     paused: st.failStreak >= PULL_FAIL_STOP
                 };
             }));
-            const health = await getIoclHealth();
+            const [health, serverStop] = await Promise.all([getIoclHealth(), getServerStop()]);
             res.json({
                 success: true, enabled: true, today: todayYmd(), accounts,
+                server_stop_message: serverStop ? serverStop.message : null,
                 portal_health: health ? {
                     status: health.status,
                     checked_at: health.checked_at,
