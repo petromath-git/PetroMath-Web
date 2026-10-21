@@ -10,6 +10,7 @@ const secretBox = require('../utils/secret-box');
 const ioclPortal = require('../services/iocl-portal-service');
 const transactionUploadController = require('./transaction-upload-controller');
 const { getLocationConfigValue } = require('../utils/location-config');
+const portalHealth = require('../services/oil-portal-health-scheduler');
 
 const LOGIN_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
 const MAX_PULL_DAYS = 92;
@@ -24,6 +25,9 @@ const PULL_FAIL_STOP = 2;             // consecutive rejected logins -> pulls pa
 const SAVE_FAIL_STOP_TODAY = 3;       // rejected logins today -> stop trying new passwords until tomorrow
 const inFlight = new Set();           // bank_ids with a portal login running in this process
 
+const getIoclHealth = () => credentialDao.getPortalHealth(portalHealth.PORTAL_IOCL).catch(() => null);
+const healthChangedMsg = (h) => `IOCL changed its portal (noticed ${h.status_since ? new Date(h.status_since).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-') : 'recently'}), so the pull is paused until PetroMath is updated. Please upload the Excel downloaded from the portal instead.`;
+
 function fmtWait(secs) {
     const m = Math.floor(secs / 60), s = secs % 60;
     return m ? `${m} min ${s} s` : `${s} s`;
@@ -36,9 +40,11 @@ async function reserveAttempt({ bankId, locationCode, purpose, fromDate, toDate,
     }
     inFlight.add(bankId);
     try {
-        const st = await credentialDao.getAttemptStats(bankId);
+        const [st, health] = await Promise.all([credentialDao.getAttemptStats(bankId), getIoclHealth()]);
         let error = null;
-        if (st.running) {
+        if (health && health.status === 'CHANGED') {
+            error = healthChangedMsg(health);
+        } else if (st.running) {
             error = 'An IOCL portal login for this account is already running. Please wait for it to finish.';
         } else if (st.todayCount >= DAILY_LOGIN_LIMIT) {
             error = `IOCL portal logins are limited to ${DAILY_LOGIN_LIMIT} per day for this account, so IOCL does not flag it. Try again tomorrow, or upload the Excel downloaded from the portal.`;
@@ -133,6 +139,8 @@ module.exports = {
                 canAdd,
                 canDisable,
                 portalEnabled,
+                portalHealth: portalEnabled ? await getIoclHealth() : null,
+                canCheckPortalHealth: req.user.Role === 'SuperUser',
                 portalLogins,
                 ioclBankIds,
                 canManageLogin: canManageLogin(req.user),
@@ -225,6 +233,26 @@ module.exports = {
         }
     },
 
+    // SuperUser: run the (no-login) portal health check now, e.g. after a fix is deployed
+    checkPortalHealthNow: async (req, res) => {
+        try {
+            if (req.user.Role !== 'SuperUser') {
+                return res.status(403).json({ success: false, error: 'Only SuperUser can run the portal check' });
+            }
+            if (!(await isPortalEnabled(req.user.location_code))) {
+                return res.status(403).json({ success: false, error: PORTAL_DISABLED_MSG });
+            }
+            const result = await portalHealth.runCheck('MANUAL');
+            if (!result) {
+                return res.status(500).json({ success: false, error: 'The portal check could not run. See the server log.' });
+            }
+            res.json({ success: true, status: result.status, detail: result.detail });
+        } catch (error) {
+            console.error('Error running portal health check:', error);
+            res.status(500).json({ success: false, error: 'Error running the portal check' });
+        }
+    },
+
     deletePortalLogin: async (req, res) => {
         try {
             if (!canManageLogin(req.user)) {
@@ -265,7 +293,15 @@ module.exports = {
                     paused: st.failStreak >= PULL_FAIL_STOP
                 };
             }));
-            res.json({ success: true, enabled: true, today: todayYmd(), accounts });
+            const health = await getIoclHealth();
+            res.json({
+                success: true, enabled: true, today: todayYmd(), accounts,
+                portal_health: health ? {
+                    status: health.status,
+                    checked_at: health.checked_at,
+                    message: health.status === 'CHANGED' ? healthChangedMsg(health) : null
+                } : null
+            });
         } catch (error) {
             console.error('Error listing pullable accounts:', error);
             res.status(500).json({ success: false, error: 'Error loading portal accounts' });

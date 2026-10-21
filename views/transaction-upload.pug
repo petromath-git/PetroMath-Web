@@ -407,6 +407,7 @@ block content
         // ---- IOCL e-Mitra portal pull ----
         let portalAccounts = {};
         let portalToday = null;
+        let portalHealthState = null;   // { status: OK | UNREACHABLE | CHANGED, message }
 
         function ymdToDisplay(ymd) {
             if (!ymd) return '';
@@ -423,6 +424,7 @@ block content
                 if (!data.success) return;
                 portalToday = data.today;
                 data.accounts.forEach(a => { portalAccounts[a.bank_id] = a; });
+                portalHealthState = data.portal_health || null;
                 updatePortalPullBox();
             } catch (e) {
                 console.warn('Portal accounts not loaded', e);
@@ -454,16 +456,23 @@ block content
             // Server enforces these too; this just explains it before anyone clicks
             let limitNote = ` ${acc.logins_left_today} of ${acc.daily_limit} IOCL logins left today.`;
             let blocked = false;
-            if (acc.paused) {
+            let warn = false;
+            if (portalHealthState && portalHealthState.status === 'CHANGED') {
+                limitNote = ' ' + portalHealthState.message;
+                blocked = true;
+            } else if (acc.paused) {
                 limitNote = ' Pulls are paused: IOCL rejected the saved login twice. An Admin needs to re-enter the password in Masters → Oil Company Accounts.';
                 blocked = true;
             } else if (acc.logins_left_today <= 0) {
                 limitNote = ' Daily limit of IOCL logins reached for this account. Try again tomorrow, or upload the Excel below.';
                 blocked = true;
+            } else if (portalHealthState && portalHealthState.status === 'UNREACHABLE') {
+                limitNote += ' Note: the IOCL portal was unreachable at the last check, so the pull may fail.';
+                warn = true;
             }
             const hint = document.getElementById('portalPullHint');
             hint.textContent = loaded + limitNote;
-            hint.className = blocked ? 'text-danger small' : 'text-muted small';
+            hint.className = blocked ? 'text-danger small' : (warn ? 'text-warning small' : 'text-muted small');
             document.getElementById('btnPortalPull').disabled = blocked;
             box.style.display = 'block';
         }

@@ -24,6 +24,12 @@ router.put('/api/:id/portal-login',
     controller.savePortalLogin
 );
 
+// SuperUser: run the no-login portal health check now
+router.post('/api/portal-health/check',
+    isLoginEnsured,
+    controller.checkPortalHealthNow
+);
+
 router.delete('/api/:id/portal-login',
     [isLoginEnsured, security.hasPermission('EDIT_BANK_MASTER')],
     controller.deletePortalLogin
