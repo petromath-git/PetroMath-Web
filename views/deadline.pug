@@ -108,18 +108,53 @@ block content
         //- ---------------- Bank holidays ----------------
         #dlHolidayPane(hidden)
             p.small.text-muted.mb-2 Days the bank is closed. Shown on the home page in the week before — no phone reminders.
+            .dl-region.mb-3
+                if holidayRegion && holidayRegion.rbi_office
+                    div
+                        i.bi.bi-bank.mr-1(aria-hidden="true")
+                        | Filled in from RBI's list for the #[strong #{holidayRegion.rbi_office}] office
+                        if holidayRegion.state_name
+                            |  (#{holidayRegion.state_name})
+                        | , plus 2nd and 4th Saturdays.
+                    .small.text-muted
+                        if holidayRegion.source === 'GST'
+                            | State taken from the GST number.
+                        else if holidayRegion.source === 'ADDRESS'
+                            | State taken from the location's address.
+                        else if holidayRegion.source === 'IFSC'
+                            | State taken from your bank branches (#{holidayRegion.detail.replace('IFSC ', '')}).
+                        else if holidayRegion.source === 'MANUAL'
+                            | Office picked by hand.
+                else
+                    .text-danger
+                        i.bi.bi-exclamation-triangle.mr-1(aria-hidden="true")
+                        | Couldn't tell this location's state (no GST number or bank IFSC). Pick the RBI office for your state to fill in holidays.
+                .form-inline.mt-2
+                    select.form-control.form-control-sm.mr-2.mb-1#holidayOffice
+                        option(value="") Work it out automatically
+                        each o in rbiOffices
+                            option(value=o selected=(holidayRegion && holidayRegion.source === 'MANUAL' && holidayRegion.rbi_office === o))= o
+                    button.btn.btn-outline-primary.btn-sm.mr-2.mb-1#holidayOfficeSave(type="button") Save office
+                    if holidayRegion && holidayRegion.rbi_office
+                        button.btn.btn-outline-secondary.btn-sm.mb-1#holidayRefresh(type="button")
+                            i.bi.bi-arrow-repeat.mr-1(aria-hidden="true")
+                            | Fetch from RBI now
             form.form-row.align-items-end.mb-3#holidayForm(novalidate)
                 .col-6.col-md-3.mb-2
                     label.small.font-weight-bold.mb-1(for="holidayDate") Date
                     input.form-control#holidayDate(type="date" required)
                 .col-6.col-md-4.mb-2
                     label.small.font-weight-bold.mb-1(for="holidayDesc") Holiday
-                    input.form-control#holidayDesc(type="text" maxlength="200" placeholder="e.g. Diwali, 2nd Saturday")
+                    input.form-control#holidayDesc(type="text" maxlength="200" placeholder="e.g. Local festival")
                 .col-12.col-md-auto.mb-2
                     button.btn.btn-success.btn-block#holidayAddBtn(type="submit") Add Holiday
-            .custom-control.custom-checkbox.mb-2
-                input.custom-control-input#holidayShowPast(type="checkbox")
-                label.custom-control-label(for="holidayShowPast") Show past holidays
+            .d-flex.flex-wrap.mb-2
+                .custom-control.custom-checkbox.mr-4
+                    input.custom-control-input#holidayShowPast(type="checkbox")
+                    label.custom-control-label(for="holidayShowPast") Show past holidays
+                .custom-control.custom-checkbox
+                    input.custom-control-input#holidayShowSat(type="checkbox" checked)
+                    label.custom-control-label(for="holidayShowSat") Show 2nd / 4th Saturdays
             table.table.table-sm.m-stack#holidayTable
                 thead.thead-light
                     tr
@@ -129,13 +164,23 @@ block content
                         th(style="width:60px")
                 tbody
                     each h in holidays
-                        tr.holiday-row(data-past=(h.days_left < 0 ? '1' : '0'))
-                            td.m-title= h.date_display
+                        - var srcLabel = { RBI: 'RBI', MANUAL: 'Added here', HIDDEN: 'Not a holiday here' }[h.source]
+                        - var srcClass = { RBI: 'badge-info', MANUAL: 'badge-secondary', HIDDEN: 'badge-warning' }[h.source]
+                        tr.holiday-row(data-past=(h.days_left < 0 ? '1' : '0') data-source=h.source class=(h.source === 'HIDDEN' ? 'holiday-hidden' : undefined))
+                            td.m-title.text-nowrap= h.date_display
                             td(data-label="Day")= h.day_name
-                            td(data-label="Holiday")= h.description
-                            td.m-actions
-                                button.btn.btn-outline-danger.btn-sm.holiday-delete(type="button" title="Delete" data-id=h.holiday_id data-name=`${h.date_display} ${h.description}`)
-                                    i.bi.bi-trash
+                            td.m-wide(data-label="Holiday")
+                                span.holiday-desc= h.description
+                                if h.source !== 'SATURDAY'
+                                    span.badge.ml-2(class=srcClass)= srcLabel
+                            td.m-actions.text-nowrap
+                                if h.source === 'MANUAL'
+                                    button.btn.btn-outline-danger.btn-sm.holiday-delete(type="button" title="Delete" data-id=h.holiday_id data-name=`${h.date_display} ${h.description}`)
+                                        i.bi.bi-trash
+                                else if h.source === 'HIDDEN'
+                                    button.btn.btn-outline-secondary.btn-sm.holiday-restore(type="button" title="Show as a holiday again" data-id=h.holiday_id) Restore
+                                else
+                                    button.btn.btn-outline-secondary.btn-sm.holiday-hide(type="button" title="Our bank is open on this day" data-date=h.date data-name=`${h.date_display} ${h.description}`) Not a holiday
                     tr.m-static#holidayEmpty(hidden)
                         td.m-wide.text-center.text-muted(colspan="4") No upcoming bank holidays.
 
@@ -235,6 +280,8 @@ block content
         .dl-notes { white-space: pre-line; max-width: 420px; }
         #dlTable td.m-actions .btn { margin-right: 2px; }
         .dl-page [hidden] { display: none !important; }
+        .holiday-hidden .holiday-desc { text-decoration: line-through; color: #6c757d; }
+        .dl-region { padding: 10px 12px; border: 1px solid #dee2e6; border-radius: 0.5rem; background: #fff; }
         .dl-hist { border-left: 3px solid #dee2e6; padding: 4px 0 8px 10px; margin-bottom: 8px; font-size: 0.9rem; }
 
     +cardToggleMobile('#dlTable > tbody > tr:not(.m-static)')
@@ -277,9 +324,10 @@ block content
             }
             function applyHolidayFilter() {
                 var past = document.getElementById('holidayShowPast').checked;
+                var sat = document.getElementById('holidayShowSat').checked;
                 var shown = 0;
                 document.querySelectorAll('.holiday-row').forEach(function (r) {
-                    var ok = past || r.dataset.past === '0';
+                    var ok = (past || r.dataset.past === '0') && (sat || r.dataset.source !== 'SATURDAY');
                     r.style.display = ok ? '' : 'none';
                     if (ok) shown++;
                 });
@@ -309,6 +357,7 @@ block content
             });
             document.getElementById('dlCategoryFilter').addEventListener('change', applyFilters);
             document.getElementById('holidayShowPast').addEventListener('change', applyHolidayFilter);
+            document.getElementById('holidayShowSat').addEventListener('change', applyHolidayFilter);
 
             var TABS = ['OVERDUE', 'SOON', 'LATER', 'DONE', 'HOLIDAYS'];
             function hashTab() {
@@ -456,13 +505,29 @@ block content
                     .then(function () { location.hash = '#holidays'; location.reload(); })
                     .catch(function (err) { alert(err.message); btn.disabled = false; });
             });
-            document.getElementById('holidayTable').addEventListener('click', function (e) {
-                var btn = e.target.closest('.holiday-delete');
-                if (!btn) return;
-                if (!confirm('Delete bank holiday ' + btn.dataset.name + '?')) return;
+            function holidayCall(btn, method, url, body) {
                 btn.disabled = true;
-                api('DELETE', '/deadline/holidays/api/' + btn.dataset.id)
-                    .then(function () { location.reload(); })
+                api(method, url, body)
+                    .then(function () { location.hash = '#holidays'; location.reload(); })
                     .catch(function (err) { alert(err.message); btn.disabled = false; });
+            }
+            document.getElementById('holidayTable').addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (!btn) return;
+                if (btn.classList.contains('holiday-delete')) {
+                    if (confirm('Delete bank holiday ' + btn.dataset.name + '?')) holidayCall(btn, 'DELETE', '/deadline/holidays/api/' + btn.dataset.id);
+                } else if (btn.classList.contains('holiday-hide')) {
+                    if (confirm(btn.dataset.name + '\n\nMark as NOT a holiday for this location (your bank is open)?')) holidayCall(btn, 'POST', '/deadline/holidays/hide', { holiday_date: btn.dataset.date });
+                } else if (btn.classList.contains('holiday-restore')) {
+                    holidayCall(btn, 'DELETE', '/deadline/holidays/api/' + btn.dataset.id);
+                }
+            });
+            document.getElementById('holidayOfficeSave').addEventListener('click', function () {
+                holidayCall(this, 'POST', '/deadline/holidays/region', { rbi_office: document.getElementById('holidayOffice').value });
+            });
+            var refreshBtn = document.getElementById('holidayRefresh');
+            if (refreshBtn) refreshBtn.addEventListener('click', function () {
+                this.innerHTML = 'Fetching…';
+                holidayCall(this, 'POST', '/deadline/holidays/refresh');
             });
         })();

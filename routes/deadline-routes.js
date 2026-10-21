@@ -17,5 +17,8 @@ router.post('/api/:id/renew',        canManage, ctrl.renewItem);
 router.get('/api/:id/history',       canManage, ctrl.getHistory);
 router.post('/holidays/api',         canManage, ctrl.createHoliday);
 router.delete('/holidays/api/:id',   canManage, ctrl.deleteHoliday);
+router.post('/holidays/hide',        canManage, ctrl.hideHoliday);
+router.post('/holidays/region',      canManage, ctrl.setHolidayRegion);
+router.post('/holidays/refresh',     canManage, ctrl.refreshHolidays);
 
 module.exports = router;
