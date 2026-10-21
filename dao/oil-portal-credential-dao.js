@@ -178,6 +178,20 @@ module.exports = {
         };
     },
 
+    // Server-wide: accounts whose IOCL login failed in the last hour, newest first, with how many
+    // minutes ago (DB clock). Used to stop all pulls if IOCL appears to be pushing back.
+    getRecentFailingAccounts: (windowMinutes) => {
+        return db.sequelize.query(
+            `SELECT bank_id, TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) AS secs_ago
+             FROM t_oil_portal_login_attempt
+             WHERE result IN ('LOGIN_FAILED', 'ERROR')
+               AND started_at > NOW() - INTERVAL :windowMinutes MINUTE
+             GROUP BY bank_id
+             ORDER BY secs_ago ASC`,
+            { replacements: { windowMinutes }, type: QueryTypes.SELECT }
+        );
+    },
+
     // Last statement date already loaded for the account (default "from" date for a pull)
     getLastTransactionDate: async (bankId) => {
         const rows = await db.sequelize.query(

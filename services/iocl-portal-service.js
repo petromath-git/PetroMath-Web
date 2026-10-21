@@ -20,6 +20,15 @@ const STATEMENT_API_PATH = '/xepp-api/dealer-account/fetch-statement';
 const CAPTCHA_API_PATH = '/xepp-api/auth/samadhan/captcha-challenge';
 const LOGIN_API_PART = '/xepp-api/auth/samadhan/login';
 
+// Present as an ordinary desktop Chrome (the dealer's own browser would), not "HeadlessChrome" on Linux
+// with an 800x600 screen. Version follows the bundled Chrome so it stays consistent.
+async function preparePage(page, browser) {
+    const major = ((await browser.version()).match(/\/(\d+)\./) || [])[1] || '131';
+    await page.setUserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-IN,en;q=0.9' });
+    await page.setViewport({ width: 1366, height: 768 });
+}
+
 async function portalUrls() {
     const raw = await getLocationConfigValue('*', 'IOCL_PORTAL_BASE_URL', DEFAULT_PORTAL_BASE);
     const base = String(raw || DEFAULT_PORTAL_BASE).trim().replace(/\/+$/, '');
@@ -204,7 +213,7 @@ function pullStatement({ username, password, fromDate, toDate }) {
         const context = await browser.createBrowserContext();
         try {
             const page = await context.newPage();
-            await page.setViewport({ width: 1366, height: 900 });
+            await preparePage(page, browser);
             page.setDefaultTimeout(60000);
 
             await login(page, username, password, urls);
@@ -237,6 +246,7 @@ function checkHealth() {
         const context = await browser.createBrowserContext();
         try {
             const page = await context.newPage();
+            await preparePage(page, browser);
             try {
                 await page.goto(urls.login, { waitUntil: 'networkidle2', timeout: 45000 });
             } catch (e) {
@@ -297,6 +307,7 @@ module.exports = {
     checkHealth,
     PortalError,
     // exported for tests
+    preparePage,
     solveMathQuestion,
     toExcelRows,
     EXCEL_HEADER
