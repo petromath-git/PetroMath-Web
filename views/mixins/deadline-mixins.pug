@@ -1,0 +1,39 @@
+//- Home page (desktop + phone /m): open deadlines that are overdue or inside
+//- their reminder window, plus bank holidays in the next 7 days.
+//-   summary - DeadlineController.getAttentionSummary(locationCode)
+//-   canOpen - user may open /deadline (admin-type roles)
+mixin deadlineAttention(summary, canOpen)
+  if summary && (summary.items.length || summary.holidays.length)
+    .deadline-section
+      .deadline-header
+        span.mr-auto Important Deadlines
+        if canOpen
+          a.text-white(href="/deadline") Open »
+      if summary.items.length
+        ul.dl-att-list
+          each it in summary.items
+            li.dl-att-item
+              span.badge(class=(it.days_left < 0 ? 'badge-danger' : 'badge-warning'))= it.due_text
+              span.dl-att-name
+                = it.title
+                if it.reference_no
+                  span.text-muted  · #{it.reference_no}
+              span.dl-att-date= it.due_display
+      if summary.holidays.length
+        .dl-att-hol
+          i.bi.bi-bank(aria-hidden="true")
+          |  Bank holiday:
+          each h, i in summary.holidays
+            |  #{i ? '·' : ''} #[strong #{h.day_name} #{h.date_display}] #{h.description}
+  style.
+    .dl-att-list { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid #e9ecef; border-radius: 6px; }
+    .dl-att-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #f1f3f5; font-size: 14px; }
+    .dl-att-item:last-child { border-bottom: 0; }
+    .dl-att-item .badge { flex-shrink: 0; min-width: 96px; font-size: 12px; }
+    .dl-att-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    .dl-att-date { flex-shrink: 0; color: #6c757d; font-size: 13px; }
+    .dl-att-hol { margin-top: 10px; font-size: 13px; color: #495057; }
+    @media (max-width: 575px) {
+      .dl-att-item { flex-wrap: wrap; gap: 4px 10px; }
+      .dl-att-name { flex-basis: 100%; order: 3; }
+    }

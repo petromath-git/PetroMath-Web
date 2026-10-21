@@ -20,6 +20,7 @@ const EmployeeDao = require("../dao/employee-dao");
 const db = require("../db/db-connection");
 const rolePermissionsDao = require("../dao/role-permissions-dao");
 const serviceTier = require('../utils/service-tier');
+const DeadlineController = require("./deadline-controller");
 
 // Shown when a piece (NOS) product is saved with a fractional quantity —
 // usually an amount typed in that is not a multiple of the price.
@@ -762,7 +763,7 @@ const getHomeData = async (req, res, next) => {
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
             TxnReadDao.getDraftClosingsBeforeDays(locationCode, maxAllowedDraftDays + 1),
-            getDeadlineWarningMessage(locationCode),
+            getDeadlineSummary(locationCode),
             getLocationProductColumns(locationCode),
             rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
         ]).then(values => {
@@ -778,7 +779,7 @@ const getHomeData = async (req, res, next) => {
                 draftsCnt: values[1].value,
                 draftDaysCnt: (values[2].value || []).length,
                 staleDrafts: values[2].value || [],
-                deadlineMessage: values[3].value,
+                deadlineSummary: values[3].value,
                 productColumns: values[4].value,
                 canSearchClosings: values[5].value,
                 maxAllowedDrafts: maxAllowedDrafts,
@@ -962,20 +963,12 @@ const getDraftsCount = (locationCode) => {
     });
 }
 
-const getDeadlineWarningMessage = (locationCode) => {
-    return new Promise((resolve, reject) => {
-        let deadlineMessage =[];
-        return TxnReadDao.getDeadlineWarningMessage(locationCode)
-            .then(data => {
-                data.forEach((deadlineData) => {
-                    deadlineMessage.push({deadlineDate: deadlineData.dataValues.deadline_date,
-                        message: deadlineData.message
-                    });
-                });
-                resolve(deadlineMessage);
-            });
+// Overdue / due-soon deadlines + bank holidays this week (empty on error: never blocks the home page)
+const getDeadlineSummary = (locationCode) =>
+    DeadlineController.getAttentionSummary(locationCode).catch(err => {
+        console.error('Home: deadline summary failed:', err.message);
+        return { items: [], holidays: [] };
     });
-}
 
 // Add new flow: Get person data
 const personDataPromise = (locationCode) => {
