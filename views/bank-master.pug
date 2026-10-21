@@ -26,8 +26,12 @@ block content
                 if canManageLogin
                     button.btn.btn-outline-primary.btn-sm.ml-1.py-0.portal-login-btn(type="button", title=login ? 'Change portal login' : 'Set portal login', data-bank-id=bank.bank_id, data-has-login=login ? 'Y' : 'N', data-username=login ? login.username : '', data-account=`${bank.bank_name}${bank.account_nickname ? ' - ' + bank.account_nickname : ''}`)
                         i.bi.bi-key
-            if login && login.last_pull_status === 'FAILED'
+            if login && login.paused
+                div.text-danger(style="font-size:0.8em") Pulls paused: IOCL rejected the login twice. Re-enter the password.
+            else if login && login.last_pull_status === 'FAILED'
                 div.text-danger(style="font-size:0.8em" title=login.last_pull_message) Last pull failed
+            if login
+                div.text-muted(style="font-size:0.75em")= `${login.loginsToday} of ${login.dailyLimit} IOCL logins used today`
 
     // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")

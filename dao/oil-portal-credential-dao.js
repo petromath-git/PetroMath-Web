@@ -80,6 +80,66 @@ module.exports = {
         );
     },
 
+    // ---- Portal login attempt log (t_oil_portal_login_attempt) ----
+
+    startAttempt: async ({ bankId, locationCode, purpose, fromDate, toDate, userId }) => {
+        const [id] = await db.sequelize.query(
+            `INSERT INTO t_oil_portal_login_attempt
+                (bank_id, location_code, purpose, from_date, to_date, created_by)
+             VALUES (:bankId, :locationCode, :purpose, :fromDate, :toDate, :userId)`,
+            {
+                replacements: { bankId, locationCode, purpose, fromDate: fromDate || null, toDate: toDate || null, userId: String(userId || '') },
+                type: QueryTypes.INSERT
+            }
+        );
+        return id;
+    },
+
+    finishAttempt: (attemptId, result, message) => {
+        return db.sequelize.query(
+            `UPDATE t_oil_portal_login_attempt
+             SET result = :result, message = :message, finished_at = NOW()
+             WHERE attempt_id = :attemptId`,
+            { replacements: { attemptId, result, message: String(message || '').slice(0, 500) }, type: QueryTypes.UPDATE }
+        );
+    },
+
+    // Everything the safeguards need, computed in the DB clock (IST)
+    getAttemptStats: async (bankId) => {
+        const [row] = await db.sequelize.query(
+                `SELECT
+                    (SELECT COUNT(*) FROM t_oil_portal_login_attempt
+                      WHERE bank_id = :bankId AND started_at >= CURDATE()) AS today_count,
+                    (SELECT COUNT(*) FROM t_oil_portal_login_attempt
+                      WHERE bank_id = :bankId AND result = 'RUNNING'
+                        AND started_at > NOW() - INTERVAL 10 MINUTE) AS running_count,
+                    (SELECT TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) FROM t_oil_portal_login_attempt
+                      WHERE bank_id = :bankId AND purpose = 'PULL') AS secs_since_last_pull`,
+                { replacements: { bankId }, type: QueryTypes.SELECT }
+            );
+        // Consecutive LOGIN_FAILED since the last successful login (other errors don't count either way)
+        const recent = await db.sequelize.query(
+            `SELECT result, started_at >= CURDATE() AS is_today
+             FROM t_oil_portal_login_attempt
+             WHERE bank_id = :bankId AND result IN ('OK', 'LOGIN_FAILED')
+             ORDER BY attempt_id DESC LIMIT 10`,
+            { replacements: { bankId }, type: QueryTypes.SELECT }
+        );
+        let failStreak = 0, failStreakToday = 0;
+        for (const r of recent) {
+            if (r.result !== 'LOGIN_FAILED') break;
+            failStreak++;
+            if (Number(r.is_today) === 1) failStreakToday++;
+        }
+        return {
+            todayCount: Number(row.today_count) || 0,
+            running: Number(row.running_count) > 0,
+            secsSinceLastPull: row.secs_since_last_pull === null ? null : Number(row.secs_since_last_pull),
+            failStreak,
+            failStreakToday
+        };
+    },
+
     // Last statement date already loaded for the account (default "from" date for a pull)
     getLastTransactionDate: async (bankId) => {
         const rows = await db.sequelize.query(

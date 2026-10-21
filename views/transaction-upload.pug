@@ -448,9 +448,23 @@ block content
             document.getElementById('pullToDate').value = today;
             document.getElementById('pullFromDate').max = today;
             document.getElementById('pullToDate').max = today;
-            document.getElementById('portalPullHint').textContent = acc.last_txn_date
+            const loaded = acc.last_txn_date
                 ? `Statement loaded up to ${ymdToDisplay(acc.last_txn_date)}.`
                 : 'No statement loaded yet for this account.';
+            // Server enforces these too; this just explains it before anyone clicks
+            let limitNote = ` ${acc.logins_left_today} of ${acc.daily_limit} IOCL logins left today.`;
+            let blocked = false;
+            if (acc.paused) {
+                limitNote = ' Pulls are paused: IOCL rejected the saved login twice. An Admin needs to re-enter the password in Masters → Oil Company Accounts.';
+                blocked = true;
+            } else if (acc.logins_left_today <= 0) {
+                limitNote = ' Daily limit of IOCL logins reached for this account. Try again tomorrow, or upload the Excel below.';
+                blocked = true;
+            }
+            const hint = document.getElementById('portalPullHint');
+            hint.textContent = loaded + limitNote;
+            hint.className = blocked ? 'text-danger small' : 'text-muted small';
+            document.getElementById('btnPortalPull').disabled = blocked;
             box.style.display = 'block';
         }
 
@@ -502,6 +516,7 @@ block content
             } finally {
                 this.disabled = false;
                 this.innerHTML = originalButtonHtml;
+                loadPortalAccounts();   // refresh "logins left today" / paused state
             }
         });
 

@@ -16,6 +16,58 @@ const MAX_PULL_DAYS = 92;
 const PORTAL_IOCL = 'IOCL_EMITRA';
 const PORTAL_DISABLED_MSG = 'IOCL portal pull is not enabled for this location.';
 
+// Safeguards so repeated clicks / a bad stored password can't get the dealer's IOCL account flagged.
+// Derived from t_oil_portal_login_attempt (one row per IOCL login).
+const DAILY_LOGIN_LIMIT = 5;          // pulls + "Check & Save", per account per day
+const PULL_COOLDOWN_SECS = 120;       // between pulls of the same account
+const PULL_FAIL_STOP = 2;             // consecutive rejected logins -> pulls paused until re-saved
+const SAVE_FAIL_STOP_TODAY = 3;       // rejected logins today -> stop trying new passwords until tomorrow
+const inFlight = new Set();           // bank_ids with a portal login running in this process
+
+function fmtWait(secs) {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return m ? `${m} min ${s} s` : `${s} s`;
+}
+
+// Checks every safeguard and, if allowed, logs a RUNNING attempt. Returns { attemptId } or { error }.
+async function reserveAttempt({ bankId, locationCode, purpose, fromDate, toDate, userId }) {
+    if (inFlight.has(bankId)) {
+        return { error: 'An IOCL portal login for this account is already running. Please wait for it to finish.' };
+    }
+    inFlight.add(bankId);
+    try {
+        const st = await credentialDao.getAttemptStats(bankId);
+        let error = null;
+        if (st.running) {
+            error = 'An IOCL portal login for this account is already running. Please wait for it to finish.';
+        } else if (st.todayCount >= DAILY_LOGIN_LIMIT) {
+            error = `IOCL portal logins are limited to ${DAILY_LOGIN_LIMIT} per day for this account, so IOCL does not flag it. Try again tomorrow, or upload the Excel downloaded from the portal.`;
+        } else if (purpose === 'PULL' && st.failStreak >= PULL_FAIL_STOP) {
+            error = 'IOCL rejected the saved login twice in a row, so pulls are paused to protect the account. An Admin needs to re-enter the password in Masters → Oil Company Accounts.';
+        } else if (purpose === 'SAVE' && st.failStreakToday >= SAVE_FAIL_STOP_TODAY) {
+            error = `IOCL rejected ${st.failStreakToday} logins today. To avoid locking the account, check the password by logging in on the IOCL portal yourself, then try again tomorrow.`;
+        } else if (purpose === 'PULL' && st.secsSinceLastPull !== null && st.secsSinceLastPull < PULL_COOLDOWN_SECS) {
+            error = `This account was pulled ${fmtWait(st.secsSinceLastPull)} ago. Please try again in ${fmtWait(PULL_COOLDOWN_SECS - st.secsSinceLastPull)}.`;
+        }
+        if (error) {
+            inFlight.delete(bankId);
+            return { error };
+        }
+        const attemptId = await credentialDao.startAttempt({ bankId, locationCode, purpose, fromDate, toDate, userId });
+        return { attemptId };
+    } catch (e) {
+        inFlight.delete(bankId);
+        throw e;
+    }
+}
+
+async function releaseAttempt(bankId, attemptId, result, message) {
+    inFlight.delete(bankId);
+    await credentialDao.finishAttempt(attemptId, result, message).catch(err => console.error('finishAttempt failed:', err.message));
+}
+
+const attemptResult = (e) => (e && e.code === 'LOGIN_FAILED' ? 'LOGIN_FAILED' : 'ERROR');
+
 const canManageLogin = (user) => LOGIN_ROLES.includes(user.Role);
 
 // Location config gate (location row beats '*'); off unless explicitly 'Y'
@@ -60,7 +112,14 @@ module.exports = {
                 const ioclFlags = await Promise.all(oilBanks.map(b => isIoclAccount(b.bank_id)));
                 ioclBankIds = oilBanks.filter((b, i) => ioclFlags[i]).map(b => b.bank_id);
                 const loginRows = await credentialDao.findStatusByLocation(locationCode);
-                loginRows.forEach(r => { portalLogins[r.bank_id] = r; });
+                const stats = await Promise.all(loginRows.map(r => credentialDao.getAttemptStats(r.bank_id)));
+                loginRows.forEach((r, i) => {
+                    portalLogins[r.bank_id] = Object.assign({}, r, {
+                        paused: stats[i].failStreak >= PULL_FAIL_STOP,
+                        loginsToday: stats[i].todayCount,
+                        dailyLimit: DAILY_LOGIN_LIMIT
+                    });
+                });
             }
 
             res.render('bank-master', {
@@ -133,12 +192,18 @@ module.exports = {
             }
 
             const today = todayYmd();
+            const slot = await reserveAttempt({ bankId, locationCode, purpose: 'SAVE', userId: req.user.Person_id });
+            if (slot.error) {
+                return res.status(429).json({ success: false, error: slot.error });
+            }
             let check;
             try {
                 check = await ioclPortal.pullStatement({ username, password, fromDate: today, toDate: today });
             } catch (e) {
+                await releaseAttempt(bankId, slot.attemptId, attemptResult(e), e.message);
                 return res.status(400).json({ success: false, error: e.message || 'Could not log in to the IOCL portal' });
             }
+            await releaseAttempt(bankId, slot.attemptId, 'OK', 'Login verified');
 
             await credentialDao.upsert({
                 bankId,
@@ -188,12 +253,18 @@ module.exports = {
                 return res.json({ success: true, enabled: false, accounts: [] });
             }
             const rows = await credentialDao.findStatusByLocation(req.user.location_code);
-            const accounts = await Promise.all(rows.map(async r => ({
-                bank_id: r.bank_id,
-                last_txn_date: await credentialDao.getLastTransactionDate(r.bank_id),
-                last_pull_at: r.last_pull_at,
-                last_pull_status: r.last_pull_status
-            })));
+            const accounts = await Promise.all(rows.map(async r => {
+                const st = await credentialDao.getAttemptStats(r.bank_id);
+                return {
+                    bank_id: r.bank_id,
+                    last_txn_date: await credentialDao.getLastTransactionDate(r.bank_id),
+                    last_pull_at: r.last_pull_at,
+                    last_pull_status: r.last_pull_status,
+                    logins_left_today: Math.max(0, DAILY_LOGIN_LIMIT - st.todayCount),
+                    daily_limit: DAILY_LOGIN_LIMIT,
+                    paused: st.failStreak >= PULL_FAIL_STOP
+                };
+            }));
             res.json({ success: true, enabled: true, today: todayYmd(), accounts });
         } catch (error) {
             console.error('Error listing pullable accounts:', error);
@@ -239,13 +310,19 @@ module.exports = {
                 return res.status(500).json({ success: false, error: 'Saved portal login could not be read on this server. Please re-enter it in Oil Company Accounts.' });
             }
 
+            const slot = await reserveAttempt({ bankId, locationCode, purpose: 'PULL', fromDate, toDate, userId: req.user.Person_id });
+            if (slot.error) {
+                return res.status(429).json({ success: false, error: slot.error });
+            }
             let pulled;
             try {
                 pulled = await ioclPortal.pullStatement({ username: cred.username, password, fromDate, toDate });
             } catch (e) {
+                await releaseAttempt(bankId, slot.attemptId, attemptResult(e), e.message);
                 await credentialDao.recordPull(bankId, 'FAILED', e.message);
                 return res.status(502).json({ success: false, error: e.message || 'IOCL portal pull failed' });
             }
+            await releaseAttempt(bankId, slot.attemptId, 'OK', `${pulled.rows.length} rows`);
 
             // Hand over to the existing upload preview exactly as if the user had uploaded the file
             req.body.bank_id = String(bankId);
