@@ -124,7 +124,27 @@ block content
                                 //- Only show info if overlap validation is enabled
                                 if overlapMode !== 'off'
                                     #lastUploadInfo.alert.mt-2(style='display: none;')
-                                        #lastUploadText                     
+                                        #lastUploadText
+
+                            //- IOCL e-Mitra pull: shown only for accounts with a saved portal login
+                            #portalPullBox.card.border-success.mb-3(style='display: none;')
+                                .card-body.py-3
+                                    .d-flex.align-items-center.mb-2
+                                        i.bi.bi-cloud-download.text-success.mr-2(style='font-size:1.3rem;')
+                                        strong Pull statement from IOCL portal
+                                    .row
+                                        .col-6.col-md-4.mb-2
+                                            label.small.text-muted.mb-0(for='pullFromDate') From
+                                            input#pullFromDate.form-control(type='date')
+                                        .col-6.col-md-4.mb-2
+                                            label.small.text-muted.mb-0(for='pullToDate') To
+                                            input#pullToDate.form-control(type='date')
+                                        .col-12.col-md-4.mb-2.d-flex.align-items-end
+                                            button#btnPortalPull.btn.btn-success.w-100(type='button')
+                                                i.bi.bi-cloud-download.mr-1
+                                                | Pull &amp; Preview
+                                    small#portalPullHint.text-muted
+                                    .text-center.text-muted.small.mt-2 — or upload the downloaded Excel file below —
                             .mb-3
                                 label.form-label 
                                     | Select Statement File:
@@ -384,6 +404,136 @@ block content
             }
         });
         
+        // ---- IOCL e-Mitra portal pull ----
+        let portalAccounts = {};
+        let portalToday = null;
+        let portalHealthState = null;   // { status: OK | UNREACHABLE | CHANGED, message }
+        let portalServerStopMessage = null;   // set when IOCL logins are paused server-wide
+
+        function ymdToDisplay(ymd) {
+            if (!ymd) return '';
+            const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const [y, mo, d] = ymd.split('-');
+            return `${d}-${m[parseInt(mo, 10) - 1]}-${y}`;
+        }
+
+        async function loadPortalAccounts() {
+            try {
+                const res = await fetch('/oil-company-accounts/api/pullable');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.success) return;
+                portalToday = data.today;
+                data.accounts.forEach(a => { portalAccounts[a.bank_id] = a; });
+                portalHealthState = data.portal_health || null;
+                portalServerStopMessage = data.server_stop_message || null;
+                updatePortalPullBox();
+            } catch (e) {
+                console.warn('Portal accounts not loaded', e);
+            }
+        }
+
+        function updatePortalPullBox() {
+            const box = document.getElementById('portalPullBox');
+            const acc = portalAccounts[document.getElementById('bank_id').value];
+            if (!acc) {
+                box.style.display = 'none';
+                return;
+            }
+            // Start from the last loaded statement date (1-day overlap; duplicates are skipped in preview)
+            const today = portalToday;
+            let from = acc.last_txn_date;
+            if (!from) {
+                const d = new Date(today + 'T00:00:00Z');
+                d.setUTCDate(d.getUTCDate() - 7);
+                from = d.toISOString().slice(0, 10);
+            }
+            document.getElementById('pullFromDate').value = from;
+            document.getElementById('pullToDate').value = today;
+            document.getElementById('pullFromDate').max = today;
+            document.getElementById('pullToDate').max = today;
+            const loaded = acc.last_txn_date
+                ? `Statement loaded up to ${ymdToDisplay(acc.last_txn_date)}.`
+                : 'No statement loaded yet for this account.';
+            // Server enforces these too; this just explains it before anyone clicks
+            let limitNote = ` ${acc.logins_left_today} of ${acc.daily_limit} IOCL logins left today.`;
+            let blocked = false;
+            let warn = false;
+            if (portalServerStopMessage) {
+                limitNote = ' ' + portalServerStopMessage;
+                blocked = true;
+            } else if (portalHealthState && portalHealthState.status === 'CHANGED') {
+                limitNote = ' ' + portalHealthState.message;
+                blocked = true;
+            } else if (acc.paused) {
+                limitNote = ' Pulls are paused: IOCL rejected the saved login twice. An Admin needs to re-enter the password in Masters → Oil Company Accounts.';
+                blocked = true;
+            } else if (acc.logins_left_today <= 0) {
+                limitNote = ' Daily limit of IOCL logins reached for this account. Try again tomorrow, or upload the Excel below.';
+                blocked = true;
+            } else if (portalHealthState && portalHealthState.status === 'UNREACHABLE') {
+                limitNote += ' Note: the IOCL portal was unreachable at the last check, so the pull may fail.';
+                warn = true;
+            }
+            const hint = document.getElementById('portalPullHint');
+            hint.textContent = loaded + limitNote;
+            hint.className = blocked ? 'text-danger small' : (warn ? 'text-warning small' : 'text-muted small');
+            document.getElementById('btnPortalPull').disabled = blocked;
+            box.style.display = 'block';
+        }
+
+        document.getElementById('bank_id').addEventListener('change', updatePortalPullBox);
+        loadPortalAccounts();
+
+        document.getElementById('btnPortalPull').addEventListener('click', async function() {
+            const bankId = document.getElementById('bank_id').value;
+            const fromDate = document.getElementById('pullFromDate').value;
+            const toDate = document.getElementById('pullToDate').value;
+            if (!bankId || !fromDate || !toDate) {
+                alert('Select the account and dates');
+                return;
+            }
+            if (fromDate > toDate) {
+                alert('From date is after To date');
+                return;
+            }
+
+            const originalButtonHtml = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm mr-2"></span>Logging in to IOCL...';
+
+            try {
+                const response = await fetch(`/oil-company-accounts/api/${bankId}/pull`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from_date: fromDate, to_date: toDate })
+                });
+                const data = await response.json().catch(() => ({ success: false, error: 'Unexpected response from server' }));
+
+                if (data.success) {
+                    uploadedTransactions = data.transactions;
+                    displayStep2(data);
+                    if (data.portal) {
+                        const p = data.portal;
+                        const fmt = v => v === null || v === undefined ? '-' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+                        document.getElementById('step2-summary').insertAdjacentHTML('beforeend',
+                            `<br><i class="bi bi-cloud-download me-2"></i>Pulled from IOCL portal: ${ymdToDisplay(p.from_date)} to ${ymdToDisplay(p.to_date)}` +
+                            ` · Opening ${fmt(p.opening_balance)} · Closing ${fmt(p.closing_balance)}`);
+                    }
+                    goToStep(2);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Portal pull error:', error);
+                alert('Failed to pull from IOCL portal');
+            } finally {
+                this.disabled = false;
+                this.innerHTML = originalButtonHtml;
+                loadPortalAccounts();   // refresh "logins left today" / paused state
+            }
+        });
+
         function displayStep2(data) {
             // Summary with duplicate count
             const duplicateCount = data.summary.duplicates || 0;

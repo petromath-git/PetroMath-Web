@@ -12,9 +12,9 @@ block content
         .container-fluid
             .row.align-items-center.py-3
                 .col
-                    h4.mb-0.text-warning Disabled Banks
+                    h4.mb-0.text-warning= title
                 .col-auto
-                    button.btn.btn-primary.btn-sm(type="button", onclick="window.location.href='/bank-master'")
+                    button.btn.btn-primary.btn-sm(type="button", onclick=`window.location.href='${masterMode === 'OIL' ? '/oil-company-accounts' : '/bank-master'}'`)
                         i.bi.bi-arrow-left
                         span.ms-1 Back to Active Banks
 

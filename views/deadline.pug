@@ -1,47 +1,533 @@
 extends layout
-include mixins/mixins
+include mixins/card-toggle-mobile
+include mixins/push-mixins
+
+//- Deadlines & Renewals: m_deadline_item (next due date per item, renewal
+//- history in t_deadline_renewal) + bank holiday calendar (m_bank_holiday).
+//- Row data lives in data-* attributes (not JSON in <script>) so text is escaped.
+
+mixin dueBadge(it)
+    - var cls = { OVERDUE: 'badge-danger', SOON: 'badge-warning', LATER: 'badge-light', DONE: 'badge-success' }[it.bucket]
+    span.badge.dl-badge(class=cls)= it.due_text
+
+mixin itemActions(it)
+    if it.bucket === 'DONE'
+        button.btn.btn-outline-primary.btn-sm.dl-renew(type="button" title="Reopen with a new due date") Reopen
+    else
+        button.btn.btn-outline-success.btn-sm.dl-renew(type="button" title="Renewed / done") Renewed
+    button.btn.btn-outline-primary.btn-sm.dl-edit(type="button" title="Edit")
+        i.bi.bi-pencil
+    if it.renewal_count > 0
+        button.btn.btn-outline-secondary.btn-sm.dl-history(type="button" title="Renewal history")
+            i.bi.bi-clock-history
+    button.btn.btn-outline-danger.btn-sm.dl-delete(type="button" title="Delete")
+        i.bi.bi-trash
 
 block content
-    form(method='POST' action='/deadline')
-        table(class="table" id="deadline-master-table")
-            thead(class="thead-light")
-                tr
-                    th(scope="col") #
-                    th(scope="col") Date
-                    th(scope="col") Purpose
-                    th(scope="col") Warning Day
-                    th(scope="col") HardStop
-                    th(scope="col") Closed
-                    th(scope="col") Comments
-                    th(scope="col") Edit
+    .container-fluid.dl-page
+        .d-flex.align-items-center.flex-wrap.py-3.dl-head
+            div.mr-auto
+                h4.mb-0.text-primary Deadlines & Renewals
+                small.text-muted Licences, certificates, stamping, insurance and bills (#{user.location_code})
+            button.btn.btn-success.btn-sm#dlAddBtn(type="button")
+                i.bi.bi-plus-circle
+                span.ml-1 Add Deadline
+
+        if pushLocation
+            .alert.alert-info.py-2
+                | That reminder was for #[strong #{pushLocation}]. You're on #{user.location_code} now —
+                a.alert-link(href="/select-location")  switch location
+                |  to see it.
+
+        if pushReady
+            +pushRemindersCard(false)
+
+        ul.nav.nav-pills.dl-tabs.mb-3#dlTabs
+            li.nav-item
+                a.nav-link(href="#" data-tab="OVERDUE") Overdue
+                    span.badge.badge-pill.ml-1(class=counts.OVERDUE ? 'badge-danger' : 'badge-secondary')= counts.OVERDUE
+            li.nav-item
+                a.nav-link(href="#" data-tab="SOON") Due soon
+                    span.badge.badge-pill.ml-1(class=counts.SOON ? 'badge-warning' : 'badge-secondary')= counts.SOON
+            li.nav-item
+                a.nav-link(href="#" data-tab="LATER") Later
+                    span.badge.badge-pill.badge-secondary.ml-1= counts.LATER
+            li.nav-item
+                a.nav-link(href="#" data-tab="DONE") Done
+                    span.badge.badge-pill.badge-secondary.ml-1= counts.DONE
+            li.nav-item
+                a.nav-link(href="#" data-tab="HOLIDAYS") Bank Holidays
+
+        //- ---------------- Deadlines ----------------
+        #dlItemsPane
+            .row.mb-2
+                .col-12.col-md-5.col-lg-4.mb-2
+                    input.form-control#dlSearch(type="search" placeholder="Search name or reference (e.g. TN21AT3466)…" autocomplete="off")
+                .col-12.col-md-4.col-lg-3.mb-2
+                    select.form-control#dlCategoryFilter
+                        option(value="") All categories
+                        each c in categories
+                            option(value=c.category_id)= c.category_name
+
+            table.table.table-sm.table-hover.m-stack.m-collapse#dlTable
+                thead.thead-light
+                    tr
+                        th Name
+                        th Reference
+                        th Category
+                        th Due date
+                        th Status
+                        th Repeats
+                        th(style="width:220px")
                 tbody
-                    each val, index in deadlinesList
-                        tr
-                            th(scope="row")= index + 1
-                            td(scope="row")
-                                input.form-control(type='date', id='deadline-date-'+index value=val.deadlineDate format="dd/mm/yyyy" readonly)
-                            td(scope="row")
-                                select.form-control(id="purpose-"+index, disabled=true)
-                                    if  deadlineTypes
-                                        each deadline in deadlineTypes
-                                            option(value=`${deadline.id}` selected=(val.purpose === deadline.id))= deadline.type
-                            td(scope="row")
-                                input.form-control(type="number" id="warning-day-"+index value=val.warningDay readonly)
-                            td(scope="row")
-                                input.form-control(type="checkbox", id="hard-stop-"+index,  checked=('Y'===val.hardStop) value=val.hardStop onClick="changeCheckValue('hard-stop-',"+index+")" disabled=true)
-                            td(scope="row")
-                                input.form-control(type="checkbox", id="closed-"+index, checked=('Y'===val.closed) value=val.closed onClick="changeClosedValue('closed-',"+index+")" disabled=true)
-                            td(scope="row")
-                                textarea.form-control(id="comments-"+index style="height:36px" readonly)=val.comment
-                            td(scope="row")
-                                div.row
-                                    a.btn.btn-info(id="deadline-edit-"+index onclick="editDeadline('"+index+"','"+ val.deadlineId +"')")
-                                        span.oi.oi-pencil
-                                    a.btn-info.d-md-none(id="deadline-save-"+index onClick="saveDeadline('"+ index+"','"+ val.deadlineId +"')") Save
-                    - var rowCnt = 0
-                    while rowCnt < 1
-                        +addMasterDeadline(rowCnt++)
-        div(align="center")
-            button.btn.btn-info(type="button", onClick="showMasterEntryRow(this, 'deadline-master')", id='deadline-master-add-new') Add New
-            span &nbsp;&nbsp;&nbsp;&nbsp;
-            button.btn.btn-primary(type="submit", id='deadline-master-save', disabled=true) Save
+                    each it in items
+                        tr.dl-row(data-id=it.item_id data-bucket=it.bucket data-category=it.category_id
+                            data-title=it.title data-reference=(it.reference_no || '') data-due=it.due_date
+                            data-repeat=it.repeat_months data-remind=it.remind_days data-notes=(it.notes || '')
+                            data-due-display=it.due_display)
+                            td.m-title
+                                = it.title
+                                if it.notes
+                                    .small.text-muted.dl-notes= it.notes
+                            td(data-label="Reference")= it.reference_no || '-'
+                            td(data-label="Category")= it.category_name
+                            td.text-nowrap(data-label="Due date")
+                                = it.due_display
+                                if it.bucket === 'DONE' && it.closed_display
+                                    .small.text-muted Closed #{it.closed_display}
+                            td.m-summary.text-nowrap(data-label="Status")
+                                +dueBadge(it)
+                            td(data-label="Repeats")
+                                = it.repeat_label
+                                .small.text-muted Remind #{it.remind_days} day#{it.remind_days === 1 ? '' : 's'} before
+                            td.m-actions.text-nowrap
+                                +itemActions(it)
+                    tr.m-static#dlEmpty(hidden)
+                        td.m-wide.text-center.text-muted(colspan="7") Nothing here.
+
+        //- ---------------- Bank holidays ----------------
+        #dlHolidayPane(hidden)
+            p.small.text-muted.mb-2 Days the bank is closed. Shown on the home page in the week before — no phone reminders.
+            .dl-region.mb-3
+                if holidayRegion && holidayRegion.rbi_office
+                    div
+                        i.bi.bi-bank.mr-1(aria-hidden="true")
+                        | Filled in from RBI's list for the #[strong #{holidayRegion.rbi_office}] office
+                        if holidayRegion.state_name
+                            |  (#{holidayRegion.state_name})
+                        | , plus 2nd and 4th Saturdays.
+                    .small.text-muted
+                        if holidayRegion.source === 'GST'
+                            | State taken from the GST number.
+                        else if holidayRegion.source === 'ADDRESS'
+                            | State taken from the location's address.
+                        else if holidayRegion.source === 'IFSC'
+                            | State taken from your bank branches (#{holidayRegion.detail.replace('IFSC ', '')}).
+                        else if holidayRegion.source === 'MANUAL'
+                            | Office picked by hand.
+                else
+                    .text-danger
+                        i.bi.bi-exclamation-triangle.mr-1(aria-hidden="true")
+                        | Couldn't tell this location's state (no GST number or bank IFSC). Pick the RBI office for your state to fill in holidays.
+                .form-inline.mt-2
+                    select.form-control.form-control-sm.mr-2.mb-1#holidayOffice
+                        option(value="") Work it out automatically
+                        each o in rbiOffices
+                            option(value=o selected=(holidayRegion && holidayRegion.source === 'MANUAL' && holidayRegion.rbi_office === o))= o
+                    button.btn.btn-outline-primary.btn-sm.mr-2.mb-1#holidayOfficeSave(type="button") Save office
+                    if holidayRegion && holidayRegion.rbi_office
+                        button.btn.btn-outline-secondary.btn-sm.mb-1#holidayRefresh(type="button")
+                            i.bi.bi-arrow-repeat.mr-1(aria-hidden="true")
+                            | Fetch from RBI now
+            form.form-row.align-items-end.mb-3#holidayForm(novalidate)
+                .col-6.col-md-3.mb-2
+                    label.small.font-weight-bold.mb-1(for="holidayDate") Date
+                    input.form-control#holidayDate(type="date" required)
+                .col-6.col-md-4.mb-2
+                    label.small.font-weight-bold.mb-1(for="holidayDesc") Holiday
+                    input.form-control#holidayDesc(type="text" maxlength="200" placeholder="e.g. Local festival")
+                .col-12.col-md-auto.mb-2
+                    button.btn.btn-success.btn-block#holidayAddBtn(type="submit") Add Holiday
+            .d-flex.flex-wrap.mb-2
+                .custom-control.custom-checkbox.mr-4
+                    input.custom-control-input#holidayShowPast(type="checkbox")
+                    label.custom-control-label(for="holidayShowPast") Show past holidays
+                .custom-control.custom-checkbox
+                    input.custom-control-input#holidayShowSat(type="checkbox" checked)
+                    label.custom-control-label(for="holidayShowSat") Show 2nd / 4th Saturdays
+            table.table.table-sm.m-stack#holidayTable
+                thead.thead-light
+                    tr
+                        th Date
+                        th Day
+                        th Holiday
+                        th(style="width:60px")
+                tbody
+                    each h in holidays
+                        - var srcLabel = { RBI: 'RBI', MANUAL: 'Added here', HIDDEN: 'Not a holiday here' }[h.source]
+                        - var srcClass = { RBI: 'badge-info', MANUAL: 'badge-secondary', HIDDEN: 'badge-warning' }[h.source]
+                        tr.holiday-row(data-past=(h.days_left < 0 ? '1' : '0') data-source=h.source class=(h.source === 'HIDDEN' ? 'holiday-hidden' : undefined))
+                            td.m-title.text-nowrap= h.date_display
+                            td(data-label="Day")= h.day_name
+                            td.m-wide(data-label="Holiday")
+                                span.holiday-desc= h.description
+                                if h.source !== 'SATURDAY'
+                                    span.badge.ml-2(class=srcClass)= srcLabel
+                            td.m-actions.text-nowrap
+                                if h.source === 'MANUAL'
+                                    button.btn.btn-outline-danger.btn-sm.holiday-delete(type="button" title="Delete" data-id=h.holiday_id data-name=`${h.date_display} ${h.description}`)
+                                        i.bi.bi-trash
+                                else if h.source === 'HIDDEN'
+                                    button.btn.btn-outline-secondary.btn-sm.holiday-restore(type="button" title="Show as a holiday again" data-id=h.holiday_id) Restore
+                                else
+                                    button.btn.btn-outline-secondary.btn-sm.holiday-hide(type="button" title="Our bank is open on this day" data-date=h.date data-name=`${h.date_display} ${h.description}`) Not a holiday
+                    tr.m-static#holidayEmpty(hidden)
+                        td.m-wide.text-center.text-muted(colspan="4") No upcoming bank holidays.
+
+    //- ---------------- Add / Edit modal ----------------
+    .modal.fade#itemModal(tabindex="-1" role="dialog" aria-labelledby="itemModalLabel" aria-hidden="true")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#itemModalLabel Add Deadline
+                    button.close(type="button" data-dismiss="modal" aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    .form-group
+                        label.font-weight-bold(for="fTitle") Name *
+                        input.form-control#fTitle(type="text" maxlength=maxTitle placeholder="e.g. PESO Licence, Fire extinguisher 9 KG, Road tax")
+                    .form-group
+                        label.font-weight-bold(for="fReference") Reference
+                        input.form-control#fReference(type="text" maxlength=maxReference list="dlReferenceList" placeholder="Vehicle no, serial no, licence no")
+                        datalist#dlReferenceList
+                            each r in references
+                                option(value=r)
+                    .form-row
+                        .form-group.col-7
+                            label.font-weight-bold(for="fCategory") Category *
+                            select.form-control#fCategory
+                                each c in categories
+                                    option(value=c.category_id data-remind=c.default_remind_days)= c.category_name
+                        .form-group.col-5
+                            label.font-weight-bold(for="fDue") Due / expiry *
+                            input.form-control#fDue(type="date")
+                    .form-row
+                        .form-group.col-7
+                            label.font-weight-bold(for="fRepeat") Repeats
+                            select.form-control#fRepeat
+                                each r in repeatOptions
+                                    option(value=r.months)= r.label
+                        .form-group.col-5
+                            label.font-weight-bold(for="fRemind") Remind (days before)
+                            input.form-control#fRemind(type="number" min="0" max="365" step="1" inputmode="numeric")
+                    .form-group.mb-0
+                        label.font-weight-bold(for="fNotes") Notes
+                        textarea.form-control#fNotes(rows="2" maxlength=maxNotes)
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-primary#itemSaveBtn(type="button") Save
+
+    //- ---------------- Renew modal ----------------
+    .modal.fade#renewModal(tabindex="-1" role="dialog" aria-labelledby="renewModalLabel" aria-hidden="true")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#renewModalLabel Renewed
+                    button.close(type="button" data-dismiss="modal" aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    p.mb-3
+                        strong#rTitle
+                        br
+                        span.small.text-muted#rCurrent
+                    .form-row
+                        .form-group.col-6
+                            label.font-weight-bold(for="rDone") Done on *
+                            input.form-control#rDone(type="date" max=today)
+                        .form-group.col-6#rNextGroup
+                            label.font-weight-bold(for="rNext") Next due *
+                            input.form-control#rNext(type="date")
+                    small.form-text.text-muted.mt-n2.mb-2#rNextHelp
+                    .custom-control.custom-checkbox.mb-3#rCloseGroup
+                        input.custom-control-input#rClose(type="checkbox")
+                        label.custom-control-label(for="rClose") No next date — close this deadline
+                    .form-group.mb-0
+                        label.font-weight-bold(for="rNote") Note
+                        input.form-control#rNote(type="text" maxlength=maxNote placeholder="e.g. Certificate no, paid amount")
+                .modal-footer
+                    button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                    button.btn.btn-success#renewSaveBtn(type="button") Save
+
+    //- ---------------- History modal ----------------
+    .modal.fade#historyModal(tabindex="-1" role="dialog" aria-labelledby="historyModalLabel" aria-hidden="true")
+        .modal-dialog(role="document")
+            .modal-content
+                .modal-header
+                    h5.modal-title#historyModalLabel Renewal history
+                    button.close(type="button" data-dismiss="modal" aria-label="Close")
+                        span(aria-hidden="true") &times;
+                .modal-body
+                    p.font-weight-bold#hTitle
+                    #hBody
+
+    style.
+        .dl-page { padding-bottom: 2rem; }
+        .dl-head { gap: 8px; }
+        .dl-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 4px; }
+        .dl-tabs .nav-link { white-space: nowrap; cursor: pointer; }
+        .dl-badge { font-size: 0.8rem; font-weight: 600; }
+        .dl-badge.badge-light { border: 1px solid #dee2e6; color: #495057; }
+        .dl-notes { white-space: pre-line; max-width: 420px; }
+        #dlTable td.m-actions .btn { margin-right: 2px; }
+        .dl-page [hidden] { display: none !important; }
+        .holiday-hidden .holiday-desc { text-decoration: line-through; color: #6c757d; }
+        .dl-region { padding: 10px 12px; border: 1px solid #dee2e6; border-radius: 0.5rem; background: #fff; }
+        .dl-hist { border-left: 3px solid #dee2e6; padding: 4px 0 8px 10px; margin-bottom: 8px; font-size: 0.9rem; }
+
+    +cardToggleMobile('#dlTable > tbody > tr:not(.m-static)')
+
+    script.
+        (function () {
+            var TODAY = !{JSON.stringify(today)};
+            var tab = null, editing = null, renewing = null;
+            var rows = Array.prototype.slice.call(document.querySelectorAll('.dl-row'));
+            var counts = !{JSON.stringify(counts)};
+
+            function api(method, url, body) {
+                return fetch(url, { method: method, credentials: 'same-origin',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: body ? JSON.stringify(body) : undefined })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) { if (!d.success) throw new Error(d.error || 'Something went wrong.'); return d; });
+            }
+            function addMonths(ymd, months) {
+                var p = ymd.split('-').map(Number);
+                var d = new Date(Date.UTC(p[0], p[1] - 1 + months, 1));
+                var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+                d.setUTCDate(Math.min(p[2], last));
+                return d.toISOString().slice(0, 10);
+            }
+
+            // ---- Tabs + filters ----
+            function applyFilters() {
+                var term = document.getElementById('dlSearch').value.trim().toLowerCase();
+                var cat = document.getElementById('dlCategoryFilter').value;
+                var shown = 0;
+                rows.forEach(function (r) {
+                    var ok = r.dataset.bucket === tab
+                        && (!cat || r.dataset.category === cat)
+                        && (!term || (r.dataset.title + ' ' + r.dataset.reference + ' ' + r.dataset.notes).toLowerCase().indexOf(term) !== -1);
+                    r.style.display = ok ? '' : 'none';
+                    if (ok) shown++;
+                });
+                document.getElementById('dlEmpty').hidden = shown > 0;
+            }
+            function applyHolidayFilter() {
+                var past = document.getElementById('holidayShowPast').checked;
+                var sat = document.getElementById('holidayShowSat').checked;
+                var shown = 0;
+                document.querySelectorAll('.holiday-row').forEach(function (r) {
+                    var ok = (past || r.dataset.past === '0') && (sat || r.dataset.source !== 'SATURDAY');
+                    r.style.display = ok ? '' : 'none';
+                    if (ok) shown++;
+                });
+                document.getElementById('holidayEmpty').hidden = shown > 0;
+            }
+            function setTab(t) {
+                tab = t;
+                document.querySelectorAll('#dlTabs .nav-link').forEach(function (a) { a.classList.toggle('active', a.dataset.tab === t); });
+                document.getElementById('dlItemsPane').hidden = t === 'HOLIDAYS';
+                document.getElementById('dlHolidayPane').hidden = t !== 'HOLIDAYS';
+                if (t === 'HOLIDAYS') applyHolidayFilter(); else applyFilters();
+                try { history.replaceState(null, '', '#' + t.toLowerCase()); } catch (e) {}
+            }
+            document.querySelectorAll('#dlTabs .nav-link').forEach(function (a) {
+                a.addEventListener('click', function (e) { e.preventDefault(); setTab(a.dataset.tab); });
+            });
+            document.getElementById('dlSearch').addEventListener('input', function () {
+                // Searching looks across every tab: jump to the first tab with a match
+                applyFilters();
+                if (this.value.trim() && document.getElementById('dlEmpty').hidden === false) {
+                    var order = ['OVERDUE', 'SOON', 'LATER', 'DONE'], term = this.value.trim().toLowerCase();
+                    for (var i = 0; i < order.length; i++) {
+                        var hit = rows.some(function (r) { return r.dataset.bucket === order[i] && (r.dataset.title + ' ' + r.dataset.reference + ' ' + r.dataset.notes).toLowerCase().indexOf(term) !== -1; });
+                        if (hit) { setTab(order[i]); break; }
+                    }
+                }
+            });
+            document.getElementById('dlCategoryFilter').addEventListener('change', applyFilters);
+            document.getElementById('holidayShowPast').addEventListener('change', applyHolidayFilter);
+            document.getElementById('holidayShowSat').addEventListener('change', applyHolidayFilter);
+
+            var TABS = ['OVERDUE', 'SOON', 'LATER', 'DONE', 'HOLIDAYS'];
+            function hashTab() {
+                var h = (location.hash || '').replace('#', '').toUpperCase();
+                return TABS.indexOf(h) !== -1 ? h : null;
+            }
+            setTab(hashTab() || (counts.OVERDUE ? 'OVERDUE' : counts.SOON ? 'SOON' : 'LATER'));
+            window.addEventListener('hashchange', function () { var t = hashTab(); if (t) setTab(t); });
+
+            // ---- Add / edit ----
+            var fCategory = document.getElementById('fCategory'), fRemind = document.getElementById('fRemind');
+            var remindTouched = false;
+            fRemind.addEventListener('input', function () { remindTouched = true; });
+            fCategory.addEventListener('change', function () {
+                if (!remindTouched) fRemind.value = fCategory.selectedOptions[0].dataset.remind;
+            });
+            function openItem(row) {
+                editing = row ? row.dataset.id : null;
+                remindTouched = !!row;
+                document.getElementById('itemModalLabel').textContent = row ? 'Edit Deadline' : 'Add Deadline';
+                document.getElementById('fTitle').value = row ? row.dataset.title : '';
+                document.getElementById('fReference').value = row ? row.dataset.reference : '';
+                fCategory.value = row ? row.dataset.category : fCategory.options[0].value;
+                document.getElementById('fDue').value = row ? row.dataset.due : '';
+                document.getElementById('fRepeat').value = row ? row.dataset.repeat : '0';
+                fRemind.value = row ? row.dataset.remind : fCategory.selectedOptions[0].dataset.remind;
+                document.getElementById('fNotes').value = row ? row.dataset.notes : '';
+                $('#itemModal').modal('show');
+            }
+            document.getElementById('dlAddBtn').addEventListener('click', function () { openItem(null); });
+            document.getElementById('itemSaveBtn').addEventListener('click', function () {
+                var btn = this;
+                var body = {
+                    title: document.getElementById('fTitle').value,
+                    reference_no: document.getElementById('fReference').value,
+                    category_id: fCategory.value,
+                    due_date: document.getElementById('fDue').value,
+                    repeat_months: document.getElementById('fRepeat').value,
+                    remind_days: fRemind.value,
+                    notes: document.getElementById('fNotes').value
+                };
+                if (!body.title.trim()) return alert('Enter the name.');
+                if (!body.due_date) return alert('Enter the due date.');
+                btn.disabled = true;
+                api(editing ? 'PUT' : 'POST', editing ? '/deadline/api/' + editing : '/deadline/api', body)
+                    .then(function () { location.reload(); })
+                    .catch(function (e) { alert(e.message); btn.disabled = false; });
+            });
+
+            // ---- Renew / reopen ----
+            var rClose = document.getElementById('rClose'), rNext = document.getElementById('rNext');
+            function syncClose() {
+                document.getElementById('rNextGroup').style.visibility = rClose.checked ? 'hidden' : '';
+                document.getElementById('rNextHelp').hidden = rClose.checked;
+            }
+            rClose.addEventListener('change', syncClose);
+            function openRenew(row) {
+                renewing = row;
+                var reopening = row.dataset.bucket === 'DONE';
+                var repeat = Number(row.dataset.repeat);
+                document.getElementById('renewModalLabel').textContent = reopening ? 'Reopen' : 'Renewed / done';
+                document.getElementById('rTitle').textContent = row.dataset.title + (row.dataset.reference ? ' — ' + row.dataset.reference : '');
+                document.getElementById('rCurrent').textContent = (reopening ? 'Was due ' : 'Due ') + row.dataset.dueDisplay;
+                document.getElementById('rDone').value = TODAY;
+                // Next date: from the repeat, counted from the old due date (renewals keep their cycle)
+                var next = '';
+                if (repeat > 0) {
+                    next = addMonths(row.dataset.due, repeat);
+                    while (next <= TODAY) next = addMonths(next, repeat);
+                }
+                rNext.value = next;
+                document.getElementById('rNextHelp').textContent = repeat > 0
+                    ? 'Filled in from "repeats". For a certificate, use the expiry date printed on the new one.'
+                    : 'The new expiry / due date, e.g. from the renewed certificate.';
+                rClose.checked = false;
+                document.getElementById('rCloseGroup').hidden = reopening;
+                document.getElementById('rNote').value = '';
+                syncClose();
+                $('#renewModal').modal('show');
+            }
+            document.getElementById('renewSaveBtn').addEventListener('click', function () {
+                var btn = this;
+                var body = { done_date: document.getElementById('rDone').value, next_due_date: rNext.value,
+                             close: rClose.checked ? 'Y' : 'N', note: document.getElementById('rNote').value };
+                if (!body.done_date) return alert('Enter the date it was done.');
+                if (!rClose.checked && !body.next_due_date) return alert('Enter the next due date, or tick "close".');
+                btn.disabled = true;
+                api('POST', '/deadline/api/' + renewing.dataset.id + '/renew', body)
+                    .then(function () { location.reload(); })
+                    .catch(function (e) { alert(e.message); btn.disabled = false; });
+            });
+
+            // ---- History ----
+            function openHistory(row) {
+                document.getElementById('hTitle').textContent = row.dataset.title + (row.dataset.reference ? ' — ' + row.dataset.reference : '');
+                var bodyEl = document.getElementById('hBody');
+                bodyEl.textContent = 'Loading…';
+                $('#historyModal').modal('show');
+                api('GET', '/deadline/api/' + row.dataset.id + '/history').then(function (d) {
+                    bodyEl.textContent = '';
+                    if (!d.history.length) { bodyEl.textContent = 'No renewals yet.'; return; }
+                    d.history.forEach(function (h) {
+                        var div = document.createElement('div');
+                        div.className = 'dl-hist';
+                        var line1 = document.createElement('div');
+                        line1.innerHTML = '<strong></strong>';
+                        line1.firstChild.textContent = 'Done ' + h.done;
+                        line1.appendChild(document.createTextNode(h.by ? ' by ' + h.by : ''));
+                        var line2 = document.createElement('div');
+                        line2.className = 'small text-muted';
+                        line2.textContent = 'Was due ' + h.previous_due + (h.next_due ? ' → next due ' + h.next_due : ' → closed');
+                        div.appendChild(line1); div.appendChild(line2);
+                        if (h.note) { var n = document.createElement('div'); n.className = 'small'; n.textContent = h.note; div.appendChild(n); }
+                        bodyEl.appendChild(div);
+                    });
+                }).catch(function (e) { bodyEl.textContent = e.message; });
+            }
+
+            // ---- Row buttons ----
+            document.getElementById('dlTable').addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (!btn) return;
+                var row = btn.closest('.dl-row');
+                if (!row) return;
+                if (btn.classList.contains('dl-edit')) openItem(row);
+                else if (btn.classList.contains('dl-renew')) openRenew(row);
+                else if (btn.classList.contains('dl-history')) openHistory(row);
+                else if (btn.classList.contains('dl-delete')) {
+                    if (!confirm('Delete "' + row.dataset.title + '" and its renewal history? This cannot be undone.\n\nIf it was renewed or is finished, use "Renewed" instead.')) return;
+                    btn.disabled = true;
+                    api('DELETE', '/deadline/api/' + row.dataset.id)
+                        .then(function () { location.reload(); })
+                        .catch(function (err) { alert(err.message); btn.disabled = false; });
+                }
+            });
+
+            // ---- Bank holidays ----
+            document.getElementById('holidayForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var btn = document.getElementById('holidayAddBtn');
+                var date = document.getElementById('holidayDate').value;
+                if (!date) return alert('Pick the date.');
+                btn.disabled = true;
+                api('POST', '/deadline/holidays/api', { holiday_date: date, description: document.getElementById('holidayDesc').value })
+                    .then(function () { location.hash = '#holidays'; location.reload(); })
+                    .catch(function (err) { alert(err.message); btn.disabled = false; });
+            });
+            function holidayCall(btn, method, url, body) {
+                btn.disabled = true;
+                api(method, url, body)
+                    .then(function () { location.hash = '#holidays'; location.reload(); })
+                    .catch(function (err) { alert(err.message); btn.disabled = false; });
+            }
+            document.getElementById('holidayTable').addEventListener('click', function (e) {
+                var btn = e.target.closest('button');
+                if (!btn) return;
+                if (btn.classList.contains('holiday-delete')) {
+                    if (confirm('Delete bank holiday ' + btn.dataset.name + '?')) holidayCall(btn, 'DELETE', '/deadline/holidays/api/' + btn.dataset.id);
+                } else if (btn.classList.contains('holiday-hide')) {
+                    if (confirm(btn.dataset.name + '\n\nMark as NOT a holiday for this location (your bank is open)?')) holidayCall(btn, 'POST', '/deadline/holidays/hide', { holiday_date: btn.dataset.date });
+                } else if (btn.classList.contains('holiday-restore')) {
+                    holidayCall(btn, 'DELETE', '/deadline/holidays/api/' + btn.dataset.id);
+                }
+            });
+            document.getElementById('holidayOfficeSave').addEventListener('click', function () {
+                holidayCall(this, 'POST', '/deadline/holidays/region', { rbi_office: document.getElementById('holidayOffice').value });
+            });
+            var refreshBtn = document.getElementById('holidayRefresh');
+            if (refreshBtn) refreshBtn.addEventListener('click', function () {
+                this.innerHTML = 'Fetching…';
+                holidayCall(this, 'POST', '/deadline/holidays/refresh');
+            });
+        })();

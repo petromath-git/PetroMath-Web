@@ -1,5 +1,6 @@
 extends layout
 include mixins/exshort-breakdown-mixin
+include mixins/deadline-mixins
 
 block content
     //- Dev Environment Banner - shows if backup info exists
@@ -428,20 +429,8 @@ block content
                     pre.text-danger.bg-warning Note: Cannot allow to add new closings, max #{maxAllowedDrafts} allowed drafts are met.
                 .mb-4
 
-        if deadlineMessage && deadlineMessage.length > 0
-            .deadline-section
-                .deadline-header Important Deadlines
-                table.table#deadlineWarning-table
-                    thead.thead-light
-                        tr
-                            th Deadline Date
-                            th Message
-                    tbody
-                        each val, index in deadlineMessage
-                            tr(id="deadlineWarning_row_"+index)
-                                td(scope="row")= val.deadlineDate
-                                td(scope="row")= val.message
-    
+        +deadlineAttention(deadlineSummary, user.isAdmin)
+
     script(src=`/javascripts/app-report-date.js?v=${CACHE_BUST}`)
     if showExShortBreakdown
         script(src=`/javascripts/exshort-breakdown.js?v=${CACHE_BUST}`)

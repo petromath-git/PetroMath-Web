@@ -502,31 +502,6 @@ mixin addTxnAccount(rowCnt)
         td(scope="row")
             button.btn.btn-danger(type="button" onclick="removeBankTxnRow('banktransaction-table-row-" + rowCnt + "')") ×
                 span(aria-hidden="true") &times;
-//- add new product
-mixin addMasterDeadline(rowCnt)
-    - let id = 'deadline-master-table-row-' + rowCnt;
-    tr(class='d-md-none' id=id)
-        input.form-control(type="hidden" id="location_id" name="location_id" value=location_id)
-        th(scope="row")
-        td(scope="row")
-            input.form-control(type="date" id="deadline_date_"+rowCnt name="deadline_date_"+rowCnt, format="dd/mm/yyyy" required)
-        td(scope="row")
-            select.form-control(id="purpose_"+rowCnt name=id="purpose_"+rowCnt)
-                if  deadlineTypes
-                    each deadline in deadlineTypes
-                        option(value=`${deadline.id}`)= deadline.type
-        td(scope="row")
-            input.form-control(type="number" id="warning_day_"+rowCnt name="warning_day_"+rowCnt min=1 max=100 required step=1)
-        td(scope="row")
-            input.form-control(type="checkbox", id="hard_stop_"+rowCnt, name="hard_stop_"+rowCnt onClick="changeCheckValue('hard-stop_',"+rowCnt+")")
-        td(scope="row")
-            input.form-control(type="checkbox", id="closed_"+rowCnt, name="closed_"+rowCnt  onClick="changeClosedValue('closed_',"+rowCnt+")")
-        td(scope="row")
-            textarea.form-control(name="comments_"+rowCnt id="comments_"+rowCnt style="height:36px")
-        td(scope="row")
-            button.close(type="button" aria-label="Close"  onclick='hideMasterEntryRow(\'deadline-master\', \'' + id + '\')', id = id + '_close')
-                span(aria-hidden="true") &times;
-
 //- GL period pickers — month select runs FY order (Apr..Mar), year select
 //- descends from the current year. Pair with a Period <select> that has a
 //- "month_year" option and data-monthyear/data-month/data-year attributes

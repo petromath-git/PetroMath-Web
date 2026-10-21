@@ -3,6 +3,36 @@ include mixins/mixins
 include mixins/card-toggle-mobile
 
 block content
+    - const isOil = masterMode === 'OIL'
+    - const masterBase = isOil ? '/oil-company-accounts' : '/bank-master'
+    - const showPortal = isOil && portalEnabled
+    - const hasOilAccount = isOil && banks && banks.length > 0
+    - const showAdd = canAdd && !hasOilAccount
+    - const showDelete = canDisable && !isOil
+    - const isIoclTpl = (b) => isOil && ioclBankIds && ioclBankIds.includes(b.bank_id)
+
+    mixin portalLoginCell(bank)
+        - const login = portalLogins && portalLogins[bank.bank_id]
+        if !isIoclTpl(bank)
+            span.text-muted(style="font-size:0.85em") —
+        else
+            span(style="white-space:nowrap;")
+                if login
+                    span.badge.badge-success(title=`IOCL e-Mitra login ${login.username}`)
+                        i.bi.bi-check-circle.mr-1
+                        = login.username
+                else
+                    span.badge.badge-light Not set
+                if canManageLogin
+                    button.btn.btn-outline-primary.btn-sm.ml-1.py-0.portal-login-btn(type="button", title=login ? 'Change portal login' : 'Set portal login', data-bank-id=bank.bank_id, data-has-login=login ? 'Y' : 'N', data-username=login ? login.username : '', data-account=`${bank.bank_name}${bank.account_nickname ? ' - ' + bank.account_nickname : ''}`)
+                        i.bi.bi-key
+            if login && login.paused
+                div.text-danger(style="font-size:0.8em") Pulls paused: IOCL rejected the login twice. Re-enter the password.
+            else if login && login.last_pull_status === 'FAILED'
+                div.text-danger(style="font-size:0.8em" title=login.last_pull_message) Last pull failed
+            if login
+                div.text-muted(style="font-size:0.75em" title="IOCL portal logins used today (pulls + Check & Save), limit per account per day")= `${login.loginsToday}/${login.dailyLimit} logins today`
+
     // Alert for messages
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
@@ -14,15 +44,37 @@ block content
         .container-fluid
             .row.align-items-center.py-3
                 .col-12.col-md
-                    h4.mb-2.mb-md-0.text-primary Bank Master
+                    h4.mb-2.mb-md-0.text-primary= isOil ? 'Oil Company Accounts' : 'Bank Master'
+                    if isOil
+                        small.text-muted Oil company (SAP) accounts. Real bank accounts are in Bank Master.
+                    if showPortal
+                        - const fmtDT = (d) => { if (!d) return ''; const x = new Date(d); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${String(x.getDate()).padStart(2,'0')}-${m[x.getMonth()]}-${x.getFullYear()} ${String(x.getHours()).padStart(2,'0')}:${String(x.getMinutes()).padStart(2,'0')}`; }
+                        div.mt-1(style="font-size:0.8em")
+                            if !portalHealth
+                                span.text-muted IOCL portal check: not run yet
+                            else if portalHealth.status === 'OK'
+                                span.text-success(title=portalHealth.detail)
+                                    i.bi.bi-check-circle.mr-1
+                                    | IOCL portal check OK · #{fmtDT(portalHealth.checked_at)}
+                            else if portalHealth.status === 'UNREACHABLE'
+                                span.text-warning(title=portalHealth.detail)
+                                    i.bi.bi-exclamation-triangle.mr-1
+                                    | IOCL portal was unreachable at #{fmtDT(portalHealth.checked_at)}; pulls may fail
+                            else
+                                span.text-danger(title=portalHealth.detail)
+                                    i.bi.bi-x-octagon.mr-1
+                                    | IOCL changed its portal (since #{fmtDT(portalHealth.status_since)}); pulls are paused until PetroMath is updated
+                            if canCheckPortalHealth
+                                button.btn.btn-link.btn-sm.p-0.ml-2.align-baseline#portalHealthCheckBtn(type="button", style="font-size:1em") Check now
                 .col-12.col-md-auto.banks-header-buttons
-                    if canAdd
+                    if showAdd
                         button.btn.btn-success.btn-sm#addBankBtn(type="button", data-toggle="modal", data-target="#addBankModal")
                             i.bi.bi-plus-circle.mr-1
-                            | Add Bank
-                    button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick="window.location.href='/bank-master/enable'")
-                        i.bi.bi-eye-slash.mr-1
-                        | View Disabled
+                            = isOil ? 'Add Account' : 'Add Bank'
+                    if !isOil
+                        button.btn.btn-warning.btn-sm#viewDisabledBtn(type="button", onclick=`window.location.href='${masterBase}/enable'`)
+                            i.bi.bi-eye-slash.mr-1
+                            | View Disabled
                     button.btn.btn-info.btn-sm#refreshDataBtn(type="button")
                         i.bi.bi-arrow-clockwise.mr-1
                         | Refresh
@@ -58,12 +110,13 @@ block content
                             th IFSC Code
                             th Account Nickname
                             th Type
-                            th CC Limit
+                            if !isOil
+                                th CC Limit
                             th Ledger Name
-                            th Internal
-                            th Oil Company
                             th Statement Template
-                            if canEdit || canDisable
+                            if showPortal
+                                th Portal Login
+                            if canEdit || showDelete
                                 th Actions
                     tbody
                         if banks && banks.length > 0
@@ -76,31 +129,29 @@ block content
                                     td(data-label="IFSC Code")= bank.ifsc_code
                                     td.m-summary(data-label="Nickname")= bank.account_nickname || '-'
                                     td(data-label="Type")= bank.type || '-'
-                                    td(data-label="CC Limit")= bank.cc_limit ? bank.cc_limit.toLocaleString() : '-'
+                                    if !isOil
+                                        td(data-label="CC Limit")= bank.cc_limit ? bank.cc_limit.toLocaleString() : '-'
                                     td.m-wide(data-label="Ledger Name")= bank.ledger_name || '-'
-                                    td(data-label="Internal")
-                                        span.badge(class=bank.internal_flag === 'Y' ? 'badge-info' : 'badge-secondary')
-                                            = bank.internal_flag === 'Y' ? 'Yes' : 'No'
-                                    td(data-label="Oil Company")
-                                        span.badge(class=bank.is_oil_company === 'Y' ? 'badge-warning' : 'badge-secondary')
-                                            = bank.is_oil_company === 'Y' ? 'Yes' : 'No'
                                     td.m-wide(data-label="Statement Template")
                                         - const tpl = bank.template_id ? templates.find(t => t.template_id === bank.template_id) : null
                                         if tpl
                                             span.badge.badge-success= tpl.template_name
                                         else
                                             span.text-muted(style="font-size:0.85em") auto
-                                    if canEdit || canDisable
+                                    if showPortal
+                                        td.m-wide(data-label="Portal Login")
+                                            +portalLoginCell(bank)
+                                    if canEdit || showDelete
                                         td.m-actions
                                             if canEdit
                                                 button.btn.btn-outline-primary.btn-sm.edit-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-pencil
-                                            if canDisable
+                                            if showDelete
                                                 button.btn.btn-outline-danger.btn-sm.ml-1.disable-bank-btn(type="button", data-index=index, data-bank-id=bank.bank_id)
                                                     i.bi.bi-trash
                         else
                             tr.m-static
-                                td.text-center.m-wide(colspan="13") No banks found
+                                td.text-center.m-wide(colspan="13")= isOil ? 'No oil company accounts found' : 'No banks found'
 
     //- phones: cards start collapsed to bank name + nickname; tap to open
     +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
@@ -110,7 +161,7 @@ block content
         .modal-dialog.modal-lg(role="document")
             .modal-content
                 .modal-header
-                    h5.modal-title#addBankModalLabel Add New Bank
+                    h5.modal-title#addBankModalLabel= isOil ? 'Add Oil Company Account' : 'Add New Bank'
                     button.close(type="button", data-dismiss="modal", aria-label="Close")
                         span(aria-hidden="true") &times;
                 .modal-body
@@ -134,22 +185,14 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Type
                                 input.form-control(type="text", name="type")
-                            .col-md-6.mb-3
+                            .col-md-6.mb-3(class=isOil ? 'd-none' : '')
                                 label.form-label CC Limit
                                 input.form-control(type="number", name="cc_limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
                                 input.form-control(type="text", name="ledger_name")
-                            .col-md-6.mb-3
-                                label.form-label Internal Account
-                                select.form-control(name="internal_flag")
-                                    option(value="N") No
-                                    option(value="Y") Yes
-                            .col-md-6.mb-3
-                                label.form-label Oil Company
-                                select.form-control(name="is_oil_company")
-                                    option(value="N") No
-                                    option(value="Y") Yes
+                            //- The screen decides the kind: Bank Master = internal bank, Oil Company Accounts = oil (server enforces)
+                            input(type="hidden", name="is_oil_company", value=isOil ? 'Y' : 'N')
                             .col-md-6.mb-3
                                 label.form-label Statement Template
                                 select.form-control(name="template_id")
@@ -165,7 +208,7 @@ block content
         .modal-dialog.modal-lg(role="document")
             .modal-content
                 .modal-header
-                    h5.modal-title Edit Bank
+                    h5.modal-title= isOil ? 'Edit Oil Company Account' : 'Edit Bank'
                     button.close(type="button", data-dismiss="modal", aria-label="Close")
                         span(aria-hidden="true") &times;
                 .modal-body
@@ -190,22 +233,12 @@ block content
                             .col-md-6.mb-3
                                 label.form-label Type
                                 input.form-control(type="text", name="type", id="edit-type")
-                            .col-md-6.mb-3
+                            .col-md-6.mb-3(class=isOil ? 'd-none' : '')
                                 label.form-label CC Limit
                                 input.form-control(type="number", name="cc_limit", id="edit-cc-limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
                                 input.form-control(type="text", name="ledger_name", id="edit-ledger-name")
-                            .col-md-6.mb-3
-                                label.form-label Internal Account
-                                select.form-control(name="internal_flag", id="edit-internal-flag")
-                                    option(value="N") No
-                                    option(value="Y") Yes
-                            .col-md-6.mb-3
-                                label.form-label Oil Company
-                                select.form-control(name="is_oil_company", id="edit-oil-company")
-                                    option(value="N") No
-                                    option(value="Y") Yes
                             .col-md-6.mb-3
                                 label.form-label Statement Template
                                 select.form-control(name="template_id", id="edit-template-id")
@@ -215,6 +248,39 @@ block content
                         .modal-footer
                             button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
                             button.btn.btn-primary(type="button", onclick="saveBankEdit()") Save Changes
+
+    if showPortal && canManageLogin
+        // IOCL e-Mitra portal login modal
+        .modal.fade#portalLoginModal(tabindex="-1", role="dialog")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header
+                        h5.modal-title IOCL e-Mitra Portal Login
+                        button.close(type="button", data-dismiss="modal", aria-label="Close")
+                            span(aria-hidden="true") &times;
+                    .modal-body
+                        if !portalKeyConfigured
+                            .alert.alert-danger.mb-0
+                                | Portal login storage is not set up on this server yet. Please contact PetroMath support.
+                        else
+                            p.mb-2
+                                strong#portal-account-name
+                            p.text-muted.small.mb-3
+                                | Used only to download your IOCL account statement (Account Summary) into Upload Transactions.
+                                | The password is stored encrypted and is never shown again.
+                            input(type="hidden", id="portal-bank-id")
+                            .form-group
+                                label.form-label Username (RO SAP Code)
+                                input.form-control#portal-username(type="text", inputmode="numeric", autocomplete="off", placeholder="e.g. 177105")
+                            .form-group.mb-0
+                                label.form-label Password
+                                input.form-control#portal-password(type="password", autocomplete="new-password")
+                            small.text-muted PetroMath logs in once to check the password before saving it (takes about 15 seconds).
+                    .modal-footer
+                        button.btn.btn-outline-danger.mr-auto#portalRemoveBtn(type="button", onclick="removePortalLogin()", style="display:none;") Remove
+                        button.btn.btn-secondary(type="button", data-dismiss="modal") Cancel
+                        if portalKeyConfigured
+                            button.btn.btn-primary#portalSaveBtn(type="button", onclick="savePortalLogin()") Check &amp; Save
 
     // CSS Styles
     style.
@@ -280,7 +346,96 @@ block content
                     disableBank(index, bankId);
                 });
             });
+
+            // Portal login buttons (Oil Company Accounts only)
+            document.querySelectorAll('.portal-login-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();   // don't toggle the phone card
+                    openPortalLogin(this.dataset);
+                });
+            });
         });
+
+        // SuperUser: run the no-login IOCL portal check now
+        const portalHealthCheckBtn = document.getElementById('portalHealthCheckBtn');
+        if (portalHealthCheckBtn) {
+            portalHealthCheckBtn.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Checking IOCL portal...';
+                try {
+                    const res = await fetch('/oil-company-accounts/api/portal-health/check', { method: 'POST' });
+                    const data = await res.json().catch(() => ({ success: false, error: 'Unexpected response' }));
+                    alert(data.success ? `IOCL portal: ${data.status}\n${data.detail}` : (data.error || 'Check failed'));
+                } catch (e) {
+                    alert('Could not reach the server');
+                }
+                location.reload();
+            });
+        }
+
+        function openPortalLogin(data) {
+            const bankIdEl = document.getElementById('portal-bank-id');
+            if (bankIdEl) {
+                bankIdEl.value = data.bankId;
+                document.getElementById('portal-account-name').textContent = data.account;
+                document.getElementById('portal-username').value = data.username || '';
+                document.getElementById('portal-password').value = '';
+                document.getElementById('portal-password').placeholder = data.hasLogin === 'Y' ? 'Enter a new password to change it' : '';
+            }
+            const removeBtn = document.getElementById('portalRemoveBtn');
+            removeBtn.style.display = data.hasLogin === 'Y' ? '' : 'none';
+            removeBtn.dataset.bankId = data.bankId;
+            $('#portalLoginModal').modal('show');
+        }
+
+        async function savePortalLogin() {
+            const bankId = document.getElementById('portal-bank-id').value;
+            const username = document.getElementById('portal-username').value.trim();
+            const password = document.getElementById('portal-password').value;
+            if (!username || !password) {
+                alert('Enter the RO SAP code and password');
+                return;
+            }
+            const btn = document.getElementById('portalSaveBtn');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span>Checking with IOCL...';
+            try {
+                const res = await fetch(`/oil-company-accounts/api/${bankId}/portal-login`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json().catch(() => ({ success: false, error: 'Unexpected response' }));
+                if (data.success) {
+                    document.getElementById('portal-password').value = '';
+                    $('#portalLoginModal').modal('hide');
+                    showMessage(data.message, 'success');
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    alert(data.error || 'Could not save the portal login');
+                }
+            } catch (e) {
+                alert('Could not reach the server');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            }
+        }
+
+        async function removePortalLogin() {
+            const bankId = document.getElementById('portalRemoveBtn').dataset.bankId;
+            if (!confirm('Remove the saved IOCL portal login for this account?')) return;
+            const res = await fetch(`/oil-company-accounts/api/${bankId}/portal-login`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({ success: false }));
+            if (data.success) {
+                $('#portalLoginModal').modal('hide');
+                showMessage('Portal login removed', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                alert(data.error || 'Could not remove the portal login');
+            }
+        }
         
         // Search functionality
         document.getElementById('searchInput').addEventListener('input', function(e) {
@@ -326,8 +481,6 @@ block content
             document.getElementById('edit-type').value = bank.type || '';
             document.getElementById('edit-cc-limit').value = bank.cc_limit || '';
             document.getElementById('edit-ledger-name').value = bank.ledger_name || '';
-            document.getElementById('edit-internal-flag').value = bank.internal_flag;
-            document.getElementById('edit-oil-company').value = bank.is_oil_company;
             document.getElementById('edit-template-id').value = bank.template_id || '';
 
             $('#editBankModal').modal('show');
@@ -336,9 +489,6 @@ block content
         // Save bank edit
         function saveBankEdit() {
             const bankId = document.getElementById('edit-bank-id').value;
-             // Get values and handle empty strings for ENUM fields
-            const internalFlag = document.getElementById('edit-internal-flag').value;
-            const isOilCompany = document.getElementById('edit-oil-company').value;
 
             const formData = {
                 bank_name: document.getElementById('edit-bank-name').value,
@@ -349,8 +499,6 @@ block content
                 type: document.getElementById('edit-type').value,
                 cc_limit: document.getElementById('edit-cc-limit').value,
                 ledger_name: document.getElementById('edit-ledger-name').value,
-                internal_flag: internalFlag || 'N',
-                is_oil_company: isOilCompany || 'N',
                 template_id: document.getElementById('edit-template-id').value || null
             };
             
