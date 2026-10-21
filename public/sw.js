@@ -43,3 +43,34 @@ self.addEventListener('fetch', function (event) {
         }
     })());
 });
+
+// Deadline reminders (services/deadline-reminder-scheduler.js). Payload JSON:
+// { title, body, url, tag }. Same tag replaces the earlier notification.
+self.addEventListener('push', function (event) {
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
+    event.waitUntil(self.registration.showNotification(data.title || 'PetroMath', {
+        body: data.body || '',
+        tag: data.tag || undefined,
+        renotify: !!data.tag,
+        icon: '/images/app-icons/icon-192.png',
+        data: { url: data.url || '/deadline' }
+    }));
+});
+
+// Tap: reuse an open app window if there is one, else open a new one
+self.addEventListener('notificationclick', function (event) {
+    event.notification.close();
+    const target = new URL((event.notification.data && event.notification.data.url) || '/deadline', self.location.origin).href;
+    event.waitUntil((async function () {
+        const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const w of wins) {
+            if (new URL(w.url).origin === self.location.origin && 'focus' in w) {
+                await w.focus();
+                if ('navigate' in w) return w.navigate(target);
+                return;
+            }
+        }
+        return self.clients.openWindow(target);
+    })());
+});

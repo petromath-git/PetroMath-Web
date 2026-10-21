@@ -140,6 +140,8 @@ require('./services/platform-billing-scheduler').start();
 // Platform billing monthly auto-generation - end
 // IOCL e-Mitra portal daily health check (no login) - see services/oil-portal-health-scheduler.js
 require('./services/oil-portal-health-scheduler').start();
+// Deadline reminders to phones, 09:00 IST - see services/deadline-reminder-scheduler.js
+require('./services/deadline-reminder-scheduler').start();
 
 // Router business
 const HomeController = require("./controllers/home-controller");
@@ -161,7 +163,6 @@ const digitalSalesCorrectionsRoutes = require('./routes/digital-sales-correction
 const decantEditController = require("./controllers/decant-edit-controller");
 const truckLoadController = require("./controllers/truck-load-controller");
 const dashBoardController = require("./controllers/dashboard-controller");
-const deadlineController = require("./controllers/deadline-master-controller");
 const creditController = require("./controllers/credit-controller");
 const tankDipController = require("./controllers/tank-dip-controller");
 const pumpController = require("./controllers/pump-controller");
@@ -289,6 +290,8 @@ const oilCompanyStatementRoutes = require('./routes/oil-company-statement-routes
 const bankStatementRoutes = require('./routes/bank-statement-routes');
 const bankMasterRoutes = require('./routes/bank-master-routes');
 const expenseMasterRoutes = require('./routes/expense-master-routes');
+const deadlineRoutes = require('./routes/deadline-routes');
+const pushRoutes = require('./routes/push-routes');
 const oilCompanyAccountRoutes = require('./routes/oil-company-account-routes');
 const locationConfigRoutes = require('./routes/location-config-routes');
 const accountHeadsRoutes = require("./routes/account-heads-routes");
@@ -598,6 +601,8 @@ app.use('/oil-company-statement', oilCompanyStatementRoutes);
 app.use('/bank-statement', bankStatementRoutes); 
 app.use('/bank-master', bankMasterRoutes);
 app.use('/expense-master', expenseMasterRoutes);
+app.use('/deadline', deadlineRoutes);
+app.use('/push', pushRoutes);
 app.use('/oil-company-accounts', oilCompanyAccountRoutes);
 app.use('/location-config', locationConfigRoutes);
 app.use("/account-heads", accountHeadsRoutes);
@@ -1582,19 +1587,6 @@ app.get('/charts', isLoginEnsured, function (req, res) {
 //     dashBoardController.getCharatData(req, res);    // response returned inside controller
 // });
 // routes - end
-
-app.get('/deadline', isLoginEnsured, function (req, res, next) {
-    deadlineController.getDeadlineData(req, res, next);  // response returned inside controller
-});
-
-app.post('/deadline', [isLoginEnsured, security.isAdmin()], function (req, res, next) {
-    deadlineController.saveDeadlineData(req, res, next)
-});
-
-app.put('/deadline/:id', [isLoginEnsured, security.isAdmin()], function (req, res) {
-    deadlineController.updateDeadlineData(req, res);
-
-});
 
 // Add these routes with your other route definitions
 app.get('/tank-dip', isLoginEnsured, function(req, res, next) {

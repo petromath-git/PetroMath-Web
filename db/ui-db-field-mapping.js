@@ -145,20 +145,6 @@ module.exports = {
         return data;
         
     },
-    newDeadlineData : function (req) {
-        const data = {
-            deadline_date: req.body.deadline_date_0,
-            purpose: req.body.purpose_0,
-            warning_day: req.body.warning_day_0,
-            hard_stop: req.body.hard_stop_0,
-            closed: req.body.closed_0,
-            comment:req.body.comments_0,
-            location_id: req.body.location_id,
-            created_by: req.user.Person_id,
-            updated_by: req.user.Person_id
-        };
-        return data;
-    },
     newTankDip : function(req) {
         return {
             tank_id: req.body.tank_id,
