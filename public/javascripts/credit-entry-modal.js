@@ -9,7 +9,7 @@
 
 var creditModalState = { rowNo: null, isNew: false, savedThisSession: false, deleteRequested: false, moved: {} };
 
-var CREDIT_MODAL_SIMPLE_FIELDS = ['bill-date', 'product', 'billno', 'creditparty', 'odometer', 'price', 'discount', 'qty', 'amt', 'notes'];
+var CREDIT_MODAL_SIMPLE_FIELDS = ['bill-date', 'product', 'billno', 'indent', 'creditparty', 'odometer', 'price', 'discount', 'qty', 'amt', 'notes'];
 
 function creditFieldEl(rowNo, field) {
     return document.getElementById('credit-' + field + '-' + rowNo);
@@ -308,7 +308,9 @@ function refreshCreditSummaryRow(rowNo) {
     setCreditSummaryText('credit-summary-date-' + rowNo, dateEl && dateEl.value ? formatDateDDMonYYYY(dateEl.value) : '');
     setCreditSummaryText('credit-summary-product-' + rowNo, selectedCreditOptionText(creditFieldEl(rowNo, 'product')));
     var billNoEl = creditFieldEl(rowNo, 'billno');
-    setCreditSummaryText('credit-summary-billno-' + rowNo, billNoEl ? billNoEl.value : '');
+    var indentEl = creditFieldEl(rowNo, 'indent');
+    var indentVal = indentEl && indentEl.value.trim() ? ' / Ind ' + indentEl.value.trim() : '';
+    setCreditSummaryText('credit-summary-billno-' + rowNo, (billNoEl ? billNoEl.value : '') + indentVal);
     setCreditSummaryText('credit-summary-company-' + rowNo, selectedCreditOptionText(creditFieldEl(rowNo, 'creditparty')));
     setCreditSummaryText('credit-summary-vehicle-' + rowNo, selectedCreditOptionText(document.getElementById('credit-vehicle-' + rowNo)));
     var qtyEl = creditFieldEl(rowNo, 'qty');
