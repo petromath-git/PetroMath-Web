@@ -513,15 +513,10 @@ function updateHiddenCreditId(obj, creditRowPrefix, rowNo) {
 }
 
 
-// Add new page: Internally & externally for both cash and credit sale to show/hide of specific product price(s)
-// Calls calculation of sale amount too
-function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName) {
-    // Validate productId first
-    if (!productId) {
-        console.error('ProductId is null or undefined');
-        return;
-    }
-
+// Rate for a product as this closing page currently shows it: the pump reading
+// price for pump products (else the rate box, else the DB price), the DB price
+// otherwise. Shared by the credit/cash sale price box and the credit bill import.
+function getShiftProductPrice(productId) {
     let productPrice = 0;
 
     // NEW DYNAMIC APPROACH: Find product using productValuesData
@@ -604,6 +599,20 @@ function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefi
             productPrice = 0;
         }
     }
+
+    return productPrice;
+}
+
+// Add new page: Internally & externally for both cash and credit sale to show/hide of specific product price(s)
+// Calls calculation of sale amount too
+function showOrHideProductPricesForCashOrCreditSales(rowNo, cashOrCreditRowPrefix, productId, productName) {
+    // Validate productId first
+    if (!productId) {
+        console.error('ProductId is null or undefined');
+        return;
+    }
+
+    const productPrice = getShiftProductPrice(productId);
 
     // Update the price field if it exists
     const priceFieldId = cashOrCreditRowPrefix + "price-" + rowNo;
@@ -710,6 +719,7 @@ function searchCreditRows() {
         const notesEl = document.getElementById('credit-notes-' + rowNo);
         const searchableFields = [
             document.getElementById('credit-summary-product-' + rowNo),
+            document.getElementById('credit-summary-billno-' + rowNo),
             document.getElementById('credit-summary-company-' + rowNo),
             document.getElementById('credit-summary-vehicle-' + rowNo),
             document.getElementById('credit-summary-qty-' + rowNo),
@@ -1531,6 +1541,7 @@ function formCreditSales(salesId, creditSaleTag, creditObjRowNum, user) {
         'creditlist_id': getCreditType(creditSaleTag, creditObjRowNum),
         'vehicle_id': document.getElementById(creditSaleTag + 'vehicle-' + creditObjRowNum).value,  // ADD THIS
         'odometer_reading': document.getElementById(creditSaleTag + 'odometer-' + creditObjRowNum).value,
+        'indent_number': (function() { var el = document.getElementById(creditSaleTag + 'indent-' + creditObjRowNum); return el && el.value.trim() ? el.value.trim() : null; })(),
         'credit_bill_date': creditBillDate,
         'product_id': document.getElementById(creditSaleTag + 'product-' + creditObjRowNum).value,
         'price': document.getElementById(creditSaleTag + 'price-' + creditObjRowNum).value,

@@ -470,6 +470,10 @@ block content
                     div.row
                         div.col(align="center")
                             button.btn.btn-info(type="button", onClick="handleAddCreditRowClick()") Add credits
+                            if allowCreditBillImport
+                                button.btn.btn-outline-info.ml-2(type="button", onClick="openCreditBillImport()")
+                                    i.bi.bi-file-earmark-arrow-up.mr-1
+                                    | Import bills
                     //- One blank credit line (and its Summary row), copied by ensureFreeCreditRow()
                     //- in credit-entry-modal.js with __ROW__ set to the next line number
                     template#credit-row-template
@@ -959,6 +963,8 @@ block content
     +closingMobileSearch()
     // Credit sale Add/Edit modal (shared by the compact credit sales list)
     +creditEntryModal(allowOffMeterSale)
+    if allowCreditBillImport
+        +creditBillImportModal()
     // Quick Add Vehicle Modal
     .modal.fade#quickAddVehicleModal(tabindex='-1' role='dialog' aria-labelledby='quickAddVehicleModalLabel' aria-hidden='true')
         .modal-dialog(role='document')
@@ -987,6 +993,8 @@ block content
         +closingShortcuts()
     script(src=`/javascripts/shift-products.js?v=${CACHE_BUST}`)
     script(src=`/javascripts/credit-entry-modal.js?v=${CACHE_BUST}`)
+    if allowCreditBillImport
+        script(src=`/javascripts/credit-bill-import.js?v=${CACHE_BUST}`)
     if(!freezedRecord)
         script(src=`/javascripts/closing-autosave.js?v=${CACHE_BUST}`)
     if showExShortBreakdown
