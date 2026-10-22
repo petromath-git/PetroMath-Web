@@ -172,6 +172,7 @@ const txnCreditsPromise = (closingId) => {
                                 creditBillDate: credit.credit_bill_date,
                                 notes: credit.notes,
                                 odometerReading: credit.odometer_reading,
+                                indentNumber: credit.indent_number,
                                 offMeterSale: credit.off_meter_sale,
                                 isLubeProduct: productInfo ? (productInfo.is_lube_product == 1 && productInfo.is_tank_product == 1) : false
                             });
