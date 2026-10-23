@@ -111,6 +111,12 @@ module.exports = {
                 'N' // default - disabled
             );
 
+            const allowCreditBillImport = await locationConfig.getLocationConfigValue(
+                locationCode,
+                'CREDIT_BILL_IMPORT',
+                'N'
+            );
+
             const allowOffMeterSale = await locationConfig.getLocationConfigValue(
                 locationCode,
                 'ALLOW_OFF_METER_SALE',
@@ -190,6 +196,7 @@ module.exports = {
                         digitalSalesFutureDays: digitalSalesFutureDays,
                         show2TSalesTab: show2TSalesTab === 'Y',
                         allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
+                        allowCreditBillImport: allowCreditBillImport === 'Y',
                         allowOffMeterSale: allowOffMeterSale === 'Y',
                         allowCreditReceiptsInClosing: allowCreditReceiptsInClosing === 'Y',
                         allowEmployeeAdvanceInClosing: allowEmployeeAdvanceInClosing === 'Y',

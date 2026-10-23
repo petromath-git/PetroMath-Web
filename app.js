@@ -256,6 +256,7 @@ app.use(express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 
 const vehicleRoutes = require('./routes/vehicle-routes'); 
+const creditBillImportRoutes = require('./routes/credit-bill-import-routes');
 const passwordRoutes = require('./routes/password-reset-routes'); 
 const tallyDaybookRoutes = require('./routes/tally-daybook-routes'); 
 const customerDashboardRoutes = require('./routes/customer-dashboard-routes');
@@ -574,6 +575,7 @@ app.use(routeLogger({
 
 
 app.use('/vehicles', vehicleRoutes);
+app.use('/credit-bill-import', creditBillImportRoutes);
 app.use('/password', passwordRoutes);
 app.use('/passkey', require('./routes/passkey-routes'));
 app.use('/reports-tally-daybook', tallyDaybookRoutes);

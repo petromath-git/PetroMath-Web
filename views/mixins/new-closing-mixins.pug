@@ -407,6 +407,8 @@ mixin addCredits(creditRowNo, rowData)
         td
             input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo type='number' inputmode='numeric' min=1 oninput='validity.valid||(value="1")')
         td
+            input.form-control(type='text' name=prefix + 'indent-' + creditRowNo id=prefix + 'indent-' + creditRowNo value=rowData.indentNumber maxlength=100 autocomplete='off')
+        td
             input(type='hidden' id=prefix +'companyName_'+ creditRowNo, value = rowData.companyName)
             input(type='hidden' id=prefix +'companyId_'+ creditRowNo, value = rowData.creditListId)
             - var allCreditParties = [];
@@ -551,15 +553,18 @@ mixin creditEntryModal(allowOffMeterSale)
                         span(aria-hidden='true') &times;
                 .modal-body
                     .row
-                        .col-md-4.form-group
+                        .col-md-3.form-group
                             label Bill Date
                             div#creditModalSlot-bill-date
-                        .col-md-4.form-group
+                        .col-md-3.form-group
                             label Product
                             div#creditModalSlot-product
-                        .col-md-4.form-group
+                        .col-md-3.form-group
                             label Bill #
                             div#creditModalSlot-billno
+                        .col-md-3.form-group
+                            label Indent #
+                            div#creditModalSlot-indent
                     .row
                         .col-md-6.form-group
                             label Company
@@ -603,6 +608,38 @@ mixin creditEntryModal(allowOffMeterSale)
                     button.btn.btn-secondary(type='button' data-dismiss='modal' data-ck-key='C') Close
                     button.btn.btn-primary(type='button' onclick='saveCreditRowModal()' data-ck-key='S') Save
 
+
+//- Credit Sales > Import bills (CREDIT_BILL_IMPORT). Filled in by credit-bill-import.js.
+mixin creditBillImportModal()
+    style.
+        #creditBillImportModal .cbi-section { margin-top: 14px; }
+        #creditBillImportModal .cbi-section h6 { font-weight: 600; margin-bottom: 6px; }
+        #creditBillImportModal .cbi-list { max-height: 180px; overflow-y: auto; font-size: 0.85rem; margin: 0; padding-left: 18px; }
+        #creditBillImportModal table.cbi-map { font-size: 0.85rem; }
+        #creditBillImportModal table.cbi-map td { vertical-align: middle; }
+        #creditBillImportModal table.cbi-map select { min-width: 260px; }
+    #creditBillImportModal.modal.fade(tabindex='-1' role='dialog' aria-labelledby='creditBillImportLabel' aria-hidden='true')
+        .modal-dialog.modal-xl(role='document')
+            .modal-content
+                .modal-header
+                    h5.modal-title#creditBillImportLabel
+                        i.bi.bi-file-earmark-arrow-up.mr-2
+                        | Import credit bills
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    p.text-muted.small.mb-2
+                        | Excel export with columns B.No, Date, Vehicle, Party, Indent, Item, Qty, Rate, Amount.
+                        | Save your other tabs first - the page reloads after the import.
+                    .form-row.align-items-end
+                        .col-md-8
+                            input.form-control-file#cbi-file(type='file' accept='.xlsx,.xls')
+                        .col-md-4.text-md-right.mt-2.mt-md-0
+                            button.btn.btn-outline-primary#cbi-check-btn(type='button' onclick='checkCreditBillFile()') Check file
+                    #cbi-result
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Close
+                    button.btn.btn-primary#cbi-import-btn(type='button' onclick='importCreditBillFile()' disabled) Import
 
 //- Add new page: Dom elements to show new custom expenses on 'add'
 mixin addExpenses(rowNo, rowData)
