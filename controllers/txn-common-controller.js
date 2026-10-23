@@ -54,12 +54,10 @@ module.exports = {
 
 // Used as part of txnClosingPromise(new/edit flow) to do cashier,closer ids to person's name conversion
 const getNamesPromise = (closerId, cashierId) => {
-    return new Promise((resolve, reject) => {
-        const personData = appCache.getPersonCache();
+    return appCache.ensurePersonCache().then(personData => {
         const closerName = utils.getPersonName(closerId, personData);
         const cashierName = utils.getPersonName(cashierId, personData);
-        // TODO: debug this issue later, the names are undefined.
-        resolve({closerName: closerName, cashierName: cashierName});
+        return {closerName: closerName, cashierName: cashierName};
     });
 }
 
