@@ -1439,13 +1439,20 @@ async function checkTransactionDuplicates(bankId, transactions) {
         const matchedExistingIds = new Set();
         const duplicates = [];
         
-        // PHASE 1: For each uploaded transaction, try to find a match in existing
-        transactions.forEach((uploadedTxn, uploadIndex) => {
+        // Same date + amount + narration. Two rounds over the whole upload: exact narration
+        // matches first, then rows still unmatched may take an existing row with no narration
+        // stored (manual entries) on date + amount alone. Doing it per row in one go let an
+        // uploaded line grab a blank manual row ahead of its own exact row, leaving its
+        // same-day same-amount sibling unmatched and re-imported (MUE IOCL 13-04 fleet card).
+        // No date-independent narration fallback: generic narrations like BPCL's "Invoice" /
+        // "LFR Recovery" repeat with identical amounts every tanker load.
+        const matchedUploadIndexes = new Set();
+        const matchRound = (blankOnly) => transactions.forEach((uploadedTxn, uploadIndex) => {
+            if (matchedUploadIndexes.has(uploadIndex)) return;
             const uploadAmount = uploadedTxn.credit_amount > 0 ? uploadedTxn.credit_amount : uploadedTxn.debit_amount;
             const uploadType = uploadedTxn.credit_amount > 0 ? 'credit' : 'debit';
             const uploadDescription = (uploadedTxn.description || uploadedTxn.remarks || '').trim();
 
-            // Exact date + amount + narration (or date+amount if no narration stored).
             const matchInfo = existingTransactions.find(existingTxn => {
                 if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
 
@@ -1456,14 +1463,11 @@ async function checkTransactionDuplicates(bankId, transactions) {
                 if (!dateMatch || !amountMatch) return false;
 
                 const existingRemarks = (existingTxn.remarks || '').trim();
-                if (existingRemarks === '') return true; // no narration stored — date+amount is enough
-                return uploadDescription === existingRemarks;
+                return blankOnly ? existingRemarks === '' : existingRemarks !== '' && uploadDescription === existingRemarks;
             });
-            // No date-independent narration fallback: generic narrations like BPCL's "Invoice" /
-            // "LFR Recovery" repeat with identical amounts every tanker load, so matching on
-            // amount + narration alone flagged genuinely new rows as duplicates of months-old ones.
 
             if (matchInfo) {
+                matchedUploadIndexes.add(uploadIndex);
                 // Mark as matched
                 matchedExistingIds.add(matchInfo.t_bank_id);
                 duplicates.push({
@@ -1479,7 +1483,9 @@ async function checkTransactionDuplicates(bankId, transactions) {
                 debugLog(null, `DUPLICATE FOUND: ${uploadedTxn.txn_date} - ${uploadAmount} (${uploadType}) matches existing ${matchInfo.trans_date}`);
             }
         });
-        
+        matchRound(false);
+        matchRound(true);
+
         await debugLog(null, `checkTransactionDuplicates: Found ${duplicates.length} duplicates out of ${transactions.length} transactions`);
         return duplicates;
         
