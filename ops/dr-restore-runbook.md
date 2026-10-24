@@ -2,12 +2,12 @@
 
 Covers the scenario: something is wrong with the current prod instance/code, and you want
 to go back to a known-good AMI snapshot (app code + OS + config as of that snapshot) while
-still keeping the freshest possible business data (from the 15-min S3 DB backups, which are
+still keeping the freshest possible business data (from the 30-min S3 DB backups, which are
 far more current than any AMI).
 
 AMIs are created daily at 23:00 IST by DLM policy `policy-0b54e96fd1186ded0` (3-day
-retention, no forced reboot). DB backups land in `s3://mysql-backups-petromath/`:
-`mysql-backups/hourly/` (actually every 15 min, kept 24h) and `mysql-backups/daily/`
+retention, no forced reboot). DB backups land in `s3://mysql-backups-petromath-mumbai/` (ap-south-1; was `mysql-backups-petromath` in us-east-1 until 2026-10-23):
+`mysql-backups/hourly/` (actually every 30 min since 2026-10-24, kept 24h) and `mysql-backups/daily/`
 (kept 7 days).
 
 **Before touching anything, decide which scenario you're actually in:**

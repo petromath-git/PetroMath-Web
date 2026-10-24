@@ -9,7 +9,7 @@ set -euo pipefail
 TIER="${1:-daily}"
 ENV_FILE="${2:-$HOME/petroMath/.env}"
 PM2_APP="${3:-petromath}"
-S3_BUCKET="mysql-backups-petromath"
+S3_BUCKET="mysql-backups-petromath-mumbai"
 WORK_DIR="/home/ubuntu/restore"
 
 if [[ "$TIER" != "daily" && "$TIER" != "hourly" ]]; then
