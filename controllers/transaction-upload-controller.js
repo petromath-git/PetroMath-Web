@@ -1042,21 +1042,13 @@ previewTransactions: async (req, res) => {
         
         const duplicates = await checkTransactionDuplicates(bankId, transactions);
 
-        const transactionsWithDupFlag = transactions.map(txn => {
-            const uploadAmount = txn.credit_amount > 0 ? txn.credit_amount : txn.debit_amount;
-            const uploadType = txn.credit_amount > 0 ? 'credit' : 'debit';
-            
-            const isDup = duplicates.some(dup => 
-                dup.uploaded_date === txn.txn_date && 
-                Math.abs(dup.amount - uploadAmount) < 0.01 &&
-                dup.type === uploadType
-            );
-            
-            return {
-                ...txn,
-                is_duplicate: isDup
-            };
-        });
+        // Flag by the row's own index — matching on date+amount+type would also flag
+        // a second identical same-day row (e.g. two tanker invoices) that had no match.
+        const duplicateIndexes = new Set(duplicates.map(dup => dup.upload_index));
+        const transactionsWithDupFlag = transactions.map((txn, index) => ({
+            ...txn,
+            is_duplicate: duplicateIndexes.has(index)
+        }));
 
         // ========== STEP 7: Return response ==========
 
@@ -1448,13 +1440,13 @@ async function checkTransactionDuplicates(bankId, transactions) {
         const duplicates = [];
         
         // PHASE 1: For each uploaded transaction, try to find a match in existing
-        transactions.forEach(uploadedTxn => {
+        transactions.forEach((uploadedTxn, uploadIndex) => {
             const uploadAmount = uploadedTxn.credit_amount > 0 ? uploadedTxn.credit_amount : uploadedTxn.debit_amount;
             const uploadType = uploadedTxn.credit_amount > 0 ? 'credit' : 'debit';
             const uploadDescription = (uploadedTxn.description || uploadedTxn.remarks || '').trim();
 
-            // Pass 1: exact date + amount + narration (or date+amount if no narration stored).
-            let matchInfo = existingTransactions.find(existingTxn => {
+            // Exact date + amount + narration (or date+amount if no narration stored).
+            const matchInfo = existingTransactions.find(existingTxn => {
                 if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
 
                 const existingAmount = uploadType === 'credit' ? existingTxn.credit_amount : existingTxn.debit_amount;
@@ -1467,26 +1459,15 @@ async function checkTransactionDuplicates(bankId, transactions) {
                 if (existingRemarks === '') return true; // no narration stored — date+amount is enough
                 return uploadDescription === existingRemarks;
             });
-
-            // Pass 2: if date parsing may have differed, catch re-uploads of the same line via
-            // exact amount + exact narration match (narration must be non-empty on both sides).
-            if (!matchInfo && uploadDescription !== '') {
-                matchInfo = existingTransactions.find(existingTxn => {
-                    if (matchedExistingIds.has(existingTxn.t_bank_id)) return false;
-
-                    const existingAmount = uploadType === 'credit' ? existingTxn.credit_amount : existingTxn.debit_amount;
-                    const amountMatch = Math.abs(uploadAmount - existingAmount) < 0.01;
-                    if (!amountMatch) return false;
-
-                    const existingRemarks = (existingTxn.remarks || '').trim();
-                    return existingRemarks !== '' && uploadDescription === existingRemarks;
-                });
-            }
+            // No date-independent narration fallback: generic narrations like BPCL's "Invoice" /
+            // "LFR Recovery" repeat with identical amounts every tanker load, so matching on
+            // amount + narration alone flagged genuinely new rows as duplicates of months-old ones.
 
             if (matchInfo) {
                 // Mark as matched
                 matchedExistingIds.add(matchInfo.t_bank_id);
                 duplicates.push({
+                    upload_index: uploadIndex,
                     uploaded_date: uploadedTxn.txn_date,
                     existing_date: matchInfo.trans_date,
                     amount: uploadAmount,
