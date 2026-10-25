@@ -13,6 +13,8 @@
 // TIME, at least 5 minutes apart, in a fixed order (new locations join the end), so this server never
 // sends IOCL a burst of logins: at most 12 an hour however many locations use it. Runs only while the
 // health check is OK, and never retries an account the same day (one automatic login per account).
+// Off unless the server's .env has IOCL_INVOICE_AUTO_IMPORT=Y (set on prod only), so beta / dev /
+// a fresh server never log in to IOCL on their own, even with a copy of prod's data.
 //
 const cron = require('node-cron');
 const credentialDao = require('../dao/oil-portal-credential-dao');
@@ -59,7 +61,10 @@ function istMinutesNow() {
 
 let invoiceRun = null;
 
+const isInvoiceAutoImportOn = () => String(process.env.IOCL_INVOICE_AUTO_IMPORT || '').toUpperCase() === 'Y';
+
 async function runInvoiceImports(trigger) {
+    if (!isInvoiceAutoImportOn()) return null;
     if (invoiceRun) return invoiceRun;   // never two runs at once
     invoiceRun = (async () => {
         const tried = new Set();
@@ -104,13 +109,18 @@ async function runInvoiceImports(trigger) {
 
 function start() {
     cron.schedule(DAILY_CRON, () => runCheck('DAILY'));
-    cron.schedule(INVOICE_CRON, () => runInvoiceImports('DAILY'), { timezone: 'Asia/Kolkata' });
+    if (isInvoiceAutoImportOn()) {
+        cron.schedule(INVOICE_CRON, () => runInvoiceImports('DAILY'), { timezone: 'Asia/Kolkata' });
 
-    // Restarted during the day: finish today's run for the accounts not done yet
-    setTimeout(() => {
-        const m = istMinutesNow();
-        if (m >= INVOICE_START_MIN_IST && m < INVOICE_END_HOUR_IST * 60) runInvoiceImports('STARTUP');
-    }, 3 * 60 * 1000);
+        // Restarted during the day: finish today's run for the accounts not done yet
+        setTimeout(() => {
+            const m = istMinutesNow();
+            if (m >= INVOICE_START_MIN_IST && m < INVOICE_END_HOUR_IST * 60) runInvoiceImports('STARTUP');
+        }, 3 * 60 * 1000);
+        console.log('OilPortalInvoices: daily IOCL invoice auto-import ON (06:10 IST, one account every 5 min)');
+    } else {
+        console.log('OilPortalInvoices: IOCL invoice auto-import OFF on this server (IOCL_INVOICE_AUTO_IMPORT not Y)');
+    }
     cron.schedule(RETRY_CRON, async () => {
         const h = await credentialDao.getPortalHealth(PORTAL_IOCL).catch(() => null);
         if (h && h.status !== 'OK') runCheck('RETRY');
