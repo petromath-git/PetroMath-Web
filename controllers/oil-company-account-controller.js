@@ -13,6 +13,7 @@ const { getLocationConfigValue } = require('../utils/location-config');
 const portalHealth = require('../services/oil-portal-health-scheduler');
 const tankReceiptController = require('./tank-receipt-controller');
 const db = require('../db/db-connection');
+const TankInvoiceDao = require('../dao/tank-invoice-dao');
 
 const LOGIN_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
 const MAX_PULL_DAYS = 92;
@@ -202,12 +203,110 @@ async function invoiceListPayload(locationCode, cache) {
     };
 }
 
+// Save a fetched invoice as a Fuel Invoice without a person, only when nothing needs a decision:
+// the PDF reads, its number is the portal's, and every line maps to a product used before.
+// Returns null when saved, else the reason it was left for the user.
+async function autoSaveInvoice(locationCode, inv) {
+    const parsed = await tankReceiptController.parseInvoiceForLocation(locationCode, inv.pdf, `${inv.invoice_number}.pdf`);
+    const body = parsed.body;
+    if (body.tempId) tankReceiptController.tempInvoiceStore.delete(body.tempId);
+    if (!body.success) return body.error || 'could not read the PDF';
+
+    const h = body.data.header || {};
+    if (String(h.invoice_number || '').trim() !== inv.invoice_number) return 'invoice number in the PDF differs from the portal';
+    if (!h.invoice_date) return 'no invoice date in the PDF';
+    const lines = body.data.lines || [];
+    if (!lines.length) return 'no product lines in the PDF';
+    const unmapped = lines.filter(l => !(body.mappings || {})[l.product_name] || !(Number(l.quantity) > 0));
+    if (unmapped.length) return `product not mapped yet: ${unmapped.map(l => l.product_name).join(', ')}`;
+
+    // Entered by a person since the fetch started? Never overwrite it.
+    if ((await getEnteredInvoiceNumbers(locationCode)).has(inv.invoice_number)) return null;
+
+    const saveLines = lines.map(l => ({
+        product_id: Number(body.mappings[l.product_name]),
+        product_name: l.product_name,
+        quantity: l.quantity,
+        qty_unit: String(l.qty_unit || 'KL').toUpperCase() === 'KG' ? 'KG' : 'KL',
+        rate_per_kl: l.rate_per_kl || null,
+        density: l.density || null,
+        hsn_code: l.hsn_code || null,
+        total_line_amount: l.total_line_amount || null,
+        charges: l.charges || []
+    }));
+    const header = {
+        location_id: locationCode,
+        supplier_id: Number(body.supplierId),
+        supplier: body.supplier,
+        invoice_number: inv.invoice_number,
+        invoice_date: h.invoice_date,
+        truck_number: h.truck_number || null,
+        delivery_doc_no: h.delivery_doc_no || null,
+        seal_lock_no: h.seal_lock_no || null,
+        bay_number: h.bay_number ? String(h.bay_number).trim() : null,
+        total_invoice_amount: h.total_invoice_amount || null,
+        fuel_category: saveLines.some(l => l.qty_unit === 'KG') ? 'CNG' : 'MS_HSD'
+    };
+    await TankInvoiceDao.saveInvoice(header, saveLines, inv.pdf, locationCode, header.supplier_id, `${inv.invoice_number}.pdf`);
+    return null;
+}
+
+// Daily automatic run for one location (called by the oil portal scheduler, one account at a time):
+// fetch the last week's invoices and save the ones not yet entered. One IOCL login, same safeguards.
+async function autoImportIoclInvoices(locationCode) {
+    if (!(await isPortalEnabled(locationCode))) return { skipped: 'pull not enabled' };
+    const cred = await findIoclLogin(locationCode);
+    if (!cred) return { skipped: 'no portal login' };
+
+    let password;
+    try {
+        password = secretBox.decrypt(cred.password_enc);
+    } catch (e) {
+        return { skipped: 'saved login cannot be read on this server' };
+    }
+
+    const toDate = todayYmd();
+    const fromDate = ymdMinusDays(toDate, INVOICE_DEFAULT_DAYS);
+    const slot = await reserveAttempt({ bankId: cred.bank_id, locationCode, purpose: 'INVOICE', fromDate, toDate, userId: 'AUTO' });
+    if (slot.error) return { skipped: slot.error };
+
+    let invoices;
+    try {
+        invoices = await ioclPortal.pullInvoices({
+            username: cred.username, password, fromDate, toDate, skip: await getEnteredInvoiceNumbers(locationCode)
+        });
+    } catch (e) {
+        await releaseAttempt(cred.bank_id, slot.attemptId, attemptResult(e), e.message);
+        return { error: e.message };
+    }
+
+    const saved = [], left = [];
+    for (const inv of invoices.filter(i => i.pdf)) {
+        try {
+            const reason = await autoSaveInvoice(locationCode, inv);
+            if (reason) left.push(`${inv.invoice_number} (${reason})`); else saved.push(inv.invoice_number);
+        } catch (e) {
+            left.push(`${inv.invoice_number} (${e.message})`);
+        }
+    }
+    invoices.filter(i => !i.pdf && i.pdf_error).forEach(i => left.push(`${i.invoice_number} (${i.pdf_error})`));
+
+    const message = `auto: ${invoices.length} invoices, saved ${saved.length}${saved.length ? ' [' + saved.join(', ') + ']' : ''}`
+        + (left.length ? `; left for user: ${left.join('; ')}` : '');
+    await releaseAttempt(cred.bank_id, slot.attemptId, 'OK', message);
+    // The Fuel Invoice page shows this list (anything left over gets "Fill form")
+    invoiceCache.set(locationCode, { fetchedAt: Date.now(), fromDate, toDate, invoices });
+    return { saved, left, message };
+}
+
 async function isIoclAccount(bankId) {
     const template = await bankReconDao.getBankTemplate(bankId);
     return !!(template && String(template.bank_name || '').toUpperCase() === 'IOCL');
 }
 
 module.exports = {
+    autoImportIoclInvoices,
+
     getOilCompanyAccountsPage: async (req, res) => {
         try {
             const locationCode = req.user.location_code;
