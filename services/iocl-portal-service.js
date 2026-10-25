@@ -19,6 +19,11 @@ const DEFAULT_PORTAL_BASE = 'https://utkarsh.indianoil.co.in';
 const STATEMENT_API_PATH = '/xepp-api/dealer-account/fetch-statement';
 const CAPTCHA_API_PATH = '/xepp-api/auth/samadhan/captcha-challenge';
 const LOGIN_API_PART = '/xepp-api/auth/samadhan/login';
+// "TT Acknowledgement / Download Invoice" screen: invoice list + digital invoice PDF.
+// Only these two are used — the screen's Check / Acknowledge (receipt + vehicle condition) stay manual.
+const INVOICE_LIST_API_PART = '/retaildbapi/retaildbapi/fetch-invoices';
+const INVOICE_PDF_API_PATH = '/xepp-api/api-req/post-data/172';
+const MAX_INVOICE_PDFS = 15;
 
 // Present as an ordinary desktop Chrome (the dealer's own browser would), not "HeadlessChrome" on Linux
 // with an 800x600 screen. Version follows the bundled Chrome so it stays consistent.
@@ -35,7 +40,8 @@ async function portalUrls() {
     return {
         base,
         login: `${base}/sdmspro/auth/login`,
-        statementPage: `${base}/sdmspro/accounts/account-summary`
+        statementPage: `${base}/sdmspro/accounts/account-summary`,
+        invoicePage: `${base}/sdmspro/indent/receipt-ack`
     };
 }
 
@@ -235,6 +241,126 @@ function pullStatement({ username, password, fromDate, toDate }) {
     });
 }
 
+const ymdCompact = (ymd) => String(ymd).replace(/-/g, '');
+const ymdFromCompact = (s) => (/^\d{8}$/.test(String(s || '')) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : null);
+
+async function fetchInvoiceList(page, fromDate, toDate, urls) {
+    // The screen lists the last week by itself on load; take its own request body (partner code,
+    // employee login id, ...) and re-send it for the dates we want.
+    const ownRequest = page.waitForRequest(
+        r => r.url().includes(INVOICE_LIST_API_PART) && r.method() === 'POST', { timeout: 30000 }
+    ).catch(() => null);
+    await page.goto(urls.invoicePage, { waitUntil: 'networkidle2', timeout: 60000 });
+    const req = await ownRequest;
+    let body = null;
+    try { body = req ? JSON.parse(req.postData()) : null; } catch (e) { /* not JSON */ }
+    if (!body || !body.PartnerCode) {
+        throw new PortalError('The IOCL invoice screen did not load its invoice list. The portal may have changed.', 'INVOICE_FAILED');
+    }
+    body.FromDate = ymdCompact(fromDate);
+    body.ToDate = ymdCompact(toDate);
+
+    const result = await page.evaluate(async (apiUrl, payload) => {
+        const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json;charset=UTF-8',
+                'Accept': 'application/json, text/plain, */*',
+                'Authorization': 'Bearer ' + localStorage.getItem('accessToken'),
+                'x-auth-user': localStorage.getItem('userId'),
+                'custcode': localStorage.getItem('roCode')
+            },
+            body: JSON.stringify(payload)
+        });
+        return { status: res.status, text: await res.text() };
+    }, req.url(), body);
+
+    let json = null;
+    try { json = JSON.parse(result.text); } catch (e) { /* not JSON */ }
+    if (result.status !== 200 || !json || String(json.errorCode) !== '0') {
+        const msg = json && json.errorMessage ? `: ${json.errorMessage}` : ` (HTTP ${result.status})`;
+        throw new PortalError(`IOCL invoice list request failed${msg}.`, 'INVOICE_FAILED');
+    }
+    return (json.indentTrackingPOList || []).map(r => ({
+        invoice_number: String(r.sapinvoiceNumber || '').trim(),
+        invoice_date: ymdFromCompact(r.saporderDate || r.loadDispatchedDateTime),
+        vehicle_number: r.vehicleNumber || null,
+        products: (r.productDetails || []).map(p => ({
+            name: p.productName || p.productShortCode || '',
+            quantity: p.requestedQuantity !== '' && p.requestedQuantity != null ? Number(p.requestedQuantity) : null
+        }))
+    })).filter(r => r.invoice_number);
+}
+
+async function downloadInvoicePdf(page, invoiceNumber) {
+    const result = await page.evaluate(async (apiPath, vbeln) => {
+        const res = await fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json;charset=UTF-8',
+                'Accept': 'application/json, text/plain, */*',
+                'Authorization': 'Bearer ' + localStorage.getItem('accessToken'),
+                'x-auth-user': localStorage.getItem('userId'),
+                'custcode': localStorage.getItem('roCode')
+            },
+            body: JSON.stringify({ I_VBELN: vbeln, TrackingId: '172_' + new Date().toISOString(), Source: 'XePP' })
+        });
+        return { status: res.status, text: await res.text() };
+    }, INVOICE_PDF_API_PATH, invoiceNumber);
+
+    let json = null;
+    try { json = JSON.parse(result.text); } catch (e) { /* not JSON */ }
+    const b64 = json && json.E_PDF_DATA && json.E_PDF_DATA.PDF;
+    if (result.status !== 200 || !b64) {
+        throw new Error((json && json.E_MSG) || `HTTP ${result.status}`);
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.slice(0, 4).toString('ascii') !== '%PDF') throw new Error('IOCL did not return a PDF');
+    return buffer;
+}
+
+/**
+ * Log in once, list the dealer's invoices and download the PDFs of those not in `skip`.
+ * @param {object} p { username, password, fromDate, toDate: 'YYYY-MM-DD', skip: Set of invoice numbers }
+ * @returns {Promise<Array<{invoice_number, invoice_date, vehicle_number, products, pdf: Buffer|null, pdf_error}>>}
+ */
+function pullInvoices({ username, password, fromDate, toDate, skip }) {
+    return serialize(async () => {
+        const urls = await portalUrls();
+        const browser = await getBrowser();
+        const context = await browser.createBrowserContext();
+        try {
+            const page = await context.newPage();
+            await preparePage(page, browser);
+            page.setDefaultTimeout(60000);
+
+            await login(page, username, password, urls);
+            const invoices = await fetchInvoiceList(page, fromDate, toDate, urls);
+
+            let downloads = 0;
+            for (const inv of invoices) {
+                inv.pdf = null;
+                inv.pdf_error = null;
+                if (skip && skip.has(inv.invoice_number)) continue;
+                if (downloads >= MAX_INVOICE_PDFS) {
+                    inv.pdf_error = `Only ${MAX_INVOICE_PDFS} PDFs are fetched at a time — fetch again for the rest.`;
+                    continue;
+                }
+                if (downloads > 0) await new Promise(r => setTimeout(r, 1000));
+                downloads++;
+                try {
+                    inv.pdf = await downloadInvoicePdf(page, inv.invoice_number);
+                } catch (e) {
+                    inv.pdf_error = `PDF download failed: ${e.message}`.slice(0, 200);
+                }
+            }
+            return invoices;
+        } finally {
+            await context.close().catch(() => {});
+        }
+    });
+}
+
 /**
  * Health check WITHOUT logging in (uses none of the daily logins): does the portal still look the way
  * the pull expects? Returns { status: 'OK' | 'UNREACHABLE' | 'CHANGED', detail }.
@@ -304,6 +430,7 @@ function checkHealth() {
 
 module.exports = {
     pullStatement,
+    pullInvoices,
     checkHealth,
     PortalError,
     // exported for tests

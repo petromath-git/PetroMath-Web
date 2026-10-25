@@ -152,7 +152,7 @@ module.exports = {
                       WHERE bank_id = :bankId AND result = 'RUNNING'
                         AND started_at > NOW() - INTERVAL 10 MINUTE) AS running_count,
                     (SELECT TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) FROM t_oil_portal_login_attempt
-                      WHERE bank_id = :bankId AND purpose = 'PULL') AS secs_since_last_pull`,
+                      WHERE bank_id = :bankId AND purpose IN ('PULL', 'INVOICE')) AS secs_since_last_pull`,
                 { replacements: { bankId }, type: QueryTypes.SELECT }
             );
         // Consecutive LOGIN_FAILED since the last successful login (other errors don't count either way)
