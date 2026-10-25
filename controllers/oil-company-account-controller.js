@@ -11,6 +11,8 @@ const ioclPortal = require('../services/iocl-portal-service');
 const transactionUploadController = require('./transaction-upload-controller');
 const { getLocationConfigValue } = require('../utils/location-config');
 const portalHealth = require('../services/oil-portal-health-scheduler');
+const tankReceiptController = require('./tank-receipt-controller');
+const db = require('../db/db-connection');
 
 const LOGIN_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
 const MAX_PULL_DAYS = 92;
@@ -88,12 +90,12 @@ async function reserveAttempt({ bankId, locationCode, purpose, fromDate, toDate,
             error = 'An IOCL portal login for this account is already running. Please wait for it to finish.';
         } else if (st.todayCount >= DAILY_LOGIN_LIMIT) {
             error = `IOCL portal logins are limited to ${DAILY_LOGIN_LIMIT} per day for this account, so IOCL does not flag it. Try again tomorrow, or upload the Excel downloaded from the portal.`;
-        } else if (purpose === 'PULL' && st.failStreak >= PULL_FAIL_STOP) {
+        } else if (purpose !== 'SAVE' && st.failStreak >= PULL_FAIL_STOP) {
             error = 'IOCL rejected the saved login twice in a row, so pulls are paused to protect the account. An Admin needs to re-enter the password in Masters → Oil Company Accounts.';
         } else if (purpose === 'SAVE' && st.failStreakToday >= SAVE_FAIL_STOP_TODAY) {
             error = `IOCL rejected ${st.failStreakToday} logins today. To avoid locking the account, check the password by logging in on the IOCL portal yourself, then try again tomorrow.`;
-        } else if (purpose === 'PULL' && st.secsSinceLastPull !== null && st.secsSinceLastPull < PULL_COOLDOWN_SECS) {
-            error = `This account was pulled ${fmtWait(st.secsSinceLastPull)} ago. Please try again in ${fmtWait(PULL_COOLDOWN_SECS - st.secsSinceLastPull)}.`;
+        } else if (purpose !== 'SAVE' && st.secsSinceLastPull !== null && st.secsSinceLastPull < PULL_COOLDOWN_SECS) {
+            error = `This account was used on the IOCL portal ${fmtWait(st.secsSinceLastPull)} ago. Please try again in ${fmtWait(PULL_COOLDOWN_SECS - st.secsSinceLastPull)}.`;
         }
         if (error) {
             inFlight.delete(bankId);
@@ -143,6 +145,61 @@ function todayYmd() {
 
 function isYmd(s) {
     return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !isNaN(new Date(s + 'T00:00:00Z'));
+}
+
+// ---- IOCL purchase invoices (Fuel Invoice "Fetch from IOCL") ----
+// One fetch = one IOCL login: list + PDFs of invoices not yet entered, kept here per location so
+// picking an invoice afterwards needs no further login. Lost on restart (just fetch again).
+const INVOICE_DEFAULT_DAYS = 7;
+const INVOICE_MAX_DAYS = 31;
+const INVOICE_CACHE_MS = 6 * 60 * 60 * 1000;
+const invoiceCache = new Map();   // location_code -> { fetchedAt, fromDate, toDate, invoices[] }
+
+function getCachedInvoices(locationCode) {
+    const c = invoiceCache.get(locationCode);
+    if (c && Date.now() - c.fetchedAt > INVOICE_CACHE_MS) {
+        invoiceCache.delete(locationCode);
+        return null;
+    }
+    return c || null;
+}
+
+function ymdMinusDays(ymd, days) {
+    return new Date(new Date(ymd + 'T00:00:00Z').getTime() - days * 86400000).toISOString().slice(0, 10);
+}
+
+// The location's IOCL account with a saved portal login, if any
+async function findIoclLogin(locationCode) {
+    const rows = await credentialDao.findStatusByLocation(locationCode);
+    const row = rows.find(r => r.portal_code === PORTAL_IOCL);
+    return row ? credentialDao.findForBank(row.bank_id, locationCode) : null;
+}
+
+// invoice numbers already saved as Fuel Invoices at the location
+async function getEnteredInvoiceNumbers(locationCode) {
+    const rows = await db.sequelize.query(
+        `SELECT invoice_number FROM t_tank_invoice WHERE location_id = :locationCode AND invoice_number IS NOT NULL`,
+        { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+    );
+    return new Set(rows.map(r => String(r.invoice_number).trim()));
+}
+
+async function invoiceListPayload(locationCode, cache) {
+    const entered = await getEnteredInvoiceNumbers(locationCode);
+    return {
+        fetched_at: cache.fetchedAt,
+        from_date: cache.fromDate,
+        to_date: cache.toDate,
+        invoices: cache.invoices.map(inv => ({
+            invoice_number: inv.invoice_number,
+            invoice_date: inv.invoice_date,
+            vehicle_number: inv.vehicle_number,
+            products: inv.products,
+            entered: entered.has(inv.invoice_number),
+            pdf_ready: !!inv.pdf,
+            pdf_error: inv.pdf_error
+        }))
+    };
 }
 
 async function isIoclAccount(bankId) {
@@ -447,6 +504,110 @@ module.exports = {
             console.error('Error pulling IOCL statement:', error);
             if (bankId) await credentialDao.recordPull(bankId, 'FAILED', error.message).catch(() => {});
             res.status(500).json({ success: false, error: 'Error pulling statement from IOCL portal' });
+        }
+    },
+
+    // Fuel Invoice page: is "Fetch from IOCL" available, and the last fetched list (no login)
+    getIoclInvoiceStatus: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            if (!(await isPortalEnabled(locationCode))) {
+                return res.json({ success: true, enabled: false });
+            }
+            const cred = await findIoclLogin(locationCode);
+            if (!cred) {
+                return res.json({ success: true, enabled: true, has_login: false });
+            }
+            const st = await credentialDao.getAttemptStats(cred.bank_id);
+            const cache = getCachedInvoices(locationCode);
+            res.json({
+                success: true, enabled: true, has_login: true,
+                logins_left_today: Math.max(0, DAILY_LOGIN_LIMIT - st.todayCount),
+                daily_limit: DAILY_LOGIN_LIMIT,
+                paused: st.failStreak >= PULL_FAIL_STOP,
+                default_from: ymdMinusDays(todayYmd(), INVOICE_DEFAULT_DAYS),
+                today: todayYmd(),
+                list: cache ? await invoiceListPayload(locationCode, cache) : null
+            });
+        } catch (error) {
+            console.error('Error loading IOCL invoice status:', error);
+            res.status(500).json({ success: false, error: 'Error loading IOCL invoice status' });
+        }
+    },
+
+    // One IOCL login: list invoices and download the PDFs of those not yet entered
+    fetchIoclInvoices: async (req, res) => {
+        let bankId = null;
+        try {
+            const locationCode = req.user.location_code;
+            if (!(await isPortalEnabled(locationCode))) {
+                return res.status(403).json({ success: false, error: PORTAL_DISABLED_MSG });
+            }
+            const toDate = isYmd(req.body.to_date) ? req.body.to_date : todayYmd();
+            const fromDate = isYmd(req.body.from_date) ? req.body.from_date : ymdMinusDays(toDate, INVOICE_DEFAULT_DAYS);
+            if (fromDate > toDate) {
+                return res.status(400).json({ success: false, error: 'From date is after To date' });
+            }
+            if (toDate > todayYmd()) {
+                return res.status(400).json({ success: false, error: 'To date cannot be in the future' });
+            }
+            if ((new Date(toDate) - new Date(fromDate)) / 86400000 + 1 > INVOICE_MAX_DAYS) {
+                return res.status(400).json({ success: false, error: `Fetch at most ${INVOICE_MAX_DAYS} days at a time` });
+            }
+
+            const cred = await findIoclLogin(locationCode);
+            if (!cred) {
+                return res.status(404).json({ success: false, error: 'No IOCL portal login saved for this location. Set it up in Masters → Oil Company Accounts.' });
+            }
+            bankId = cred.bank_id;
+
+            let password;
+            try {
+                password = secretBox.decrypt(cred.password_enc);
+            } catch (e) {
+                console.error('Portal credential decrypt failed:', e.message);
+                return res.status(500).json({ success: false, error: 'Saved portal login could not be read on this server. Please re-enter it in Oil Company Accounts.' });
+            }
+
+            const slot = await reserveAttempt({ bankId, locationCode, purpose: 'INVOICE', fromDate, toDate, userId: req.user.Person_id });
+            if (slot.error) {
+                return res.status(429).json({ success: false, error: slot.error });
+            }
+            let invoices;
+            try {
+                const skip = await getEnteredInvoiceNumbers(locationCode);
+                invoices = await ioclPortal.pullInvoices({ username: cred.username, password, fromDate, toDate, skip });
+            } catch (e) {
+                await releaseAttempt(bankId, slot.attemptId, attemptResult(e), e.message);
+                return res.status(502).json({ success: false, error: e.message || 'IOCL invoice fetch failed' });
+            }
+            const pdfs = invoices.filter(i => i.pdf).length;
+            await releaseAttempt(bankId, slot.attemptId, 'OK', `${invoices.length} invoices, ${pdfs} PDFs`);
+
+            const cache = { fetchedAt: Date.now(), fromDate, toDate, invoices };
+            invoiceCache.set(locationCode, cache);
+            res.json({ success: true, list: await invoiceListPayload(locationCode, cache) });
+        } catch (error) {
+            console.error('Error fetching IOCL invoices:', error);
+            res.status(500).json({ success: false, error: 'Error fetching invoices from IOCL portal' });
+        }
+    },
+
+    // Read one fetched invoice PDF into the Fuel Invoice form (same JSON as the PDF upload)
+    readIoclInvoice: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const invoiceNumber = String(req.params.invoiceNumber || '').trim();
+            const cache = getCachedInvoices(locationCode);
+            const inv = cache && cache.invoices.find(i => i.invoice_number === invoiceNumber);
+            if (!inv || !inv.pdf) {
+                return res.status(404).json({ success: false, error: 'This invoice PDF is no longer available. Please fetch from IOCL again.' });
+            }
+            const result = await tankReceiptController.parseInvoiceForLocation(locationCode, inv.pdf, `${invoiceNumber}.pdf`);
+            res.status(result.status).json(result.body);
+        } catch (error) {
+            console.error('Error reading IOCL invoice:', error);
+            res.status(500).json({ success: false, error: 'Failed to read invoice: ' + error.message });
         }
     }
 };

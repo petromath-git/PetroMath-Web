@@ -46,4 +46,20 @@ router.post('/api/:id/pull',
     controller.pullStatement
 );
 
+// Used by Purchases → Fuel Invoice (same access as that page)
+router.get('/api/iocl-invoices',
+    isLoginEnsured,
+    controller.getIoclInvoiceStatus
+);
+
+router.post('/api/iocl-invoices/fetch',
+    isLoginEnsured,
+    controller.fetchIoclInvoices
+);
+
+router.post('/api/iocl-invoices/:invoiceNumber/read',
+    isLoginEnsured,
+    controller.readIoclInvoice
+);
+
 module.exports = router;
