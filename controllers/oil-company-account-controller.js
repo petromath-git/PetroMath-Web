@@ -254,6 +254,8 @@ async function autoSaveInvoice(locationCode, inv) {
 // Daily automatic run for one location (called by the oil portal scheduler, one account at a time):
 // fetch the last week's invoices and save the ones not yet entered. One IOCL login, same safeguards.
 async function autoImportIoclInvoices(locationCode) {
+    const autoOn = await getLocationConfigValue(locationCode, 'IOCL_INVOICE_AUTO_IMPORT', 'N');
+    if (String(autoOn).toUpperCase() !== 'Y') return { skipped: 'auto-import not enabled (IOCL_INVOICE_AUTO_IMPORT)' };
     if (!(await isPortalEnabled(locationCode))) return { skipped: 'pull not enabled' };
     const cred = await findIoclLogin(locationCode);
     if (!cred) return { skipped: 'no portal login' };
