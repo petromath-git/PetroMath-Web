@@ -6,7 +6,8 @@
 //   OK          -> pull allowed
 //   UNREACHABLE -> pull allowed, users warned (usually maintenance)
 //   CHANGED     -> pull refused until a later check passes; users told to upload the Excel instead
-// Only runs while IOCL_PORTAL_PULL_ENABLED is 'Y' for at least one location.
+// Only runs while IOCL_PORTAL_PULL_ENABLED is 'Y' for at least one location, and only on the prod
+// server (.env ENVIRONMENT=prod): beta / dev never contact IOCL on a timer, whatever their DB says.
 //
 // Invoice auto-import (from 06:10, after the health check): for each location with a saved IOCL login,
 // one login to fetch the last week's invoices and save the ones not yet entered. Accounts go ONE AT A
@@ -105,6 +106,10 @@ async function runInvoiceImports(trigger) {
 }
 
 function start() {
+    if (process.env.ENVIRONMENT !== 'prod') {
+        console.log(`OilPortal: automatic IOCL checks and invoice import OFF (ENVIRONMENT=${process.env.ENVIRONMENT || 'unset'}, runs only on prod)`);
+        return;
+    }
     cron.schedule(DAILY_CRON, () => runCheck('DAILY'));
     cron.schedule(INVOICE_CRON, () => runInvoiceImports('DAILY'), { timezone: 'Asia/Kolkata' });
 
