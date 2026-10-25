@@ -37,6 +37,17 @@ block content
                         label.font-weight-bold.mb-0.mr-3 Upload Invoice PDF
                         input#fuelInvoicePdfUpload.form-control-file(type='file' accept='.pdf' style='max-width:320px' onchange='fuelInvoiceUploadAndParse()')
                         span#fuelParseStatus.text-muted.small.ml-3
+                    //- IOCL e-Mitra: shown by fuelIoclInit() only when the pull is enabled and a login is saved
+                    div#ioclInvoiceBox.border-top.mt-2.pt-2(style='display:none')
+                        div.d-flex.flex-wrap.align-items-center
+                            label.font-weight-bold.mb-0.mr-3 Or fetch from IOCL
+                            input#ioclFromDate.form-control.form-control-sm.mr-1(type='date' style='max-width:150px' title='From date')
+                            span.small.text-muted.mr-1 to
+                            input#ioclToDate.form-control.form-control-sm.mr-2(type='date' style='max-width:150px' title='To date')
+                            button#ioclFetchBtn.btn.btn-sm.btn-primary.mr-2(type='button' onclick='fuelIoclFetch()') Fetch from IOCL
+                            span#ioclLoginsLeft.small.text-muted
+                        div#ioclStatus.small.mt-1
+                        div#ioclList.mt-2
         else
             div.mb-3.d-flex.flex-wrap.align-items-center
                 a.btn.btn-outline-secondary.btn-sm(href='/purchases/fuel-invoice/new') + Upload Another Invoice
@@ -319,6 +330,136 @@ block content
                 statusEl.className = 'text-danger small ml-3';
             }
         }
+
+        // ---- Fetch from IOCL (e-Mitra): one login lists invoices + downloads PDFs not yet entered ----
+        const IOCL_API = '/oil-company-accounts/api/iocl-invoices';
+
+        function ioclFmtDate(ymd) {
+            if (!ymd) return '—';
+            const [y, m, d] = ymd.split('-');
+            return d + '-' + ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(m) - 1] + '-' + y;
+        }
+
+        function ioclEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function ioclSetStatus(text, cls) {
+            const el = document.getElementById('ioclStatus');
+            el.textContent = text || '';
+            el.className = 'small mt-1 ' + (cls || 'text-muted');
+        }
+
+        function ioclShowLogins(st) {
+            const el = document.getElementById('ioclLoginsLeft');
+            if (st.paused) {
+                el.textContent = 'Paused — IOCL rejected the saved login. Re-enter it in Masters → Oil Company Accounts.';
+                el.className = 'small text-danger';
+                document.getElementById('ioclFetchBtn').disabled = true;
+                return;
+            }
+            el.textContent = st.logins_left_today + ' of ' + st.daily_limit + ' IOCL logins left today';
+            el.className = 'small text-muted';
+            document.getElementById('ioclFetchBtn').disabled = st.logins_left_today <= 0;
+        }
+
+        function ioclRenderList(list) {
+            const box = document.getElementById('ioclList');
+            if (!list) { box.innerHTML = ''; return; }
+            const fetched = new Date(list.fetched_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            if (!list.invoices.length) {
+                box.innerHTML = '<div class="small text-muted">No IOCL invoices from ' + ioclFmtDate(list.from_date) + ' to ' + ioclFmtDate(list.to_date) + ' (fetched ' + fetched + ').</div>';
+                return;
+            }
+            let html = '<div class="small text-muted mb-1">IOCL invoices ' + ioclFmtDate(list.from_date) + ' to ' + ioclFmtDate(list.to_date) + ' — fetched ' + fetched + '</div>'
+                + '<table class="table table-sm table-bordered mb-0 m-stack"><thead class="thead-light"><tr>'
+                + '<th>Invoice #</th><th>Date</th><th>Vehicle</th><th>Products</th><th></th></tr></thead><tbody>';
+            list.invoices.forEach(inv => {
+                const products = (inv.products || []).map(p => ioclEsc(p.name) + (p.quantity != null ? ' ' + p.quantity + ' KL' : '')).join(', ');
+                let action;
+                if (inv.entered) action = '<span class="badge badge-success">Entered</span>';
+                else if (inv.pdf_ready) action = '<button type="button" class="btn btn-sm btn-outline-primary" onclick="fuelIoclUse(\'' + ioclEsc(inv.invoice_number) + '\')">Fill form</button>';
+                else action = '<span class="text-danger small">' + ioclEsc(inv.pdf_error || 'PDF not available') + '</span>';
+                html += '<tr><td data-label="Invoice #">' + ioclEsc(inv.invoice_number) + '</td>'
+                    + '<td data-label="Date">' + ioclFmtDate(inv.invoice_date) + '</td>'
+                    + '<td data-label="Vehicle">' + ioclEsc(inv.vehicle_number || '—') + '</td>'
+                    + '<td data-label="Products">' + (products || '—') + '</td>'
+                    + '<td class="m-actions">' + action + '</td></tr>';
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+
+        async function fuelIoclInit() {
+            const box = document.getElementById('ioclInvoiceBox');
+            if (!box) return;
+            try {
+                const resp = await fetch(IOCL_API);
+                const st = await resp.json();
+                if (!st.success || !st.enabled || !st.has_login) return;
+                document.getElementById('ioclFromDate').value = st.default_from;
+                document.getElementById('ioclToDate').value = st.today;
+                document.getElementById('ioclToDate').max = st.today;
+                box.style.display = '';
+                ioclShowLogins(st);
+                ioclRenderList(st.list);
+            } catch (e) { /* stay hidden */ }
+        }
+
+        async function fuelIoclFetch() {
+            const btn = document.getElementById('ioclFetchBtn');
+            btn.disabled = true;
+            ioclSetStatus('Signing in to IOCL and fetching invoices… this takes about 20–40 seconds.', 'text-info');
+            try {
+                const resp = await fetch(IOCL_API + '/fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        from_date: document.getElementById('ioclFromDate').value,
+                        to_date: document.getElementById('ioclToDate').value
+                    })
+                });
+                const json = await resp.json();
+                if (!json.success) {
+                    ioclSetStatus(json.error || 'Could not fetch invoices from IOCL.', 'text-danger');
+                } else {
+                    const waiting = json.list.invoices.filter(i => !i.entered && i.pdf_ready).length;
+                    ioclSetStatus(waiting ? waiting + ' invoice(s) not yet entered — click "Fill form" to review and save.' : 'All fetched invoices are already entered.', waiting ? 'text-success' : 'text-muted');
+                    ioclRenderList(json.list);
+                }
+            } catch (e) {
+                ioclSetStatus('Error: ' + e.message, 'text-danger');
+            }
+            // refresh the logins-left count (also re-enables the button)
+            try {
+                const st = await (await fetch(IOCL_API)).json();
+                if (st.success && st.has_login) ioclShowLogins(st); else btn.disabled = false;
+            } catch (e) { btn.disabled = false; }
+        }
+
+        async function fuelIoclUse(invoiceNumber) {
+            const statusEl = document.getElementById('fuelParseStatus');
+            statusEl.textContent = 'Reading IOCL invoice ' + invoiceNumber + '...';
+            statusEl.className = 'text-muted small ml-3';
+            try {
+                const resp = await fetch(IOCL_API + '/' + encodeURIComponent(invoiceNumber) + '/read', { method: 'POST' });
+                const json = await resp.json();
+                if (!json.success) {
+                    statusEl.textContent = json.error || 'Could not read invoice.';
+                    statusEl.className = 'text-danger small ml-3';
+                    return;
+                }
+                fi_tempId = json.tempId || null;
+                fuelInvoicePrefill(json.data, json.supplier, json.supplierId, json.products, json.mappings);
+                statusEl.textContent = 'IOCL invoice ' + invoiceNumber + ' read. Check the lines and save.';
+                statusEl.className = 'text-success small ml-3';
+                document.getElementById('fi_invoice_number').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.className = 'text-danger small ml-3';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fuelIoclInit);
 
         function fuelInvoicePrefill(data, supplier, supplierId, products, mappings) {
             const h = data.header || {};
