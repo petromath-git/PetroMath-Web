@@ -178,6 +178,24 @@ module.exports = {
         };
     },
 
+    // Accounts for the daily invoice auto-import, in a fixed order (oldest first) so a newly added
+    // location joins the end of the queue. Skips accounts that already had their automatic run today.
+    listAutoInvoiceAccounts: (portalCode) => {
+        return db.sequelize.query(
+            `SELECT c.bank_id, c.location_code
+             FROM m_oil_portal_credential c
+             JOIN m_bank b ON b.bank_id = c.bank_id
+             WHERE c.portal_code = :portalCode
+               AND b.active_flag = 'Y'
+               AND b.is_oil_company = 'Y'
+               AND NOT EXISTS (SELECT 1 FROM t_oil_portal_login_attempt a
+                                WHERE a.bank_id = c.bank_id AND a.purpose = 'INVOICE'
+                                  AND a.created_by = 'AUTO' AND a.started_at >= CURDATE())
+             ORDER BY c.bank_id`,
+            { replacements: { portalCode }, type: QueryTypes.SELECT }
+        );
+    },
+
     // Server-wide: accounts whose IOCL login failed in the last hour, newest first, with how many
     // minutes ago (DB clock). Used to stop all pulls if IOCL appears to be pushing back.
     getRecentFailingAccounts: (windowMinutes) => {
