@@ -129,76 +129,11 @@ module.exports = {
             if (!req.file) {
                 return res.status(400).json({ success: false, error: 'No PDF file uploaded.' });
             }
-            const locationCode = req.user.location_code;
-            const location = await LocationDao.findByLocationCode(locationCode);
-            const companyName = location && location.company_name ? location.company_name : null;
-
-            if (!companyName) {
-                return res.status(400).json({ success: false, error: `No oil company configured for location ${locationCode}. Check m_location.company_name.` });
-            }
-
             const pdfBuffer = fs.readFileSync(req.file.path);
             fs.unlink(req.file.path, () => {});
 
-            const result = await InvoiceParserService.parseInvoice(pdfBuffer, companyName);
-
-            // Validate dealer code if configured — catches wrong-location uploads (e.g. MC invoice at MC2)
-            const dealerCode = location.oil_co_dealer_code ? String(location.oil_co_dealer_code).trim() : null;
-            if (dealerCode && !result.rawText.includes(dealerCode)) {
-                return res.status(400).json({
-                    success: false,
-                    error: `Invoice does not belong to this outlet. Expected dealer code ${dealerCode} not found in the PDF.`
-                });
-            }
-
-            // Resolve supplier_id — mandatory
-            const supplierRow = await db.sequelize.query(
-                `SELECT supplier_id, supplier_name FROM m_supplier WHERE UPPER(supplier_short_name) = UPPER(:code) AND location_code = :loc LIMIT 1`,
-                { replacements: { code: result.supplier, loc: locationCode }, type: db.Sequelize.QueryTypes.SELECT }
-            ).then(r => r[0] || null);
-
-            if (!supplierRow) {
-                return res.status(400).json({
-                    success: false,
-                    error: `Supplier "${result.supplier}" not found in supplier master for this location. Please add it under Supplier Master first.`
-                });
-            }
-
-            // Stash buffer temporarily — saved to DB only after user confirms products
-            const tempId = uuidv4();
-            const originalFileName = req.file ? req.file.originalname : 'invoice.pdf';
-            tempInvoiceStore.set(tempId, { buffer: pdfBuffer, supplierId: supplierRow.supplier_id, originalFileName, expires: Date.now() + 30 * 60 * 1000 });
-            for (const [k, v] of tempInvoiceStore) { if (v.expires < Date.now()) tempInvoiceStore.delete(k); }
-
-            const [products, mappings] = await Promise.all([
-                getTankProductsForLocation(locationCode),
-                InvoiceProductMapDao.getMappings(locationCode, supplierRow.supplier_id)
-            ]);
-
-            const linesWithCharges = result.lines.map(l => {
-                const charges = [];
-                if (l.vat_pct != null || l.vat_amount != null)
-                    charges.push({ charge_type: 'VAT', charge_pct: l.vat_pct || null, charge_amount: l.vat_amount || null });
-                if (l.additional_vat_amount != null)
-                    charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
-                if (l.delivery_charge != null)
-                    charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
-                if (l.sslf_amount != null)
-                    charges.push({ charge_type: 'SSLF_RECOVERY', charge_pct: null, charge_amount: l.sslf_amount });
-                return { ...l, charges, qty_unit: result.qty_unit || 'KL' };
-            });
-
-            return res.json({
-                success: true,
-                supplier: result.supplier,
-                supplierId: supplierRow.supplier_id,
-                supplierName: supplierRow.supplier_name,
-                tempId,
-                products,
-                mappings,
-                qty_unit: result.qty_unit || 'KL',
-                data: { header: result.header, lines: linesWithCharges }
-            });
+            const result = await parseInvoiceForLocation(req.user.location_code, pdfBuffer, req.file.originalname || 'invoice.pdf');
+            return res.status(result.status).json(result.body);
         } catch (err) {
             console.error('Error parsing invoice PDF:', err);
             return res.status(500).json({ success: false, error: 'Failed to read invoice: ' + err.message });
@@ -643,4 +578,76 @@ const getInvoiceTotals = (locationCode) => {
     });
 }
 
+// Read an oil company invoice PDF for the location and stash it until the user saves.
+// Used by the PDF upload and by the IOCL portal fetch. Returns { status, body } where body is the
+// parse-invoice JSON the invoice forms expect.
+async function parseInvoiceForLocation(locationCode, pdfBuffer, originalFileName) {
+    const location = await LocationDao.findByLocationCode(locationCode);
+    const companyName = location && location.company_name ? location.company_name : null;
+
+    if (!companyName) {
+        return { status: 400, body: { success: false, error: `No oil company configured for location ${locationCode}. Check m_location.company_name.` } };
+    }
+
+    const result = await InvoiceParserService.parseInvoice(pdfBuffer, companyName);
+
+    // Validate dealer code if configured — catches wrong-location uploads (e.g. MC invoice at MC2)
+    const dealerCode = location.oil_co_dealer_code ? String(location.oil_co_dealer_code).trim() : null;
+    if (dealerCode && !result.rawText.includes(dealerCode)) {
+        return { status: 400, body: {
+            success: false,
+            error: `Invoice does not belong to this outlet. Expected dealer code ${dealerCode} not found in the PDF.`
+        } };
+    }
+
+    // Resolve supplier_id — mandatory
+    const supplierRow = await db.sequelize.query(
+        `SELECT supplier_id, supplier_name FROM m_supplier WHERE UPPER(supplier_short_name) = UPPER(:code) AND location_code = :loc LIMIT 1`,
+        { replacements: { code: result.supplier, loc: locationCode }, type: db.Sequelize.QueryTypes.SELECT }
+    ).then(r => r[0] || null);
+
+    if (!supplierRow) {
+        return { status: 400, body: {
+            success: false,
+            error: `Supplier "${result.supplier}" not found in supplier master for this location. Please add it under Supplier Master first.`
+        } };
+    }
+
+    // Stash buffer temporarily — saved to DB only after user confirms products
+    const tempId = uuidv4();
+    tempInvoiceStore.set(tempId, { buffer: pdfBuffer, supplierId: supplierRow.supplier_id, originalFileName, expires: Date.now() + 30 * 60 * 1000 });
+    for (const [k, v] of tempInvoiceStore) { if (v.expires < Date.now()) tempInvoiceStore.delete(k); }
+
+    const [products, mappings] = await Promise.all([
+        getTankProductsForLocation(locationCode),
+        InvoiceProductMapDao.getMappings(locationCode, supplierRow.supplier_id)
+    ]);
+
+    const linesWithCharges = result.lines.map(l => {
+        const charges = [];
+        if (l.vat_pct != null || l.vat_amount != null)
+            charges.push({ charge_type: 'VAT', charge_pct: l.vat_pct || null, charge_amount: l.vat_amount || null });
+        if (l.additional_vat_amount != null)
+            charges.push({ charge_type: 'ADDITIONAL_VAT', charge_pct: null, charge_amount: l.additional_vat_amount });
+        if (l.delivery_charge != null)
+            charges.push({ charge_type: 'DELIVERY_CHARGE', charge_pct: null, charge_amount: l.delivery_charge });
+        if (l.sslf_amount != null)
+            charges.push({ charge_type: 'SSLF_RECOVERY', charge_pct: null, charge_amount: l.sslf_amount });
+        return { ...l, charges, qty_unit: result.qty_unit || 'KL' };
+    });
+
+    return { status: 200, body: {
+        success: true,
+        supplier: result.supplier,
+        supplierId: supplierRow.supplier_id,
+        supplierName: supplierRow.supplier_name,
+        tempId,
+        products,
+        mappings,
+        qty_unit: result.qty_unit || 'KL',
+        data: { header: result.header, lines: linesWithCharges }
+    } };
+}
+
 module.exports.tempInvoiceStore = tempInvoiceStore;
+module.exports.parseInvoiceForLocation = parseInvoiceForLocation;

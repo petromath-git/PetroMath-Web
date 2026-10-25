@@ -152,7 +152,7 @@ module.exports = {
                       WHERE bank_id = :bankId AND result = 'RUNNING'
                         AND started_at > NOW() - INTERVAL 10 MINUTE) AS running_count,
                     (SELECT TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) FROM t_oil_portal_login_attempt
-                      WHERE bank_id = :bankId AND purpose = 'PULL') AS secs_since_last_pull`,
+                      WHERE bank_id = :bankId AND purpose IN ('PULL', 'INVOICE')) AS secs_since_last_pull`,
                 { replacements: { bankId }, type: QueryTypes.SELECT }
             );
         // Consecutive LOGIN_FAILED since the last successful login (other errors don't count either way)
@@ -176,6 +176,24 @@ module.exports = {
             failStreak,
             failStreakToday
         };
+    },
+
+    // Accounts for the daily invoice auto-import, in a fixed order (oldest first) so a newly added
+    // location joins the end of the queue. Skips accounts that already had their automatic run today.
+    listAutoInvoiceAccounts: (portalCode) => {
+        return db.sequelize.query(
+            `SELECT c.bank_id, c.location_code
+             FROM m_oil_portal_credential c
+             JOIN m_bank b ON b.bank_id = c.bank_id
+             WHERE c.portal_code = :portalCode
+               AND b.active_flag = 'Y'
+               AND b.is_oil_company = 'Y'
+               AND NOT EXISTS (SELECT 1 FROM t_oil_portal_login_attempt a
+                                WHERE a.bank_id = c.bank_id AND a.purpose = 'INVOICE'
+                                  AND a.created_by = 'AUTO' AND a.started_at >= CURDATE())
+             ORDER BY c.bank_id`,
+            { replacements: { portalCode }, type: QueryTypes.SELECT }
+        );
     },
 
     // Server-wide: accounts whose IOCL login failed in the last hour, newest first, with how many
