@@ -39,7 +39,10 @@ const ATTACHMENT_CATEGORY = 'INVOICE_COPY';
 const MAX_ATTACHMENTS = 3;
 // Supplier SKU → product links learned from PDF invoices are kept in
 // t_invoice_product_map under this prefix (fuel invoices use plain product names)
-const SKU_MAP_PREFIX = 'SKU:';
+// Product links learned from PDFs: "SKU:<code>" (IOCL) or "NAME:<description>"
+// (suppliers whose invoices carry no SKU code)
+const PDF_MAP_KEY_RE = /^(SKU:\d{4,12}|NAME:.{3,95})$/;
+const COUNTED_UNITS = /^(NOS?|PCS|NUMBERS?|EACH)$/;
 const GSTIN_RE = /^[0-9]{2}[A-Z0-9]{13}$/;
 
 
@@ -732,7 +735,7 @@ readInvoicePdf: async (req, res) => {
             console.error('Lube invoice PDF read error:', e);
             return fail('Could not read this PDF. Enter the invoice by hand and attach the PDF after saving.');
         }
-        if (!parsed) return fail('This invoice layout is not supported yet. IndianOil (SERVO) distributor invoices can be read — enter this one by hand and attach the PDF after saving.');
+        if (!parsed) return fail('This invoice layout is not supported yet. IndianOil (SERVO) distributor and Shri Balaji Traders invoices can be read — enter this one by hand and attach the PDF after saving.');
 
         const h = parsed.header;
         const [suppliers, products] = await Promise.all([
@@ -746,10 +749,12 @@ readInvoicePdf: async (req, res) => {
 
         const lines = parsed.lines.map(l => {
             const pack = LubeInvoicePdf.skuPack(l.sku_name);
-            // Pieces only when the pack read from the name agrees with the invoice's litres/kg
-            const pieces = pack && l.qty > 0 && (!(l.qty_ltr > 0) || Math.abs(pack.count * pack.size * l.qty - l.qty_ltr) < 0.01)
-                ? pack.count * l.qty : null;
-            const learned = mappings[SKU_MAP_PREFIX + l.sku_code];
+            // Pieces: as invoiced when billed in Nos, else only when the pack read
+            // from the name agrees with the invoice's litres/kg
+            const pieces = COUNTED_UNITS.test(l.unit) ? l.qty
+                : pack && l.qty > 0 && (!(l.qty_ltr > 0) || Math.abs(pack.count * pack.size * l.qty - l.qty_ltr) < 0.01)
+                    ? pack.count * l.qty : null;
+            const learned = mappings[l.map_key];
             let productId = null, match = null;
             if (learned && productIds.has(learned.product_id)) { productId = learned.product_id; match = 'LEARNED'; }
             else {
@@ -758,6 +763,7 @@ readInvoicePdf: async (req, res) => {
             }
             return {
                 sku_code: l.sku_code,
+                map_key: l.map_key,
                 sku_name: l.sku_name,
                 invoice_qty: l.qty,
                 unit: l.unit,
@@ -817,8 +823,8 @@ readInvoicePdf: async (req, res) => {
 async function learnFromPdf(src, supplier, productById, locationCode) {
     try {
         const mappings = (Array.isArray(src.skus) ? src.skus : [])
-            .filter(s => s && /^\d{4,12}$/.test(String(s.sku_code)) && productById.has(parseInt(s.product_id)))
-            .map(s => ({ invoice_product_name: SKU_MAP_PREFIX + s.sku_code, product_id: parseInt(s.product_id) }));
+            .filter(s => s && PDF_MAP_KEY_RE.test(String(s.map_key)) && productById.has(parseInt(s.product_id)))
+            .map(s => ({ invoice_product_name: s.map_key, product_id: parseInt(s.product_id) }));
         if (mappings.length) await InvoiceProductMapDao.saveLubesMappings(locationCode, supplier.supplier_id, mappings);
 
         const gstin = String(src.supplier_gstin || '').toUpperCase().trim();
