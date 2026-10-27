@@ -181,7 +181,8 @@ module.exports = {
                 txnController.txnCreditReceiptsPromise(closingId),
                 homeController.employeeDataPromise(locationCode),
                 txnController.txnEmployeeAdvancePromise(closingId)])
-                .then((values) => {
+                .then(async (values) => {
+                    const creditProductValues = await homeController.sortProductsByCreditUsage(locationCode, values[2].value.products);
                     res.render('edit-draft-closing', {
                         user: req.user,
                         mobileReady: true,
@@ -203,6 +204,7 @@ module.exports = {
                         cashiers: values[0].value.cashiers,
                         closingData: values[1].value,
                         productValues: values[2].value.products,
+                        creditProductValues: creditProductValues,
                         pumpInstances: values[3].value,
                         pumps:values[4].value.t_pump_readings,
                         product2TValues: values[5].value,
