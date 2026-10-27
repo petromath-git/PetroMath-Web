@@ -768,7 +768,7 @@ readInvoicePdf: async (req, res) => {
                 gross_amount: l.gross,
                 discount_amount: l.discount || 0,
                 gst_pct: l.gst_pct,
-                mrp: pieces && l.mrp ? Calc.round2(l.mrp * l.qty / pieces) : 0,
+                invoice_mrp: l.mrp,   // per invoice unit (carton, can, bucket); blank on barrels
                 ok: l.ok,
                 product_id: productId,
                 match
