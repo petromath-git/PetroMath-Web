@@ -272,11 +272,17 @@ block content
                                 else if val.closing_status === 'DRAFT'
                                     a.btn.btn-sm.btn-info.mr-2(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-pencil
+                                    if val.doc_url
+                                        a.btn.btn-sm.btn-outline-danger.mr-2(href=val.doc_url target='_blank' rel='noopener' title='View invoice PDF')
+                                            span.oi.oi-document
                                     a.btn.btn-sm.btn-danger(onClick=`deleteInvoice(${val.lubes_hdr_id}, '${val.closing_status}')`)
                                         span.oi.oi-trash
                                 else
-                                    a.btn.btn-sm.btn-info(href='/lubes-invoice?id=' + val.lubes_hdr_id)
+                                    a.btn.btn-sm.btn-info.mr-1(href='/lubes-invoice?id=' + val.lubes_hdr_id)
                                         span.oi.oi-envelope-open
+                                    if val.doc_url
+                                        a.btn.btn-sm.btn-danger(href=val.doc_url target='_blank' rel='noopener' title='View invoice PDF')
+                                            span.oi.oi-document
                         if val.type === 'LUBE'
                             tr.collapse-row.m-static
                                 td.line-details.m-wide(colspan='9')

@@ -71,6 +71,19 @@ module.exports = {
     },
 
     /**
+     * ACTIVE documents (metadata only) for many entities of one type — for
+     * list pages that show an attachment link per row.
+     */
+    findByEntities: async (entityType, entityIds) => {
+        if (!entityIds.length) return [];
+        return DocumentStore.findAll({
+            attributes: ['doc_id', 'entity_id', 'file_name', 'mime_type'],
+            where: { entity_type: entityType, entity_id: entityIds, status: 'ACTIVE' },
+            order: [['creation_date', 'ASC']]
+        });
+    },
+
+    /**
      * Fetch the single ACTIVE document for an entity/category, if any.
      * Bill photos are 1-per-entity — a new upload while one is ACTIVE is a swap.
      */
