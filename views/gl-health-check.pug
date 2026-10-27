@@ -14,26 +14,40 @@ block content
             .alert.alert-warning.py-2
                 | No financial year is set up for #{user.location_code}. Add one under GL &rarr; Financial Years first.
         else
+            - var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
             form.form-inline.mb-3(method="get" action="/gl/health-check")
                 input(type="hidden" name="run" value="1")
-                label.mr-2.small.text-muted(for="fy_id") Financial year
-                select.form-control.form-control-sm.mr-2#fy_id(name="fy_id")
-                    each y in years
-                        option(value=y.fy_id selected=(y.fy_id === fy.fy_id))= y.fy_name
-                button.btn.btn-primary.btn-sm(type="submit")
+                label.mr-2.small.text-muted(for="hcPeriod") Period
+                select.form-control.form-control-sm.mr-2.mb-1#hcPeriod(name="period")
+                    option(value="fy" selected=!isMonth) Financial Year
+                    option(value="month" selected=isMonth) Month / Year
+                span#hcFyWrap(style=isMonth ? "display:none" : null)
+                    select.form-control.form-control-sm.mr-2.mb-1#fy_id(name="fy_id" aria-label="Financial year")
+                        each y in years
+                            option(value=y.fy_id selected=(y.fy_id === fy.fy_id))= y.fy_name
+                span#hcMonthWrap(style=isMonth ? null : "display:none")
+                    select.form-control.form-control-sm.mr-1.mb-1#hcMonth(name="month" aria-label="Month" style="width:75px")
+                        each m in [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+                            option(value=m selected=(m === selMonth))= monthNames[m - 1]
+                    select.form-control.form-control-sm.mr-2.mb-1#hcYear(name="year" aria-label="Year" style="width:85px")
+                        each yr in yearOptions
+                            option(value=yr selected=(yr === selYear))= yr
+                button.btn.btn-primary.btn-sm.mb-1(type="submit")
                     i.bi.bi-play-fill.mr-1
                     | Run checks
-                span.small.text-muted.ml-3= `${user.location_code} · ${fyLabel}`
+                span.small.text-muted.ml-3.mb-1= `${user.location_code} · ${fyLabel}`
 
-            if !report
+            if periodError
+                .alert.alert-warning.py-2= periodError
+            else if !report
                 .alert.alert-info.py-2
-                    | Choose the financial year and press #[strong Run checks]. Each check is one read-only query over that year's data; nothing is changed.
+                    | Choose a financial year or a month and press #[strong Run checks]. Each check is one read-only query over that period's data; nothing is changed.
             else
                 - var counts = report.counts
                 if counts.fail === 0 && counts.warn === 0 && counts.error === 0
                     .alert.alert-success.py-2
                         i.bi.bi-check-circle-fill.mr-1
-                        | All #{report.results.length} checks passed for #{user.location_code}, #{fy.fy_name}.
+                        | All #{report.results.length} checks passed for #{user.location_code}, #{periodLabel}.
                 else
                     .alert.py-2(class=counts.fail || counts.error ? "alert-danger" : "alert-warning")
                         i.bi.bi-exclamation-triangle-fill.mr-1
@@ -78,7 +92,7 @@ block content
                                             if c.drill
                                                 p.small.text-muted.mb-1
                                                     i.bi.bi-hand-index.mr-1
-                                                    | Year totals first, then each month. Click a month row to drill down to its days, then a day to its bills.
+                                                    | #{isMonth ? 'Totals first, then the month' : 'Year totals first, then each month'}. Click a month row to drill down to its days, then a day to its bills.
                                             .table-responsive(style="max-height:420px; overflow:auto")
                                                 table.table.table-sm.table-bordered.mb-0
                                                     thead.thead-light
@@ -211,6 +225,15 @@ block content
             })();
 
     script.
+        (function() {
+            var sel = document.getElementById('hcPeriod');
+            if (!sel) return;
+            sel.addEventListener('change', function() {
+                var month = sel.value === 'month';
+                document.getElementById('hcFyWrap').style.display = month ? 'none' : '';
+                document.getElementById('hcMonthWrap').style.display = month ? '' : 'none';
+            });
+        })();
         document.querySelectorAll('[data-toggle="collapse"]').forEach(function(header) {
             var target = document.querySelector(header.getAttribute('data-target'));
             var chevron = header.querySelector('.bi-chevron-down, .bi-chevron-up');
