@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pdf_source: pdfSource ? {
                 supplier_gstin: pdfSource.supplier_gstin,
                 skus: rows.filter(tr => tr._src && tr.querySelector('.pi-product').value)
-                    .map(tr => ({ sku_code: tr._src.sku_code, product_id: tr.querySelector('.pi-product').value }))
+                    .map(tr => ({ map_key: tr._src.map_key, product_id: tr.querySelector('.pi-product').value }))
             } : null,
             items: rows.filter(tr => tr.querySelector('.pi-product').value).map(tr => {
                 const p = productById.get(tr.querySelector('.pi-product').value);
@@ -726,7 +726,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 gross_amount: l.gross_amount,
                 discount_amount: l.discount_amount,
                 gst_pct: l.gst_pct,
-                notes: `SKU ${l.sku_code} · ${l.invoice_qty} ${l.unit}`
+                notes: `${l.sku_code ? `SKU ${l.sku_code}` : l.sku_name} · ${l.invoice_qty} ${l.unit}`
             });
             tr._src = l;
             applyPdfQty(tr);
