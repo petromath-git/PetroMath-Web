@@ -13,6 +13,11 @@
  *   Rate | Net Total | Disc | Taxable Value | GST % | GST Amt | Cess Amt | Net Amt
  * Every line is checked against its own arithmetic (qty x rate = net total,
  * net total - disc = taxable, GST, net amount) before it is trusted.
+ *
+ * Shri Balaji Traders (distilled water, battery acid) has used two layouts:
+ * Zoho-style (until mid-2026, CGST/SGST % on each line) and Tally (GST % only
+ * in the HSN summary). Their lines have no SKU code, so products are
+ * remembered by the item description instead.
  */
 const pdfParse = require('pdf-parse');
 const Calc = require('../public/javascripts/lube-invoice-calc');
@@ -72,6 +77,9 @@ const RIGHT_LAYOUTS = [
     ['rate', 'gross', 'discount', 'taxable', 'gst_pct', 'gst_amount', 'cess_pct', 'cess', 'amount'],
     ['rate', 'gross', 'taxable', 'gst_pct', 'gst_amount', 'cess', 'amount']
 ];
+
+// Key a line's product link is remembered under (t_invoice_product_map)
+const mapKey = l => (l.sku_code ? `SKU:${l.sku_code}` : `NAME:${l.sku_name.toUpperCase().replace(/\s+/g, ' ').trim()}`).slice(0, 100);
 
 function lineChecks(l) {
     return near(l.qty * l.rate, l.gross, 1)
@@ -200,12 +208,214 @@ function parseIoclDistributor(pages) {
     return { format: 'IOCL', header, lines, problems };
 }
 
+// ── Shri Balaji Traders ─────────────────────────────────────────────────────
+
+const ddmmyyyy = s => { const m = /(\d{2})-(\d{2})-(\d{4})/.exec(s || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+const MONTHS = { JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06', JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12' };
+const ddMonyyyy = s => {
+    const m = /(\d{1,2})-([A-Za-z]{3})-(\d{4})/.exec(s || '');
+    return m && MONTHS[m[2].toUpperCase()] ? `${m[3]}-${MONTHS[m[2].toUpperCase()]}-${m[1].padStart(2, '0')}` : null;
+};
+
+// A goods line with no discount: qty x rate = taxable, plus GST at gst_pct
+function plainLine(skuName, hsn, qty, unit, rate, taxable, gstPct) {
+    const l = {
+        sku_code: null, sku_name: skuName.replace(/\s+/g, ' ').trim(), hsn, mrp: null, qty_ltr: null,
+        qty, unit, rate, gross: taxable, discount: 0, taxable, gst_pct: gstPct,
+        gst_amount: gstPct != null ? Calc.round2(taxable * gstPct / 100) : null, cess: 0
+    };
+    l.amount = l.gst_amount != null ? Calc.round2(taxable + l.gst_amount) : null;
+    l.ok = qty > 0 && near(qty * rate, taxable, 0.05) && Calc.GST_RATES.indexOf(gstPct) >= 0;
+    return l;
+}
+
+// GST is rounded on the whole invoice here, so the lines may differ from the total by paise
+function finish(format, header, lines) {
+    const problems = [];
+    if (!header.invoice_number) problems.push('Invoice number not found.');
+    if (!header.invoice_date) problems.push('Invoice date not found.');
+    if (!lines.length) problems.push('No product lines found.');
+    lines.forEach((l, n) => { if (!l.ok) problems.push(`Line ${n + 1} (${l.sku_name}): figures don't add up — check it against the invoice.`); });
+    const sum = Calc.round2(lines.reduce((a, l) => a + (l.amount || 0), 0));
+    if (header.total != null && !near(sum, header.total, 1)) {
+        problems.push(`Lines add up to ₹${sum}, but the invoice total is ₹${header.total}.`);
+    }
+    return { format, header, lines, problems };
+}
+
+function sellerTax(all, text) {
+    const gst = /GSTIN(?:\/UIN)?\s*:?\s*([0-9]{2}[A-Z0-9]{13})/.exec(text);
+    return {
+        supplier_gstin: gst ? gst[1] : null,
+        cash_discount: 0,
+        tax_type: all.some(r => r.cells.some(c => /^IGST/i.test(c.s))) ? 'IGST' : 'CGST_SGST'
+    };
+}
+
+// Zoho-style: "# | Items & Description | Qty | Rate | CGST | SGST | Amount",
+// with the unit ("NO'S") and "HSN: ..." on the rows under each item
+function isBalajiZoho(text) {
+    return /Items & Description/.test(text) && /Invoice Number/.test(text) && /BALAJI/i.test(text);
+}
+function parseBalajiZoho(pages) {
+    const all = pages.flat();
+    const text = all.map(rowText).join('\n');
+    const field = label => {
+        const r = all.find(r => r.cells.some(c => c.s === label));
+        if (!r) return null;
+        const next = r.cells[r.cells.findIndex(c => c.s === label) + 1];
+        return next ? next.s.replace(/^:\s*/, '').trim() : null;
+    };
+    const header = {
+        invoice_number: field('Invoice Number'),
+        invoice_date: ddmmyyyy(field('Invoice Date')),
+        supplier_name: rowText(all[0]).trim(),
+        ...sellerTax(all, text),
+        total: null,
+        printed_total: null
+    };
+
+    const lines = [];
+    let descEnd = null, cur = null;
+    const close = () => {
+        if (cur) lines.push(plainLine(cur.name.join(' '), cur.hsn, cur.qty, cur.unit, cur.rate, cur.amount, cur.gst));
+        cur = null;
+    };
+    for (const r of all) {
+        if (r.cells.some(c => c.s === 'Items & Description')) {
+            const qtyHead = r.cells.find(c => c.s === 'Qty');
+            descEnd = qtyHead ? qtyHead.x - 20 : null;
+            continue;
+        }
+        if (descEnd == null) continue;
+        const first = r.cells[0];
+        const totalCell = r.cells.find(c => c.s === 'Total');
+        if (totalCell) {
+            close();
+            const fig = r.cells.find(c => c.x > totalCell.x && /\d/.test(c.s));
+            if (fig) header.total = header.printed_total = num(fig.s.replace(/[^\d.,]/g, ''));
+            break;
+        }
+        if (/^\d{1,3}$/.test(first.s) && first.x < 60) {
+            close();
+            const figs = r.cells.filter(c => c.x >= descEnd);
+            const nums = figs.filter(c => isNum(c.s)).map(c => num(c.s));
+            if (nums.length < 3) continue;
+            cur = {
+                name: r.cells.filter((c, k) => k > 0 && c.x < descEnd).map(c => c.s),
+                hsn: null,
+                unit: 'NOS',
+                qty: nums[0],
+                rate: nums[1],
+                amount: nums[nums.length - 1],
+                gst: Calc.round2(figs.filter(c => /%$/.test(c.s)).reduce((a, c) => a + num(c.s.replace('%', '')), 0))
+            };
+            continue;
+        }
+        if (r.cells.some(c => /^(CGST|SGST|IGST)\d/.test(c.s))) { close(); continue; }
+        if (!cur) continue;
+        const hsn = r.cells.find(c => /^HSN:/.test(c.s));
+        if (hsn) cur.hsn = hsn.s.replace(/^HSN:\s*/, '');
+        else if (r.cells.length === 1 && first.x >= descEnd) cur.unit = first.s.replace(/'/g, '').toUpperCase();
+        else cur.name.push(...r.cells.filter(c => c.x < descEnd).map(c => c.s));
+    }
+    close();
+    return finish('BALAJI', header, lines);
+}
+
+// Tally: "Sl | Description of Goods | HSN/SAC | Quantity | Rate | per | Amount";
+// GST % per HSN comes from the summary table under the items
+function isTallyInvoice(text) {
+    return /Description of Goods/.test(text) && /HSN\/SAC/.test(text) && /Invoice No\./.test(text);
+}
+function parseTally(pages) {
+    const all = pages.flat();
+    const text = all.map(rowText).join('\n');
+
+    // "Invoice No." / "Dated" headings with the values on the next row, same x
+    let invoiceNumber = null, invoiceDate = null;
+    const hi = all.findIndex(r => r.cells.some(c => c.s === 'Invoice No.'));
+    if (hi >= 0) {
+        const nx = all[hi].cells.find(c => c.s === 'Invoice No.').x;
+        const dated = all[hi].cells.find(c => c.s === 'Dated');
+        for (const r of all.slice(hi + 1, hi + 3)) {
+            const n = r.cells.find(c => Math.abs(c.x - nx) < 5);
+            const d = dated && r.cells.find(c => Math.abs(c.x - dated.x) < 5);
+            if (!invoiceNumber && n) invoiceNumber = n.s;
+            if (!invoiceDate && d) invoiceDate = ddMonyyyy(d.s);
+        }
+    }
+    const titleIdx = all.findIndex(r => /Tax Invoice/i.test(rowText(r)));
+    const sellerCell = all.slice(titleIdx + 1).map(r => r.cells.find(c => c.x < 100)).find(Boolean);
+    const header = {
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
+        supplier_name: sellerCell ? sellerCell.s : null,
+        ...sellerTax(all, text),
+        total: null,
+        printed_total: null
+    };
+
+    // HSN summary: "HSN | Taxable | CGST Rate | Amount | SGST Rate | Amount | Total" (or IGST)
+    const hsnRate = {};
+    const si = all.findIndex(r => r.cells[0].s === 'HSN/SAC' && r.cells.some(c => c.s === 'Taxable'));
+    if (si >= 0) {
+        for (const r of all.slice(si + 1)) {
+            if (r.cells.some(c => c.s === 'Total') || /in words/i.test(rowText(r))) break;
+            if (!/^\d{4,8}$/.test(r.cells[0].s)) continue;
+            hsnRate[r.cells[0].s] = Calc.round2(r.cells.filter(c => /%$/.test(c.s)).reduce((a, c) => a + num(c.s.replace('%', '')), 0));
+        }
+    }
+    // Fallback: one rate for the invoice from the tax rows ("Cgst 2.5%  2.50  %  88.30")
+    const taxRates = all.filter(r => r.cells.some(c => /^(cgst|sgst|igst)\b/i.test(c.s)) && r.cells.some(c => c.s === '%'))
+        .map(r => num(r.cells[r.cells.findIndex(c => c.s === '%') - 1].s));
+    const flatRate = taxRates.length === 1 || taxRates.length === 2 ? Calc.round2(taxRates.reduce((a, b) => a + b, 0)) : null;
+
+    const lines = [];
+    let descEnd = null;
+    for (let i = 0; i < all.length; i++) {
+        const r = all[i];
+        if (r.cells.some(c => c.s === 'Description of Goods')) {
+            const hsnHead = r.cells.find(c => c.s === 'HSN/SAC');
+            descEnd = hsnHead ? hsnHead.x - 8 : null;
+            continue;
+        }
+        if (descEnd == null) continue;
+        const first = r.cells[0];
+        if (r.cells.some(c => c.s === 'Total')) {
+            // Payable total on this row or just under it ("₹ 3,709.00")
+            for (const t of [r, all[i + 1]]) {
+                const fig = t && t.cells.filter(c => c.x > 400 && isNum(c.s)).pop();
+                if (fig) { header.total = header.printed_total = num(fig.s); break; }
+            }
+            break;
+        }
+        if (!(/^\d{1,3}$/.test(first.s) && first.x < 60)) continue;
+        const rest = r.cells.filter(c => c.x >= descEnd);
+        const hsn = rest[0] && /^\d{4,8}$/.test(rest[0].s) ? rest[0].s : null;
+        const qtyCell = rest.find(c => /^[\d,.]+\s+[A-Za-z']+$/.test(c.s));
+        const nums = rest.filter(c => c !== rest[0] && isNum(c.s)).map(c => num(c.s));
+        if (!qtyCell || nums.length < 2) continue;
+        const [q, u] = qtyCell.s.split(/\s+/);
+        lines.push(plainLine(
+            r.cells.filter((c, k) => k > 0 && c.x < descEnd).map(c => c.s).join(' '),
+            hsn, num(q), u.replace(/'/g, '').toUpperCase(), nums[0], nums[nums.length - 1],
+            hsn && hsnRate[hsn] != null ? hsnRate[hsn] : flatRate
+        ));
+    }
+    return finish('BALAJI', header, lines);
+}
+
 // Returns { format, header, lines, problems }, or null when the layout isn't recognised
 async function readInvoicePdf(buffer) {
     const pages = await readRows(buffer);
     const text = pages.flat().map(rowText).join('\n');
-    if (isIoclDistributorInvoice(text)) return parseIoclDistributor(pages);
-    return null;
+    let parsed = null;
+    if (isIoclDistributorInvoice(text)) parsed = parseIoclDistributor(pages);
+    else if (isBalajiZoho(text)) parsed = parseBalajiZoho(pages);
+    else if (isTallyInvoice(text)) parsed = parseTally(pages);
+    if (parsed) parsed.lines.forEach(l => { l.map_key = mapKey(l); });
+    return parsed;
 }
 
 module.exports = { readInvoicePdf, skuPack };
