@@ -10,6 +10,7 @@ const LubesInvoiceLine = db.t_lubes_inv_lines;
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const InvoiceParserService = require('../services/invoice-parser-service');
+const LubeInvoicePdf = require('../services/lube-invoice-pdf-service');
 const InvoiceProductMapDao = require('../dao/invoice-product-map-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
 const locationDao = require('../dao/location-dao');
@@ -36,6 +37,10 @@ for (const f of INVOICE_FORMATS) {
 const ATTACHMENT_ENTITY = 'LUBE_INVOICE';
 const ATTACHMENT_CATEGORY = 'INVOICE_COPY';
 const MAX_ATTACHMENTS = 3;
+// Supplier SKU → product links learned from PDF invoices are kept in
+// t_invoice_product_map under this prefix (fuel invoices use plain product names)
+const SKU_MAP_PREFIX = 'SKU:';
+const GSTIN_RE = /^[0-9]{2}[A-Z0-9]{13}$/;
 
 
 module.exports = {
@@ -276,6 +281,8 @@ module.exports = {
                 }
                 return id;
             });
+
+            if (b.pdf_source) await learnFromPdf(b.pdf_source, supplier, productById, locationCode);
 
             return res.json({
                 success: true,
@@ -699,8 +706,197 @@ removeAttachment: async (req, res) => {
         console.error('Lube invoice attachment remove error:', err);
         return res.status(500).json({ success: false, message: 'Could not remove the attachment.' });
     }
+},
+
+// POST /lubes-invoice/read-pdf  (multipart, field "file"; optional lubes_hdr_id)
+// Reads the supplier's PDF invoice and returns the screen's fields to review.
+// Nothing is saved here: the user checks the form and saves as usual, and the
+// screen then attaches the same PDF and we remember the SKU → product picks.
+readInvoicePdf: async (req, res) => {
+    const locationCode = req.user.location_code;
+    const fail = (message) => res.status(400).json({ success: false, message });
+    try {
+        if (!req.file || !req.file.buffer) return fail('No file received.');
+        const kind = detectFileKind(req.file.buffer);
+        if (!kind || kind.mime !== 'application/pdf') return fail('Choose the invoice PDF you downloaded or received from the supplier.');
+        // Same checks as attaching, since this file is attached on save
+        const maxMb = parseFloat(await getLocationConfigValue(locationCode, 'DOC_MAX_UPLOAD_MB', '5')) || 5;
+        if (req.file.size > maxMb * 1024 * 1024) return fail(`PDF must be ${maxMb} MB or smaller.`);
+        const problem = pdfSafetyProblem(req.file.buffer);
+        if (problem) return fail(problem);
+
+        let parsed;
+        try {
+            parsed = await LubeInvoicePdf.readInvoicePdf(req.file.buffer);
+        } catch (e) {
+            console.error('Lube invoice PDF read error:', e);
+            return fail('Could not read this PDF. Enter the invoice by hand and attach the PDF after saving.');
+        }
+        if (!parsed) return fail('This invoice layout is not supported yet. IndianOil (SERVO) distributor invoices can be read — enter this one by hand and attach the PDF after saving.');
+
+        const h = parsed.header;
+        const [suppliers, products] = await Promise.all([
+            lubesInvoiceDao.getSuppliers(locationCode),
+            lubesInvoiceDao.getProducts(locationCode)
+        ]);
+        const supplier = matchSupplier(suppliers, h.supplier_gstin, h.supplier_name);
+        const mappings = supplier ? await InvoiceProductMapDao.getLubesMappings(locationCode, supplier.supplier_id) : {};
+        const productData = products.map(toProductData);
+        const productIds = new Set(productData.map(p => p.product_id));
+
+        const lines = parsed.lines.map(l => {
+            const pack = LubeInvoicePdf.skuPack(l.sku_name);
+            // Pieces only when the pack read from the name agrees with the invoice's litres/kg
+            const pieces = pack && l.qty > 0 && (!(l.qty_ltr > 0) || Math.abs(pack.count * pack.size * l.qty - l.qty_ltr) < 0.01)
+                ? pack.count * l.qty : null;
+            const learned = mappings[SKU_MAP_PREFIX + l.sku_code];
+            let productId = null, match = null;
+            if (learned && productIds.has(learned.product_id)) { productId = learned.product_id; match = 'LEARNED'; }
+            else {
+                const guess = guessProduct(l.sku_name, pack, productData);
+                if (guess) { productId = guess.product_id; match = 'GUESS'; }
+            }
+            return {
+                sku_code: l.sku_code,
+                sku_name: l.sku_name,
+                invoice_qty: l.qty,
+                unit: l.unit,
+                qty_ltr: l.qty_ltr,
+                pack_measure: pack ? pack.measure : 'L',
+                pack_label: pack && pack.count > 1 ? `${pack.count} × ${Calc.round2(pack.size)} ${pack.measure === 'KG' ? 'kg' : 'L'}` : null,
+                pieces,
+                gross_amount: l.gross,
+                discount_amount: l.discount || 0,
+                gst_pct: l.gst_pct,
+                mrp: pieces && l.mrp ? Calc.round2(l.mrp * l.qty / pieces) : 0,
+                ok: l.ok,
+                product_id: productId,
+                match
+            };
+        });
+
+        // Same invoice number already entered at this location (any supplier)
+        const currentId = parseInt(req.body.lubes_hdr_id) || 0;
+        const duplicates = h.invoice_number ? (await LubesInvoiceHeader.findAll({
+            attributes: ['lubes_hdr_id', 'invoice_date', 'closing_status'],
+            where: { location_code: locationCode, invoice_number: h.invoice_number }
+        })).filter(d => d.lubes_hdr_id !== currentId).map(d => ({
+            lubes_hdr_id: d.lubes_hdr_id,
+            invoice_date: moment(d.invoice_date).format('DD-MMM-YYYY').toUpperCase(),
+            closing_status: d.closing_status
+        })) : [];
+
+        return res.json({
+            success: true,
+            format: parsed.format,
+            header: {
+                invoice_number: h.invoice_number,
+                invoice_date: h.invoice_date,
+                supplier_id: supplier ? supplier.supplier_id : null,
+                supplier_name: h.supplier_name,
+                supplier_gstin: h.supplier_gstin,
+                tax_type: h.tax_type,
+                cash_discount: h.cash_discount,
+                printed_total: h.printed_total
+            },
+            lines,
+            problems: parsed.problems,
+            duplicates
+        });
+    } catch (err) {
+        console.error('Lube invoice read-pdf error:', err);
+        return res.status(500).json({ success: false, message: 'Could not read the invoice: ' + err.message });
+    }
 }
 };
+
+// After a save that started from a PDF: remember which product each supplier
+// SKU was saved as (next PDF from this supplier fills it in), and the
+// supplier's GSTIN if the master doesn't have one yet. Best effort — the
+// invoice itself is already saved.
+async function learnFromPdf(src, supplier, productById, locationCode) {
+    try {
+        const mappings = (Array.isArray(src.skus) ? src.skus : [])
+            .filter(s => s && /^\d{4,12}$/.test(String(s.sku_code)) && productById.has(parseInt(s.product_id)))
+            .map(s => ({ invoice_product_name: SKU_MAP_PREFIX + s.sku_code, product_id: parseInt(s.product_id) }));
+        if (mappings.length) await InvoiceProductMapDao.saveLubesMappings(locationCode, supplier.supplier_id, mappings);
+
+        const gstin = String(src.supplier_gstin || '').toUpperCase().trim();
+        if (GSTIN_RE.test(gstin) && !supplier.gstin) {
+            await db.m_supplier.update({ gstin }, { where: { supplier_id: supplier.supplier_id, location_code: locationCode } });
+        }
+    } catch (e) {
+        console.error('Lube invoice: could not remember PDF product links:', e);
+    }
+}
+
+// Supplier from the PDF: GSTIN first, else the name ("SHAKTHI GANESH AUTO
+// SERVICE" on the invoice is "SAKTHI GANESH AUTO SERVICE" in the master,
+// "ARAVALLI AGENCIES" is "ARAVALLI"). Only an unambiguous match is returned.
+function matchSupplier(suppliers, gstin, name) {
+    if (gstin) {
+        const byGstin = suppliers.filter(s => s.gstin && String(s.gstin).toUpperCase().trim() === gstin);
+        if (byGstin.length === 1) return byGstin[0];
+    }
+    const norm = s => String(s || '').toUpperCase().replace(/[^A-Z]/g, '').replace(/H/g, '');
+    const n = norm(name);
+    if (n.length < 5) return null;
+    const hits = suppliers.filter(s => {
+        const m = norm(s.supplier_name);
+        return m.length >= 5 && (n.startsWith(m) || m.startsWith(n));
+    });
+    return hits.length === 1 ? hits[0] : null;
+}
+
+// First-time suggestion for a supplier SKU with no learned product: at least
+// one shared word, and the same pack size — or, for bulk packs (5 L cans,
+// buckets, barrels), a product stocked loose in litres/kg. Grades (20W40) count
+// half a word and never suggest on their own, so "SERVO SUPER 20W-40 1 L"
+// picks "SSM 1LTR" over "4T 20W40 1 LTR".
+// Only a clear winner is suggested; it's shown to the user as "check this".
+const GUESS_STOP = new Set(['SERVO', 'IOC', 'L', 'LT', 'LIT', 'LITRE', 'LTR', 'ML', 'KG', 'GM', 'G', 'HDPE', 'HDP', 'PROMO',
+    'CAR', 'CTN', 'X', 'LUBE', 'BRL', 'POU', 'OIL', 'MG', 'BUC', 'CAN']);
+const GUESS_SYNONYMS = { BREAK: 'BRAKE', FLIUID: 'FLUID', ADBLUE: 'CLEARBLUE', SSM: 'SUPER', POUCH: 'JFC', TRANS: 'TRANSFLUID' };
+function guessWords(name) {
+    const s = String(name || '').toUpperCase()
+        .replace(/\d+\s*X\s*[\d\/.]+\s*(MLS?|LTRS?|LT|L|KGS?|GMS?|G)(?![A-Z])/g, ' ')   // carton "20 X 1 L" (before grades: "140-20x1L")
+        .replace(/(\d{1,2})\s*W?\s*[-\/]\s*(\d{2})(?!\d)/g, '$1W$2')   // 20W-40, 20-40, 20/40 → 20W40
+        .replace(/CLEAR\s+BLUE/g, 'CLEARBLUE')
+        .replace(/[\d\/.]+\s*(MLS?|LTRS?|LITS?|LT|L|KGS?|GMS?|GM|G)(?![A-Z])/g, ' ');   // pack size
+    return new Set(s.split(/[^A-Z0-9]+/).filter(w => w && !GUESS_STOP.has(w)).map(w => GUESS_SYNONYMS[w] || w));
+}
+function guessProduct(skuName, pack, products) {
+    const words = guessWords(skuName);
+    let best = null, bestScore = 0, tie = false;
+    for (const p of products) {
+        const samePack = pack && p.pack_size && !p.measure && Math.abs(p.pack_size - pack.size) < 0.001;
+        const looseBulk = pack && p.measure && pack.size >= 5 && p.measure === pack.measure;
+        if (!samePack && !looseBulk) continue;
+        let shared = 0;
+        guessWords(p.product_name).forEach(w => { if (words.has(w)) shared += /^\d+W\d+$/.test(w) ? 0.5 : 1; });
+        if (shared < 1) continue;   // a grade alone is not enough
+        if (shared > bestScore) { best = p; bestScore = shared; tie = false; }
+        else if (shared === bestScore) tie = true;
+    }
+    return best && !tie ? best : null;
+}
+
+// Product as the purchase screen needs it: GST, selling price and pack size
+// (learned value first, else read from the name)
+function toProductData(p) {
+    const learned = parseFloat(p.pack_volume) || null;
+    const parsed = Calc.parsePackSize(p.product_name);
+    return {
+        product_id: p.product_id,
+        product_name: p.product_name,
+        unit: p.unit,
+        price: parseFloat(p.price) || 0,
+        gst: (parseFloat(p.cgst_percent) || 0) + (parseFloat(p.sgst_percent) || 0),
+        measure: Calc.measureUnit(p.unit),
+        pack_size: learned || (parsed ? parsed.size : null),
+        pack_measure: parsed ? parsed.measure : 'L'
+    };
+}
 
 // Recognise a file from its first bytes. Anything else is refused.
 function detectFileKind(buf) {
@@ -777,22 +973,7 @@ async function renderInvoiceForm(req, res, invoice, lines) {
         locationDao.getGoLiveDate(locationCode)
     ]);
 
-    // Plain product data for the screen: GST, selling price and pack size
-    // (learned value first, else read from the name)
-    const productData = products.map(p => {
-        const learned = parseFloat(p.pack_volume) || null;
-        const parsed = Calc.parsePackSize(p.product_name);
-        return {
-            product_id: p.product_id,
-            product_name: p.product_name,
-            unit: p.unit,
-            price: parseFloat(p.price) || 0,
-            gst: (parseFloat(p.cgst_percent) || 0) + (parseFloat(p.sgst_percent) || 0),
-            measure: Calc.measureUnit(p.unit),
-            pack_size: learned || (parsed ? parsed.size : null),
-            pack_measure: parsed ? parsed.measure : 'L'
-        };
-    });
+    const productData = products.map(toProductData);
 
     const supplierFormats = {};
     suppliers.forEach(s => { if (s.invoice_format) supplierFormats[s.supplier_id] = s.invoice_format; });
