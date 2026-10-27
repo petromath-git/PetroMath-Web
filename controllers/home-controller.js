@@ -141,7 +141,8 @@ module.exports = {
                     BowserDao.getActiveBowsersByLocation(locationCode),
                     employeeDataPromise(locationCode),
                 ])
-                    .then((values) => {
+                    .then(async (values) => {
+                        const creditProductValues = await sortProductsByCreditUsage(locationCode, values[1].value.products);
                         res.render('new-closing', {
                             user: req.user,
                             mobileReady: true,
@@ -152,6 +153,7 @@ module.exports = {
                             minDateForNewClosing: utils.restrictToPastDate(maxBackDateDays),
                             currentDate: utils.currentDate(),
                             productValues: values[1].value.products,                            
+                            creditProductValues: creditProductValues,
                             product2TValues: values[1].value.products2T,
                             testingValues: values[1].value.products,
                             productIdAliasMapping: JSON.stringify(values[1].value.productIdAliasMapping),
@@ -660,6 +662,10 @@ deleteTxnEmployeeAdvance: ((req, res, next) => {
         return pumpProductDataPromise(locationCode);
     },
 
+    sortProductsByCreditUsage: (locationCode, products) => {
+        return sortProductsByCreditUsage(locationCode, products);
+    },
+
     personDataPromise: (locationCode) => {
         return personDataPromise(locationCode);
     },
@@ -1018,6 +1024,29 @@ const productDataPromise = (locationCode) => {
     });
 }
 
+
+// Products ordered by credit-sale usage at the location (most used first); products
+// never billed on credit keep their existing order after them. Falls back to the
+// original order if the usage query fails.
+const sortProductsByCreditUsage = async (locationCode, products) => {
+    if (!products || !products.length) return products || [];
+    let usage = [];
+    try {
+        usage = await ProductDao.getCreditProductUsage(locationCode);
+    } catch (err) {
+        console.warn('Credit product usage lookup failed: ' + err.toString());
+        return products;
+    }
+    const rank = new Map(usage.map((u, i) => [Number(u.product_id), i]));
+    return products
+        .map((p, i) => ({ p, i }))
+        .sort((a, b) => {
+            const ra = rank.has(Number(a.p.productId)) ? rank.get(Number(a.p.productId)) : Infinity;
+            const rb = rank.has(Number(b.p.productId)) ? rank.get(Number(b.p.productId)) : Infinity;
+            return ra === rb ? a.i - b.i : ra - rb;
+        })
+        .map(x => x.p);
+}
 
 // Get pump-specific product data only
 const pumpProductDataPromise = (locationCode) => {

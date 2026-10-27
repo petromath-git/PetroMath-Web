@@ -168,6 +168,21 @@ module.exports = {
         return Product.findAll(baseQuery);
     },
 
+    // Credit-sale count per product at a location over the last 90 days,
+    // most used first. Drives the default product in the shift-close credit modal.
+    getCreditProductUsage: async (locationCode) => {
+        return db.sequelize.query(
+            `SELECT tc.product_id, COUNT(*) AS cnt
+               FROM t_credits tc
+               JOIN t_closing c ON c.closing_id = tc.closing_id
+              WHERE c.location_code = :locationCode
+                AND c.closing_date >= CURDATE() - INTERVAL 90 DAY
+              GROUP BY tc.product_id
+              ORDER BY cnt DESC`,
+            { replacements: { locationCode }, type: db.sequelize.QueryTypes.SELECT }
+        );
+    },
+
     findProductNames: (productIds) => {
         return Product.findAll({
             attributes: [
