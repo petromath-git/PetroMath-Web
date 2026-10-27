@@ -1711,6 +1711,16 @@ app.post('/lubes-invoice/:id/attachments', isLoginEnsured, function(req, res, ne
         lubesInvoiceController.uploadAttachment(req, res, next);
     });
 });
+// Read a supplier's PDF invoice into the purchase screen (nothing saved)
+app.post('/lubes-invoice/read-pdf', isLoginEnsured, function(req, res, next) {
+    lubeInvoiceAttachmentUpload.single('file')(req, res, function(err) {
+        if (err) {
+            const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (10 MB maximum).' : err.message;
+            return res.status(400).json({ success: false, message });
+        }
+        lubesInvoiceController.readInvoicePdf(req, res, next);
+    });
+});
 app.post('/lubes-invoice/:id/attachments/:docId/remove', isLoginEnsured, function(req, res, next) {
     lubesInvoiceController.removeAttachment(req, res, next);
 });
