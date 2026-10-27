@@ -1077,8 +1077,16 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
         });
 
     Promise.all([suppliersPromise, lubesPromise, fuelPromise, hasCngPromise])
-        .then(([suppliers, lubesInvoices, fuelInvoices, cngProduct]) => {
+        .then(async ([suppliers, lubesInvoices, fuelInvoices, cngProduct]) => {
             let invoiceValues = [];
+
+            // One attachment link per lube invoice: its PDF if it has one, else the first file
+            const docByHdr = {};
+            const docs = await DocumentStoreDao.findByEntities(ATTACHMENT_ENTITY, (lubesInvoices || []).map(i => i.lubes_hdr_id));
+            docs.forEach(d => {
+                const cur = docByHdr[d.entity_id];
+                if (!cur || (cur.mime_type !== 'application/pdf' && d.mime_type === 'application/pdf')) docByHdr[d.entity_id] = d;
+            });
 
             if (lubesInvoices && lubesInvoices.length > 0) {
                 lubesInvoices.forEach(invoice => {
@@ -1092,7 +1100,8 @@ function gatherLubesInvoices(fromDate, toDate, supplierId, invoiceType, fuelCate
                         date: dateFormat(invoice.invoice_date, 'dd-mmm-yyyy'),
                         invoice_date_raw: invoice.invoice_date,
                         amount: parseFloat(invoice.invoice_amount) || 0,
-                        total_lines: invoice.LubesInvoiceLines ? invoice.LubesInvoiceLines.length : 0
+                        total_lines: invoice.LubesInvoiceLines ? invoice.LubesInvoiceLines.length : 0,
+                        doc_url: docByHdr[invoice.lubes_hdr_id] ? `/documents/${docByHdr[invoice.lubes_hdr_id].doc_id}` : null
                     });
                 });
             }

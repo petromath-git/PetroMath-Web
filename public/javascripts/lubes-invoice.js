@@ -353,22 +353,16 @@ document.addEventListener('DOMContentLoaded', function () {
             `<li><span class="pi-mark">${s.n}</span>${s.text}</li>`).join('');
     }
 
-    // Help opens by itself on new invoices until the user hides it; only the
-    // user's own Hide/Show choice is remembered (per browser)
-    function setHelpOpen(open, remember) {
+    // Help stays closed until the user asks for it with the Help link
+    function setHelpOpen(open) {
         if (!helpPanel) return;
         helpPanel.style.display = open ? '' : 'none';
-        if (remember) {
-            try { localStorage.setItem('pi-help-hidden', open ? '0' : '1'); } catch (e) { /* storage unavailable */ }
-        }
+        if (open) helpPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     if (helpPanel) {
-        let hidden = false;
-        try { hidden = localStorage.getItem('pi-help-hidden') === '1'; } catch (e) { /* storage unavailable */ }
-        setHelpOpen(D.isNew && !hidden, false);
-        document.getElementById('pi-help-toggle').addEventListener('click', () => setHelpOpen(helpPanel.style.display === 'none', true));
-        document.getElementById('pi-help-close').addEventListener('click', () => setHelpOpen(false, true));
+        document.getElementById('pi-help-toggle').addEventListener('click', () => setHelpOpen(helpPanel.style.display === 'none'));
+        document.getElementById('pi-help-close').addEventListener('click', () => setHelpOpen(false));
         formatSel.addEventListener('change', () => { chosenFormat = formatSel.value; renderHelp(); });
     }
     supplierSelect.addEventListener('change', () => { chosenFormat = null; renderHelp(); });
