@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
                 <div class="pi-calc text-muted"></div>
             </td>
+            <td data-label="MRP"><input class="form-control form-control-sm pi-mrp" type="number" inputmode="decimal" step="0.01" min="0" value="${line.mrp ? line.mrp : ''}">
+                <div class="pi-calc pi-mrp-note"></div></td>
             <td data-label="Amount"><input class="form-control form-control-sm pi-gross" type="number" inputmode="decimal" step="0.01" min="0" value="${line.gross_amount != null ? line.gross_amount : ''}">
                 <div class="pi-free" style="display:none">Free stock (no charge)</div></td>
             <td class="pi-col-disc" data-label="Discount"><input class="form-control form-control-sm pi-disc" type="number" inputmode="decimal" step="0.01" min="0" value="${line.discount_amount ? line.discount_amount : ''}">
@@ -83,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.appendChild(tr);
 
         tr._line = line;   // stored values (closed invoices display these as-is)
-        tr._mrp = line.mrp || 0;
         tr._notes = line.notes || '';
 
         const productSel = tr.querySelector('.pi-product');
@@ -108,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
             tr.querySelector('.pi-uom').addEventListener('change', () => { updatePackPrompt(tr); recalc(); });
+            tr.querySelector('.pi-mrp').addEventListener('input', () => updateMrpNote(tr));
             tr.querySelector('.pi-remove').addEventListener('click', () => {
                 if (tbody.querySelectorAll('tr.pi-row').length > 1) { tr.remove(); renumber(); recalc(); }
             });
@@ -160,6 +162,19 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.querySelector('.pi-calc').textContent = p.measure ? `in ${opts[0][1].toLowerCase()}` : '';
         }
         updatePackPrompt(tr);
+        updateMrpNote(tr);
+    }
+
+    // Under the MRP box: the unit it is per, and the product's current selling price
+    function updateMrpNote(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const el = tr.querySelector('.pi-mrp-note');
+        if (!p) { el.textContent = ''; return; }
+        const per = p.measure === 'KG' ? 'kg' : p.measure === 'L' ? 'litre' : countUnit(p).toLowerCase();
+        const mrp = parseFloat(tr.querySelector('.pi-mrp').value);
+        const differs = mrp > 0 && p.price > 0 && Math.abs(mrp - p.price) >= 0.01;
+        el.className = `pi-calc pi-mrp-note ${differs ? 'text-danger' : 'text-muted'}`;
+        el.textContent = `per ${per}` + (p.price > 0 ? ` · selling ₹${fmt(p.price)}` : '');
     }
 
     // Litres chosen but the product name doesn't say its pack size — ask once
@@ -450,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     gross_amount: tr.querySelector('.pi-gross').value,
                     discount_amount: discountMode() === 'TOTAL' ? 0 : tr.querySelector('.pi-disc').value,
                     gst_pct: tr.querySelector('.pi-gst').value,
-                    mrp: tr._mrp,
+                    mrp: tr.querySelector('.pi-mrp').value,
                     notes: tr._notes
                 };
             })
@@ -642,11 +657,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Quantity for a PDF line in the chosen product's terms:
     //   counted in litres/kg (loose 2T, barrels) → the invoice's Qty (Ltr or Kg)
     //   counted in pieces → cartons × pieces per carton (read from the SKU name)
+    // MRP is printed per carton/can/bucket (blank on barrels), so it is spread
+    // over the same quantity: per litre/kg, or per piece.
     function pdfQty(p, src) {
-        if (p && p.measure) return { qty: src.qty_ltr, uom: p.measure === 'KG' ? 'KG' : 'LTR' };
-        if (src.pieces) return { qty: src.pieces, uom: 'PCS' };
-        if (p && src.qty_ltr > 0) return { qty: src.qty_ltr, uom: src.pack_measure === 'KG' ? 'KG' : 'LTR' };
-        return { qty: '', uom: 'PCS' };
+        const per = n => src.invoice_mrp && n > 0 ? Calc.round2(src.invoice_mrp * src.invoice_qty / n) : '';
+        if (p && p.measure) return { qty: src.qty_ltr, uom: p.measure === 'KG' ? 'KG' : 'LTR', mrp: per(src.qty_ltr) };
+        if (src.pieces) return { qty: src.pieces, uom: 'PCS', mrp: per(src.pieces) };
+        if (p && src.qty_ltr > 0) return { qty: src.qty_ltr, uom: src.pack_measure === 'KG' ? 'KG' : 'LTR', mrp: '' };
+        return { qty: '', uom: 'PCS', mrp: '' };
     }
 
     function applyPdfQty(tr) {
@@ -654,7 +672,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const q = pdfQty(p, tr._src);
         configureUom(tr, q.uom);
         tr.querySelector('.pi-qty').value = q.qty;
+        tr.querySelector('.pi-mrp').value = q.mrp;
         tr.querySelector('.pi-gst').value = String(tr._src.gst_pct);
+        updateMrpNote(tr);
         updatePackPrompt(tr);
         renderPdfSource(tr);
     }
@@ -706,7 +726,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 gross_amount: l.gross_amount,
                 discount_amount: l.discount_amount,
                 gst_pct: l.gst_pct,
-                mrp: l.mrp,
                 notes: `SKU ${l.sku_code} · ${l.invoice_qty} ${l.unit}`
             });
             tr._src = l;
