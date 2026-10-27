@@ -76,7 +76,8 @@ block content
                                             a.btn.btn-sm.btn-outline-secondary.mr-1.my-1(href='/cashflow?id=' + val.cashflowId, title='View day close')
                                                 span.oi.oi-eye
                                                 span.d-none.d-sm-inline &nbsp;View
-                                            if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC')
+                                            //- Admin only when the location has ALLOW_DAY_CLOSE_REOPEN = Y
+                                            if (user.Role === 'SuperUser' || user.Role === 'PowerUser' || user.User_Name === 'GOBI-INC' || adminCanReopen)
                                                 button.btn.btn-sm.btn-outline-warning.mr-1.my-1(onClick=`reopenCashflow(${val.cashflowId})`, title='Reopen as draft')
                                                     span.oi.oi-action-undo
                                                     span.d-none.d-sm-inline &nbsp;Reopen
