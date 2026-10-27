@@ -1,4 +1,4 @@
-// Accounting Health Check — per location, per financial year.
+// Accounting Health Check — per location, for a financial year or one month of it.
 //
 // Each check is one read-only query that returns ONLY problem rows, plus a judge
 // that turns those rows into pass / warn / fail. Codes are stable (P = pre-flight
@@ -63,13 +63,20 @@ function q(sql, replacements) {
 
 const sum = (rows, col) => rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0);
 
-// Fuel position per tank product for the year: opening seed + tank invoices − meter.
+// Fuel position per tank product for the period: opening + tank invoices − meter.
+// The opening is the FY's GL seed; for a month it is carried forward through the
+// FY's earlier months (seed + invoices − meter before :from, valued at the
+// weighted cost of seed + those invoices). For a full FY :fyFrom = :from, so
+// nothing is carried.
 // A product counts as fuel when it has a tank here; it is judged only when it was
 // bought on tank invoices or has a GL opening seed (2T loose, AdBlue etc. are not).
 const FUEL_POSITION_SQL = `
     SELECT p.product_id, p.product_name,
-           ROUND(COALESCE(sob.opening_qty,0),0)   opening_l,
-           ROUND(COALESCE(sob.opening_value,0),2) opening_value,
+           ROUND(COALESCE(sob.opening_qty,0),0)   seed_l,
+           ROUND(COALESCE(sob.opening_value,0),2) seed_value,
+           ROUND(COALESCE(pre_pu.litres,0),0)     pre_purchased_l,
+           ROUND(COALESCE(pre_pu.value,0),2)      pre_purchase_value,
+           ROUND(COALESCE(pre_sa.litres,0),0)     pre_sold_l,
            ROUND(COALESCE(pu.litres,0),0)         purchased_l,
            ROUND(COALESCE(pu.value,0),2)          purchase_value,
            ROUND(COALESCE(sa.litres,0),0)         sold_l,
@@ -86,15 +93,43 @@ const FUEL_POSITION_SQL = `
                       ON ch.invoice_dtl_id = d.id
                WHERE ti.location_id = :loc AND ti.invoice_date BETWEEN :from AND :to
                GROUP BY d.product_id) pu ON pu.product_id = p.product_id
+    LEFT JOIN (SELECT d.product_id,
+                      SUM(CASE WHEN d.qty_unit = 'KL' THEN d.quantity * 1000 ELSE d.quantity END) litres,
+                      SUM(d.total_line_amount + COALESCE(ch.amt,0)) value
+               FROM t_tank_invoice ti JOIN t_tank_invoice_dtl d ON d.invoice_id = ti.id
+               LEFT JOIN (SELECT invoice_dtl_id, SUM(charge_amount) amt FROM t_tank_invoice_charges GROUP BY invoice_dtl_id) ch
+                      ON ch.invoice_dtl_id = d.id
+               WHERE ti.location_id = :loc AND ti.invoice_date >= :fyFrom AND ti.invoice_date < :from
+               GROUP BY d.product_id) pre_pu ON pre_pu.product_id = p.product_id
     LEFT JOIN (SELECT mp.product_id, SUM(tr.closing_reading - tr.opening_reading - tr.testing) litres,
                       SUM((tr.closing_reading - tr.opening_reading - tr.testing) * tr.price) value
                FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
                JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
                WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED' AND DATE(tc.closing_date) BETWEEN :from AND :to
                GROUP BY mp.product_id) sa ON sa.product_id = p.product_id
+    LEFT JOIN (SELECT mp.product_id, SUM(tr.closing_reading - tr.opening_reading - tr.testing) litres
+               FROM t_closing tc JOIN t_reading tr ON tr.closing_id = tc.closing_id
+               JOIN m_pump mp ON mp.pump_id = tr.pump_id AND DATE(tc.closing_date) BETWEEN mp.effective_start_date AND mp.effective_end_date
+               WHERE tc.location_code = :loc AND tc.closing_status = 'CLOSED'
+                 AND DATE(tc.closing_date) >= :fyFrom AND DATE(tc.closing_date) < :from
+               GROUP BY mp.product_id) pre_sa ON pre_sa.product_id = p.product_id
     WHERE p.location_code = :loc
       AND p.product_id IN (SELECT tk.product_id FROM m_tank tk WHERE tk.location_code = :loc)
     ORDER BY p.product_name`;
+
+async function fuelPosition(r) {
+    const prods = await q(FUEL_POSITION_SQL, r);
+    return prods.map(p => {
+        const seedL = parseFloat(p.seed_l), seedV = parseFloat(p.seed_value);
+        const preInL = parseFloat(p.pre_purchased_l), preInV = parseFloat(p.pre_purchase_value);
+        const openingL = seedL + preInL - parseFloat(p.pre_sold_l);
+        const cost = seedL + preInL > 0 ? (seedV + preInV) / (seedL + preInL) : 0;
+        return Object.assign(p, {
+            opening_l: Math.round(openingL),
+            opening_value: preInL || parseFloat(p.pre_sold_l) ? Math.round(openingL * cost * 100) / 100 : seedV
+        });
+    });
+}
 
 // ── Sales and output GST: GST Summary vs GL ─────────────────────────────────
 // The GST return is filed from the GST Summary report, so its side is worked out
@@ -703,7 +738,7 @@ const CHECKS = [
             const { lines, keyLabel, keyKind } = await salesGstLines(c.loc, c.r.from, c.r.to);
             const months = rollUp(lines, l => `${l.d.slice(0, 7)}|${l.key}`);
             const rowOf = (e, mon, key) => ({
-                month: mon === 'Year' ? 'Year total' : monLabel(mon), kind: keyKind(key), ledger: keyLabel(key),
+                month: mon === 'Year' ? (c.isMonth ? 'Total' : 'Year total') : monLabel(mon), kind: keyKind(key), ledger: keyLabel(key),
                 gst_summary: r2(e.gst_summary), billed_below_price: r2(e.explained), gl: r2(e.gl), unexplained: r2(e.unexplained)
             });
             const rows = months.map(e => {
@@ -733,7 +768,7 @@ const CHECKS = [
         fix: 'Check P06 and P07 first, then the opening stock and the tank invoices for the product.',
         fixUrl: '/gl/profit-loss',
         run: async c => {
-            const prods = await q(FUEL_POSITION_SQL, c.r);
+            const prods = await fuelPosition(c.r);
             const defBand = await getBand(c.loc, 'HC_FUEL_MARGIN');
             const fuelBands = await getFuelBands(c.loc);
             let worst = 'pass', gp = 0, sales = 0;
@@ -780,7 +815,7 @@ const CHECKS = [
         fix: 'Negative stock: check P06. No opening stock: enter the year\'s opening stock for the product. Otherwise compare each fuel with the physical stock at the period end.',
         fixUrl: '/tank-invoice',
         run: async c => {
-            const prods = await q(FUEL_POSITION_SQL, c.r);
+            const prods = await fuelPosition(c.r);
             const rows = prods
                 .filter(p => Number(p.has_invoices) || Number(p.has_opening))
                 .map(p => {
@@ -819,10 +854,13 @@ async function getFinancialYears(locationCode) {
               FROM gl_financial_years WHERE location_code = :loc ORDER BY start_date DESC`, { loc: locationCode });
 }
 
-async function runChecks(locationCode, fy) {
+// period: { from, to } inside the FY (one month), or omitted for the whole FY.
+async function runChecks(locationCode, fy, period) {
+    const from = period ? period.from : fy.start_date;
+    const to = period ? period.to : fy.end_date;
     const ctx = {
-        loc: locationCode,
-        r: { loc: locationCode, from: fy.start_date, to: fy.end_date, fyId: fy.fy_id }
+        loc: locationCode, isMonth: !!period,
+        r: { loc: locationCode, from, to, fyFrom: fy.start_date, fyId: fy.fy_id }
     };
     const results = [];
     for (const check of CHECKS) {                       // sequential: keeps the load on prod MySQL low
