@@ -1483,6 +1483,7 @@ router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
 // GET /gl/health-check?fy_id=&run=1 — period checks from the GL audit runbook
 // (pre-flight on source data, post-accounting, reconciliation). Setup Check
 // above covers masters; this covers a financial year's data. Read-only.
+// &period=month&month=1-12&year=YYYY runs one month instead, inside the FY that holds it.
 
 const healthCheckService = require('../services/accounting-health-check-service');
 const moment = require('moment');
@@ -1506,14 +1507,41 @@ router.get('/health-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACC
     try {
         const years = await healthCheckService.getFinancialYears(locationCode);
         const fyId  = parseInt(req.query.fy_id, 10);
-        const fy    = years.find(y => y.fy_id === fyId) || years.find(y => y.is_current) || years[0] || null;
+        let fy      = years.find(y => y.fy_id === fyId) || years.find(y => y.is_current) || years[0] || null;
+
+        // Month mode: the month's FY replaces the FY dropdown's choice.
+        const isMonth = req.query.period === 'month';
+        const lastMonth = moment().subtract(1, 'month');
+        const selMonth = parseInt(req.query.month, 10) || (lastMonth.month() + 1);
+        const selYear  = parseInt(req.query.year, 10) || lastMonth.year();
+        let period = null, periodError = null;
+        if (isMonth) {
+            const mStart = moment.utc({ year: selYear, month: selMonth - 1, day: 1 });
+            const from = mStart.format('YYYY-MM-DD');
+            const to   = mStart.clone().endOf('month').format('YYYY-MM-DD');
+            const monthFy = years.find(y => y.start_date <= from && y.end_date >= to);
+            if (monthFy) {
+                fy = monthFy;
+                period = { from, to };
+            } else {
+                periodError = `${mStart.format('MMM-YYYY')} is not inside a financial year set up for ${locationCode}.`;
+            }
+        }
 
         let report = null;
-        if (fy && req.query.run === '1') {
-            report = await healthCheckService.runChecks(locationCode, fy);
+        if (fy && req.query.run === '1' && !periodError) {
+            report = await healthCheckService.runChecks(locationCode, fy, period);
             report.results.forEach(r => { r.rows = formatHealthRows(r.rows); });
             report.ranAt = moment().format('DD-MMM-YYYY HH:mm');
         }
+
+        const yearOptions = [];
+        years.forEach(y => {
+            for (let yr = +y.start_date.slice(0, 4); yr <= Math.min(+y.end_date.slice(0, 4), moment().year()); yr++) {
+                if (!yearOptions.includes(yr)) yearOptions.push(yr);
+            }
+        });
+        yearOptions.sort((a, b) => b - a);
 
         res.render('gl-health-check', {
             title:    'Accounting Health Check',
@@ -1521,7 +1549,10 @@ router.get('/health-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACC
             config:   require('../config/app-config').APP_CONFIGS,
             years,
             fy,
-            fyLabel:  fy ? `${moment(fy.start_date).format('DD-MMM-YYYY')} to ${moment(fy.end_date).format('DD-MMM-YYYY')}` : '',
+            fyLabel:  period ? `${moment(period.from).format('DD-MMM-YYYY')} to ${moment(period.to).format('DD-MMM-YYYY')} (${fy.fy_name})`
+                    : fy ? `${moment(fy.start_date).format('DD-MMM-YYYY')} to ${moment(fy.end_date).format('DD-MMM-YYYY')}` : '',
+            periodLabel: period ? moment(period.from).format('MMM-YYYY') : (fy ? fy.fy_name : ''),
+            isMonth, selMonth, selYear, yearOptions, periodError,
             report,
             messages: req.flash()
         });
