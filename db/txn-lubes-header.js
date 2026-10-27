@@ -52,6 +52,8 @@ module.exports = function(sequelize, DataTypes) {
         total_line_discount: { field: 'total_line_discount', type: DataTypes.DECIMAL(15,2), allowNull: true },
         printed_total:       { field: 'printed_total',       type: DataTypes.DECIMAL(15,2), allowNull: true },
         round_off:           { field: 'round_off',           type: DataTypes.DECIMAL(8,2),  allowNull: true },
+        // 'PDF' when filled from the supplier's invoice PDF (db/migrations/lube-invoice-entry-source.sql)
+        entry_source:        { field: 'entry_source',        type: DataTypes.STRING(10),    allowNull: true },
         created_by: DataTypes.STRING,
         updated_by: DataTypes.STRING,
         creation_date: DataTypes.DATE,

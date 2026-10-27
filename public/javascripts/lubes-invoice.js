@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Line read from a PDF: GST stays as invoiced, quantity follows the product
             tr._src.match = 'USER';
             applyPdfQty(tr);
-        } else {
+        } else if (!tr._locked) {
             if (p) tr.querySelector('.pi-gst').value = String(p.gst);
             configureUom(tr, null);
         }
@@ -707,6 +707,36 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Figures read from the PDF can't be changed by hand (as with fuel invoices);
+    // only the product pick and MRP stay open. A line whose figures didn't add
+    // up on the PDF, or a header value it didn't find, is left editable.
+    const lockEl = el => {
+        if (!el) return;
+        if (el.tagName === 'SELECT') el.disabled = true; else el.readOnly = true;
+        el.classList.add('pi-locked');
+    };
+    function lockLine(tr) {
+        tr._locked = true;
+        ['.pi-qty', '.pi-uom', '.pi-packsize', '.pi-gross', '.pi-disc', '.pi-gst'].forEach(s => lockEl(tr.querySelector(s)));
+        const rm = tr.querySelector('.pi-remove');
+        if (rm) rm.style.display = 'none';
+    }
+    function lockHeader(h) {
+        if (!h || h.invoice_number) lockEl(document.getElementById('invoice_number'));
+        if (!h || h.invoice_date) lockEl(invoiceDateInput);
+        if (!h || (h.supplier_id && supplierSelect.value === String(h.supplier_id))) lockEl(supplierSelect);
+        if (!h || h.printed_total != null) lockEl(printedTotalInput);
+        lockEl(cashDiscountInput);
+        lockEl(totalLineDiscInput);
+        form.querySelectorAll('input[name="tax_type"], input[name="discount_mode"]').forEach(r => {
+            r.disabled = true;   // still read as :checked by taxType()/discountMode()
+            const group = r.closest('.btn-group, .custom-control');
+            if (group) group.classList.add('pi-locked-group');
+        });
+        const addBtn = document.getElementById('add-row-btn');
+        if (addBtn) addBtn.style.display = 'none';
+    }
+
     function fillFromPdf(data, file) {
         const h = data.header;
         if (h.invoice_number) document.getElementById('invoice_number').value = h.invoice_number;
@@ -730,7 +760,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             tr._src = l;
             applyPdfQty(tr);
+            if (l.ok) lockLine(tr);
         });
+        lockHeader(h);
         recalc();
 
         pendingPdf = file;
@@ -804,6 +836,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (closed) {
         renderClosed();
     } else {
+        if (D.invoice && D.invoice.entry_source === 'PDF') {
+            lockHeader(null);
+            tbody.querySelectorAll('tr.pi-row').forEach(lockLine);
+        }
         document.getElementById('add-row-btn').addEventListener('click', () => { addRow({}); recalc(); });
         [cashDiscountInput, printedTotalInput, totalLineDiscInput].forEach(el => el && el.addEventListener('input', recalc));
         form.querySelectorAll('input[name="tax_type"], input[name="discount_mode"]').forEach(el => el.addEventListener('change', recalc));

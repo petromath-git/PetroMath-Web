@@ -219,6 +219,8 @@ module.exports = {
                     total_line_discount: totalLineDiscount,
                     printed_total: result.totals.printed_total,
                     round_off: result.totals.round_off,
+                    // Once filled from a PDF it stays a PDF invoice (later saves send no pdf_source)
+                    entry_source: b.pdf_source ? 'PDF' : (existing ? existing.entry_source : null),
                     updated_by: user.Person_id,
                     updation_date: new Date()
                 };
