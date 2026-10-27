@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <td class="pi-idx m-hide"></td>
             <td class="m-title">
                 <select class="form-control form-control-sm pi-product">${productOptions(line.product_id)}</select>
+                <div class="pi-src"></div>
                 <div class="pi-warn pi-row-warn"></div>
             </td>
             <td class="m-wide" data-label="Quantity">
@@ -70,6 +71,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
                 <div class="pi-calc text-muted"></div>
             </td>
+            <td data-label="MRP"><input class="form-control form-control-sm pi-mrp" type="number" inputmode="decimal" step="0.01" min="0" value="${line.mrp ? line.mrp : ''}">
+                <div class="pi-calc pi-mrp-note"></div></td>
             <td data-label="Amount"><input class="form-control form-control-sm pi-gross" type="number" inputmode="decimal" step="0.01" min="0" value="${line.gross_amount != null ? line.gross_amount : ''}">
                 <div class="pi-free" style="display:none">Free stock (no charge)</div></td>
             <td class="pi-col-disc" data-label="Discount"><input class="form-control form-control-sm pi-disc" type="number" inputmode="decimal" step="0.01" min="0" value="${line.discount_amount ? line.discount_amount : ''}">
@@ -82,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.appendChild(tr);
 
         tr._line = line;   // stored values (closed invoices display these as-is)
-        tr._mrp = line.mrp || 0;
         tr._notes = line.notes || '';
 
         const productSel = tr.querySelector('.pi-product');
@@ -107,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             tr.querySelectorAll('input, select').forEach(el => el.addEventListener('input', recalc));
             tr.querySelector('.pi-uom').addEventListener('change', () => { updatePackPrompt(tr); recalc(); });
+            tr.querySelector('.pi-mrp').addEventListener('input', () => updateMrpNote(tr));
             tr.querySelector('.pi-remove').addEventListener('click', () => {
                 if (tbody.querySelectorAll('tr.pi-row').length > 1) { tr.remove(); renumber(); recalc(); }
             });
@@ -121,9 +124,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function onProductChange(tr) {
         const p = productById.get(tr.querySelector('.pi-product').value);
-        if (p) tr.querySelector('.pi-gst').value = String(p.gst);
         tr._badLegacyGst = null;
-        configureUom(tr, null);
+        if (tr._src) {
+            // Line read from a PDF: GST stays as invoiced, quantity follows the product
+            tr._src.match = 'USER';
+            applyPdfQty(tr);
+        } else if (!tr._locked) {
+            if (p) tr.querySelector('.pi-gst').value = String(p.gst);
+            configureUom(tr, null);
+        }
         recalc();
     }
 
@@ -153,6 +162,19 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.querySelector('.pi-calc').textContent = p.measure ? `in ${opts[0][1].toLowerCase()}` : '';
         }
         updatePackPrompt(tr);
+        updateMrpNote(tr);
+    }
+
+    // Under the MRP box: the unit it is per, and the product's current selling price
+    function updateMrpNote(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const el = tr.querySelector('.pi-mrp-note');
+        if (!p) { el.textContent = ''; return; }
+        const per = p.measure === 'KG' ? 'kg' : p.measure === 'L' ? 'litre' : countUnit(p).toLowerCase();
+        const mrp = parseFloat(tr.querySelector('.pi-mrp').value);
+        const differs = mrp > 0 && p.price > 0 && Math.abs(mrp - p.price) >= 0.01;
+        el.className = `pi-calc pi-mrp-note ${differs ? 'text-danger' : 'text-muted'}`;
+        el.textContent = `per ${per}` + (p.price > 0 ? ` · selling ₹${fmt(p.price)}` : '');
     }
 
     // Litres chosen but the product name doesn't say its pack size — ask once
@@ -346,22 +368,16 @@ document.addEventListener('DOMContentLoaded', function () {
             `<li><span class="pi-mark">${s.n}</span>${s.text}</li>`).join('');
     }
 
-    // Help opens by itself on new invoices until the user hides it; only the
-    // user's own Hide/Show choice is remembered (per browser)
-    function setHelpOpen(open, remember) {
+    // Help stays closed until the user asks for it with the Help link
+    function setHelpOpen(open) {
         if (!helpPanel) return;
         helpPanel.style.display = open ? '' : 'none';
-        if (remember) {
-            try { localStorage.setItem('pi-help-hidden', open ? '0' : '1'); } catch (e) { /* storage unavailable */ }
-        }
+        if (open) helpPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     if (helpPanel) {
-        let hidden = false;
-        try { hidden = localStorage.getItem('pi-help-hidden') === '1'; } catch (e) { /* storage unavailable */ }
-        setHelpOpen(D.isNew && !hidden, false);
-        document.getElementById('pi-help-toggle').addEventListener('click', () => setHelpOpen(helpPanel.style.display === 'none', true));
-        document.getElementById('pi-help-close').addEventListener('click', () => setHelpOpen(false, true));
+        document.getElementById('pi-help-toggle').addEventListener('click', () => setHelpOpen(helpPanel.style.display === 'none'));
+        document.getElementById('pi-help-close').addEventListener('click', () => setHelpOpen(false));
         formatSel.addEventListener('change', () => { chosenFormat = formatSel.value; renderHelp(); });
     }
     supplierSelect.addEventListener('change', () => { chosenFormat = null; renderHelp(); });
@@ -433,6 +449,12 @@ document.addEventListener('DOMContentLoaded', function () {
             printed_total: printedTotalInput.value,
             notes: document.getElementById('notes').value,
             invoice_format: chosenFormat,
+            // Filled from a PDF: the server remembers SKU → product for next time
+            pdf_source: pdfSource ? {
+                supplier_gstin: pdfSource.supplier_gstin,
+                skus: rows.filter(tr => tr._src && tr.querySelector('.pi-product').value)
+                    .map(tr => ({ map_key: tr._src.map_key, product_id: tr.querySelector('.pi-product').value }))
+            } : null,
             items: rows.filter(tr => tr.querySelector('.pi-product').value).map(tr => {
                 const p = productById.get(tr.querySelector('.pi-product').value);
                 return {
@@ -443,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     gross_amount: tr.querySelector('.pi-gross').value,
                     discount_amount: discountMode() === 'TOTAL' ? 0 : tr.querySelector('.pi-disc').value,
                     gst_pct: tr.querySelector('.pi-gst').value,
-                    mrp: tr._mrp,
+                    mrp: tr.querySelector('.pi-mrp').value,
                     notes: tr._notes
                 };
             })
@@ -490,7 +512,10 @@ document.addEventListener('DOMContentLoaded', function () {
             setBusy(true);
             try {
                 const result = await save();
-                if (result) window.location.href = `/lubes-invoice?id=${result.lubes_hdr_id}`;
+                if (result) {
+                    await attachPendingPdf(result.lubes_hdr_id);
+                    window.location.href = `/lubes-invoice?id=${result.lubes_hdr_id}`;
+                }
             } catch (e) {
                 showErrors(['Could not save — check your connection and try again.']);
             } finally { setBusy(false); }
@@ -504,6 +529,7 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
                 const saved = await save();
                 if (!saved) return;
+                await attachPendingPdf(saved.lubes_hdr_id);
                 const res = await fetch(`/lubes-invoice/close?id=${saved.lubes_hdr_id}`, { headers: { Accept: 'application/json' } });
                 const result = await res.json().catch(() => ({ success: false }));
                 if (result.success) window.location.href = '/lubes-invoice-home';
@@ -613,6 +639,195 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // ── Fill from the supplier's PDF invoice ────────────────────────────────
+    // The server reads the PDF; this only fills the form. The user checks it
+    // and saves as usual — the same PDF is then attached, and the server
+    // remembers which product each supplier SKU was saved as.
+    const pdfInput = document.getElementById('pi-pdf-file');
+    const pdfStatus = document.getElementById('pi-pdf-status');
+    let pendingPdf = null;   // PDF to attach once the invoice is saved
+    let pdfSource = null;    // { supplier_gstin } from the PDF last read
+
+    function pdfMessage(kind, html) {
+        pdfStatus.className = `alert alert-${kind} small py-2`;
+        pdfStatus.innerHTML = html;
+        pdfStatus.style.display = html ? '' : 'none';
+    }
+
+    // Quantity for a PDF line in the chosen product's terms:
+    //   counted in litres/kg (loose 2T, barrels) → the invoice's Qty (Ltr or Kg)
+    //   counted in pieces → cartons × pieces per carton (read from the SKU name)
+    // MRP is printed per carton/can/bucket (blank on barrels), so it is spread
+    // over the same quantity: per litre/kg, or per piece.
+    function pdfQty(p, src) {
+        const per = n => src.invoice_mrp && n > 0 ? Calc.round2(src.invoice_mrp * src.invoice_qty / n) : '';
+        if (p && p.measure) return { qty: src.qty_ltr, uom: p.measure === 'KG' ? 'KG' : 'LTR', mrp: per(src.qty_ltr) };
+        if (src.pieces) return { qty: src.pieces, uom: 'PCS', mrp: per(src.pieces) };
+        if (p && src.qty_ltr > 0) return { qty: src.qty_ltr, uom: src.pack_measure === 'KG' ? 'KG' : 'LTR', mrp: '' };
+        return { qty: '', uom: 'PCS', mrp: '' };
+    }
+
+    function applyPdfQty(tr) {
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const q = pdfQty(p, tr._src);
+        configureUom(tr, q.uom);
+        tr.querySelector('.pi-qty').value = q.qty;
+        tr.querySelector('.pi-mrp').value = q.mrp;
+        tr.querySelector('.pi-gst').value = String(tr._src.gst_pct);
+        updateMrpNote(tr);
+        updatePackPrompt(tr);
+        renderPdfSource(tr);
+    }
+
+    // What the invoice says for this line, and how sure the product match is
+    function renderPdfSource(tr) {
+        const src = tr._src;
+        const el = tr.querySelector('.pi-src');
+        if (!src) { el.innerHTML = ''; return; }
+        const p = productById.get(tr.querySelector('.pi-product').value);
+        const badge = !p ? '<span class="badge badge-danger">Pick the product</span>'
+            : src.match === 'LEARNED' ? '<span class="badge badge-success">Matched</span>'
+            : src.match === 'GUESS' ? '<span class="badge badge-warning">Suggested — check</span>' : '';
+        const notes = [];
+        if (!src.ok) notes.push("This line's figures don't add up on the PDF — check it against the paper invoice.");
+        if (p && !p.measure && src.pieces && p.pack_size && src.qty_ltr > 0
+            && Math.abs(src.qty_ltr / p.pack_size - src.pieces) > 0.01) {
+            notes.push(`Invoice is ${src.pieces} pieces of ${src.qty_ltr / src.pieces} ${src.pack_measure === 'KG' ? 'kg' : 'L'}, but this product is ${p.pack_size} per piece — is it the right product?`);
+        }
+        el.innerHTML = `${badge} Invoice: ${esc(src.sku_name)} · ${src.invoice_qty} ${esc(src.unit)}` +
+            (src.pack_label ? ` of ${esc(src.pack_label)}` : '') +
+            notes.map(n => `<div class="text-danger"><i class="bi bi-exclamation-triangle mr-1"></i>${esc(n)}</div>`).join('');
+    }
+
+    function setRadio(name, value) {
+        form.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+            r.checked = r.value === value;
+            const label = r.closest('label.btn');
+            if (label) label.classList.toggle('active', r.checked);
+        });
+    }
+
+    // Figures read from the PDF can't be changed by hand (as with fuel invoices);
+    // only the product pick and MRP stay open. A line whose figures didn't add
+    // up on the PDF, or a header value it didn't find, is left editable.
+    const lockEl = el => {
+        if (!el) return;
+        if (el.tagName === 'SELECT') el.disabled = true; else el.readOnly = true;
+        el.classList.add('pi-locked');
+    };
+    function lockLine(tr) {
+        tr._locked = true;
+        ['.pi-qty', '.pi-uom', '.pi-packsize', '.pi-gross', '.pi-disc', '.pi-gst'].forEach(s => lockEl(tr.querySelector(s)));
+        const rm = tr.querySelector('.pi-remove');
+        if (rm) rm.style.display = 'none';
+    }
+    function lockHeader(h) {
+        if (!h || h.invoice_number) lockEl(document.getElementById('invoice_number'));
+        if (!h || h.invoice_date) lockEl(invoiceDateInput);
+        if (!h || (h.supplier_id && supplierSelect.value === String(h.supplier_id))) lockEl(supplierSelect);
+        if (!h || h.printed_total != null) lockEl(printedTotalInput);
+        lockEl(cashDiscountInput);
+        lockEl(totalLineDiscInput);
+        form.querySelectorAll('input[name="tax_type"], input[name="discount_mode"]').forEach(r => {
+            r.disabled = true;   // still read as :checked by taxType()/discountMode()
+            const group = r.closest('.btn-group, .custom-control');
+            if (group) group.classList.add('pi-locked-group');
+        });
+        const addBtn = document.getElementById('add-row-btn');
+        if (addBtn) addBtn.style.display = 'none';
+    }
+
+    function fillFromPdf(data, file) {
+        const h = data.header;
+        if (h.invoice_number) document.getElementById('invoice_number').value = h.invoice_number;
+        if (h.invoice_date) { invoiceDateInput.value = h.invoice_date; filterSuppliersByDate(h.invoice_date); }
+        if (h.supplier_id) supplierSelect.value = String(h.supplier_id);
+        chosenFormat = data.format;
+        renderHelp();
+        setRadio('tax_type', h.tax_type);
+        setRadio('discount_mode', 'LINE');
+        cashDiscountInput.value = h.cash_discount ? h.cash_discount : '';
+        printedTotalInput.value = h.printed_total != null ? h.printed_total : '';
+
+        tbody.querySelectorAll('tr.pi-row').forEach(tr => tr.remove());
+        data.lines.forEach(l => {
+            const tr = addRow({
+                product_id: l.product_id,
+                gross_amount: l.gross_amount,
+                discount_amount: l.discount_amount,
+                gst_pct: l.gst_pct,
+                notes: `${l.sku_code ? `SKU ${l.sku_code}` : l.sku_name} · ${l.invoice_qty} ${l.unit}`
+            });
+            tr._src = l;
+            applyPdfQty(tr);
+            if (l.ok) lockLine(tr);
+        });
+        lockHeader(h);
+        recalc();
+
+        pendingPdf = file;
+        pdfSource = { supplier_gstin: h.supplier_gstin };
+        const note = document.getElementById('pi-att-new-note');
+        if (note) note.textContent = 'The invoice PDF will be attached when you save.';
+
+        const matched = data.lines.filter(l => l.match === 'LEARNED').length;
+        const guessed = data.lines.filter(l => l.match === 'GUESS').length;
+        const missing = data.lines.length - matched - guessed;
+        const parts = [`<b>Filled from the PDF: ${data.lines.length} product${data.lines.length === 1 ? '' : 's'}.</b>`];
+        if (guessed) parts.push(`${guessed} suggested — check the product.`);
+        if (missing) parts.push(`${missing} need${missing === 1 ? 's' : ''} a product picked (remembered after you save).`);
+        const extra = [];
+        if (!h.supplier_id || supplierSelect.value !== String(h.supplier_id)) {
+            extra.push(`Supplier on the PDF: <b>${esc(h.supplier_name || 'not found')}</b>${h.supplier_gstin ? ` (GSTIN ${esc(h.supplier_gstin)})` : ''} — select it above.`);
+        }
+        (data.duplicates || []).forEach(d => {
+            extra.push(`Invoice ${esc(h.invoice_number)} is already entered (${esc(d.invoice_date)}, ${esc(d.closing_status)}) — <a href="/lubes-invoice?id=${d.lubes_hdr_id}" target="_blank" rel="noopener">open it</a> before saving this again.`);
+        });
+        (data.problems || []).forEach(pr => extra.push(esc(pr)));
+        parts.push('Check every line against the invoice, then save — the PDF is attached automatically.');
+        const warn = extra.length || guessed || missing;
+        pdfMessage(warn ? 'warning' : 'success', parts.join(' ') + (extra.length ? '<ul class="mb-0 mt-1 pl-3">' + extra.map(e => `<li>${e}</li>`).join('') + '</ul>' : ''));
+    }
+
+    async function readPdf(file) {
+        const hasLines = [...tbody.querySelectorAll('tr.pi-row')].some(tr => tr.querySelector('.pi-product').value);
+        if (hasLines && !confirm('Replace the products on this invoice with the ones from the PDF?')) return;
+        pdfMessage('info', 'Reading the invoice…');
+        try {
+            const fd = new FormData();
+            const hdrIdEl = document.getElementById('lubes_hdr_id');
+            if (hdrIdEl) fd.append('lubes_hdr_id', hdrIdEl.value);
+            fd.append('file', file, file.name || 'invoice.pdf');
+            const res = await fetch('/lubes-invoice/read-pdf', { method: 'POST', body: fd });
+            const data = await res.json().catch(() => ({ success: false, message: 'Unexpected server response.' }));
+            if (!data.success) { pdfMessage('danger', esc(data.message || 'Could not read the invoice.')); return; }
+            fillFromPdf(data, file);
+        } catch (e) {
+            pdfMessage('danger', 'Could not read the invoice — check your connection and try again.');
+        }
+    }
+
+    // After save: attach the PDF the form was filled from
+    async function attachPendingPdf(hdrId) {
+        if (!pendingPdf || attachments.length >= D.maxAttachments) return;
+        try {
+            const fd = new FormData();
+            fd.append('capture_source', 'UPLOAD');
+            fd.append('file', pendingPdf, pendingPdf.name || 'invoice.pdf');
+            const res = await fetch(`/lubes-invoice/${hdrId}/attachments`, { method: 'POST', body: fd });
+            const result = await res.json().catch(() => ({ success: false, message: 'Upload failed.' }));
+            if (!result.success) throw new Error(result.message || 'Upload failed.');
+            pendingPdf = null;
+        } catch (e) {
+            alert(`Invoice saved, but the PDF could not be attached (${e.message}). Attach it from the invoice page.`);
+        }
+    }
+
+    if (pdfInput) {
+        document.getElementById('pi-pdf-btn').addEventListener('click', () => pdfInput.click());
+        pdfInput.addEventListener('change', () => { if (pdfInput.files[0]) readPdf(pdfInput.files[0]); pdfInput.value = ''; });
+    }
+
     // ── Init ────────────────────────────────────────────────────────────────
     (D.lines && D.lines.length ? D.lines : [{}]).forEach(addRow);
     renderHelp();
@@ -621,6 +836,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (closed) {
         renderClosed();
     } else {
+        if (D.invoice && D.invoice.entry_source === 'PDF') {
+            lockHeader(null);
+            tbody.querySelectorAll('tr.pi-row').forEach(lockLine);
+        }
         document.getElementById('add-row-btn').addEventListener('click', () => { addRow({}); recalc(); });
         [cashDiscountInput, printedTotalInput, totalLineDiscInput].forEach(el => el && el.addEventListener('input', recalc));
         form.querySelectorAll('input[name="tax_type"], input[name="discount_mode"]').forEach(el => el.addEventListener('change', recalc));
