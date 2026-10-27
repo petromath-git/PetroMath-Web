@@ -362,8 +362,10 @@ mixin addCredits(creditRowNo, rowData)
     - var trClass = 'd-md-none';
     - var price = 0;
     - var creditType = undefined, creditName = undefined;
-    if(productValues && productValues[0])
-        - price = productValues[0].productPrice;
+    //- Credit rows list products by credit-sale usage (most used first = default)
+    - var creditProducts = (typeof creditProductValues !== 'undefined' && creditProductValues) ? creditProductValues : productValues;
+    if(creditProducts && creditProducts[0])
+        - price = creditProducts[0].productPrice;
     if(creditCompanyValues && creditCompanyValues[0])
         - creditName = creditCompanyValues[0].creditorName;
     if(!rowData)
@@ -401,8 +403,8 @@ mixin addCredits(creditRowNo, rowData)
             input.form-control.credit-bill-date(type='date' name=prefix + 'bill-date-' + creditRowNo id=prefix + 'bill-date-' + creditRowNo value=defaultCreditDate data-closing-date=(typeof closingData !== 'undefined' ? closingData.closingDate : currentDate))
         td
             select.form-control(name=prefix + 'product-'+creditRowNo id=prefix + 'product-'+creditRowNo  onChange='creditOrSaleUpdateProductTypePrices(this, ' + creditRowNo + ', \'' + prefix +'\')')
-                if productValues
-                    each val in productValues
+                if creditProducts
+                    each val in creditProducts
                         option(value=`${val.productId}` data-unit=val.unit selected= rowData.productId === val.productId)= val.productAlias
         td
             input.form-control(name=prefix + 'billno-' + creditRowNo id=prefix + 'billno-' + creditRowNo value=rowData.billNo type='number' inputmode='numeric' min=1 oninput='validity.valid||(value="1")')
