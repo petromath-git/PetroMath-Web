@@ -404,12 +404,14 @@ reopenCashflow: async (req, res, next) => {
     const userId = req.user.Person_id;
 
     try {
-        // Check if user has permission (SuperUser, GOBI-INC, or PowerUser for their own locations)
+        // Check if user has permission (SuperUser, GOBI-INC, PowerUser for their own locations,
+        // or Admin for their own location when ALLOW_DAY_CLOSE_REOPEN = Y)
         const isSuperUser = req.user.Role === 'SuperUser';
         const isGobiInc = username === 'GOBI-INC';
         const isPowerUser = req.user.Role === 'PowerUser';
+        const isAllowedAdmin = req.user.Role === 'Admin' && await isAdminDayCloseReopenAllowed(req.user.location_code);
 
-        if (!isSuperUser && !isGobiInc && !isPowerUser) {
+        if (!isSuperUser && !isGobiInc && !isPowerUser && !isAllowedAdmin) {
             return res.status(403).json({
                 error: 'You do not have access to reopen cashflows.'
             });
@@ -527,7 +529,8 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
     if(toDate === undefined) toDate = dateFormat(new Date(), "yyyy-mm-dd");
     Promise.allSettled([cashflowDao.findCashflowClosings(user.location_code, fromDate, toDate),
     cashflowDao.findClosedCashflowTotals(user.location_code, fromDate, toDate),
-    cashflowDao.findLatestCashflowClosing(user.location_code)]).then(values => {
+    cashflowDao.findLatestCashflowClosing(user.location_code),
+    user.Role === 'Admin' ? isAdminDayCloseReopenAllowed(user.location_code) : Promise.resolve(false)]).then(values => {
         let cashflowValues = [];
         const totalsById = new Map((values[1].value || []).map(t => [t.cashflow_id, t]));
         if(values[0].value) {
@@ -552,9 +555,16 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
             fromDate: fromDate, toDate: toDate,
             cashflowValues: cashflowValues,
             nextDayClose: getNextDayClose(values[2].value),
+            adminCanReopen: values[3].value === true,
             generateDate : utils.currentDate(), currentDate: utils.currentDate(),
             messages: messagesOptional});
     });
+}
+
+// Admins may reopen Day Close for their own location only when the location enables it
+async function isAdminDayCloseReopenAllowed(locationCode) {
+    const value = await locationConfig.getLocationConfigValue(locationCode, 'ALLOW_DAY_CLOSE_REOPEN', 'N');
+    return String(value).toUpperCase() === 'Y';
 }
 
 // What the user should do next: continue the open DRAFT, or generate the day
