@@ -6,6 +6,10 @@
 // Import: sends the same file again with the chosen matches; the server re-checks
 // everything, saves the lines into this draft closing, and the page reloads on the
 // Credit Sales tab.
+//
+// When the file has a cashier column, each cashier name is matched to a staff member
+// once (changing a match re-checks the file) and only this shift's bills are taken.
+// Parties matched to a digital vendor (PAYTM etc.) are saved as digital sales.
 
 var creditBillImportState = { preview: null };
 
@@ -73,7 +77,7 @@ function checkCreditBillFile() {
     document.getElementById('cbi-import-btn').disabled = true;
     result.innerHTML = '<div class="text-muted mt-3">Checking...</div>';
 
-    cbiPost('/credit-bill-import/preview', cbiFormData())
+    cbiPost('/credit-bill-import/preview', cbiFormData({ cashier_choices: cbiCollectChoices().cashiers }))
         .then(function (data) {
             btn.disabled = false;
             if (data.error) {
@@ -109,21 +113,28 @@ function cbiSelect(kind, row, options, allowNew) {
     if (allowNew) {
         html += '<option value="NEW">+ Create new customer "' + cbiEscape(row.source) + '"</option>';
     }
-    var suggested = {};
+    var suggested = {}, digitalById = {};
+    options.forEach(function (o) { if (o.digital) digitalById[o.id] = true; });
     if (row.suggestions && row.suggestions.length) {
         html += '<optgroup label="Closest matches">';
         row.suggestions.forEach(function (s) {
             suggested[s.id] = true;
             html += '<option value="' + s.id + '"' + (row.id === s.id ? ' selected' : '') + '>'
-                + cbiEscape(s.name) + ' (' + Math.round(s.score * 100) + '%)</option>';
+                + cbiEscape(s.name) + ' (' + Math.round(s.score * 100) + '%)'
+                + (digitalById[s.id] ? ' - digital sales' : '') + '</option>';
         });
         html += '</optgroup>';
     }
     html += '<optgroup label="All">';
     options.forEach(function (o) {
-        if (!suggested[o.id]) html += '<option value="' + o.id + '">' + cbiEscape(o.name) + '</option>';
+        if (!suggested[o.id]) html += '<option value="' + o.id + '">' + cbiEscape(o.name) + (o.digital ? ' (digital sales)' : '') + '</option>';
     });
     return html + '</optgroup></select>';
+}
+
+function cbiKnownNote(kind, r) {
+    if (kind === 'cashier') return r.thisShift ? ' (this shift)' : ' - other shift, ' + r.bills + ' bills ignored';
+    return r.digital ? ' (digital sales)' : '';
 }
 
 function cbiMappingSection(title, kind, rows, options, allowNew) {
@@ -133,17 +144,19 @@ function cbiMappingSection(title, kind, rows, options, allowNew) {
     if (toChoose.length) {
         html += '<p class="small text-muted mb-1">Choose once - the choice is remembered for future files.</p>'
             + '<table class="table table-sm table-bordered cbi-map mb-1"><thead class="thead-light"><tr><th>Name in file</th>'
-            + (kind === 'party' ? '<th class="text-center">Bills</th>' : '') + '<th>PetroMath</th></tr></thead><tbody>';
+            + (kind !== 'product' ? '<th class="text-center">Bills</th>' : '') + '<th>PetroMath</th></tr></thead><tbody>';
         toChoose.forEach(function (r) {
             html += '<tr><td>' + cbiEscape(r.source) + '</td>'
-                + (kind === 'party' ? '<td class="text-center">' + r.bills + '</td>' : '')
+                + (kind !== 'product' ? '<td class="text-center">' + r.bills + '</td>' : '')
                 + '<td>' + cbiSelect(kind, r, options, allowNew) + '</td></tr>';
         });
         html += '</tbody></table>';
     }
     if (known.length) {
         html += '<details class="small"><summary>' + known.length + ' already matched</summary><ul class="cbi-list">'
-            + known.map(function (r) { return '<li>' + cbiEscape(r.source) + ' &rarr; ' + cbiEscape(r.name) + '</li>'; }).join('')
+            + known.map(function (r) {
+                return '<li>' + cbiEscape(r.source) + ' &rarr; ' + cbiEscape(r.name) + cbiEscape(cbiKnownNote(kind, r)) + '</li>';
+            }).join('')
             + '</ul></details>';
     }
     return html + '</div>';
@@ -155,33 +168,46 @@ function cbiRenderPreview(data) {
         + '<strong>' + data.lineCount + '</strong> lines, total <strong>'
         + data.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         + '</strong> for this closing.'
-        + (data.skippedOtherTypes ? ' ' + data.skippedOtherTypes + ' non-credit bills ignored.' : '') + '</div>';
+        + (data.digitalCount ? ' <strong>' + data.digitalCount + '</strong> digital sales, total <strong>'
+            + data.digitalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</strong>.' : '')
+        + (data.skippedOtherTypes ? ' ' + data.skippedOtherTypes + ' non-credit bills ignored.' : '')
+        + (data.otherCashierBills ? ' ' + data.otherCashierBills + ' bills of other cashiers ignored.' : '') + '</div>';
+
+    var unresolvedCashiers = data.cashiers.filter(function (c) { return !c.id; }).length;
 
     if (blocking.length) {
         html += cbiListSection('The file will be rejected - fix these and check again', 'alert-danger', blocking);
     }
     html += cbiListSection(data.duplicates.length + ' bills already in PetroMath - will be skipped', 'alert-warning',
         data.duplicates.map(function (d) { return d.billNo + ' (closing ' + d.closingDate + ')'; }));
+    if (data.cashiers.length) {
+        html += cbiMappingSection('Cashier - this shift is ' + (data.cashierName || 'not set'), 'cashier', data.cashiers, data.staffOptions, false);
+    }
     html += cbiMappingSection('Customers', 'party', data.parties, data.partyOptions, true);
     html += cbiMappingSection('Products', 'product', data.products, data.productOptions, false);
 
     document.getElementById('cbi-result').innerHTML = html;
-    document.getElementById('cbi-import-btn').disabled = blocking.length > 0;
+    document.getElementById('cbi-import-btn').disabled = blocking.length > 0 || unresolvedCashiers > 0;
+
+    // The cashier decides which bills are this shift's, so re-check with the new choice
+    document.querySelectorAll('#cbi-result select.cbi-choice[data-kind="cashier"]').forEach(function (sel) {
+        sel.addEventListener('change', function () { if (sel.value) checkCreditBillFile(); });
+    });
 }
 
 function cbiCollectChoices() {
-    var parties = {}, products = {}, missing = 0;
+    var choices = { party: {}, product: {}, cashier: {} }, missing = 0;
     document.querySelectorAll('#cbi-result select.cbi-choice').forEach(function (sel) {
         if (!sel.value) missing++;
-        (sel.getAttribute('data-kind') === 'party' ? parties : products)[sel.getAttribute('data-source')] = sel.value;
+        choices[sel.getAttribute('data-kind')][sel.getAttribute('data-source')] = sel.value;
     });
-    return { parties: parties, products: products, missing: missing };
+    return { parties: choices.party, products: choices.product, cashiers: choices.cashier, missing: missing };
 }
 
 function importCreditBillFile() {
     var choices = cbiCollectChoices();
     if (choices.missing) {
-        alert('Choose a customer or product for every name in the list (' + choices.missing + ' left).');
+        alert('Choose a match for every name in the list (' + choices.missing + ' left).');
         return;
     }
     var newCount = Object.keys(choices.parties).filter(function (k) { return choices.parties[k] === 'NEW'; }).length;
@@ -192,7 +218,7 @@ function importCreditBillFile() {
     var btn = document.getElementById('cbi-import-btn');
     btn.disabled = true;
     btn.textContent = 'Importing...';
-    cbiPost('/credit-bill-import/import', cbiFormData({ party_choices: choices.parties, product_choices: choices.products }))
+    cbiPost('/credit-bill-import/import', cbiFormData({ party_choices: choices.parties, product_choices: choices.products, cashier_choices: choices.cashiers }))
         .then(function (data) {
             btn.textContent = 'Import';
             if (data.error) {
@@ -201,6 +227,8 @@ function importCreditBillFile() {
                 return;
             }
             var msg = data.imported + ' bills (' + data.lines + ' lines) imported.';
+            if (data.digital) msg += '\n' + data.digital + ' digital sales added to the Digital Sales tab.';
+            if (data.otherCashierBills) msg += '\n' + data.otherCashierBills + ' bills of other cashiers ignored.';
             if (data.skipped.length) msg += '\n' + data.skipped.length + ' already in PetroMath, skipped.';
             if (data.createdParties.length) msg += '\nNew customers: ' + data.createdParties.length + '.';
             if (data.createdVehicles.length) msg += '\nNew vehicles: ' + data.createdVehicles.length + '.';

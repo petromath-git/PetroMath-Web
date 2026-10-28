@@ -25,7 +25,8 @@ function requestArgs(req) {
         closingId: parseInt(req.body.closing_id, 10),
         buffer: req.file.buffer,
         productIds: parseJson(req.body.product_ids, []),
-        rates: parseJson(req.body.rates, {})
+        rates: parseJson(req.body.rates, {}),
+        cashierChoices: parseJson(req.body.cashier_choices, {})
     };
 }
 
