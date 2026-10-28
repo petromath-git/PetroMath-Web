@@ -9,6 +9,7 @@ const pug = require('pug');
 const dateFormat = require('dateformat');
 const RentalDao = require('../dao/rental-dao');
 const gstUtils = require('../utils/gst-utils');
+const security = require('../utils/app-security');
 const { amountInWords } = require('../utils/amount-in-words');
 
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST',
@@ -152,73 +153,87 @@ function invoiceForPrint(invoice, settings) {
 
 const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-module.exports = {
-    // GET /rental?tab=invoices|tenants|statement|settings&month=YYYY-MM&tenant=&from=&to=
-    getPage: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const settings = await RentalDao.getSettings(locationCode);
-            if (!settings) {
-                return res.render('rental/home', { title: 'Rental Invoices', user: req.user, notSetUp: true });
-            }
+// Two pages share one view: Rental Invoices (Transactions menu) and Rental Master
+// (Masters menu, tenants + settings).
+const PAGES = {
+    invoices: { title: 'Rental Invoices', basePath: '/rental', tabs: [['invoices', 'Invoices'], ['statement', 'Statement']] },
+    master:   { title: 'Rental Master', basePath: '/rental/master', tabs: [['tenants', 'Tenants'], ['settings', 'Settings']] },
+};
 
-            const tab = ['invoices', 'tenants', 'statement', 'settings'].includes(req.query.tab) ? req.query.tab : 'invoices';
-            const month = monthStart(req.query.month) ? req.query.month : currentMonth();
-            const periodMonth = monthStart(month);
-
-            const [tenants, banks, invoices, due] = await Promise.all([
-                RentalDao.getTenants(locationCode),
-                RentalDao.getBanks(locationCode),
-                RentalDao.getInvoicesForMonth(locationCode, periodMonth),
-                RentalDao.getTenantsDueForMonth(locationCode, periodMonth),
-            ]);
-
-            // Statement: one tenant, financial year to date by default
-            let statement = null;
-            const stTenantId = Number(req.query.tenant) || (tenants[0] && tenants[0].tenant_id);
-            if (tab === 'statement' && stTenantId) {
-                const fy = gstUtils.getFinancialYear(new Date());
-                const fromDate = isIsoDate(req.query.from) ? req.query.from : `${fy.split('-')[0]}-04-01`;
-                const toDate = isIsoDate(req.query.to) ? req.query.to : dateFormat(new Date(), 'yyyy-mm-dd');
-                const [opening, rows] = await Promise.all([
-                    RentalDao.getOpeningBalance(locationCode, stTenantId, fromDate),
-                    RentalDao.getStatement(locationCode, stTenantId, fromDate, toDate),
-                ]);
-                let balance = opening;
-                const lines = rows.map(r => {
-                    balance = round2(balance + Number(r.debit) - Number(r.credit));
-                    return { ...r, txn_date_display: dateFormat(r.txn_date, 'dd-mmm-yyyy'), balance };
-                });
-                statement = {
-                    tenantId: stTenantId, fromDate, toDate, opening, lines, closing: balance,
-                    totalDebit: round2(rows.reduce((s, r) => s + Number(r.debit), 0)),
-                    totalCredit: round2(rows.reduce((s, r) => s + Number(r.credit), 0)),
-                    totalTds: round2(rows.reduce((s, r) => s + Number(r.tds), 0)),
-                };
-            }
-
-            const live = invoices.filter(i => i.status !== 'CANCELLED');
-            res.render('rental/home', {
-                title: 'Rental Invoices',
-                user: req.user,
-                mobileReady: true,
-                tab, month, settings, tenants, banks, invoices, due, statement,
-                monthLabel: `${MONTHS[Number(month.split('-')[1]) - 1]} ${month.split('-')[0]}`,
-                totals: {
-                    taxable: round2(live.reduce((s, i) => s + Number(i.taxable_value), 0)),
-                    gst: round2(live.reduce((s, i) => s + Number(i.cgst_amount) + Number(i.sgst_amount), 0)),
-                    total: round2(live.reduce((s, i) => s + Number(i.total_amount), 0)),
-                },
-                draftCount: invoices.filter(i => i.status === 'DRAFT').length,
-                fmtAmt,
-                fmtDate: (d) => d ? dateFormat(d, 'dd-mmm-yyyy') : '',
-                isoDate: (d) => d ? dateFormat(d, 'yyyy-mm-dd') : '',
-                gstinOk: settings.gstin ? gstUtils.isGstinCheckDigitValid(settings.gstin) : false,
-            });
-        } catch (e) {
-            next(e);
+// GET /rental?tab=invoices|statement&month=YYYY-MM&tenant=&from=&to=  and  GET /rental/master?tab=tenants|settings
+async function renderPage(req, res, next, pageKey) {
+    const page = PAGES[pageKey];
+    try {
+        const locationCode = req.user.location_code;
+        const settings = await RentalDao.getSettings(locationCode);
+        if (!settings) {
+            return res.render('rental/home', { title: page.title, page, user: req.user, notSetUp: true });
         }
-    },
+
+        const tab = page.tabs.some(t => t[0] === req.query.tab) ? req.query.tab : page.tabs[0][0];
+        const month = monthStart(req.query.month) ? req.query.month : currentMonth();
+        const periodMonth = monthStart(month);
+
+        const [tenants, banks, invoices, due] = await Promise.all([
+            RentalDao.getTenants(locationCode),
+            RentalDao.getBanks(locationCode),
+            RentalDao.getInvoicesForMonth(locationCode, periodMonth),
+            RentalDao.getTenantsDueForMonth(locationCode, periodMonth),
+        ]);
+
+        // Statement: one tenant, financial year to date by default
+        let statement = null;
+        const stTenantId = Number(req.query.tenant) || (tenants[0] && tenants[0].tenant_id);
+        if (tab === 'statement' && stTenantId) {
+            const fy = gstUtils.getFinancialYear(new Date());
+            const fromDate = isIsoDate(req.query.from) ? req.query.from : `${fy.split('-')[0]}-04-01`;
+            const toDate = isIsoDate(req.query.to) ? req.query.to : dateFormat(new Date(), 'yyyy-mm-dd');
+            const [opening, rows] = await Promise.all([
+                RentalDao.getOpeningBalance(locationCode, stTenantId, fromDate),
+                RentalDao.getStatement(locationCode, stTenantId, fromDate, toDate),
+            ]);
+            let balance = opening;
+            const lines = rows.map(r => {
+                balance = round2(balance + Number(r.debit) - Number(r.credit));
+                return { ...r, txn_date_display: dateFormat(r.txn_date, 'dd-mmm-yyyy'), balance };
+            });
+            statement = {
+                tenantId: stTenantId, fromDate, toDate, opening, lines, closing: balance,
+                totalDebit: round2(rows.reduce((s, r) => s + Number(r.debit), 0)),
+                totalCredit: round2(rows.reduce((s, r) => s + Number(r.credit), 0)),
+                totalTds: round2(rows.reduce((s, r) => s + Number(r.tds), 0)),
+            };
+        }
+
+        const live = invoices.filter(i => i.status !== 'CANCELLED');
+        res.render('rental/home', {
+            title: page.title,
+            page,
+            canInvoice: security.hasMenuChk(req.user, 'RENTAL_INVOICES'),
+            canMaster: security.hasMenuChk(req.user, 'RENTAL_MASTER'),
+            user: req.user,
+            mobileReady: true,
+            tab, month, settings, tenants, banks, invoices, due, statement,
+            monthLabel: `${MONTHS[Number(month.split('-')[1]) - 1]} ${month.split('-')[0]}`,
+            totals: {
+                taxable: round2(live.reduce((s, i) => s + Number(i.taxable_value), 0)),
+                gst: round2(live.reduce((s, i) => s + Number(i.cgst_amount) + Number(i.sgst_amount), 0)),
+                total: round2(live.reduce((s, i) => s + Number(i.total_amount), 0)),
+            },
+            draftCount: invoices.filter(i => i.status === 'DRAFT').length,
+            fmtAmt,
+            fmtDate: (d) => d ? dateFormat(d, 'dd-mmm-yyyy') : '',
+            isoDate: (d) => d ? dateFormat(d, 'yyyy-mm-dd') : '',
+            gstinOk: settings.gstin ? gstUtils.isGstinCheckDigitValid(settings.gstin) : false,
+        });
+    } catch (e) {
+        next(e);
+    }
+}
+
+module.exports = {
+    getPage: (req, res, next) => renderPage(req, res, next, 'invoices'),
+    getMasterPage: (req, res, next) => renderPage(req, res, next, 'master'),
 
     saveSettings: async (req, res) => {
         try {
