@@ -632,7 +632,8 @@ mixin creditBillImportModal()
                         span(aria-hidden='true') &times;
                 .modal-body
                     p.text-muted.small.mb-2
-                        | Excel export with columns B.No, Date, Vehicle, Party, Indent, Item, Qty, Rate, Amount.
+                        | Excel export with columns B.No, Date, Vehicle, Party, Indent, Item, Qty, Rate, Amount (cashier-wise export: only this shift's cashier is accepted).
+                        | Bills of digital vendors (PAYTM etc.) go to Digital Sales.
                         | Save your other tabs first - the page reloads after the import.
                     .form-row.align-items-end
                         .col-md-8
