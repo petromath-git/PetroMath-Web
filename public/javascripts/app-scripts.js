@@ -2460,15 +2460,17 @@ function creditQtyOverMeterProblems() {
 }
 
 function finishClosing(hiddenPrefix, uri, redirect) {
-    let confirmMsg = "Please confirm if you want to freeze the closing?";
     if (uri === 'close-closing') {
+        // Hard stop (tkt #36): the shift cannot be closed until the credit bills are corrected.
         const problems = creditQtyOverMeterProblems();
         if (problems.length > 0) {
-            confirmMsg = 'WARNING: Credit qty is more than the meter sale:\n\n• ' + problems.join('\n• ') +
-                '\n\nPlease check the product on the credit bills (e.g. HSD entered as GD).\n\n' + confirmMsg;
+            alert('Cannot close the shift. Credit qty is more than the meter sale:\n\n• ' + problems.join('\n• ') +
+                '\n\nPlease correct the product on the credit bills (e.g. HSD entered as GD). ' +
+                'If the sale was really outside the pump, tick "Off Meter" on that bill.');
+            return;
         }
     }
-    const r = confirm(confirmMsg);
+    const r = confirm("Please confirm if you want to freeze the closing?");
     if (r == true) {
         const id = document.getElementById(hiddenPrefix + '_hiddenId').value;
         if (id && parseInt(id) > 0) {
