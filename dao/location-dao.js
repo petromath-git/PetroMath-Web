@@ -8,6 +8,10 @@ const dateFormat = require("dateformat");
 // so the Select Location page shares one result for a few minutes.
 const STAFF_ACTIVITY_TTL_MS = 5 * 60 * 1000;
 let staffActivityCache = { at: 0, rows: null };
+const SNAPSHOT_DAYS = 14;
+let snapshotCache = { at: 0, rows: null };
+// MySQL runs on UTC; shift dates are Indian business dates
+const IST_TODAY = "DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'))";
 
 module.exports = {
     // Last page opened at each active location by its own staff (SuperUser and
@@ -34,6 +38,67 @@ module.exports = {
             ) t
         `, { type: db.sequelize.QueryTypes.SELECT });
         staffActivityCache = { at: Date.now(), rows };
+        return rows;
+    },
+
+    // Per-location shift snapshot for the Select Location tiles (SuperUser/PowerUser):
+    // last shift / last closed shift, last day close and a per-day count for the last
+    // SNAPSHOT_DAYS days. Keyed by location_code; shared for a few minutes like staff activity.
+    getLocationSnapshot: async function () {
+        if (snapshotCache.rows && Date.now() - snapshotCache.at < STAFF_ACTIVITY_TTL_MS) {
+            return snapshotCache.rows;
+        }
+        const select = (sql) => db.sequelize.query(sql, { type: db.sequelize.QueryTypes.SELECT });
+        const [lastShifts, daily, dayCloses] = await Promise.all([
+            select(`
+                SELECT location_code,
+                       UPPER(DATE_FORMAT(MAX(closing_date), '%d-%b-%Y')) AS last_shift_date,
+                       DATEDIFF(${IST_TODAY}, MAX(CASE WHEN closing_status = 'CLOSED' THEN closing_date END)) AS days_since_closed,
+                       UPPER(DATE_FORMAT(MAX(CASE WHEN closing_status = 'CLOSED' THEN closing_date END), '%d-%b-%Y')) AS last_closed_date,
+                       SUM(CASE WHEN closing_status = 'DRAFT' THEN 1 ELSE 0 END) AS open_drafts
+                FROM t_closing
+                GROUP BY location_code`),
+            select(`
+                SELECT location_code,
+                       DATEDIFF(${IST_TODAY}, DATE(closing_date)) AS days_ago,
+                       SUM(CASE WHEN closing_status = 'CLOSED' THEN 1 ELSE 0 END) AS closed,
+                       SUM(CASE WHEN closing_status = 'DRAFT' THEN 1 ELSE 0 END) AS drafts
+                FROM t_closing
+                WHERE closing_date >= ${IST_TODAY} - INTERVAL ${SNAPSHOT_DAYS - 1} DAY
+                GROUP BY location_code, DATE(closing_date)`),
+            select(`
+                SELECT location_code,
+                       UPPER(DATE_FORMAT(MAX(cashflow_date), '%d-%b-%Y')) AS last_day_close_date,
+                       DATEDIFF(${IST_TODAY}, MAX(cashflow_date)) AS days_since_day_close
+                FROM t_cashflow_closing
+                WHERE closing_status = 'CLOSED'
+                GROUP BY location_code`)
+        ]);
+
+        const byLocation = {};
+        const entry = (code) => byLocation[code] || (byLocation[code] = {
+            location_code: code, days: Array.from({ length: SNAPSHOT_DAYS }, () => ({ closed: 0, drafts: 0 }))
+        });
+        lastShifts.forEach(r => Object.assign(entry(r.location_code), {
+            last_shift_date: r.last_shift_date,
+            last_closed_date: r.last_closed_date,
+            days_since_closed: r.days_since_closed,
+            open_drafts: Number(r.open_drafts) || 0
+        }));
+        // days[] runs oldest → today so the strip reads left to right
+        daily.forEach(r => {
+            const idx = SNAPSHOT_DAYS - 1 - r.days_ago;
+            if (idx >= 0 && idx < SNAPSHOT_DAYS) {
+                entry(r.location_code).days[idx] = { closed: Number(r.closed) || 0, drafts: Number(r.drafts) || 0 };
+            }
+        });
+        dayCloses.forEach(r => Object.assign(entry(r.location_code), {
+            last_day_close_date: r.last_day_close_date,
+            days_since_day_close: r.days_since_day_close
+        }));
+
+        const rows = Object.values(byLocation);
+        snapshotCache = { at: Date.now(), rows };
         return rows;
     },
 
