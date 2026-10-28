@@ -99,6 +99,19 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.INTEGER,
             allowNull: true,
             defaultValue: 1
+        },
+        is_deleted: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true,
+            defaultValue: false
+        },
+        deleted_by: {
+            type: DataTypes.STRING(45),
+            allowNull: true
+        },
+        deleted_date: {
+            type: DataTypes.DATE,
+            allowNull: true
         }
     }, {
         timestamps: false,
