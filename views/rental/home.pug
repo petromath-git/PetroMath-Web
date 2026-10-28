@@ -11,6 +11,11 @@ mixin statusBadge(i)
         span.badge.badge-warning Draft
     else
         span.badge.badge-secondary(title=i.cancel_reason) Cancelled
+    //- e-invoice: B2B final invoices need an IRN from the portal
+    if i.irn
+        span.badge.badge-light.border.ml-1(title=`IRN ${i.irn} · Ack ${i.irn_ack_no || ''}`) IRN ✓
+    else if i.status === 'FINAL' && i.tenant_gstin
+        span.badge.badge-warning.ml-1(title="Not yet e-invoiced on the portal") No IRN
 
 mixin glBadge(i)
     if i.status === 'DRAFT'
@@ -36,7 +41,7 @@ mixin invoiceActions(i)
         a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental/invoice/${i.invoice_id}/pdf?download=1` title="Download PDF")
             i.bi.bi-download
         if i.status === 'FINAL'
-            button.btn.btn-outline-danger.btn-sm.cancel-inv-btn(type="button" title="Cancel invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name)
+            button.btn.btn-outline-danger.btn-sm.cancel-inv-btn(type="button" title="Cancel invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name data-irn=(i.irn ? '1' : ''))
                 i.bi.bi-x-circle
 
 block content
@@ -108,6 +113,23 @@ block content
                         button.btn.btn-primary.btn-sm#finalizeAllBtn(type="button" disabled=(draftCount === 0))
                             i.bi.bi-check2-all.mr-1
                             | Finalise all drafts (#{draftCount})
+
+                //- e-invoice: download the bulk-upload file, then bring the portal's result back
+                if einvoicePending.length || invoices.some(function (i) { return i.irn; })
+                    .border.rounded.p-2.mb-3.bg-light
+                        .small.font-weight-bold.mb-1 e-Invoice (IRN)
+                        .d-flex.flex-wrap.align-items-center
+                            if einvoicePending.length
+                                a.btn.btn-outline-primary.btn-sm.mr-2.mb-1(href=`/rental/einvoice/json?ids=${einvoicePending.map(function (i) { return i.invoice_id; }).join(',')}`)
+                                    i.bi.bi-filetype-json.mr-1
+                                    | Download e-invoice JSON (#{einvoicePending.length})
+                            label.btn.btn-outline-secondary.btn-sm.mr-2.mb-1(for="einvoiceFile")
+                                i.bi.bi-upload.mr-1
+                                | Upload portal result
+                            input#einvoiceFile(type="file" accept=".json,.xlsx,.xls" style="display:none")
+                        .small.text-muted
+                            | 1) Download the JSON and upload it on einvoice1.gst.gov.in → e-Invoice → Bulk Upload.
+                            | 2) Download the result there (JSON or Excel) and upload it here: the IRN and QR then print on the invoice PDF.
 
                 p.small.text-muted.mb-2
                     | #[strong Create drafts] makes one draft per tenant active in #{monthLabel} with the rent from the tenant master.
@@ -204,6 +226,7 @@ block content
                                         td.text-nowrap.m-actions
                                             button.btn.btn-outline-primary.btn-sm.mr-1.edit-tenant-btn(type="button" title="Edit"
                                                 data-id=t.tenant_id data-name=t.tenant_name data-address=t.tenant_address data-gstin=t.gstin
+                                                data-city=t.city data-pincode=t.pincode
                                                 data-phone=t.phone data-email=t.email data-property=t.property_address data-desc=t.rent_description
                                                 data-sac=t.sac_code data-rent=t.monthly_rent data-rate=t.gst_rate data-tds=t.tds_percent
                                                 data-start=isoDate(t.start_date) data-end=isoDate(t.end_date) data-notes=t.notes
@@ -309,9 +332,16 @@ block content
                         .form-group.col-md-3
                             label.small PAN
                             input.form-control.form-control-sm.text-uppercase(name="pan" value=settings.pan maxlength="10")
-                    .form-group
-                        label.small Address
-                        input.form-control.form-control-sm(name="landlord_address" value=settings.landlord_address)
+                    .form-row
+                        .form-group.col-md-7
+                            label.small Address
+                            input.form-control.form-control-sm(name="landlord_address" value=settings.landlord_address)
+                        .form-group.col-7.col-md-3
+                            label.small City / town
+                            input.form-control.form-control-sm(name="landlord_city" value=settings.landlord_city maxlength="50")
+                        .form-group.col-5.col-md-2
+                            label.small PIN code
+                            input.form-control.form-control-sm(name="landlord_pincode" value=settings.landlord_pincode maxlength="7" inputmode="numeric")
                     .form-row
                         .form-group.col-md-3
                             label.small Bank name
@@ -368,9 +398,16 @@ block content
                                 .form-group.col-md-4
                                     label.small GSTIN
                                     input.form-control.form-control-sm.text-uppercase(name="gstin" maxlength="15")
-                            .form-group
-                                label.small Tenant address
-                                input.form-control.form-control-sm(name="tenant_address")
+                            .form-row
+                                .form-group.col-md-7
+                                    label.small Tenant address
+                                    input.form-control.form-control-sm(name="tenant_address")
+                                .form-group.col-7.col-md-3
+                                    label.small City / town
+                                    input.form-control.form-control-sm(name="city" maxlength="50")
+                                .form-group.col-5.col-md-2
+                                    label.small PIN code
+                                    input.form-control.form-control-sm(name="pincode" maxlength="7" inputmode="numeric")
                             .form-group
                                 label.small Property address (printed as Place of Supply)
                                 input.form-control.form-control-sm(name="property_address")
@@ -509,6 +546,26 @@ block content
                     } catch (e) { showMessage(e.message); finalizeAllBtn.disabled = false; }
                 });
 
+                // e-invoice result file from the portal
+                var einvoiceFile = document.getElementById('einvoiceFile');
+                if (einvoiceFile) einvoiceFile.addEventListener('change', async function () {
+                    if (!einvoiceFile.files.length) return;
+                    var fd = new FormData();
+                    fd.append('file', einvoiceFile.files[0]);
+                    try {
+                        var r = await fetch('/rental/api/einvoice/import', { method: 'POST', body: fd });
+                        var data = {};
+                        try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+                        if (!r.ok || !data.success) throw new Error(data.error || ('Upload failed (' + r.status + ')'));
+                        var msg = 'IRN saved for invoice(s): ' + (data.saved.join(', ') || 'none') + '.';
+                        if (data.withoutQr) msg += ' ' + data.withoutQr + ' had no signed QR in the file, so their PDF shows the IRN without the QR.';
+                        if (data.skipped.length) msg += '\nSkipped: ' + data.skipped.join('; ');
+                        alert(msg);
+                        location.reload();
+                    } catch (e) { showMessage(e.message); }
+                    einvoiceFile.value = '';
+                });
+
                 var draftForm = document.getElementById('draftForm');
                 function updateDraftPreview() {
                     var f = draftForm.elements;
@@ -557,7 +614,10 @@ block content
 
                 document.querySelectorAll('.cancel-inv-btn').forEach(function (btn) {
                     btn.addEventListener('click', async function () {
-                        var reason = prompt('Cancel invoice ' + btn.dataset.no + ' (' + btn.dataset.name + ')?\nThe number stays used and is reported as cancelled in GSTR-1.\n\nReason:');
+                        var irnNote = btn.dataset.irn
+                            ? '\n\nThis invoice has an IRN: cancel it on the e-invoice portal too (allowed only within 24 hours of generation). After that, issue a credit note instead of cancelling.'
+                            : '';
+                        var reason = prompt('Cancel invoice ' + btn.dataset.no + ' (' + btn.dataset.name + ')?\nThe number stays used and is reported as cancelled in GSTR-1.' + irnNote + '\n\nReason:');
                         if (reason === null) return;
                         try { await call('POST', '/rental/api/invoices/' + btn.dataset.id + '/cancel', { reason: reason }); location.reload(); }
                         catch (e) { showMessage(e.message); }
@@ -566,6 +626,12 @@ block content
 
                 // Tenants tab
                 var tenantForm = document.getElementById('tenantForm');
+                // PIN from the address ("... PIN: 641 041.") when the PIN box is still empty
+                tenantForm.elements.tenant_address.addEventListener('change', function () {
+                    var pin = tenantForm.elements.pincode;
+                    var m = this.value.match(/[1-9]\d{2}\s?\d{3}(?!.*[1-9]\d{2}\s?\d{3})/);
+                    if (!pin.value && m) pin.value = m[0].replace(/\s/g, '');
+                });
                 function openTenant(d) {
                     tenantForm.reset();
                     var f = tenantForm.elements;
@@ -580,6 +646,8 @@ block content
                         f.tenant_name.value = d.name || '';
                         f.gstin.value = d.gstin || '';
                         f.tenant_address.value = d.address || '';
+                        f.city.value = d.city || '';
+                        f.pincode.value = d.pincode || '';
                         f.property_address.value = d.property || '';
                         f.monthly_rent.value = Number(d.rent);
                         f.gst_rate.value = String(Number(d.rate));
