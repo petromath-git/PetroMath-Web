@@ -27,6 +27,19 @@ module.exports = {
         };
     },
 
+    // 🔹 Menu-grant access: the user's role+location must have this menu code
+    //    (Menu Management decides who gets a page, not hardcoded roles).
+    hasMenu: (menuCode) => {
+        return (req, res, next) => {
+            if (module.exports.hasMenuChk(req.user, menuCode)) return next();
+            res.status(403).send('You do not have access to this page.');
+        };
+    },
+
+    // 🔹 Quick menu-grant check for internal use. SuperUser always passes.
+    hasMenuChk: (user, menuCode) =>
+        !!user && (user.Role === 'SuperUser' || (user.allowedMenus || []).includes(menuCode)),
+
     // 🔹 Same rule as web login: active only while effective_end_date is after today
     //    (Disable sets it to today; a missing end date counts as disabled).
     isAccountActive: (effectiveEndDate) => {

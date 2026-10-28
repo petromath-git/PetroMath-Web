@@ -1,0 +1,83 @@
+extends layout
+
+block content
+    include mixins/dev-tracker-style
+    - var typeLabel = { Bug: 'Issues', Feature: 'Feature requests', Enhancement: 'Enhancements', Task: 'Tasks' }
+    - var fmtH = function (h) { return (Math.round(h * 100) / 100) + ' h' }
+    .container-fluid.ticket-page
+        .d-flex.justify-content-between.align-items-center.flex-wrap.gap-2.mb-3
+            .d-flex.align-items-center
+                a.btn.btn-outline-secondary.mr-3(href="/dev-tracker")
+                    i.bi.bi-arrow-left
+                h2.mb-0
+                    i.bi.bi-stopwatch.mr-2
+                    | Ticket Hours
+            form.d-flex.flex-wrap.gap-2.align-items-end(method="GET" action="/dev-tracker/hours")
+                div
+                    label.small.mb-0 From
+                    input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                div
+                    label.small.mb-0 To
+                    input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                button.btn.btn-sm.btn-primary(type="submit") Go
+
+        .row.g-3.mb-3
+            .col-12.col-md-3
+                .card.card-body.text-center
+                    small.text-muted #{fmtDate(fromDate)} to #{fmtDate(toDate)}
+                    h2.mb-0= fmtH(total)
+                    small.text-muted #{rows.length} entries
+            each block in [['By type', byType, typeLabel], ['By scope', byScope, null], ['By station', byStation, null]]
+                .col-12.col-md-3
+                    .card.h-100
+                        .card-header.small.font-weight-bold= block[0]
+                        ul.list-group.list-group-flush.small
+                            each pair in block[1]
+                                li.list-group-item.d-flex.justify-content-between
+                                    span= block[2] ? (block[2][pair[0]] || pair[0]) : pair[0]
+                                    strong= fmtH(pair[1])
+                            if !block[1].length
+                                li.list-group-item.text-muted -
+
+        .card.mb-3
+            .card-header.small.font-weight-bold By ticket
+            ul.list-group.list-group-flush.small
+                each pair in byTicket
+                    li.list-group-item.d-flex.justify-content-between.gap-2
+                        a.text-truncate(href=`/dev-tracker/${pair[0].slice(1).split(' ')[0]}`)= pair[0]
+                        strong.text-nowrap= fmtH(pair[1])
+                if !byTicket.length
+                    li.list-group-item.text-muted No hours logged in this period
+
+        if rows.length
+            .card
+                .card-header.small.font-weight-bold Entries
+                .table-responsive
+                    table.table.table-sm.mb-0.small.m-stack
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Ticket
+                                th Type
+                                th Station
+                                th Note
+                                th By
+                                th.text-right Hours
+                        tbody
+                            each r in rows
+                                tr
+                                    td.text-nowrap(data-label="Date")= fmtDate(r.work_date)
+                                    td.m-title
+                                        a(href=`/dev-tracker/${r.tracker_id}`) ##{r.tracker_id}
+                                        |  #{r.title}
+                                    td(data-label="Type")= r.type
+                                    td(data-label="Station")
+                                        = r.location_code || 'Platform'
+                                        if r.scope === 'ALL'
+                                            span.badge.badge-dark.ml-1 All
+                                    td.m-wide(data-label="Note")= r.note
+                                    td(data-label="By")
+                                        = r.created_by
+                                        if r.source === 'Claude'
+                                            span.badge.badge-light.border.ml-1 Claude
+                                    td.text-right(data-label="Hours")= Number(r.hours)

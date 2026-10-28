@@ -66,6 +66,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(50),
             allowNull: true
         },
+        scope: {
+            type: DataTypes.ENUM('LOCATION','ALL'),
+            allowNull: false,
+            defaultValue: 'LOCATION'
+        },
         estimated_hours: {
             type: DataTypes.DECIMAL(5,2),
             allowNull: true
@@ -76,6 +81,19 @@ module.exports = function(sequelize, DataTypes) {
         },
         attachments_json: {
             type: DataTypes.JSON,
+            allowNull: true
+        },
+        is_deleted: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true,
+            defaultValue: false
+        },
+        deleted_by: {
+            type: DataTypes.STRING(45),
+            allowNull: true
+        },
+        deleted_date: {
+            type: DataTypes.DATE,
             allowNull: true
         }
     }, {
