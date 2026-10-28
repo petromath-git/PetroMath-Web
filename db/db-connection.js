@@ -68,6 +68,8 @@ db.txn_digital_sales = require("./txn-digital-sales")(sequelize, Sequelize);
 db.adjustments = require("./adjustments")(sequelize, Sequelize);
 db.dev_tracker = require("./dev-tracker")(sequelize, Sequelize);
 db.dev_tracker_tasks = require("./dev-tracker-tasks")(sequelize, Sequelize);
+db.dev_tracker_comments = require("./dev-tracker-comments")(sequelize, Sequelize);
+db.dev_tracker_worklog = require("./dev-tracker-worklog")(sequelize, Sequelize);
 db.menu_items = require("./menu-items")(sequelize, Sequelize);
 db.menu_groups = require("./menu-groups")(sequelize, Sequelize);
 db.menu_access_global = require("./menu-access-global")(sequelize, Sequelize);
@@ -266,6 +268,18 @@ db.dev_tracker.hasMany(db.dev_tracker_tasks, {
     as: 'tasks'
 });
 db.dev_tracker_tasks.belongsTo(db.dev_tracker, {
+    foreignKey: 'tracker_id',
+    as: 'tracker'
+});
+db.dev_tracker.hasMany(db.dev_tracker_comments, {
+    foreignKey: 'tracker_id',
+    as: 'comments'
+});
+db.dev_tracker.hasMany(db.dev_tracker_worklog, {
+    foreignKey: 'tracker_id',
+    as: 'worklog'
+});
+db.dev_tracker_worklog.belongsTo(db.dev_tracker, {
     foreignKey: 'tracker_id',
     as: 'tracker'
 });
