@@ -9,13 +9,13 @@ const select = (sql, replacements, transaction) =>
 const receiptLabel = (tenantName) => `RENT - ${tenantName}`;
 
 const TENANT_COLUMNS = [
-    'tenant_name', 'tenant_address', 'gstin', 'phone', 'email', 'property_address',
+    'tenant_name', 'tenant_address', 'city', 'pincode', 'gstin', 'phone', 'email', 'property_address',
     'rent_description', 'sac_code', 'monthly_rent', 'gst_rate', 'tds_percent',
     'start_date', 'end_date', 'notes'
 ];
 
 const SETTINGS_COLUMNS = [
-    'landlord_name', 'landlord_address', 'gstin', 'pan', 'bank_name', 'bank_branch',
+    'landlord_name', 'landlord_address', 'landlord_city', 'landlord_pincode', 'gstin', 'pan', 'bank_name', 'bank_branch',
     'bank_ifsc', 'bank_account_no', 'rent_bank_id', 'last_invoice_no', 'invoice_day'
 ];
 
@@ -244,6 +244,7 @@ const RentalDao = {
                     SET i.invoice_no = :invoiceNo, i.status = 'FINAL',
                         i.tenant_name = tn.tenant_name, i.tenant_address = tn.tenant_address,
                         i.tenant_gstin = tn.gstin, i.property_address = tn.property_address,
+                        i.tenant_city = tn.city, i.tenant_pincode = tn.pincode,
                         i.finalized_by = :finalizedBy, i.finalized_date = NOW(), i.updated_by = :finalizedBy
                     WHERE i.invoice_id = :invoiceId
                 `, { replacements: { invoiceNo: nextNo, finalizedBy, invoiceId: d.invoice_id }, type: QueryTypes.UPDATE, transaction: t });
@@ -277,6 +278,32 @@ const RentalDao = {
             `, { replacements: { invoiceId, cancelledBy }, type: QueryTypes.INSERT, transaction: t });
             return true;
         });
+    },
+
+    // ── E-invoice (IRN) ─────────────────────────────────────────────────────
+    getFinalInvoicesByIds: (locationCode, invoiceIds) => select(`
+        SELECT i.*, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date_iso
+        FROM t_rental_invoice i
+        WHERE i.location_code = :locationCode AND i.invoice_id IN (:invoiceIds) AND i.status = 'FINAL'
+        ORDER BY i.invoice_no
+    `, { locationCode, invoiceIds }),
+
+    getInvoiceByNo: async (locationCode, invoiceNo) => {
+        const rows = await select(`
+            SELECT invoice_id, invoice_no, status, tenant_gstin, irn FROM t_rental_invoice
+            WHERE location_code = :locationCode AND invoice_no = :invoiceNo
+        `, { locationCode, invoiceNo });
+        return rows[0] || null;
+    },
+
+    saveIrn: async (invoiceId, rec, importedBy) => {
+        await db.sequelize.query(`
+            UPDATE t_rental_invoice
+            SET irn = :irn, irn_ack_no = :ackNo, irn_ack_date = :ackDt,
+                irn_signed_qr = COALESCE(:signedQr, irn_signed_qr),
+                irn_imported_by = :importedBy, irn_imported_date = NOW(), updated_by = :importedBy
+            WHERE invoice_id = :invoiceId
+        `, { replacements: { ...rec, invoiceId, importedBy }, type: QueryTypes.UPDATE });
     },
 
     // ── Tenant statement ────────────────────────────────────────────────────
@@ -343,7 +370,7 @@ const RentalDao = {
 
     // ── GST: FINAL rental invoices in a period ──
     getGstInvoices: (locationCode, fromDate, toDate) => select(`
-        SELECT i.invoice_no, i.invoice_date, i.tenant_name, i.tenant_gstin, i.sac_code, i.description,
+        SELECT i.invoice_no, i.invoice_date, i.tenant_name, i.tenant_gstin, i.sac_code, i.description, i.irn,
                i.taxable_value, i.cgst_rate, i.sgst_rate, i.cgst_amount, i.sgst_amount, i.total_amount
         FROM t_rental_invoice i
         WHERE i.location_code = :locationCode AND i.status = 'FINAL'
