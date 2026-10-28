@@ -2883,6 +2883,34 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermissio
                     ]
                 };
             }
+        } else if (event.source_type === 'RENTAL_INVOICE') {
+            const rows = await db.sequelize.query(`
+                SELECT ri.invoice_no, ri.invoice_date, ri.status, ri.description, ri.taxable_value,
+                       ri.cgst_amount, ri.sgst_amount, ri.total_amount, ri.tds_amount,
+                       COALESCE(ri.tenant_name, t.tenant_name) AS tenant_name
+                FROM t_rental_invoice ri
+                JOIN m_rental_tenant t ON t.tenant_id = ri.tenant_id
+                WHERE ri.invoice_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Rental Invoice',
+                    fields: [
+                        { label: 'Invoice No',  value: r.invoice_no },
+                        { label: 'Date',        value: r.invoice_date ? String(r.invoice_date).substring(0,10) : '' },
+                        { label: 'Tenant',      value: r.tenant_name },
+                        { label: 'Description', value: r.description },
+                        { label: 'Taxable',     value: r.taxable_value },
+                        { label: 'CGST',        value: r.cgst_amount },
+                        { label: 'SGST',        value: r.sgst_amount },
+                        { label: 'Total',       value: r.total_amount },
+                        { label: 'TDS',         value: r.tds_amount },
+                        { label: 'Status',      value: r.status },
+                    ]
+                };
+            }
         }
 
         res.json({

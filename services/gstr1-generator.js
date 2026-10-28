@@ -1,6 +1,53 @@
 const GstDataAggregationDao = require("../dao/gst-data-aggregation-dao");
+const RentalDao = require("../dao/rental-dao");
 const gstUtils = require("../utils/gst-utils");
 const crypto = require('crypto');
+
+/**
+ * Merge rental invoices into the GSTR-1 rows: tenants with a GSTIN as B2B
+ * invoices, the rest as B2CS by rate; one HSN row per SAC and rate (uqc NA).
+ */
+function addRentalInvoices(rentals, b2bData, b2csData, hsnData) {
+    const hsn = {};
+    const b2cs = {};
+    rentals.forEach(r => {
+        const rate = parseFloat(r.cgst_rate) + parseFloat(r.sgst_rate);
+        if (r.tenant_gstin) {
+            b2bData.push({
+                bill_no: String(r.invoice_no),
+                invoice_date: r.invoice_date,
+                customer_gstin: r.tenant_gstin,
+                customer_name: r.tenant_name,
+                hsn_code: r.sac_code,
+                product_name: 'RENT',
+                quantity: 0,
+                rate: r.taxable_value,
+                taxable_value: r.taxable_value,
+                cgst_percent: r.cgst_rate,
+                sgst_percent: r.sgst_rate,
+                cgst_amount: r.cgst_amount,
+                sgst_amount: r.sgst_amount,
+                igst_amount: 0,
+                invoice_value: r.total_amount
+            });
+        } else {
+            const b = b2cs[rate] || (b2cs[rate] = { tax_rate: rate, taxable_value: 0, cgst_amount: 0, sgst_amount: 0, igst_amount: 0 });
+            b.taxable_value += parseFloat(r.taxable_value);
+            b.cgst_amount += parseFloat(r.cgst_amount);
+            b.sgst_amount += parseFloat(r.sgst_amount);
+        }
+        const key = `${r.sac_code}|${rate}`;
+        const h = hsn[key] || (hsn[key] = {
+            hsn_code: r.sac_code, product_name: 'RENTING OF IMMOVABLE PROPERTY', uqc: 'NA',
+            total_quantity: 0, total_taxable_value: 0, tax_rate: rate, total_cgst: 0, total_sgst: 0, total_igst: 0
+        });
+        h.total_taxable_value += parseFloat(r.taxable_value);
+        h.total_cgst += parseFloat(r.cgst_amount);
+        h.total_sgst += parseFloat(r.sgst_amount);
+    });
+    b2csData.push(...Object.values(b2cs));
+    hsnData.push(...Object.values(hsn));
+}
 
 module.exports = {
     /**
@@ -21,6 +68,9 @@ generateGSTR1Json: async (locationCode, gstin, returnPeriod) => {
             GstDataAggregationDao.get2TOilSalesSummary(locationCode, from_date, to_date),
             GstDataAggregationDao.getNilRatedSalesSummary(locationCode, from_date, to_date)
         ]);
+
+        // Rent invoices raised under the same GSTIN (Rental Invoices screen)
+        addRentalInvoices(await RentalDao.getGstInvoices(locationCode, from_date, to_date), b2bData, b2csData, hsnData);
 
         // Calculate totals
         let totalTaxableValue = 0;
@@ -458,7 +508,8 @@ function getUQCCode(unit) {
         'PCS': 'PCS',
         'BOTTLES': 'BTL',
         'CANS': 'CAN',
-        'UNITS': 'UNT'
+        'UNITS': 'UNT',
+        'NA': 'NA'          // services (SAC), e.g. rent
     };
 
     return uqcMap[unit?.toUpperCase()] || 'OTH';
