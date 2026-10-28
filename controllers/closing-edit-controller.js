@@ -97,7 +97,15 @@ module.exports = {
             locationCode, 
             'DIGITAL_SALES_FUTURE_DAYS', 
             0  // default 0 days
-            ));    
+            ));
+        // Label for the cash sales tab — 'Lube Sales' by default; a location that bills
+        // all cash sales there can set 'Cash Sales'
+        const cashSalesLabel = await locationConfig.getLocationConfigValue(
+            locationCode,
+            'CLOSING_CASH_SALES_TAB_LABEL',
+            'Lube Sales'
+        );
+    
 
             const show2TSalesTab = await locationConfig.getLocationConfigValue(
                 locationCode,
@@ -196,6 +204,7 @@ module.exports = {
                         allowSecondaryPump: allowSecondaryPump === 'true',
                         digitalSalesBackdateDays: digitalSalesBackdateDays,
                         digitalSalesFutureDays: digitalSalesFutureDays,
+                        cashSalesLabel: cashSalesLabel || 'Lube Sales',
                         show2TSalesTab: show2TSalesTab === 'Y',
                         allowQuickAddVehicle: allowQuickAddVehicle === 'Y',
                         allowCreditBillImport: allowCreditBillImport === 'Y',
