@@ -1,56 +1,104 @@
 // dao/dev-tracker-dao.js
 const db = require("../db/db-connection");
-const { Op, Sequelize } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 
 const DevTracker = db.dev_tracker;
 const DevTrackerTasks = db.dev_tracker_tasks;
+const DevTrackerComments = db.dev_tracker_comments;
+const DevTrackerWorklog = db.dev_tracker_worklog;
+
+// access = { locations: null (all) | [codes], canManage: bool }
+// Reporters see tickets for their stations. Manage users also see platform
+// tickets with no station (location_code NULL).
+const visibilityWhere = (access) => {
+    const where = { is_deleted: { [Op.or]: [0, null] } };
+    if (access.locations === null) return where;
+    const locs = access.locations.length ? access.locations : ['__none__'];
+    if (access.canManage) {
+        where[Op.or] = [{ location_code: { [Op.in]: locs } }, { location_code: null }];
+    } else {
+        where.location_code = { [Op.in]: locs };
+    }
+    return where;
+};
+
+const notDeleted = { is_deleted: { [Op.or]: [0, null] } };
+
+// Keep the ticket's actual_hours = SUM of its work log
+const syncActualHours = async (trackerId, transaction) => {
+    const total = await DevTrackerWorklog.sum('hours', { where: { tracker_id: trackerId }, transaction });
+    await DevTracker.update(
+        { actual_hours: total || null },
+        { where: { tracker_id: trackerId }, transaction, silent: true }
+    );
+};
 
 module.exports = {
-    // Find all trackers with optional filtering (exclude closed by default)
-    findTrackers: (locationCode, filters = {}) => {
-        const whereClause = {};
-        
-        if (locationCode) {
-            whereClause.location_code = locationCode;
+    visibilityWhere,
+
+    // Ticket list for the dashboard. Closed tickets are hidden unless asked for.
+    findTrackers: (access, filters = {}) => {
+        const where = visibilityWhere(access);
+        where.status = filters.status ? filters.status : { [Op.ne]: 'Closed' };
+        if (filters.type) where.type = filters.type;
+        if (filters.priority) where.priority = filters.priority;
+        if (filters.scope) where.scope = filters.scope;
+        if (filters.location_code === 'NONE') where.location_code = null;
+        else if (filters.location_code) where.location_code = filters.location_code;
+        if (filters.search) {
+            const like = `%${filters.search}%`;
+            where[Op.and] = [{
+                [Op.or]: [
+                    { title: { [Op.like]: like } },
+                    { description: { [Op.like]: like } },
+                    { tags: { [Op.like]: like } }
+                ]
+            }];
         }
-        
-        // Exclude closed trackers unless specifically requested
-        if (!filters.includeCompleted) {
-            whereClause.status = { [Op.ne]: 'Closed' };
-        }
-        
-        // Add filters
-        if (filters.status) whereClause.status = filters.status;
-        if (filters.type) whereClause.type = filters.type;
-        if (filters.priority) whereClause.priority = filters.priority;
-        if (filters.assigned_to) whereClause.assigned_to = filters.assigned_to;
-        
+
         return DevTracker.findAll({
-            where: whereClause,
+            where,
             include: [{
                 model: DevTrackerTasks,
                 as: 'tasks',
-                required: false
+                where: notDeleted,
+                required: false,
+                attributes: ['task_id', 'task_status']
             }],
             order: [
-                ['priority', 'DESC'], // Critical, High, Medium, Low
+                ['priority', 'DESC'], // ENUM index: Critical, High, Medium, Low
                 ['creation_date', 'DESC']
             ]
         });
     },
 
-    // Find tracker by ID with all tasks
-    findTrackerById: (trackerId) => {
-        return DevTracker.findByPk(trackerId, {
-            include: [{
-                model: DevTrackerTasks,
-                as: 'tasks',
-                order: [['sequence_order', 'ASC'], ['creation_date', 'ASC']]
-            }]
+    // One ticket with its tasks, comments and (for manage users) work log.
+    // Returns null if it doesn't exist or this user can't see it.
+    findTrackerById: (trackerId, access) => {
+        const include = [{
+            model: DevTrackerComments,
+            as: 'comments',
+            required: false,
+            where: access.canManage ? undefined : { is_internal: 0 }
+        }];
+        const order = [[{ model: DevTrackerComments, as: 'comments' }, 'creation_date', 'ASC']];
+        if (access.canManage) {
+            include.push(
+                { model: DevTrackerTasks, as: 'tasks', where: notDeleted, required: false },
+                { model: DevTrackerWorklog, as: 'worklog', required: false }
+            );
+            order.push(
+                [{ model: DevTrackerTasks, as: 'tasks' }, 'sequence_order', 'ASC'],
+                [{ model: DevTrackerWorklog, as: 'worklog' }, 'work_date', 'DESC']
+            );
+        }
+        return DevTracker.findOne({
+            where: { tracker_id: trackerId, ...visibilityWhere(access) },
+            include,
+            order
         });
     },
 
-    // Create new tracker
     createTracker: (trackerData) => {
         const now = new Date();
         return DevTracker.create({
@@ -60,7 +108,6 @@ module.exports = {
         });
     },
 
-    // Update tracker
     updateTracker: (trackerId, trackerData) => {
         return DevTracker.update({
             ...trackerData,
@@ -70,52 +117,22 @@ module.exports = {
         });
     },
 
-    // Delete tracker (will cascade delete tasks due to FK constraint)
-    deleteTracker: (trackerId) => {
-        return DevTracker.destroy({
+    deleteTracker: (trackerId, deletedBy) => {
+        return DevTracker.update({
+            is_deleted: 1,
+            deleted_by: deletedBy,
+            deleted_date: new Date()
+        }, {
             where: { tracker_id: trackerId }
         });
     },
 
-    // Get tracker summary stats
-    getTrackerStats: (locationCode) => {
-        const whereClause = locationCode ? { location_code: locationCode } : {};
-        
-        return DevTracker.findAll({
-            attributes: [
-                'status',
-                'type',
-                'priority',
-                [Sequelize.fn('COUNT', Sequelize.col('tracker_id')), 'count']
-            ],
-            where: whereClause,
-            group: ['status', 'type', 'priority'],
-            raw: true
-        });
-    },
+    // TASKS (internal breakdown, manage users only)
 
-    // TASK METHODS
-    
-    // Find all tasks for a tracker
-    findTasksByTrackerId: (trackerId) => {
-        return DevTrackerTasks.findAll({
-            where: { tracker_id: trackerId },
-            order: [['sequence_order', 'ASC'], ['creation_date', 'ASC']]
-        });
-    },
-
-    // Find task by ID
     findTaskById: (taskId) => {
-        return DevTrackerTasks.findByPk(taskId, {
-            include: [{
-                model: DevTracker,
-                as: 'tracker',
-                attributes: ['tracker_id', 'title', 'type', 'status']
-            }]
-        });
+        return DevTrackerTasks.findOne({ where: { task_id: taskId, ...notDeleted } });
     },
 
-    // Create new task
     createTask: (taskData) => {
         const now = new Date();
         return DevTrackerTasks.create({
@@ -125,18 +142,6 @@ module.exports = {
         });
     },
 
-    // Bulk create tasks
-    bulkCreateTasks: (tasksData) => {
-        const now = new Date();
-        const tasksWithDates = tasksData.map(task => ({
-            ...task,
-            creation_date: now,
-            updation_date: now
-        }));
-        return DevTrackerTasks.bulkCreate(tasksWithDates);
-    },
-
-    // Update task
     updateTask: (taskId, taskData) => {
         return DevTrackerTasks.update({
             ...taskData,
@@ -146,108 +151,68 @@ module.exports = {
         });
     },
 
-    // Delete task
-    deleteTask: (taskId) => {
-        return DevTrackerTasks.destroy({
-            where: { task_id: taskId }
-        });
-    },
-
-    // Update task completion percentage
-    updateTaskProgress: (taskId, completionPercentage) => {
+    deleteTask: (taskId, deletedBy) => {
         return DevTrackerTasks.update({
-            completion_percentage: completionPercentage,
-            updation_date: new Date()
+            is_deleted: 1,
+            deleted_by: deletedBy,
+            deleted_date: new Date()
         }, {
             where: { task_id: taskId }
         });
     },
 
-    // Reorder tasks within a tracker
-    reorderTasks: (trackerId, taskOrderData) => {
-        const updatePromises = taskOrderData.map(({ task_id, sequence_order }) => {
-            return DevTrackerTasks.update({
-                sequence_order,
-                updation_date: new Date()
-            }, {
-                where: { task_id, tracker_id: trackerId }
-            });
-        });
-        return Promise.all(updatePromises);
+    // COMMENTS
+
+    addComment: (commentData) => {
+        return DevTrackerComments.create({ ...commentData, creation_date: new Date() });
     },
 
-    // Get tasks by status across all trackers
-    findTasksByStatus: (locationCode, taskStatus) => {
-        const whereClause = { task_status: taskStatus };
-        
-        return DevTrackerTasks.findAll({
-            where: whereClause,
-            include: [{
-                model: DevTracker,
-                as: 'tracker',
-                where: locationCode ? { location_code: locationCode } : {},
-                attributes: ['tracker_id', 'title', 'type', 'status', 'priority']
-            }],
-            order: [
-                [{ model: DevTracker, as: 'tracker' }, 'priority', 'DESC'],
-                ['creation_date', 'ASC']
-            ]
+    // WORK LOG
+
+    addWorklog: (worklogData) => {
+        return db.sequelize.transaction(async (transaction) => {
+            const row = await DevTrackerWorklog.create(
+                { ...worklogData, creation_date: new Date() },
+                { transaction }
+            );
+            await syncActualHours(worklogData.tracker_id, transaction);
+            return row;
         });
     },
 
-    // Restore soft deleted tracker
-    restoreTracker: (trackerId, restoredBy) => {
-        return DevTracker.update({
-            is_deleted: 0,
-            deleted_by: null,
-            deleted_date: null,
-            updated_by: restoredBy,
-            updation_date: new Date()
-        }, {
-            where: { tracker_id: trackerId }
+    deleteWorklog: (worklogId) => {
+        return db.sequelize.transaction(async (transaction) => {
+            const row = await DevTrackerWorklog.findByPk(worklogId, { transaction });
+            if (!row) return null;
+            await row.destroy({ transaction });
+            await syncActualHours(row.tracker_id, transaction);
+            return row;
         });
     },
 
-    // Restore soft deleted task
-    restoreTask: (taskId, restoredBy) => {
-        return DevTrackerTasks.update({
-            is_deleted: 0,
-            deleted_by: null,
-            deleted_date: null,
-            updated_by: restoredBy,
-            updation_date: new Date()
-        }, {
-            where: { task_id: taskId }
-        });
+    // Hours report: every work log row in the period with its ticket's type/scope/station
+    getWorklogReport: (fromDate, toDate) => {
+        return db.sequelize.query(`
+            SELECT w.worklog_id, w.work_date, w.hours, w.note, w.source, w.created_by,
+                   t.tracker_id, t.title, t.type, t.scope, t.status, t.location_code
+            FROM t_dev_tracker_worklog w
+            JOIN t_dev_tracker t ON t.tracker_id = w.tracker_id
+            WHERE w.work_date BETWEEN :fromDate AND :toDate
+              AND COALESCE(t.is_deleted, 0) = 0
+            ORDER BY w.work_date DESC, w.worklog_id DESC`,
+            { replacements: { fromDate, toDate }, type: QueryTypes.SELECT }
+        );
     },
-    searchTrackers: (locationCode, searchTerm) => {
-        const whereClause = {
-            [Op.or]: [
-                { title: { [Op.like]: `%${searchTerm}%` } },
-                { description: { [Op.like]: `%${searchTerm}%` } },
-                { tags: { [Op.like]: `%${searchTerm}%` } }
-            ]
-        };
-        
-        if (locationCode) {
-            whereClause.location_code = locationCode;
-        }
-        
-        return DevTracker.findAll({
-            where: whereClause,
-            include: [{
-                model: DevTrackerTasks,
-                as: 'tasks',
-                where: {
-                    [Op.or]: [
-                        { task_title: { [Op.like]: `%${searchTerm}%` } },
-                        { task_description: { [Op.like]: `%${searchTerm}%` } },
-                        { notes: { [Op.like]: `%${searchTerm}%` } }
-                    ]
-                },
-                required: false
-            }],
-            order: [['creation_date', 'DESC']]
+
+    // Stations this user can file tickets for
+    getLocations: (locations) => {
+        const where = { [Op.or]: [{ effective_end_date: null }, { effective_end_date: { [Op.gt]: new Date() } }] };
+        if (locations !== null) where.location_code = { [Op.in]: locations.length ? locations : ['__none__'] };
+        return db.location.findAll({
+            attributes: ['location_code', 'location_name'],
+            where,
+            order: [['location_code', 'ASC']],
+            raw: true
         });
     }
 };

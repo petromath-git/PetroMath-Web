@@ -1,504 +1,445 @@
 // controllers/dev-tracker-controller.js
 const devTrackerDao = require('../dao/dev-tracker-dao');
+const security = require('../utils/app-security');
 const moment = require('moment');
 
 /**
- * Dev Tracker Controller
- * Hybrid controller that serves both Pug templates (current) and JSON API responses (future)
- * 
- * Pattern:
- * - GET routes render Pug templates for UI
- * - POST/PUT/DELETE routes can return either JSON (for AJAX) or redirect (for forms)
- * - /api/ prefixed routes always return JSON
+ * Support Tickets (/dev-tracker)
+ *
+ * Access is by menu grant, not by role:
+ * - DEV_TRACKER        raise tickets, see tickets for your stations, comment
+ * - DEV_TRACKER_MANAGE triage (status/priority/assignee/scope), tasks, work log, delete
+ *
+ * Reporters never see due dates, hours, assignee or internal tasks/comments, so
+ * granting DEV_TRACKER to station users later doesn't set expectations we can't meet.
  */
+
+const TYPES = ['Bug', 'Feature', 'Enhancement', 'Task'];
+const REPORTER_TYPES = ['Bug', 'Feature', 'Enhancement'];
+const STATUSES = ['Open', 'In Progress', 'Testing', 'Complete', 'Closed'];
+const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'];
+
+const getAccess = (user) => ({
+    locations: security.getAccessibleLocations(user),
+    canManage: security.hasMenuChk(user, 'DEV_TRACKER_MANAGE')
+});
+
+const pick = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback);
+
+const fmtDate = (d) => (d ? moment(d).format('DD-MMM-YYYY') : '');
+
+const wantsJson = (req) => req.xhr || (req.headers['content-type'] || '').includes('application/json');
+
+const sendError = (req, res, status, message, redirectTo) => {
+    if (wantsJson(req)) return res.status(status).json({ success: false, error: message });
+    req.flash('error', message);
+    res.redirect(redirectTo);
+};
+
+// Station + scope from the form. Manage users may leave the station blank for a
+// platform ticket (scope ALL); everyone else must pick one of their stations.
+const resolveStation = (req, access) => {
+    const locationCode = (req.body.location_code || '').trim() || null;
+    if (!locationCode) {
+        if (!access.canManage) return { error: 'Please choose the station this ticket is for' };
+        return { location_code: null, scope: 'ALL' };
+    }
+    if (!security.canAccessLocation(req.user, locationCode)) {
+        return { error: 'You cannot raise tickets for station ' + locationCode };
+    }
+    const scope = access.canManage ? pick(req.body.scope, ['LOCATION', 'ALL'], 'LOCATION') : 'LOCATION';
+    return { location_code: locationCode, scope };
+};
 
 module.exports = {
 
-    // ============================================================================
-    // PAGE ROUTES (Pug Templates)
-    // ============================================================================
-
-    // GET /dev-tracker - Main dashboard page
+    // GET /dev-tracker
     getDevTrackerPage: async (req, res, next) => {
         try {
-            const locationCode = req.user.location_code;
+            const access = getAccess(req.user);
             const filters = {
-                status: req.query.status || null,
-                type: req.query.type || null,
-                priority: req.query.priority || null,
-                assigned_to: req.query.assigned_to || null
+                status: pick(req.query.status, STATUSES, null),
+                type: pick(req.query.type, TYPES, null),
+                priority: pick(req.query.priority, PRIORITIES, null),
+                scope: access.canManage ? pick(req.query.scope, ['LOCATION', 'ALL'], null) : null,
+                location_code: req.query.location_code || null,
+                search: (req.query.search || '').trim() || null
             };
 
-            const trackers = await devTrackerDao.findTrackers(locationCode, filters);
-            
-            // Calculate stats from the actual trackers data
+            const [trackers, locations] = await Promise.all([
+                devTrackerDao.findTrackers(access, filters),
+                devTrackerDao.getLocations(access.locations)
+            ]);
+
             const stats = {
                 open: trackers.filter(t => t.status === 'Open').length,
                 inProgress: trackers.filter(t => t.status === 'In Progress').length,
                 testing: trackers.filter(t => t.status === 'Testing').length,
-                complete: trackers.filter(t => t.status === 'Complete').length,
-                total: trackers.length
+                complete: trackers.filter(t => t.status === 'Complete').length
             };
 
             res.render('dev-tracker', {
-                title: 'Dev Tracker',
+                title: 'Support Tickets',
                 user: req.user,
+                mobileReady: true,
                 trackers,
                 stats,
                 filters,
-                currentDate: moment().format('YYYY-MM-DD'),
+                locations,
+                canManage: access.canManage,
+                fmtDate,
                 messages: req.flash()
             });
         } catch (error) {
             console.error('Error in getDevTrackerPage:', error);
-            req.flash('error', 'Failed to load dev tracker: ' + error.message);
+            req.flash('error', 'Failed to load tickets: ' + error.message);
             res.redirect('/home');
         }
     },
 
-    // GET /dev-tracker/:id - View specific tracker with tasks
+    // GET /dev-tracker/new
+    getNewTrackerPage: async (req, res, next) => {
+        try {
+            const access = getAccess(req.user);
+            const locations = await devTrackerDao.getLocations(access.locations);
+            res.render('dev-tracker-new', {
+                title: 'Support Tickets',
+                user: req.user,
+                mobileReady: true,
+                locations,
+                canManage: access.canManage,
+                types: access.canManage ? TYPES : REPORTER_TYPES,
+                currentLocation: req.user.location_code,
+                messages: req.flash()
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // GET /dev-tracker/:id
     getTrackerDetailsPage: async (req, res, next) => {
         try {
-            const trackerId = req.params.id;
-            const tracker = await devTrackerDao.findTrackerById(trackerId);
-
+            const access = getAccess(req.user);
+            const tracker = await devTrackerDao.findTrackerById(req.params.id, access);
             if (!tracker) {
-                req.flash('error', 'Tracker not found');
+                req.flash('error', 'Ticket not found');
                 return res.redirect('/dev-tracker');
             }
 
             res.render('dev-tracker-details', {
-                title: `Tracker: ${tracker.title}`,
+                title: 'Support Tickets',
                 user: req.user,
+                mobileReady: true,
                 tracker,
+                canManage: access.canManage,
+                fmtDate,
+                fmtDateTime: (d) => (d ? moment(d).format('DD-MMM-YYYY hh:mm A') : ''),
+                today: moment().format('YYYY-MM-DD'),
                 messages: req.flash()
             });
         } catch (error) {
             console.error('Error in getTrackerDetailsPage:', error);
-            req.flash('error', 'Failed to load tracker details: ' + error.message);
+            req.flash('error', 'Failed to load ticket: ' + error.message);
             res.redirect('/dev-tracker');
         }
     },
 
-    // GET /dev-tracker/new - New tracker form page
-    getNewTrackerPage: (req, res) => {
-        res.render('dev-tracker-new', {
-            title: 'New Dev Tracker Item',
-            user: req.user,
-            currentDate: moment().format('YYYY-MM-DD'),
-            messages: req.flash()
-        });
-    },
-
-    // GET /dev-tracker/:id/edit - Edit tracker form page
+    // GET /dev-tracker/:id/edit (manage)
     getEditTrackerPage: async (req, res, next) => {
         try {
-            const trackerId = req.params.id;
-            const tracker = await devTrackerDao.findTrackerById(trackerId);
-
+            const access = getAccess(req.user);
+            const [tracker, locations] = await Promise.all([
+                devTrackerDao.findTrackerById(req.params.id, access),
+                devTrackerDao.getLocations(access.locations)
+            ]);
             if (!tracker) {
-                req.flash('error', 'Tracker not found');
+                req.flash('error', 'Ticket not found');
                 return res.redirect('/dev-tracker');
             }
 
             res.render('dev-tracker-edit', {
-                title: `Edit: ${tracker.title}`,
+                title: 'Support Tickets',
                 user: req.user,
+                mobileReady: true,
                 tracker,
+                locations,
+                types: TYPES,
+                statuses: STATUSES,
+                priorities: PRIORITIES,
                 messages: req.flash()
             });
         } catch (error) {
             console.error('Error in getEditTrackerPage:', error);
-            req.flash('error', 'Failed to load tracker for editing: ' + error.message);
+            req.flash('error', 'Failed to load ticket for editing: ' + error.message);
             res.redirect('/dev-tracker');
         }
     },
 
-    // ============================================================================
-    // FORM SUBMISSION ROUTES (Hybrid: Form redirect or AJAX JSON)
-    // ============================================================================
-
-    // POST /dev-tracker - Create new tracker
+    // POST /dev-tracker
     createTracker: async (req, res, next) => {
         try {
-            const locationCode = req.user.location_code;
+            const access = getAccess(req.user);
             const userName = req.user.User_Name;
+            const title = (req.body.title || '').trim();
+            if (!title) return sendError(req, res, 400, 'Title is required', '/dev-tracker/new');
+
+            const station = resolveStation(req, access);
+            if (station.error) return sendError(req, res, 400, station.error, '/dev-tracker/new');
 
             const trackerData = {
-                title: req.body.title,
+                title,
                 description: req.body.description,
-                type: req.body.type || 'Task',
-                priority: req.body.priority || 'Medium',
-                assigned_to: req.body.assigned_to,
-                due_date: req.body.due_date || null,
-                tags: req.body.tags,
-                estimated_hours: req.body.estimated_hours || null,
-                location_code: locationCode,
+                type: pick(req.body.type, access.canManage ? TYPES : REPORTER_TYPES, 'Bug'),
+                priority: pick(req.body.priority, PRIORITIES, 'Medium'),
+                status: 'Open',
+                location_code: station.location_code,
+                scope: station.scope,
                 created_by: userName,
                 updated_by: userName
             };
+            if (access.canManage) {
+                Object.assign(trackerData, {
+                    assigned_to: req.body.assigned_to || null,
+                    due_date: req.body.due_date || null,
+                    tags: req.body.tags || null,
+                    estimated_hours: req.body.estimated_hours || null
+                });
+            }
 
             const newTracker = await devTrackerDao.createTracker(trackerData);
 
-            // Check if it's an AJAX request
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Tracker created successfully',
-                    tracker: newTracker
-                });
+            if (wantsJson(req)) {
+                return res.json({ success: true, message: 'Ticket created', tracker: newTracker });
             }
-
-            // Form submission - redirect with flash message
-            req.flash('success', 'Tracker created successfully');
+            req.flash('success', `Ticket #${newTracker.tracker_id} created`);
             res.redirect(`/dev-tracker/${newTracker.tracker_id}`);
-
         } catch (error) {
             console.error('Error in createTracker:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to create tracker: ' + error.message
-                });
-            }
-
-            req.flash('error', 'Failed to create tracker: ' + error.message);
-            res.redirect('/dev-tracker/new');
+            sendError(req, res, 500, 'Failed to create ticket: ' + error.message, '/dev-tracker/new');
         }
     },
 
-    // PUT /dev-tracker/:id - Update tracker
+    // PUT /dev-tracker/:id (manage)
     updateTracker: async (req, res, next) => {
+        const trackerId = req.params.id;
         try {
-            const trackerId = req.params.id;
-            const userName = req.user.User_Name;
+            const access = getAccess(req.user);
+            const existing = await devTrackerDao.findTrackerById(trackerId, access);
+            if (!existing) return sendError(req, res, 404, 'Ticket not found', '/dev-tracker');
 
-            const updateData = {
-                title: req.body.title,
+            const station = resolveStation(req, access);
+            if (station.error) return sendError(req, res, 400, station.error, `/dev-tracker/${trackerId}/edit`);
+
+            await devTrackerDao.updateTracker(trackerId, {
+                title: (req.body.title || existing.title).trim(),
                 description: req.body.description,
-                type: req.body.type,
-                status: req.body.status,
-                priority: req.body.priority,
-                assigned_to: req.body.assigned_to,
+                type: pick(req.body.type, TYPES, existing.type),
+                status: pick(req.body.status, STATUSES, existing.status),
+                priority: pick(req.body.priority, PRIORITIES, existing.priority),
+                location_code: station.location_code,
+                scope: station.scope,
+                assigned_to: req.body.assigned_to || null,
                 due_date: req.body.due_date || null,
-                tags: req.body.tags,
+                tags: req.body.tags || null,
                 estimated_hours: req.body.estimated_hours || null,
-                actual_hours: req.body.actual_hours || null,
-                updated_by: userName
-            };
+                updated_by: req.user.User_Name
+            });
 
-            await devTrackerDao.updateTracker(trackerId, updateData);
-
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Tracker updated successfully'
-                });
-            }
-
-            req.flash('success', 'Tracker updated successfully');
+            if (wantsJson(req)) return res.json({ success: true, message: 'Ticket updated' });
+            req.flash('success', 'Ticket updated');
             res.redirect(`/dev-tracker/${trackerId}`);
-
         } catch (error) {
             console.error('Error in updateTracker:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to update tracker: ' + error.message
-                });
-            }
-
-            req.flash('error', 'Failed to update tracker: ' + error.message);
-            res.redirect(`/dev-tracker/${req.params.id}/edit`);
+            sendError(req, res, 500, 'Failed to update ticket: ' + error.message, `/dev-tracker/${trackerId}/edit`);
         }
     },
 
-    // DELETE /dev-tracker/:id - Soft delete tracker
+    // DELETE /dev-tracker/:id (manage) - soft delete
     deleteTracker: async (req, res, next) => {
         try {
-            const trackerId = req.params.id;
-            const userName = req.user.User_Name;
+            const access = getAccess(req.user);
+            const existing = await devTrackerDao.findTrackerById(req.params.id, access);
+            if (!existing) return res.status(404).json({ success: false, error: 'Ticket not found' });
 
-            await devTrackerDao.deleteTracker(trackerId, userName);
-
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Tracker deleted successfully'
-                });
-            }
-
-            req.flash('success', 'Tracker deleted successfully');
-            res.redirect('/dev-tracker');
-
+            await devTrackerDao.deleteTracker(req.params.id, req.user.User_Name);
+            res.json({ success: true, message: 'Ticket deleted' });
         } catch (error) {
             console.error('Error in deleteTracker:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to delete tracker: ' + error.message
-                });
+            res.status(500).json({ success: false, error: 'Failed to delete ticket: ' + error.message });
+        }
+    },
+
+    // POST /dev-tracker/:id/comments
+    addComment: async (req, res, next) => {
+        const trackerId = req.params.id;
+        try {
+            const access = getAccess(req.user);
+            const tracker = await devTrackerDao.findTrackerById(trackerId, access);
+            if (!tracker) return sendError(req, res, 404, 'Ticket not found', '/dev-tracker');
+
+            const text = (req.body.comment_text || '').trim();
+            if (!text) return sendError(req, res, 400, 'Comment cannot be empty', `/dev-tracker/${trackerId}`);
+
+            await devTrackerDao.addComment({
+                tracker_id: trackerId,
+                comment_text: text,
+                is_internal: access.canManage && (req.body.is_internal === 'on' || req.body.is_internal === true) ? 1 : 0,
+                created_by: req.user.User_Name
+            });
+
+            if (wantsJson(req)) return res.json({ success: true });
+            res.redirect(`/dev-tracker/${trackerId}#comments`);
+        } catch (error) {
+            console.error('Error in addComment:', error);
+            sendError(req, res, 500, 'Failed to add comment: ' + error.message, `/dev-tracker/${trackerId}`);
+        }
+    },
+
+    // POST /dev-tracker/:id/worklog (manage)
+    addWorklog: async (req, res, next) => {
+        const trackerId = req.params.id;
+        try {
+            const access = getAccess(req.user);
+            const tracker = await devTrackerDao.findTrackerById(trackerId, access);
+            if (!tracker) return sendError(req, res, 404, 'Ticket not found', '/dev-tracker');
+
+            const hours = parseFloat(req.body.hours);
+            if (!(hours > 0 && hours <= 24)) {
+                return sendError(req, res, 400, 'Hours must be between 0 and 24', `/dev-tracker/${trackerId}`);
             }
 
-            req.flash('error', 'Failed to delete tracker: ' + error.message);
+            await devTrackerDao.addWorklog({
+                tracker_id: trackerId,
+                work_date: req.body.work_date || moment().format('YYYY-MM-DD'),
+                hours,
+                note: (req.body.note || '').trim().slice(0, 500) || null,
+                source: pick(req.body.source, ['Manual', 'Claude'], 'Manual'),
+                created_by: req.user.User_Name
+            });
+
+            if (wantsJson(req)) return res.json({ success: true });
+            res.redirect(`/dev-tracker/${trackerId}#worklog`);
+        } catch (error) {
+            console.error('Error in addWorklog:', error);
+            sendError(req, res, 500, 'Failed to log hours: ' + error.message, `/dev-tracker/${trackerId}`);
+        }
+    },
+
+    // DELETE /dev-tracker/worklog/:worklogId (manage)
+    deleteWorklog: async (req, res, next) => {
+        try {
+            const row = await devTrackerDao.deleteWorklog(req.params.worklogId);
+            if (!row) return res.status(404).json({ success: false, error: 'Entry not found' });
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error in deleteWorklog:', error);
+            res.status(500).json({ success: false, error: 'Failed to delete entry: ' + error.message });
+        }
+    },
+
+    // GET /dev-tracker/hours (manage) - where the hours went
+    getHoursPage: async (req, res, next) => {
+        try {
+            const fromDate = req.query.from || moment().startOf('month').format('YYYY-MM-DD');
+            const toDate = req.query.to || moment().format('YYYY-MM-DD');
+            const rows = await devTrackerDao.getWorklogReport(fromDate, toDate);
+
+            const sumBy = (keyFn) => {
+                const map = {};
+                rows.forEach(r => {
+                    const k = keyFn(r);
+                    map[k] = (map[k] || 0) + Number(r.hours);
+                });
+                return Object.entries(map).sort((a, b) => b[1] - a[1]);
+            };
+
+            res.render('dev-tracker-hours', {
+                title: 'Ticket Hours',
+                user: req.user,
+                mobileReady: true,
+                fromDate,
+                toDate,
+                rows,
+                total: rows.reduce((s, r) => s + Number(r.hours), 0),
+                byType: sumBy(r => r.type),
+                byScope: sumBy(r => (r.scope === 'ALL' ? 'All locations' : 'Station request')),
+                byStation: sumBy(r => r.location_code || 'Platform'),
+                byTicket: sumBy(r => `#${r.tracker_id} ${r.title}`),
+                fmtDate,
+                messages: req.flash()
+            });
+        } catch (error) {
+            console.error('Error in getHoursPage:', error);
+            req.flash('error', 'Failed to load hours: ' + error.message);
             res.redirect('/dev-tracker');
         }
     },
 
     // ============================================================================
-    // TASK MANAGEMENT ROUTES
+    // TASKS (manage) - internal breakdown, never shown to reporters
     // ============================================================================
 
-    // POST /dev-tracker/:id/tasks - Create new task
+    // POST /dev-tracker/:id/tasks
     createTask: async (req, res, next) => {
+        const trackerId = req.params.id;
         try {
-            const trackerId = req.params.id;
-            const userName = req.user.User_Name;
+            const tracker = await devTrackerDao.findTrackerById(trackerId, getAccess(req.user));
+            if (!tracker) return sendError(req, res, 404, 'Ticket not found', '/dev-tracker');
 
-            const taskData = {
+            const userName = req.user.User_Name;
+            const newTask = await devTrackerDao.createTask({
                 tracker_id: trackerId,
                 task_title: req.body.task_title,
                 task_description: req.body.task_description,
-                task_priority: req.body.task_priority || 'Medium',
+                task_priority: pick(req.body.task_priority, ['Low', 'Medium', 'High'], 'Medium'),
                 assigned_to: req.body.assigned_to,
                 due_date: req.body.due_date || null,
                 estimated_hours: req.body.estimated_hours || null,
-                sequence_order: req.body.sequence_order || 1,
+                notes: req.body.notes,
+                sequence_order: (tracker.tasks || []).length + 1,
                 created_by: userName,
                 updated_by: userName
-            };
+            });
 
-            const newTask = await devTrackerDao.createTask(taskData);
-
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Task created successfully',
-                    task: newTask
-                });
-            }
-
-            req.flash('success', 'Task created successfully');
+            if (wantsJson(req)) return res.json({ success: true, task: newTask });
             res.redirect(`/dev-tracker/${trackerId}`);
-
         } catch (error) {
             console.error('Error in createTask:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to create task: ' + error.message
-                });
-            }
-
-            req.flash('error', 'Failed to create task: ' + error.message);
-            res.redirect(`/dev-tracker/${req.params.id}`);
+            sendError(req, res, 500, 'Failed to create task: ' + error.message, `/dev-tracker/${trackerId}`);
         }
     },
 
-    // PUT /dev-tracker/tasks/:taskId - Update task
+    // PUT /dev-tracker/tasks/:taskId - status change from the task list
     updateTask: async (req, res, next) => {
         try {
-            const taskId = req.params.taskId;
-            const userName = req.user.User_Name;
+            const task = await devTrackerDao.findTaskById(req.params.taskId);
+            const tracker = task && await devTrackerDao.findTrackerById(task.tracker_id, getAccess(req.user));
+            if (!tracker) return res.status(404).json({ success: false, error: 'Task not found' });
 
-            const updateData = {
-                task_title: req.body.task_title,
-                task_description: req.body.task_description,
-                task_status: req.body.task_status,
-                task_priority: req.body.task_priority,
-                assigned_to: req.body.assigned_to,
-                due_date: req.body.due_date || null,
-                estimated_hours: req.body.estimated_hours || null,
-                actual_hours: req.body.actual_hours || null,
-                completion_percentage: req.body.completion_percentage || 0,
-                notes: req.body.notes,
-                updated_by: userName
-            };
-
-            await devTrackerDao.updateTask(taskId, updateData);
-
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Task updated successfully'
-                });
-            }
-
-            // Get tracker ID for redirect
-            const task = await devTrackerDao.findTaskById(taskId);
-            req.flash('success', 'Task updated successfully');
-            res.redirect(`/dev-tracker/${task.tracker_id}`);
-
+            await devTrackerDao.updateTask(req.params.taskId, {
+                task_status: pick(req.body.task_status, ['To Do', 'In Progress', 'Done', 'Blocked'], task.task_status),
+                updated_by: req.user.User_Name
+            });
+            res.json({ success: true });
         } catch (error) {
             console.error('Error in updateTask:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to update task: ' + error.message
-                });
-            }
-
-            req.flash('error', 'Failed to update task: ' + error.message);
-            res.redirect('/dev-tracker');
+            res.status(500).json({ success: false, error: 'Failed to update task: ' + error.message });
         }
     },
 
-    // DELETE /dev-tracker/tasks/:taskId - Soft delete task
+    // DELETE /dev-tracker/tasks/:taskId - soft delete
     deleteTask: async (req, res, next) => {
         try {
-            const taskId = req.params.taskId;
-            const userName = req.user.User_Name;
+            const task = await devTrackerDao.findTaskById(req.params.taskId);
+            const tracker = task && await devTrackerDao.findTrackerById(task.tracker_id, getAccess(req.user));
+            if (!tracker) return res.status(404).json({ success: false, error: 'Task not found' });
 
-            // Get task info before deletion for redirect
-            const task = await devTrackerDao.findTaskById(taskId);
-            await devTrackerDao.deleteTask(taskId, userName);
-
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.json({
-                    success: true,
-                    message: 'Task deleted successfully'
-                });
-            }
-
-            req.flash('success', 'Task deleted successfully');
-            res.redirect(`/dev-tracker/${task.tracker_id}`);
-
+            await devTrackerDao.deleteTask(req.params.taskId, req.user.User_Name);
+            res.json({ success: true });
         } catch (error) {
             console.error('Error in deleteTask:', error);
-            
-            if (req.xhr || req.headers['content-type'] === 'application/json') {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to delete task: ' + error.message
-                });
-            }
-
-            req.flash('error', 'Failed to delete task: ' + error.message);
-            res.redirect('/dev-tracker');
-        }
-    },
-
-    // ============================================================================
-    // API ROUTES (Always JSON responses)
-    // ============================================================================
-
-    // GET /api/dev-tracker - Get trackers list (JSON)
-    getTrackersAPI: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const filters = {
-                status: req.query.status || null,
-                type: req.query.type || null,
-                priority: req.query.priority || null,
-                assigned_to: req.query.assigned_to || null,
-                includeDeleted: req.query.includeDeleted === 'true'
-            };
-
-            const trackers = await devTrackerDao.findTrackers(locationCode, filters);
-            const stats = await devTrackerDao.getTrackerStats(locationCode);
-
-            res.json({
-                success: true,
-                data: {
-                    trackers,
-                    stats,
-                    filters
-                }
-            });
-        } catch (error) {
-            console.error('Error in getTrackersAPI:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to fetch trackers: ' + error.message
-            });
-        }
-    },
-
-    // GET /api/dev-tracker/:id - Get tracker details (JSON)
-    getTrackerAPI: async (req, res, next) => {
-        try {
-            const trackerId = req.params.id;
-            const tracker = await devTrackerDao.findTrackerById(trackerId);
-
-            if (!tracker) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Tracker not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                data: tracker
-            });
-        } catch (error) {
-            console.error('Error in getTrackerAPI:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to fetch tracker: ' + error.message
-            });
-        }
-    },
-
-    // POST /api/dev-tracker/search - Search trackers (JSON)
-    searchTrackersAPI: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const searchTerm = req.body.searchTerm;
-
-            if (!searchTerm || searchTerm.trim().length < 2) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Search term must be at least 2 characters'
-                });
-            }
-
-            const results = await devTrackerDao.searchTrackers(locationCode, searchTerm.trim());
-
-            res.json({
-                success: true,
-                data: results
-            });
-        } catch (error) {
-            console.error('Error in searchTrackersAPI:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to search trackers: ' + error.message
-            });
-        }
-    },
-
-    // PUT /api/dev-tracker/tasks/:taskId/progress - Update task progress (JSON)
-    updateTaskProgressAPI: async (req, res, next) => {
-        try {
-            const taskId = req.params.taskId;
-            const completionPercentage = req.body.completion_percentage;
-
-            if (completionPercentage < 0 || completionPercentage > 100) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Completion percentage must be between 0 and 100'
-                });
-            }
-
-            await devTrackerDao.updateTaskProgress(taskId, completionPercentage);
-
-            res.json({
-                success: true,
-                message: 'Task progress updated successfully'
-            });
-        } catch (error) {
-            console.error('Error in updateTaskProgressAPI:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Failed to update task progress: ' + error.message
-            });
+            res.status(500).json({ success: false, error: 'Failed to delete task: ' + error.message });
         }
     }
-
 };

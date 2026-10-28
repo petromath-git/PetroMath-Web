@@ -1,0 +1,30 @@
+//- Shared styles for the Support Tickets pages (rendered with mobileReady)
+style.
+    /* Bootstrap 4 has no gap / row-gutter utilities */
+    .ticket-page .gap-1 { gap: 0.25rem; }
+    .ticket-page .gap-2 { gap: 0.5rem; }
+    .ticket-page .row.g-2 { margin: -0.25rem; }
+    .ticket-page .row.g-2 > [class*="col"] { padding: 0.25rem; }
+    .ticket-page .row.g-3 { margin: -0.5rem; }
+    .ticket-page .row.g-3 > [class*="col"] { padding: 0.5rem; }
+    .ticket-page .badge { font-weight: 500; }
+    .task-done { text-decoration: line-through; }
+    .ticket-text { white-space: pre-wrap; word-break: break-word; }
+    .ticket-row { border-left: 4px solid transparent; }
+    .ticket-row.priority-critical { border-left-color: #dc3545; }
+    .ticket-row.priority-high { border-left-color: #fd7e14; }
+    .ticket-row.priority-medium { border-left-color: #20c997; }
+    .ticket-row.priority-low { border-left-color: #adb5bd; }
+    .stat-card { border-left-width: 4px !important; color: inherit; }
+    .comment { border-left: 3px solid #dee2e6; padding-left: 10px; }
+    .comment-internal { border-left-color: #6c757d; background: #f8f9fa; }
+    @media (max-width: 767px) {
+        .ticket-page { padding-left: 12px; padding-right: 12px; overflow-x: hidden; }
+        .ticket-page h2 { font-size: 1.3rem; }
+        .ticket-page h3 { font-size: 1.15rem; }
+        /* 16px stops iOS zooming into the field on focus */
+        .ticket-page .form-control,
+        .ticket-page .form-select { font-size: 16px; }
+        .ticket-page .btn { min-height: 38px; }
+        .ticket-page .stat-card h4 { font-size: 1.2rem; }
+    }
