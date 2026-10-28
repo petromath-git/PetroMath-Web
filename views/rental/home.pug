@@ -1,4 +1,5 @@
 extends ../layout
+include ../mixins/card-toggle-mobile
 
 //- Rental invoices (tkt #35). Row data for the edit modals lives in data-* attributes
 //- (not JSON in <script>) so names and addresses are always HTML-escaped.
@@ -41,12 +42,16 @@ mixin invoiceActions(i)
 block content
     style.
         .rental-tabs .nav-link { font-weight: 600; }
-        .rental-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
-        .rental-card .amt { font-weight: 700; }
-        .stat-tile { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; background: #fff; }
+        @media (min-width: 768px) { .rental-table-wrap { overflow-x: auto; } }
+        @media (max-width: 1399px) { .rental-desc { display: none !important; } }
+        .stat-tile { border: 1px solid #dee2e6; border-radius: 0.5rem; padding: 8px 12px; background: #fff; }
         .stat-tile .lbl { font-size: 11px; color: #6c757d; text-transform: uppercase; }
         .stat-tile .val { font-size: 18px; font-weight: 700; }
-        @media (max-width: 575px) { .stat-tile .val { font-size: 15px; } }
+        @media (max-width: 575px) {
+            .stat-tile { padding: 6px 8px; }
+            .stat-tile .val { font-size: 13px; white-space: nowrap; }
+            .stat-tile .lbl { font-size: 10px; }
+        }
 
     div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
         span#messageText
@@ -123,17 +128,17 @@ block content
                 if !invoices.length
                     .alert.alert-light.border No invoices for #{monthLabel} yet.
                 else
-                    .d-none.d-lg-block
-                        table.table.table-sm.table-hover.table-striped
+                    //- Mobile Cards: on phones each row is a card collapsed to tenant + total
+                    .rental-table-wrap
+                        table.table.table-sm.table-hover.table-striped.m-stack.m-collapse
                             thead.thead-dark
                                 tr
                                     th No.
                                     th Date
                                     th Tenant
-                                    th Description
+                                    th.rental-desc Description
                                     th.text-right Taxable
-                                    th.text-right CGST
-                                    th.text-right SGST
+                                    th.text-right GST
                                     th.text-right Total
                                     th.text-right TDS
                                     th Status
@@ -142,32 +147,17 @@ block content
                             tbody
                                 each i in invoices
                                     tr(class=(i.status === 'CANCELLED' ? 'text-muted' : ''))
-                                        td= i.invoice_no || '—'
-                                        td= fmtDate(i.invoice_date)
-                                        td= i.display_name
-                                        td.small= i.description
-                                        td.text-right= fmtAmt(i.taxable_value)
-                                        td.text-right= fmtAmt(i.cgst_amount)
-                                        td.text-right= fmtAmt(i.sgst_amount)
-                                        td.text-right.font-weight-bold= fmtAmt(i.total_amount)
-                                        td.text-right= Number(i.tds_amount) ? fmtAmt(i.tds_amount) : ''
-                                        td: +statusBadge(i)
-                                        td: +glBadge(i)
-                                        td.text-nowrap: +invoiceActions(i)
-                    .d-lg-none
-                        each i in invoices
-                            .rental-card(class=(i.status === 'CANCELLED' ? 'text-muted' : ''))
-                                .d-flex.justify-content-between
-                                    strong= i.display_name
-                                    +statusBadge(i)
-                                .small.text-muted
-                                    | #{i.invoice_no ? 'No. ' + i.invoice_no + ' · ' : ''}#{fmtDate(i.invoice_date)}
-                                .small= i.description
-                                .d-flex.justify-content-between.align-items-center.mt-1
-                                    div
-                                        .small Taxable ₹#{fmtAmt(i.taxable_value)} + GST ₹#{fmtAmt(Number(i.cgst_amount) + Number(i.sgst_amount))}
-                                        .amt ₹#{fmtAmt(i.total_amount)}
-                                    div.text-nowrap: +invoiceActions(i)
+                                        td.text-nowrap(data-label="Invoice No.")= i.invoice_no || 'Draft'
+                                        td.text-nowrap(data-label="Date")= fmtDate(i.invoice_date)
+                                        td.m-title= i.display_name
+                                        td.small.rental-desc(data-label="Description")= i.description
+                                        td.text-right(data-label="Taxable")= fmtAmt(i.taxable_value)
+                                        td.text-right(data-label="GST (CGST + SGST)")= fmtAmt(Number(i.cgst_amount) + Number(i.sgst_amount))
+                                        td.text-right.font-weight-bold.m-summary(data-label="Total") ₹#{fmtAmt(i.total_amount)}
+                                        td.text-right(data-label="TDS" class=(Number(i.tds_amount) ? '' : 'm-hide'))= Number(i.tds_amount) ? fmtAmt(i.tds_amount) : ''
+                                        td(data-label="Status"): +statusBadge(i)
+                                        td(data-label="GL"): +glBadge(i)
+                                        td.text-nowrap.m-actions: +invoiceActions(i)
 
             //- ───────────────────────── Tenants ─────────────────────────
             if tab === 'tenants'
@@ -179,43 +169,52 @@ block content
                 if !tenants.length
                     .alert.alert-light.border No tenants yet. Add the first one.
                 else
-                    each t in tenants
-                        - var ended = t.end_date && isoDate(t.end_date) < isoDate(new Date())
-                        .rental-card(class=(ended ? 'bg-light' : ''))
-                            .d-flex.justify-content-between.flex-wrap
-                                div
-                                    strong= t.tenant_name
-                                    if ended
-                                        span.badge.badge-secondary.ml-2 Ended #{fmtDate(t.end_date)}
-                                    .small.text-muted
-                                        | GSTIN #{t.gstin || 'unregistered'} · from #{fmtDate(t.start_date)}
-                                        if t.end_date && !ended
-                                            |  to #{fmtDate(t.end_date)}
-                                    if t.property_address
-                                        .small Property: #{t.property_address}
-                                .text-right
-                                    .amt ₹#{fmtAmt(t.monthly_rent)} / month
-                                    .small.text-muted
-                                        | GST #{Number(t.gst_rate)}% · SAC #{t.sac_code}
-                                        if Number(t.tds_percent)
-                                            |  · TDS #{Number(t.tds_percent)}%
-                            .mt-2
-                                button.btn.btn-outline-primary.btn-sm.mr-1.edit-tenant-btn(type="button"
-                                    data-id=t.tenant_id data-name=t.tenant_name data-address=t.tenant_address data-gstin=t.gstin
-                                    data-phone=t.phone data-email=t.email data-property=t.property_address data-desc=t.rent_description
-                                    data-sac=t.sac_code data-rent=t.monthly_rent data-rate=t.gst_rate data-tds=t.tds_percent
-                                    data-start=isoDate(t.start_date) data-end=isoDate(t.end_date) data-notes=t.notes
-                                    data-invoices=t.invoice_count)
-                                    i.bi.bi-pencil.mr-1
-                                    | Edit
-                                if canInvoice
-                                    a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}`)
-                                        i.bi.bi-journal-text.mr-1
-                                        | Statement
-                                if Number(t.invoice_count) === 0
-                                    button.btn.btn-outline-danger.btn-sm.delete-tenant-btn(type="button" data-id=t.tenant_id data-name=t.tenant_name)
-                                        i.bi.bi-trash
-                                span.small.text-muted.ml-2 Ledger: #{t.ledger_name || 'not linked'} · bank tag: RENT - #{t.tenant_name}
+                    //- Mobile Cards: on phones each row is a card collapsed to tenant + monthly rent
+                    .rental-table-wrap
+                        table.table.table-sm.table-hover.table-striped.m-stack.m-collapse
+                            thead.thead-dark
+                                tr
+                                    th Tenant
+                                    th GSTIN
+                                    th Property
+                                    th.text-right Rent / month
+                                    th.text-right GST
+                                    th.text-right TDS
+                                    th Period
+                                    th Ledger / bank tag
+                                    th(style="width:150px")
+                            tbody
+                                each t in tenants
+                                    - var ended = t.end_date && isoDate(t.end_date) < isoDate(new Date())
+                                    tr(class=(ended ? 'text-muted' : ''))
+                                        td.m-title
+                                            = t.tenant_name
+                                            if ended
+                                                span.badge.badge-secondary.ml-2 Ended
+                                        td(data-label="GSTIN")= t.gstin || 'Unregistered'
+                                        td.small.m-wide(data-label="Property")= t.property_address || '—'
+                                        td.text-right.font-weight-bold.m-summary(data-label="Rent / month") ₹#{fmtAmt(t.monthly_rent)}
+                                        td.text-right(data-label="GST") #{Number(t.gst_rate)}% · SAC #{t.sac_code}
+                                        td.text-right(data-label="TDS")= Number(t.tds_percent) ? Number(t.tds_percent) + '%' : 'None'
+                                        td(data-label="Period")
+                                            | #{fmtDate(t.start_date)} to #{t.end_date ? fmtDate(t.end_date) : 'ongoing'}
+                                        td.small.m-wide(data-label="Ledger / bank tag")
+                                            div= t.ledger_name || 'not linked'
+                                            div.text-muted RENT - #{t.tenant_name}
+                                        td.text-nowrap.m-actions
+                                            button.btn.btn-outline-primary.btn-sm.mr-1.edit-tenant-btn(type="button" title="Edit"
+                                                data-id=t.tenant_id data-name=t.tenant_name data-address=t.tenant_address data-gstin=t.gstin
+                                                data-phone=t.phone data-email=t.email data-property=t.property_address data-desc=t.rent_description
+                                                data-sac=t.sac_code data-rent=t.monthly_rent data-rate=t.gst_rate data-tds=t.tds_percent
+                                                data-start=isoDate(t.start_date) data-end=isoDate(t.end_date) data-notes=t.notes
+                                                data-invoices=t.invoice_count)
+                                                i.bi.bi-pencil
+                                            if canInvoice
+                                                a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}` title="Statement")
+                                                    i.bi.bi-journal-text
+                                            if Number(t.invoice_count) === 0
+                                                button.btn.btn-outline-danger.btn-sm.delete-tenant-btn(type="button" title="Delete" data-id=t.tenant_id data-name=t.tenant_name)
+                                                    i.bi.bi-trash
 
             //- ───────────────────────── Statement ─────────────────────────
             if tab === 'statement'
@@ -256,8 +255,9 @@ block content
                             | Receipts are rent credits tagged #[strong RENT - tenant] on the rent bank's statement (Bank Statement / Reconciliation).
                             if statement.totalTds
                                 |  TDS of ₹#{fmtAmt(statement.totalTds)} is booked to TDS Receivable on the invoices, so the tenant owes the amount net of TDS.
-                        .table-responsive
-                            table.table.table-sm.table-striped
+                        //- Mobile Cards: on phones each line is a small card (particulars, date, amount, balance)
+                        .rental-table-wrap
+                            table.table.table-sm.table-striped.m-stack
                                 thead.thead-dark
                                     tr
                                         th Date
@@ -266,28 +266,34 @@ block content
                                         th.text-right Credit
                                         th.text-right Balance
                                 tbody
-                                    tr.font-weight-bold
-                                        td
-                                        td Opening balance
-                                        td
-                                        td
-                                        td.text-right= fmtAmt(statement.opening)
+                                    tr.font-weight-bold.m-static
+                                        td.m-hide
+                                        td.m-title Opening balance
+                                        td.m-hide
+                                        td.m-hide
+                                        td.text-right(data-label="Balance")= fmtAmt(statement.opening)
                                     each l in statement.lines
                                         tr
-                                            td.text-nowrap= l.txn_date_display
-                                            td
+                                            td.text-nowrap(data-label="Date")= l.txn_date_display
+                                            td.m-title
                                                 = l.particulars
                                                 if Number(l.tds)
                                                     span.small.text-muted  (TDS ₹#{fmtAmt(l.tds)})
-                                            td.text-right= Number(l.debit) ? fmtAmt(l.debit) : ''
-                                            td.text-right= Number(l.credit) ? fmtAmt(l.credit) : ''
-                                            td.text-right= fmtAmt(l.balance)
-                                    tr.font-weight-bold
-                                        td
-                                        td Closing balance
-                                        td.text-right= fmtAmt(statement.totalDebit)
-                                        td.text-right= fmtAmt(statement.totalCredit)
-                                        td.text-right= fmtAmt(statement.closing)
+                                            if Number(l.debit)
+                                                td.text-right(data-label="Billed")= fmtAmt(l.debit)
+                                            else
+                                                td.m-hide
+                                            if Number(l.credit)
+                                                td.text-right(data-label="Received")= fmtAmt(l.credit)
+                                            else
+                                                td.m-hide
+                                            td.text-right(data-label="Balance")= fmtAmt(l.balance)
+                                    tr.font-weight-bold.m-static
+                                        td.m-hide
+                                        td.m-title Closing balance
+                                        td.text-right(data-label="Billed")= fmtAmt(statement.totalDebit)
+                                        td.text-right(data-label="Received")= fmtAmt(statement.totalCredit)
+                                        td.text-right(data-label="Balance")= fmtAmt(statement.closing)
 
             //- ───────────────────────── Settings ─────────────────────────
             if tab === 'settings'
@@ -342,6 +348,8 @@ block content
                     button.btn.btn-primary.btn-sm(type="submit") Save settings
 
     //- ───────────────────────── Modals ─────────────────────────
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
+
     if !notSetUp
         .modal.fade#tenantModal(tabindex="-1")
             .modal-dialog.modal-lg
