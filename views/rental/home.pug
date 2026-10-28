@@ -1,0 +1,608 @@
+extends ../layout
+
+//- Rental invoices (tkt #35). Row data for the edit modals lives in data-* attributes
+//- (not JSON in <script>) so names and addresses are always HTML-escaped.
+
+mixin statusBadge(i)
+    if i.status === 'FINAL'
+        span.badge.badge-success Final
+    else if i.status === 'DRAFT'
+        span.badge.badge-warning Draft
+    else
+        span.badge.badge-secondary(title=i.cancel_reason) Cancelled
+
+mixin glBadge(i)
+    if i.status === 'DRAFT'
+        span.text-muted —
+    else if i.gl_status === 'PROCESSED'
+        span.badge.badge-light.border(title="Posted by Create Accounting") Posted
+    else if i.gl_status === 'ERROR'
+        span.badge.badge-danger(title="Create Accounting failed — see GL Control") Error
+    else if i.status === 'FINAL'
+        span.badge.badge-light.border.text-muted(title="Posts on the next Create Accounting run") Pending
+
+mixin invoiceActions(i)
+    if i.status === 'DRAFT'
+        button.btn.btn-outline-primary.btn-sm.mr-1.edit-draft-btn(type="button" title="Edit draft"
+            data-id=i.invoice_id data-name=i.display_name data-date=i.invoice_date_iso data-desc=i.description
+            data-sac=i.sac_code data-taxable=i.taxable_value data-rate=(Number(i.cgst_rate) * 2) data-tds=i.tds_amount)
+            i.bi.bi-pencil
+        button.btn.btn-outline-danger.btn-sm.delete-draft-btn(type="button" title="Delete draft" data-id=i.invoice_id data-name=i.display_name)
+            i.bi.bi-trash
+    else
+        a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental/invoice/${i.invoice_id}/pdf` target="_blank" title="View PDF")
+            i.bi.bi-file-earmark-pdf
+        a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental/invoice/${i.invoice_id}/pdf?download=1` title="Download PDF")
+            i.bi.bi-download
+        if i.status === 'FINAL'
+            button.btn.btn-outline-danger.btn-sm.cancel-inv-btn(type="button" title="Cancel invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name)
+                i.bi.bi-x-circle
+
+block content
+    style.
+        .rental-tabs .nav-link { font-weight: 600; }
+        .rental-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+        .rental-card .amt { font-weight: 700; }
+        .stat-tile { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; background: #fff; }
+        .stat-tile .lbl { font-size: 11px; color: #6c757d; text-transform: uppercase; }
+        .stat-tile .val { font-size: 18px; font-weight: 700; }
+        @media (max-width: 575px) { .stat-tile .val { font-size: 15px; } }
+
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .container-fluid.py-3
+        .d-flex.align-items-center.mb-2
+            div
+                h4.mb-0.text-primary Rental Invoices
+                if !notSetUp
+                    small.text-muted #{settings.landlord_name} · GSTIN #{settings.gstin}
+
+        if notSetUp
+            .alert.alert-info Rental invoices are not set up for #{user.location_code}.
+        else
+            if !gstinOk
+                .alert.alert-danger
+                    | The landlord GSTIN in Settings (#{settings.gstin}) fails the check digit. Fix it before finalising invoices.
+            if !settings.rent_bank_id
+                .alert.alert-warning.small
+                    | No rent bank set. In #[a(href="/rental?tab=settings") Settings], pick the bank the rent is paid into,
+                    | so rent receipts can be tagged to tenants on its bank statement.
+
+            ul.nav.nav-tabs.rental-tabs.mb-3
+                each t in [['invoices', 'Invoices'], ['tenants', 'Tenants'], ['statement', 'Statement'], ['settings', 'Settings']]
+                    li.nav-item
+                        a.nav-link(class=(tab === t[0] ? 'active' : '') href=`/rental?tab=${t[0]}&month=${month}`)= t[1]
+
+            //- ───────────────────────── Invoices ─────────────────────────
+            if tab === 'invoices'
+                .d-flex.flex-wrap.align-items-end.mb-3
+                    .mr-2.mb-2
+                        label.small.mb-1 Rent month
+                        input.form-control.form-control-sm#monthPicker(type="month" value=month style="width:170px")
+                    .mb-2.mr-2
+                        button.btn.btn-success.btn-sm#generateBtn(type="button" disabled=(due.length === 0))
+                            i.bi.bi-magic.mr-1
+                            | Create drafts (#{due.length})
+                    .mb-2
+                        button.btn.btn-primary.btn-sm#finalizeAllBtn(type="button" disabled=(draftCount === 0))
+                            i.bi.bi-check2-all.mr-1
+                            | Finalise all drafts (#{draftCount})
+
+                p.small.text-muted.mb-2
+                    | #[strong Create drafts] makes one draft per tenant active in #{monthLabel} with the rent from the tenant master.
+                    | Check and edit the drafts, then #[strong Finalise]: each gets the next invoice number (last used: #{settings.last_invoice_no})
+                    | and can't be edited after that. To correct a final invoice, cancel it and create a new draft.
+
+                .row.mb-3
+                    .col-4: .stat-tile
+                        .lbl Taxable
+                        .val ₹#{fmtAmt(totals.taxable)}
+                    .col-4: .stat-tile
+                        .lbl GST
+                        .val ₹#{fmtAmt(totals.gst)}
+                    .col-4: .stat-tile
+                        .lbl Total
+                        .val ₹#{fmtAmt(totals.total)}
+
+                if !invoices.length
+                    .alert.alert-light.border No invoices for #{monthLabel} yet.
+                else
+                    .d-none.d-lg-block
+                        table.table.table-sm.table-hover.table-striped
+                            thead.thead-dark
+                                tr
+                                    th No.
+                                    th Date
+                                    th Tenant
+                                    th Description
+                                    th.text-right Taxable
+                                    th.text-right CGST
+                                    th.text-right SGST
+                                    th.text-right Total
+                                    th.text-right TDS
+                                    th Status
+                                    th GL
+                                    th(style="width:130px")
+                            tbody
+                                each i in invoices
+                                    tr(class=(i.status === 'CANCELLED' ? 'text-muted' : ''))
+                                        td= i.invoice_no || '—'
+                                        td= fmtDate(i.invoice_date)
+                                        td= i.display_name
+                                        td.small= i.description
+                                        td.text-right= fmtAmt(i.taxable_value)
+                                        td.text-right= fmtAmt(i.cgst_amount)
+                                        td.text-right= fmtAmt(i.sgst_amount)
+                                        td.text-right.font-weight-bold= fmtAmt(i.total_amount)
+                                        td.text-right= Number(i.tds_amount) ? fmtAmt(i.tds_amount) : ''
+                                        td: +statusBadge(i)
+                                        td: +glBadge(i)
+                                        td.text-nowrap: +invoiceActions(i)
+                    .d-lg-none
+                        each i in invoices
+                            .rental-card(class=(i.status === 'CANCELLED' ? 'text-muted' : ''))
+                                .d-flex.justify-content-between
+                                    strong= i.display_name
+                                    +statusBadge(i)
+                                .small.text-muted
+                                    | #{i.invoice_no ? 'No. ' + i.invoice_no + ' · ' : ''}#{fmtDate(i.invoice_date)}
+                                .small= i.description
+                                .d-flex.justify-content-between.align-items-center.mt-1
+                                    div
+                                        .small Taxable ₹#{fmtAmt(i.taxable_value)} + GST ₹#{fmtAmt(Number(i.cgst_amount) + Number(i.sgst_amount))}
+                                        .amt ₹#{fmtAmt(i.total_amount)}
+                                    div.text-nowrap: +invoiceActions(i)
+
+            //- ───────────────────────── Tenants ─────────────────────────
+            if tab === 'tenants'
+                .d-flex.mb-3
+                    button.btn.btn-success.btn-sm#addTenantBtn(type="button")
+                        i.bi.bi-plus-circle.mr-1
+                        | Add Tenant
+
+                if !tenants.length
+                    .alert.alert-light.border No tenants yet. Add the first one.
+                else
+                    each t in tenants
+                        - var ended = t.end_date && isoDate(t.end_date) < isoDate(new Date())
+                        .rental-card(class=(ended ? 'bg-light' : ''))
+                            .d-flex.justify-content-between.flex-wrap
+                                div
+                                    strong= t.tenant_name
+                                    if ended
+                                        span.badge.badge-secondary.ml-2 Ended #{fmtDate(t.end_date)}
+                                    .small.text-muted
+                                        | GSTIN #{t.gstin || 'unregistered'} · from #{fmtDate(t.start_date)}
+                                        if t.end_date && !ended
+                                            |  to #{fmtDate(t.end_date)}
+                                    if t.property_address
+                                        .small Property: #{t.property_address}
+                                .text-right
+                                    .amt ₹#{fmtAmt(t.monthly_rent)} / month
+                                    .small.text-muted
+                                        | GST #{Number(t.gst_rate)}% · SAC #{t.sac_code}
+                                        if Number(t.tds_percent)
+                                            |  · TDS #{Number(t.tds_percent)}%
+                            .mt-2
+                                button.btn.btn-outline-primary.btn-sm.mr-1.edit-tenant-btn(type="button"
+                                    data-id=t.tenant_id data-name=t.tenant_name data-address=t.tenant_address data-gstin=t.gstin
+                                    data-phone=t.phone data-email=t.email data-property=t.property_address data-desc=t.rent_description
+                                    data-sac=t.sac_code data-rent=t.monthly_rent data-rate=t.gst_rate data-tds=t.tds_percent
+                                    data-start=isoDate(t.start_date) data-end=isoDate(t.end_date) data-notes=t.notes
+                                    data-invoices=t.invoice_count)
+                                    i.bi.bi-pencil.mr-1
+                                    | Edit
+                                a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}`)
+                                    i.bi.bi-journal-text.mr-1
+                                    | Statement
+                                if Number(t.invoice_count) === 0
+                                    button.btn.btn-outline-danger.btn-sm.delete-tenant-btn(type="button" data-id=t.tenant_id data-name=t.tenant_name)
+                                        i.bi.bi-trash
+                                span.small.text-muted.ml-2 Ledger: #{t.ledger_name || 'not linked'} · bank tag: RENT - #{t.tenant_name}
+
+            //- ───────────────────────── Statement ─────────────────────────
+            if tab === 'statement'
+                if !tenants.length
+                    .alert.alert-light.border Add a tenant first.
+                else
+                    form.d-flex.flex-wrap.align-items-end.mb-3(method="get" action="/rental")
+                        input(type="hidden" name="tab" value="statement")
+                        .mr-2.mb-2
+                            label.small.mb-1 Tenant
+                            select.form-control.form-control-sm(name="tenant" style="min-width:240px")
+                                each t in tenants
+                                    option(value=t.tenant_id selected=(statement && statement.tenantId === t.tenant_id))= t.tenant_name
+                        .mr-2.mb-2
+                            label.small.mb-1 From
+                            input.form-control.form-control-sm(type="date" name="from" value=statement && statement.fromDate)
+                        .mr-2.mb-2
+                            label.small.mb-1 To
+                            input.form-control.form-control-sm(type="date" name="to" value=statement && statement.toDate)
+                        .mb-2
+                            button.btn.btn-primary.btn-sm(type="submit") Show
+
+                    if statement
+                        .row.mb-3
+                            .col-6.col-md-3.mb-2: .stat-tile
+                                .lbl Opening
+                                .val ₹#{fmtAmt(statement.opening)}
+                            .col-6.col-md-3.mb-2: .stat-tile
+                                .lbl Billed (net of TDS)
+                                .val ₹#{fmtAmt(statement.totalDebit)}
+                            .col-6.col-md-3.mb-2: .stat-tile
+                                .lbl Received
+                                .val ₹#{fmtAmt(statement.totalCredit)}
+                            .col-6.col-md-3.mb-2: .stat-tile
+                                .lbl Outstanding
+                                .val(class=(statement.closing > 0 ? 'text-danger' : 'text-success')) ₹#{fmtAmt(statement.closing)}
+                        p.small.text-muted
+                            | Receipts are rent credits tagged #[strong RENT - tenant] on the rent bank's statement (Bank Statement / Reconciliation).
+                            if statement.totalTds
+                                |  TDS of ₹#{fmtAmt(statement.totalTds)} is booked to TDS Receivable on the invoices, so the tenant owes the amount net of TDS.
+                        .table-responsive
+                            table.table.table-sm.table-striped
+                                thead.thead-dark
+                                    tr
+                                        th Date
+                                        th Particulars
+                                        th.text-right Debit
+                                        th.text-right Credit
+                                        th.text-right Balance
+                                tbody
+                                    tr.font-weight-bold
+                                        td
+                                        td Opening balance
+                                        td
+                                        td
+                                        td.text-right= fmtAmt(statement.opening)
+                                    each l in statement.lines
+                                        tr
+                                            td.text-nowrap= l.txn_date_display
+                                            td
+                                                = l.particulars
+                                                if Number(l.tds)
+                                                    span.small.text-muted  (TDS ₹#{fmtAmt(l.tds)})
+                                            td.text-right= Number(l.debit) ? fmtAmt(l.debit) : ''
+                                            td.text-right= Number(l.credit) ? fmtAmt(l.credit) : ''
+                                            td.text-right= fmtAmt(l.balance)
+                                    tr.font-weight-bold
+                                        td
+                                        td Closing balance
+                                        td.text-right= fmtAmt(statement.totalDebit)
+                                        td.text-right= fmtAmt(statement.totalCredit)
+                                        td.text-right= fmtAmt(statement.closing)
+
+            //- ───────────────────────── Settings ─────────────────────────
+            if tab === 'settings'
+                form#settingsForm(style="max-width:760px")
+                    h6.text-muted Printed on every invoice
+                    .form-row
+                        .form-group.col-md-6
+                            label.small Landlord name
+                            input.form-control.form-control-sm(name="landlord_name" value=settings.landlord_name required)
+                        .form-group.col-md-3
+                            label.small GSTIN
+                            input.form-control.form-control-sm.text-uppercase(name="gstin" value=settings.gstin maxlength="15" required)
+                        .form-group.col-md-3
+                            label.small PAN
+                            input.form-control.form-control-sm.text-uppercase(name="pan" value=settings.pan maxlength="10")
+                    .form-group
+                        label.small Address
+                        input.form-control.form-control-sm(name="landlord_address" value=settings.landlord_address)
+                    .form-row
+                        .form-group.col-md-3
+                            label.small Bank name
+                            input.form-control.form-control-sm(name="bank_name" value=settings.bank_name)
+                        .form-group.col-md-3
+                            label.small Branch
+                            input.form-control.form-control-sm(name="bank_branch" value=settings.bank_branch)
+                        .form-group.col-md-3
+                            label.small IFSC
+                            input.form-control.form-control-sm.text-uppercase(name="bank_ifsc" value=settings.bank_ifsc)
+                        .form-group.col-md-3
+                            label.small Account no.
+                            input.form-control.form-control-sm(name="bank_account_no" value=settings.bank_account_no)
+                    h6.text-muted.mt-2 Numbering and receipts
+                    .form-row
+                        .form-group.col-md-3
+                            label.small Last invoice no. used
+                            input.form-control.form-control-sm(name="last_invoice_no" type="number" min="0" step="1" value=settings.last_invoice_no required)
+                            small.form-text.text-muted Running number, never resets. The next invoice gets this + 1.
+                        .form-group.col-md-3
+                            label.small Invoice day
+                            input.form-control.form-control-sm(name="invoice_day" type="number" min="1" max="31" value=settings.invoice_day required)
+                            small.form-text.text-muted Default invoice date in the rent month.
+                        .form-group.col-md-6
+                            label.small Bank the rent is paid into
+                            select.form-control.form-control-sm(name="rent_bank_id")
+                                option(value="") — not set —
+                                each b in banks
+                                    option(value=b.bank_id selected=(b.bank_id === settings.rent_bank_id))
+                                        | #{b.bank_name} #{b.account_number}#{b.account_nickname ? ' (' + b.account_nickname + ')' : ''}
+                            small.form-text.text-muted
+                                | Each tenant gets a "RENT - tenant" choice on this bank's statement, posting to the tenant's ledger.
+                                | Not listed? Add the account in Bank Master first.
+                    button.btn.btn-primary.btn-sm(type="submit") Save settings
+
+    //- ───────────────────────── Modals ─────────────────────────
+    if !notSetUp
+        .modal.fade#tenantModal(tabindex="-1")
+            .modal-dialog.modal-lg
+                .modal-content
+                    form#tenantForm
+                        .modal-header
+                            h5.modal-title#tenantModalTitle Add Tenant
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body
+                            input(type="hidden" name="tenant_id")
+                            .form-row
+                                .form-group.col-md-8
+                                    label.small Tenant name (as on their GST certificate)
+                                    input.form-control.form-control-sm(name="tenant_name" required maxlength="200")
+                                    small.form-text.text-muted#tenantNameHelp
+                                .form-group.col-md-4
+                                    label.small GSTIN
+                                    input.form-control.form-control-sm.text-uppercase(name="gstin" maxlength="15")
+                            .form-group
+                                label.small Tenant address
+                                input.form-control.form-control-sm(name="tenant_address")
+                            .form-group
+                                label.small Property address (printed as Place of Supply)
+                                input.form-control.form-control-sm(name="property_address")
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Monthly rent (₹, before GST)
+                                    input.form-control.form-control-sm(name="monthly_rent" type="number" min="1" step="0.01" required)
+                                .form-group.col-md-2
+                                    label.small GST %
+                                    select.form-control.form-control-sm(name="gst_rate")
+                                        each r in [18, 12, 5, 28, 0]
+                                            option(value=r)= r
+                                .form-group.col-md-2
+                                    label.small SAC
+                                    input.form-control.form-control-sm(name="sac_code" value="997212")
+                                .form-group.col-md-4
+                                    label.small TDS deducted by tenant %
+                                    input.form-control.form-control-sm(name="tds_percent" type="number" min="0" max="20" step="0.01" value="0")
+                                    small.form-text.text-muted 10 if they deduct TDS on rent (194-I), else 0.
+                            .form-row
+                                .form-group.col-md-6
+                                    label.small Invoice description
+                                    input.form-control.form-control-sm.text-uppercase(name="rent_description" value="BUILDING RENT")
+                                    small.form-text.text-muted Printed as "… FOR THE MONTH OF OCTOBER-2026".
+                                .form-group.col-md-3
+                                    label.small Rent from
+                                    input.form-control.form-control-sm(name="start_date" type="date" required)
+                                .form-group.col-md-3
+                                    label.small Rent until (blank = ongoing)
+                                    input.form-control.form-control-sm(name="end_date" type="date")
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Phone
+                                    input.form-control.form-control-sm(name="phone")
+                                .form-group.col-md-8
+                                    label.small Email
+                                    input.form-control.form-control-sm(name="email" type="email")
+                            .form-group.mb-0
+                                label.small Notes
+                                input.form-control.form-control-sm(name="notes")
+                        .modal-footer
+                            button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+                            button.btn.btn-primary.btn-sm(type="submit") Save
+
+        .modal.fade#draftModal(tabindex="-1")
+            .modal-dialog
+                .modal-content
+                    form#draftForm
+                        .modal-header
+                            h5.modal-title Edit draft — #[span#draftTenant]
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body
+                            input(type="hidden" name="invoice_id")
+                            .form-row
+                                .form-group.col-6
+                                    label.small Invoice date
+                                    input.form-control.form-control-sm(name="invoice_date" type="date" required)
+                                .form-group.col-6
+                                    label.small SAC
+                                    input.form-control.form-control-sm(name="sac_code")
+                            .form-group
+                                label.small Description
+                                input.form-control.form-control-sm.text-uppercase(name="description" required)
+                            .form-row
+                                .form-group.col-5
+                                    label.small Rent (taxable ₹)
+                                    input.form-control.form-control-sm(name="taxable_value" type="number" min="1" step="0.01" required)
+                                .form-group.col-3
+                                    label.small GST %
+                                    select.form-control.form-control-sm(name="gst_rate")
+                                        each r in [18, 12, 5, 28, 0]
+                                            option(value=r)= r
+                                .form-group.col-4
+                                    label.small TDS ₹
+                                    input.form-control.form-control-sm(name="tds_amount" type="number" min="0" step="0.01")
+                            .small.text-muted#draftPreview
+                        .modal-footer
+                            button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+                            button.btn.btn-primary.btn-sm(type="submit") Save draft
+
+        script.
+            (function () {
+                var month = !{JSON.stringify(month)};
+                var draftIds = !{JSON.stringify(invoices.filter(function (i) { return i.status === 'DRAFT'; }).map(function (i) { return i.invoice_id; }))};
+
+                function showMessage(text, ok) {
+                    var el = document.getElementById('messageAlert');
+                    el.className = 'alert alert-dismissible fade show ' + (ok ? 'alert-success' : 'alert-danger');
+                    document.getElementById('messageText').textContent = text;
+                    el.style.display = 'block';
+                    window.scrollTo(0, 0);
+                }
+
+                async function call(method, url, body) {
+                    var r = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body ? JSON.stringify(body) : undefined
+                    });
+                    var data = {};
+                    try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+                    if (!r.ok || !data.success) throw new Error(data.error || ('Request failed (' + r.status + ')'));
+                    return data;
+                }
+
+                function formData(form) {
+                    var o = {};
+                    new FormData(form).forEach(function (v, k) { o[k] = v; });
+                    return o;
+                }
+
+                function fmt(n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+                // Invoices tab
+                var monthPicker = document.getElementById('monthPicker');
+                if (monthPicker) monthPicker.addEventListener('change', function () {
+                    if (this.value) location.href = '/rental?tab=invoices&month=' + this.value;
+                });
+
+                var generateBtn = document.getElementById('generateBtn');
+                if (generateBtn) generateBtn.addEventListener('click', async function () {
+                    generateBtn.disabled = true;
+                    try {
+                        await call('POST', '/rental/api/generate', { month: month });
+                        location.reload();
+                    } catch (e) { showMessage(e.message); generateBtn.disabled = false; }
+                });
+
+                var finalizeAllBtn = document.getElementById('finalizeAllBtn');
+                if (finalizeAllBtn) finalizeAllBtn.addEventListener('click', async function () {
+                    if (!confirm('Finalise ' + draftIds.length + ' draft(s)? Each gets the next invoice number and can\'t be edited afterwards.')) return;
+                    finalizeAllBtn.disabled = true;
+                    try {
+                        await call('POST', '/rental/api/finalize', { invoice_ids: draftIds });
+                        location.reload();
+                    } catch (e) { showMessage(e.message); finalizeAllBtn.disabled = false; }
+                });
+
+                var draftForm = document.getElementById('draftForm');
+                function updateDraftPreview() {
+                    var f = draftForm.elements;
+                    var taxable = Number(f.taxable_value.value) || 0;
+                    var half = Math.round(Number(f.gst_rate.value) / 2 * 100) / 100;
+                    var gst = Math.round(taxable * half) / 100;
+                    document.getElementById('draftPreview').textContent =
+                        'CGST ' + fmt(gst) + ' + SGST ' + fmt(gst) + ' = Total ₹' + fmt(taxable + 2 * gst);
+                }
+                ['taxable_value', 'gst_rate'].forEach(function (n) {
+                    draftForm.elements[n].addEventListener('input', updateDraftPreview);
+                });
+
+                document.querySelectorAll('.edit-draft-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var d = btn.dataset, f = draftForm.elements;
+                        f.invoice_id.value = d.id;
+                        f.invoice_date.value = d.date;
+                        f.sac_code.value = d.sac;
+                        f.description.value = d.desc;
+                        f.taxable_value.value = Number(d.taxable);
+                        f.gst_rate.value = String(Number(d.rate));
+                        f.tds_amount.value = Number(d.tds);
+                        document.getElementById('draftTenant').textContent = d.name;
+                        updateDraftPreview();
+                        $('#draftModal').modal('show');
+                    });
+                });
+
+                draftForm.addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    var data = formData(draftForm);
+                    try {
+                        await call('PUT', '/rental/api/invoices/' + data.invoice_id, data);
+                        location.reload();
+                    } catch (e) { alert(e.message); }
+                });
+
+                document.querySelectorAll('.delete-draft-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete the draft for ' + btn.dataset.name + '?')) return;
+                        try { await call('DELETE', '/rental/api/invoices/' + btn.dataset.id); location.reload(); }
+                        catch (e) { showMessage(e.message); }
+                    });
+                });
+
+                document.querySelectorAll('.cancel-inv-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        var reason = prompt('Cancel invoice ' + btn.dataset.no + ' (' + btn.dataset.name + ')?\nThe number stays used and is reported as cancelled in GSTR-1.\n\nReason:');
+                        if (reason === null) return;
+                        try { await call('POST', '/rental/api/invoices/' + btn.dataset.id + '/cancel', { reason: reason }); location.reload(); }
+                        catch (e) { showMessage(e.message); }
+                    });
+                });
+
+                // Tenants tab
+                var tenantForm = document.getElementById('tenantForm');
+                function openTenant(d) {
+                    tenantForm.reset();
+                    var f = tenantForm.elements;
+                    f.tenant_id.value = d ? d.id : '';
+                    document.getElementById('tenantModalTitle').textContent = d ? 'Edit Tenant' : 'Add Tenant';
+                    var locked = d && Number(d.invoices) > 0;
+                    f.tenant_name.readOnly = !!locked;
+                    document.getElementById('tenantNameHelp').textContent = locked
+                        ? 'Locked: invoices exist. The name is the ledger and bank receipt name.'
+                        : 'Also used as the ledger name in Tally.';
+                    if (d) {
+                        f.tenant_name.value = d.name || '';
+                        f.gstin.value = d.gstin || '';
+                        f.tenant_address.value = d.address || '';
+                        f.property_address.value = d.property || '';
+                        f.monthly_rent.value = Number(d.rent);
+                        f.gst_rate.value = String(Number(d.rate));
+                        f.sac_code.value = d.sac || '997212';
+                        f.tds_percent.value = Number(d.tds);
+                        f.rent_description.value = d.desc || 'BUILDING RENT';
+                        f.start_date.value = d.start || '';
+                        f.end_date.value = d.end || '';
+                        f.phone.value = d.phone || '';
+                        f.email.value = d.email || '';
+                        f.notes.value = d.notes || '';
+                    }
+                    $('#tenantModal').modal('show');
+                }
+                var addTenantBtn = document.getElementById('addTenantBtn');
+                if (addTenantBtn) addTenantBtn.addEventListener('click', function () { openTenant(null); });
+                document.querySelectorAll('.edit-tenant-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () { openTenant(btn.dataset); });
+                });
+
+                tenantForm.addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    var data = formData(tenantForm);
+                    try {
+                        if (data.tenant_id) await call('PUT', '/rental/api/tenants/' + data.tenant_id, data);
+                        else await call('POST', '/rental/api/tenants', data);
+                        location.reload();
+                    } catch (e) { alert(e.message); }
+                });
+
+                document.querySelectorAll('.delete-tenant-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete tenant ' + btn.dataset.name + '?')) return;
+                        try { await call('DELETE', '/rental/api/tenants/' + btn.dataset.id); location.reload(); }
+                        catch (e) { showMessage(e.message); }
+                    });
+                });
+
+                // Settings tab
+                var settingsForm = document.getElementById('settingsForm');
+                if (settingsForm) settingsForm.addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    try {
+                        await call('PUT', '/rental/api/settings', formData(settingsForm));
+                        showMessage('Settings saved.', true);
+                    } catch (e) { showMessage(e.message); }
+                });
+            })();

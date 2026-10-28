@@ -13,6 +13,21 @@ module.exports = {
     },
 
     /**
+     * Validate the GSTIN check digit (15th character, base-36 checksum).
+     * A one-letter typo passes the format check but fails here.
+     */
+    isGstinCheckDigitValid: (gstin) => {
+        if (!module.exports.isValidGstin(gstin)) return false;
+        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        let sum = 0;
+        for (let i = 0; i < 14; i++) {
+            const product = chars.indexOf(gstin[i]) * (i % 2 === 0 ? 1 : 2);
+            sum += Math.floor(product / 36) + (product % 36);
+        }
+        return chars[(36 - (sum % 36)) % 36] === gstin[14];
+    },
+
+    /**
      * Get return period from date (format: MMYYYY)
      */
     getReturnPeriod: (date) => {
