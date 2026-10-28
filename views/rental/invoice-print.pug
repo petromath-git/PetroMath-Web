@@ -30,6 +30,9 @@ html(lang='en')
             .sign { text-align: center; min-width: 220px; }
             .sign .for { font-weight: 700; margin-bottom: 42px; }
             .sign .line { border-top: 1px solid #000; padding-top: 3px; }
+            .irn { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid #000; font-size: 11px; }
+            .irn div { line-height: 1.6; }
+            .irn .qr svg { width: 110px; height: 110px; display: block; }
     body
         .sheet
             .title TAX INVOICE
@@ -38,6 +41,17 @@ html(lang='en')
             .meta
                 div Invoice Number: #[strong= invoice.invoice_no]
                 div Date: #[strong= invoice.invoice_date_display]
+            //- e-invoice details from the IRP (portal result file imported on the Invoices tab)
+            if invoice.irn
+                .irn
+                    div
+                        div IRN: #[strong= invoice.irn]
+                        if invoice.irn_ack_no
+                            div Ack No: #[strong= invoice.irn_ack_no]
+                        if invoice.irn_ack_date
+                            div Ack Date: #[strong= invoice.irn_ack_date]
+                    if invoice.irn_qr_svg
+                        .qr!= invoice.irn_qr_svg
 
             .party
                 .party-label Supplier:

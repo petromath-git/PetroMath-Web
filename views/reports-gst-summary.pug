@@ -277,7 +277,10 @@ block content
                                             td.text-center= r.invoice_no
                                             td.text-center= r.invoice_date
                                             td= r.tenant_name
-                                            td= r.tenant_gstin || 'B2C'
+                                            td
+                                                = r.tenant_gstin || 'B2C'
+                                                if r.irn
+                                                    span.badge.badge-light.border.ml-1(title="Has an IRN: filled into GSTR-1 B2B by the e-invoice system") e-invoiced
                                             td.text-right= rentFmt(r.taxable_value)
                                             td.text-right= rentFmt(r.cgst_amount)
                                             td.text-right= rentFmt(r.sgst_amount)

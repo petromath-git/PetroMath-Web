@@ -11,6 +11,7 @@ const RentalDao = require('../dao/rental-dao');
 const gstUtils = require('../utils/gst-utils');
 const security = require('../utils/app-security');
 const { amountInWords } = require('../utils/amount-in-words');
+const einvoice = require('../utils/einvoice');
 
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST',
     'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -66,6 +67,8 @@ function validateTenant(body) {
     const d = {
         tenant_name: clean(body.tenant_name),
         tenant_address: clean(body.tenant_address),
+        city: clean(body.city),
+        pincode: clean(body.pincode) ? clean(body.pincode).replace(/\s/g, '') : null,
         gstin: clean(body.gstin) ? clean(body.gstin).toUpperCase() : null,
         phone: clean(body.phone),
         email: clean(body.email),
@@ -87,6 +90,8 @@ function validateTenant(body) {
     if (d.gstin && d.gstin.substring(0, 2) !== '33') {
         return { error: 'Only Tamil Nadu tenants (GSTIN starting 33) are supported: rent is charged as CGST + SGST.' };
     }
+    if (d.pincode && !/^[1-9]\d{5}$/.test(d.pincode)) return { error: 'PIN code must be 6 digits.' };
+    if (d.gstin && (!d.city || !d.pincode)) return { error: 'City and PIN code are needed for a tenant with a GSTIN (for the e-invoice).' };
     if (!/^\d{4,8}$/.test(d.sac_code)) return { error: 'SAC code must be 4 to 8 digits.' };
     if (!(d.monthly_rent > 0)) return { error: 'Monthly rent must be more than zero.' };
     if (![0, 5, 12, 18, 28].includes(d.gst_rate)) return { error: 'GST rate must be 0, 5, 12, 18 or 28.' };
@@ -100,6 +105,8 @@ function validateSettings(body) {
     const d = {
         landlord_name: clean(body.landlord_name),
         landlord_address: clean(body.landlord_address),
+        landlord_city: clean(body.landlord_city),
+        landlord_pincode: clean(body.landlord_pincode) ? clean(body.landlord_pincode).replace(/\s/g, '') : null,
         gstin: clean(body.gstin) ? clean(body.gstin).toUpperCase() : null,
         pan: clean(body.pan) ? clean(body.pan).toUpperCase() : null,
         bank_name: clean(body.bank_name),
@@ -113,6 +120,7 @@ function validateSettings(body) {
     if (!d.landlord_name) return { error: 'Landlord name is required.' };
     if (!d.gstin || !gstUtils.isGstinCheckDigitValid(d.gstin)) return { error: 'Landlord GSTIN is not valid (format or check digit).' };
     if (d.pan && d.pan !== d.gstin.substring(2, 12)) return { error: `PAN ${d.pan} does not match the GSTIN (${d.gstin.substring(2, 12)}).` };
+    if (d.landlord_pincode && !/^[1-9]\d{5}$/.test(d.landlord_pincode)) return { error: 'Landlord PIN code must be 6 digits.' };
     if (!Number.isInteger(d.last_invoice_no) || d.last_invoice_no < 0) return { error: 'Last invoice number must be a whole number.' };
     if (!Number.isInteger(d.invoice_day) || d.invoice_day < 1 || d.invoice_day > 31) return { error: 'Invoice day must be 1 to 31.' };
     return { data: d };
@@ -148,6 +156,7 @@ function invoiceForPrint(invoice, settings) {
         tenant_pan: invoice.tenant_gstin ? invoice.tenant_gstin.substring(2, 12) : null,
         landlord_pan: settings.pan || (settings.gstin ? settings.gstin.substring(2, 12) : null),
         amount_words: amountInWords(invoice.total_amount),
+        irn_qr_svg: invoice.irn_signed_qr ? einvoice.qrSvg(invoice.irn_signed_qr) : null,
     };
 }
 
@@ -225,6 +234,8 @@ async function renderPage(req, res, next, pageKey) {
             fmtDate: (d) => d ? dateFormat(d, 'dd-mmm-yyyy') : '',
             isoDate: (d) => d ? dateFormat(d, 'yyyy-mm-dd') : '',
             gstinOk: settings.gstin ? gstUtils.isGstinCheckDigitValid(settings.gstin) : false,
+            // B2B final invoices still to be e-invoiced on the portal
+            einvoicePending: invoices.filter(i => i.status === 'FINAL' && i.tenant_gstin && !i.irn),
         });
     } catch (e) {
         next(e);
@@ -434,6 +445,74 @@ module.exports = {
             console.error('Rental invoicePdf:', e);
             if (page) { try { await page.close(); } catch (err) { /* ignore */ } }
             res.status(500).send('Failed to generate invoice PDF');
+        }
+    },
+
+    // GET /rental/einvoice/json?ids=1,2 — bulk-upload file for einvoice1.gst.gov.in
+    // (final B2B invoices without an IRN). Refuses the whole file if any invoice
+    // is missing something the IRP needs, so nothing half-uploads.
+    einvoiceJson: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const ids = String(req.query.ids || '').split(',').map(Number).filter(Boolean);
+            if (!ids.length) return res.status(400).send('No invoices selected.');
+            const settings = await RentalDao.getSettings(locationCode);
+            const invoices = (await RentalDao.getFinalInvoicesByIds(locationCode, ids)).filter(i => i.tenant_gstin && !i.irn);
+            if (!invoices.length) return res.status(400).send('Nothing to e-invoice: the selected invoices already have an IRN or are B2C.');
+
+            const problems = invoices
+                .map(i => ({ no: i.invoice_no, name: i.tenant_name, list: einvoice.einvoiceProblems(i, settings) }))
+                .filter(p => p.list.length);
+            if (problems.length) {
+                return res.status(400).send('Fix these first (Masters → Rental Master):\n' +
+                    problems.map(p => `Invoice ${p.no} (${p.name}): ${p.list.join('; ')}`).join('\n'));
+            }
+
+            const body = JSON.stringify(invoices.map(i => einvoice.buildEinvoice(i, settings)), null, 2);
+            const name = `einvoice_rent_${invoices[0].invoice_no}-${invoices[invoices.length - 1].invoice_no}.json`;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+            res.send(body);
+        } catch (e) {
+            console.error('Rental einvoiceJson:', e);
+            res.status(500).send('Could not build the e-invoice file.');
+        }
+    },
+
+    // POST /rental/api/einvoice/import (multipart "file") — the portal's result file.
+    // Each record is matched by invoice number; the buyer GSTIN must match when given.
+    einvoiceImport: async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the result file from the portal.' });
+            let records;
+            try {
+                records = einvoice.parseResultFile(req.file.buffer, req.file.originalname);
+            } catch (err) {
+                return res.status(400).json({ success: false, error: `Could not read ${req.file.originalname}: ${err.message}` });
+            }
+            if (!records.length) {
+                return res.status(400).json({ success: false, error: 'No IRNs found in that file. Upload the result file downloaded after generating the e-invoices.' });
+            }
+
+            const locationCode = req.user.location_code;
+            const saved = [], skipped = [];
+            let withoutQr = 0;
+            for (const rec of records) {
+                const inv = await RentalDao.getInvoiceByNo(locationCode, Number(rec.docNo));
+                if (!inv || !/^\d+$/.test(rec.docNo)) { skipped.push(`${rec.docNo}: no rental invoice with this number`); continue; }
+                if (inv.status !== 'FINAL') { skipped.push(`${rec.docNo}: invoice is ${inv.status.toLowerCase()}`); continue; }
+                if (rec.buyerGstin && inv.tenant_gstin && rec.buyerGstin.toUpperCase() !== inv.tenant_gstin) {
+                    skipped.push(`${rec.docNo}: buyer GSTIN ${rec.buyerGstin} does not match ${inv.tenant_gstin}`); continue;
+                }
+                if (inv.irn && inv.irn !== rec.irn) { skipped.push(`${rec.docNo}: already has a different IRN`); continue; }
+                await RentalDao.saveIrn(inv.invoice_id, rec, req.user.User_Name);
+                if (!rec.signedQr) withoutQr++;
+                saved.push(rec.docNo);
+            }
+            res.json({ success: true, saved, skipped, withoutQr });
+        } catch (e) {
+            console.error('Rental einvoiceImport:', e);
+            res.status(500).json({ success: false, error: 'Could not import the file.' });
         }
     },
 };
