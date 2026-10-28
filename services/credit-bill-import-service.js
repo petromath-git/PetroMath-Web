@@ -7,9 +7,16 @@
 // t_credit_import_map. The whole file is rejected if any bill date is outside the
 // closing window or any rate differs from the shift rate; bill numbers already in
 // the location are skipped.
+//
+// If the file names a cashier (a "CASHIER: NAME" title line above the header, as in
+// Partum's export, or a cashier column), only the bills of this shift's cashier are
+// imported (cashier names are mapped once like parties). Bills whose party maps to
+// a digital vendor (m_credit_list.card_flag = 'Y', e.g. PAYTM) go to t_digital_sales
+// as one row per bill with the bill number in notes, the way stations key them in.
 const XLSX = require('xlsx');
 const db = require('../db/db-connection');
 const lookupDao = require('../dao/lookup-dao');
+const locationConfig = require('../utils/location-config');
 const { normalize: normalizeVehicle } = require('../utils/vehicle-number-matcher');
 
 const Q = db.Sequelize.QueryTypes;
@@ -23,10 +30,11 @@ const COLUMNS = {
     vehicle: ['VEHICLE', 'VEHICLENO', 'VEHICLENUMBER'],
     party: ['PARTY', 'CUSTOMER', 'PARTYNAME'],
     indent: ['INDENT', 'INDENTNO'],
-    item: ['ITEM', 'PRODUCT'],
+    item: ['ITEM', 'ITEMNAME', 'PRODUCT'],
     qty: ['QTY', 'QUANTITY'],
     rate: ['RATE', 'PRICE'],
-    amount: ['AMOUNT', 'AMT', 'VALUE']
+    amount: ['AMOUNT', 'AMT', 'VALUE'],
+    cashier: ['CASHIER', 'CASHIERNAME', 'USER', 'USERNAME', 'BILLEDBY', 'SALESMAN', 'OPERATOR', 'STAFF', 'EMPLOYEE']
 };
 const REQUIRED_COLUMNS = ['billNo', 'date', 'party', 'item', 'qty', 'rate', 'amount'];
 
@@ -144,6 +152,14 @@ function parseWorkbook(buffer) {
         return { error: 'Could not find the header row. Expected columns: B.No, Date, Party, Item, Qty, Rate, Amount (Vehicle, Indent, Type optional).' };
     }
 
+    // "CASHIER: SARFRAZ" in the title rows applies to every bill in the file
+    let fileCashier = '';
+    rows.slice(0, headerIdx).forEach(row => row.forEach(cell => {
+        const m = String(cell || '').match(/^\s*CASHIER\s*[:\-]\s*(.+)$/i);
+        if (m && !fileCashier) fileCashier = sourceKey(m[1]);
+    }));
+    const hasCashier = cols.cashier !== undefined || !!fileCashier;
+
     const get = (row, field) => cols[field] === undefined ? '' : row[cols[field]];
     const bills = [];
     const problems = [];
@@ -174,11 +190,13 @@ function parseWorkbook(buffer) {
                 party: sourceKey(get(row, 'party')),
                 vehicle: String(get(row, 'vehicle')).trim(),
                 indent: toIndent(get(row, 'indent')),
+                cashier: sourceKey(get(row, 'cashier')) || fileCashier,
                 lines: []
             };
             if (!current.billNo) problems.push(`Row ${rowNo}: bill number "${rawBill}" has no digits.`);
             if (!current.date) problems.push(`Row ${rowNo} (${rawBill}): date "${current.dateText}" is not a valid DD/MM/YYYY date.`);
             if (!current.party) problems.push(`Row ${rowNo} (${rawBill}): party is blank.`);
+            if (hasCashier && !current.cashier) problems.push(`Row ${rowNo} (${rawBill}): cashier is blank.`);
             bills.push(current);
         } else if (!current) {
             // continuation of a skipped (non-credit) bill
@@ -201,25 +219,36 @@ function parseWorkbook(buffer) {
     if (bills.length === 0 && problems.length === 0) {
         return { error: 'No credit bills found in the file.' };
     }
-    return { bills, problems, skippedOtherTypes };
+    return { bills, problems, skippedOtherTypes, hasCashier };
 }
 
 // ---------- data access ----------
 
 async function getClosing(closingId, locationCode) {
     const rows = await db.sequelize.query(
-        `SELECT closing_id, DATE_FORMAT(closing_date, '%Y-%m-%d') AS closing_date, closing_status
-           FROM t_closing WHERE closing_id = :closingId AND location_code = :locationCode`,
+        `SELECT c.closing_id, DATE_FORMAT(c.closing_date, '%Y-%m-%d') AS closing_date, c.closing_status,
+                c.cashier_id, p.Person_Name AS cashier_name
+           FROM t_closing c LEFT JOIN m_persons p ON p.Person_id = c.cashier_id
+          WHERE c.closing_id = :closingId AND c.location_code = :locationCode`,
         { replacements: { closingId, locationCode }, type: Q.SELECT });
     return rows[0] || null;
 }
 
 async function getParties(locationCode) {
     return db.sequelize.query(
-        `SELECT creditlist_id AS id, Company_Name AS name
+        `SELECT creditlist_id AS id, Company_Name AS name, card_flag = 'Y' AS digital
            FROM m_credit_list
           WHERE location_code = :locationCode
-            AND (card_flag IS NULL OR card_flag <> 'Y')
+            AND (effective_end_date IS NULL OR effective_end_date > NOW())`,
+        { replacements: { locationCode }, type: Q.SELECT });
+}
+
+// Staff who can be a shift's cashier
+async function getStaff(locationCode) {
+    return db.sequelize.query(
+        `SELECT Person_id AS id, Person_Name AS name
+           FROM m_persons
+          WHERE location_code = :locationCode AND Role <> 'Customer'
             AND (effective_end_date IS NULL OR effective_end_date > NOW())`,
         { replacements: { locationCode }, type: Q.SELECT });
 }
@@ -236,7 +265,7 @@ async function getMappings(locationCode) {
     const rows = await db.sequelize.query(
         `SELECT map_type, source_name, target_id FROM t_credit_import_map WHERE location_code = :locationCode`,
         { replacements: { locationCode }, type: Q.SELECT });
-    const out = { PARTY: new Map(), PRODUCT: new Map() };
+    const out = { PARTY: new Map(), PRODUCT: new Map(), CASHIER: new Map() };
     rows.forEach(r => out[r.map_type] && out[r.map_type].set(r.source_name, r.target_id));
     return out;
 }
@@ -260,7 +289,13 @@ async function getExistingBillNos(locationCode, closingDate, billNos, transactio
           WHERE c.location_code = :locationCode AND tc.bill_no IN (:billNos)
             AND c.closing_date BETWEEN DATE_SUB(:closingDate, INTERVAL :days DAY) AND DATE_ADD(:closingDate, INTERVAL :days DAY)`,
         { replacements: { locationCode, closingDate, billNos, days: DUPLICATE_WINDOW_DAYS }, type: Q.SELECT, transaction });
-    return new Map(rows.map(r => [String(r.bill_no), r.closing_date]));
+    const digital = await db.sequelize.query(
+        `SELECT DISTINCT TRIM(ds.notes) AS bill_no, DATE_FORMAT(c.closing_date, '%Y-%m-%d') AS closing_date
+           FROM t_digital_sales ds JOIN t_closing c ON c.closing_id = ds.closing_id
+          WHERE c.location_code = :locationCode AND TRIM(ds.notes) IN (:billNos)
+            AND c.closing_date BETWEEN DATE_SUB(:closingDate, INTERVAL :days DAY) AND DATE_ADD(:closingDate, INTERVAL :days DAY)`,
+        { replacements: { locationCode, closingDate, billNos, days: DUPLICATE_WINDOW_DAYS }, type: Q.SELECT, transaction });
+    return new Map(rows.concat(digital).map(r => [String(r.bill_no), r.closing_date]));
 }
 
 // ---------- resolution ----------
@@ -351,67 +386,130 @@ async function loadContext({ locationCode, closingId, buffer, productIds }) {
 
     const parsed = parseWorkbook(buffer);
     if (parsed.error) return { error: parsed.error };
+    if (!parsed.hasCashier
+        && await locationConfig.getLocationConfigValue(locationCode, 'CREDIT_BILL_IMPORT_CASHIER', 'N') === 'Y') {
+        return { error: 'The file does not name the cashier. Export the cashier-wise report so the bills can be checked against this shift.' };
+    }
 
     const ids = (productIds || []).map(n => parseInt(n, 10)).filter(n => n > 0);
-    const [parties, products, mappings] = await Promise.all([
-        getParties(locationCode), getProducts(locationCode, ids), getMappings(locationCode)
+    const [parties, products, mappings, staff] = await Promise.all([
+        getParties(locationCode), getProducts(locationCode, ids), getMappings(locationCode),
+        parsed.hasCashier ? getStaff(locationCode) : []
     ]);
-    return { closing, parsed, parties, products, mappings };
+    return { closing, parsed, parties, products, mappings, staff };
+}
+
+// Keeps the bills of this shift's cashier. Without a cashier column every bill is
+// this shift's. cashierChoices: { sourceName: person_id } picked by the user.
+function splitByCashier({ parsed, closing, staff, mappings }, cashierChoices) {
+    if (!parsed.hasCashier) return { mine: parsed.bills, cashiers: [], unresolved: 0 };
+    const staffIds = new Set(staff.map(s => String(s.id)));
+    const names = [...new Set(parsed.bills.map(b => b.cashier).filter(Boolean))].sort();
+    const cashiers = resolveNames(names, mappings.CASHIER, staff, true);
+    const shiftOf = new Map();
+    cashiers.forEach(c => {
+        const choice = cashierChoices && cashierChoices[c.source];
+        if (c.status === 'choose') c.id = staffIds.has(String(choice)) ? parseInt(choice, 10) : null;
+        c.thisShift = !!c.id && String(c.id) === String(closing.cashier_id);
+        c.bills = parsed.bills.filter(b => b.cashier === c.source).length;
+        shiftOf.set(c.source, c.thisShift);
+    });
+    return {
+        mine: parsed.bills.filter(b => shiftOf.get(b.cashier)),
+        cashiers,
+        unresolved: cashiers.filter(c => !c.id).length
+    };
+}
+
+function cashierErrors(split, closing) {
+    if (!split.cashiers.length || split.unresolved || split.mine.length) return [];
+    return [`None of the bills in this file are by this shift's cashier (${closing.cashier_name || 'not set'}).`
+        + ' Check that the file is for this shift.'];
+}
+
+function billAmount(bill) {
+    return Math.round(bill.lines.reduce((n, l) => n + (l.amount || 0), 0) * 100) / 100;
 }
 
 // ---------- public API ----------
 
-async function preview({ locationCode, closingId, buffer, productIds, rates }) {
+async function preview({ locationCode, closingId, buffer, productIds, rates, cashierChoices }) {
     const ctx = await loadContext({ locationCode, closingId, buffer, productIds });
     if (ctx.error) return { error: ctx.error };
-    const { closing, parsed, parties, products, mappings } = ctx;
-    const { bills } = parsed;
+    const { closing, parsed, parties, products, mappings, staff } = ctx;
+    const split = splitByCashier(ctx, cashierChoices);
+    const bills = split.mine;
 
     const existing = await getExistingBillNos(locationCode, closing.closing_date, bills.map(b => b.billNo).filter(Boolean));
     const toImport = bills.filter(b => !existing.has(b.billNo));
 
-    // Only names on bills that will actually be imported need a match
+    // Only names on bills that will actually be imported need a match. Bills of a
+    // party already matched to a digital vendor need no product.
     const partyNames = [...new Set(toImport.map(b => b.party).filter(Boolean))].sort();
-    const itemNames = [...new Set(toImport.flatMap(b => b.lines.map(l => l.item)).filter(Boolean))].sort();
-
     const partyRes = resolveNames(partyNames, mappings.PARTY, parties, true);
-    const productRes = resolveNames(itemNames, mappings.PRODUCT, products, true);
+    const digitalIds = new Set(parties.filter(p => p.digital).map(p => String(p.id)));
+    const digitalParties = new Set(partyRes
+        .filter(p => p.status !== 'choose' && digitalIds.has(String(p.id))).map(p => p.source));
+    const digitalBills = toImport.filter(b => digitalParties.has(b.party));
+    const creditBills = toImport.filter(b => !digitalParties.has(b.party));
 
+    const itemNames = [...new Set(creditBills.flatMap(b => b.lines.map(l => l.item)).filter(Boolean))].sort();
+    const productRes = resolveNames(itemNames, mappings.PRODUCT, products, true);
     const productIdByItem = new Map(productRes.filter(p => p.id).map(p => [p.source, p.id]));
 
     const billCount = new Map();
     toImport.forEach(b => billCount.set(b.party, (billCount.get(b.party) || 0) + 1));
-    partyRes.forEach(p => { p.bills = billCount.get(p.source) || 0; });
+    partyRes.forEach(p => {
+        p.bills = billCount.get(p.source) || 0;
+        p.digital = digitalParties.has(p.source);
+    });
 
     return {
         closingDate: closing.closing_date,
-        billCount: toImport.length,
-        lineCount: toImport.reduce((n, b) => n + b.lines.length, 0),
-        totalAmount: toImport.reduce((n, b) => n + b.lines.reduce((m, l) => m + (l.amount || 0), 0), 0),
+        cashierName: closing.cashier_name,
+        cashiers: split.cashiers,
+        otherCashierBills: parsed.bills.length - bills.length,
+        staffOptions: staff.map(s => ({ id: s.id, name: s.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        billCount: creditBills.length,
+        lineCount: creditBills.reduce((n, b) => n + b.lines.length, 0),
+        totalAmount: creditBills.reduce((n, b) => n + billAmount(b), 0),
+        digitalCount: digitalBills.length,
+        digitalAmount: digitalBills.reduce((n, b) => n + billAmount(b), 0),
         skippedOtherTypes: parsed.skippedOtherTypes,
-        problems: parsed.problems,
+        problems: parsed.problems.concat(cashierErrors(split, closing)),
         dateErrors: dateErrors(toImport, closing.closing_date),
-        rateErrors: rateErrors(toImport, productIdByItem, buildRateMap(products, rates)),
+        rateErrors: rateErrors(creditBills, productIdByItem, buildRateMap(products, rates)),
         duplicates: bills.filter(b => existing.has(b.billNo))
             .map(b => ({ billNo: b.rawBillNo, closingDate: fmt(existing.get(b.billNo)) })),
         parties: partyRes,
         products: productRes,
-        partyOptions: parties.map(p => ({ id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        partyOptions: parties.map(p => ({ id: p.id, name: p.name, digital: !!p.digital })).sort((a, b) => a.name.localeCompare(b.name)),
         productOptions: products.map(p => ({ id: p.id, name: p.name }))
     };
 }
 
-// partyChoices: { sourceName: creditlist_id | 'NEW' }, productChoices: { sourceName: product_id }
-async function runImport({ locationCode, closingId, buffer, productIds, rates, partyChoices, productChoices, user }) {
+// partyChoices: { sourceName: creditlist_id | 'NEW' }, productChoices: { sourceName: product_id },
+// cashierChoices: { sourceName: person_id }
+async function runImport({ locationCode, closingId, buffer, productIds, rates, partyChoices, productChoices, cashierChoices, user }) {
     const ctx = await loadContext({ locationCode, closingId, buffer, productIds });
     if (ctx.error) return { error: ctx.error };
     const { closing, parsed, parties, products, mappings } = ctx;
-    const { bills } = parsed;
     const userName = user.User_Name;
 
     if (parsed.problems.length) return { error: 'Fix these rows in the file first.', details: parsed.problems };
 
+    const split = splitByCashier(ctx, cashierChoices);
+    if (split.unresolved) {
+        return { error: 'Choose a match for every name.',
+            details: split.cashiers.filter(c => !c.id).map(c => `Cashier for "${c.source}"`) };
+    }
+    const shiftErrors = cashierErrors(split, closing);
+    if (shiftErrors.length) return { error: 'File rejected - nothing was imported.', details: shiftErrors };
+    const bills = split.mine;
+    const otherCashierBills = parsed.bills.length - bills.length;
+
     const partyIds = new Set(parties.map(p => String(p.id)));
+    const digitalIds = new Set(parties.filter(p => p.digital).map(p => String(p.id)));
     const productIdSet = new Set(products.map(p => String(p.id)));
 
     // Bills already in PetroMath are skipped, so their names need no match and their
@@ -419,14 +517,13 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
     const existingBefore = await getExistingBillNos(locationCode, closing.closing_date, bills.map(b => b.billNo));
     const candidates = bills.filter(b => !existingBefore.has(b.billNo));
     if (!candidates.length) {
-        return { imported: 0, lines: 0, skipped: bills.map(b => b.rawBillNo), createdParties: [], createdVehicles: [] };
+        return { imported: 0, lines: 0, digital: 0, otherCashierBills, skipped: bills.map(b => b.rawBillNo),
+            createdParties: [], createdVehicles: [] };
     }
 
     // Final party/product for each name: remembered/same-name first, else the user's choice.
     const partyNames = [...new Set(candidates.map(b => b.party))];
-    const itemNames = [...new Set(candidates.flatMap(b => b.lines.map(l => l.item)))];
     const partyRes = resolveNames(partyNames, mappings.PARTY, parties, false);
-    const productRes = resolveNames(itemNames, mappings.PRODUCT, products, false);
 
     const missing = [];
     const partyTarget = new Map();   // source -> id | 'NEW'
@@ -436,6 +533,11 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
         if (choice === 'NEW' || partyIds.has(String(choice))) partyTarget.set(p.source, choice === 'NEW' ? 'NEW' : parseInt(choice, 10));
         else missing.push(`Customer for "${p.source}"`);
     });
+    const isDigital = b => digitalIds.has(String(partyTarget.get(b.party)));
+
+    // Digital bills carry no product, so only credit bills need product matches
+    const itemNames = [...new Set(candidates.filter(b => !isDigital(b)).flatMap(b => b.lines.map(l => l.item)))];
+    const productRes = resolveNames(itemNames, mappings.PRODUCT, products, false);
     const productIdByItem = new Map();
     productRes.forEach(p => {
         if (p.status !== 'choose') return productIdByItem.set(p.source, p.id);
@@ -447,6 +549,9 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
 
     // Remember the confirmed choices even if the file is rejected below, so a corrected
     // file does not ask again. New customers are only created by a successful import.
+    for (const c of split.cashiers) {
+        if (c.status !== 'mapped') await saveMapping(locationCode, 'CASHIER', c.source, c.id, userName);
+    }
     for (const p of partyRes) {
         const target = partyTarget.get(p.source);
         if (p.status !== 'mapped' && target !== 'NEW') await saveMapping(locationCode, 'PARTY', p.source, target, userName);
@@ -457,7 +562,7 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
 
     const rejects = [
         ...dateErrors(candidates, closing.closing_date),
-        ...rateErrors(candidates, productIdByItem, buildRateMap(products, rates))
+        ...rateErrors(candidates.filter(b => !isDigital(b)), productIdByItem, buildRateMap(products, rates))
     ];
     if (rejects.length) return { error: 'File rejected - nothing was imported.', details: rejects };
 
@@ -510,9 +615,22 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
             return id;
         }
 
-        let lineCount = 0;
+        let lineCount = 0, creditCount = 0, digitalCount = 0;
         for (const bill of toImport) {
             const creditlistId = partyTarget.get(bill.party);
+            if (isDigital(bill)) {
+                // Bill number in notes, as stations key it in by hand (also the duplicate check)
+                await db.sequelize.query(
+                    `INSERT INTO t_digital_sales (closing_id, vendor_id, amount, transaction_date, notes,
+                            created_by, updated_by, creation_date, updation_date)
+                     VALUES (:closingId, :vendorId, :amount, :billDate, :billNo, :userName, :userName, NOW(), NOW())`,
+                    { replacements: {
+                        closingId: closing.closing_id, vendorId: creditlistId, amount: billAmount(bill),
+                        billDate: bill.date, billNo: bill.billNo, userName
+                    }, type: Q.INSERT, transaction });
+                digitalCount++;
+                continue;
+            }
             const firstProduct = productIdByItem.get(bill.lines[0].item);
             const vehicleId = await vehicleIdFor(creditlistId, bill.vehicle, firstProduct);
             for (const line of bill.lines) {
@@ -528,11 +646,14 @@ async function runImport({ locationCode, closingId, buffer, productIds, rates, p
                     }, type: Q.INSERT, transaction });
                 lineCount++;
             }
+            creditCount++;
         }
 
         return {
-            imported: toImport.length,
+            imported: creditCount,
             lines: lineCount,
+            digital: digitalCount,
+            otherCashierBills,
             skipped: bills.filter(b => existing.has(b.billNo)).map(b => b.rawBillNo),
             createdParties,
             createdVehicles
