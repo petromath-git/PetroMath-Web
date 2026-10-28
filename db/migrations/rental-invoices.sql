@@ -15,7 +15,7 @@
 -- 4. gl_ledgers.source_type gets 'TENANT'.
 -- 5. MC: "RENT RECEIVED" (Indirect Incomes) and "TDS RECEIVABLE" (Current
 --    Assets) ledgers, and the settings row with the landlord details.
--- 6. Menu RENTAL_INVOICES under Accounting, granted to MC only.
+-- 6. Menu RENTAL_INVOICES under Transactions, granted to MC only.
 --
 -- Safe to re-run.
 -- ============================================================================
@@ -149,11 +149,15 @@ SELECT 'MC', 'A.R. CHINNA NACHIMUTHU',
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM m_rental_settings WHERE location_code = 'MC');
 
--- Menu: under Accounting, MC only ---------------------------------------------
+-- Menu: under Transactions (next to Purchase Invoice), MC only ----------------
 INSERT IGNORE INTO m_menu_items
     (menu_code, menu_name, icon, url_path, parent_code, sequence, group_code, effective_start_date, created_by)
 VALUES
-    ('RENTAL_INVOICES', 'Rental Invoices', 'bi-house-door', '/rental', NULL, 40, 'ACCOUNTING', CURDATE(), 'system');
+    ('RENTAL_INVOICES', 'Rental Invoices', 'bi-house-door', '/rental', 'TRANSACTIONS', 72, 'TRANSACTIONS', CURDATE(), 'system');
+
+-- First beta run put it under Accounting
+UPDATE m_menu_items SET parent_code = 'TRANSACTIONS', sequence = 72, group_code = 'TRANSACTIONS', updated_by = 'system'
+WHERE menu_code = 'RENTAL_INVOICES' AND group_code <> 'TRANSACTIONS';
 
 INSERT INTO m_menu_access_override (role, location_code, menu_code, allowed, effective_start_date, created_by, updated_by)
 SELECT r.role, 'MC', 'RENTAL_INVOICES', 1, CURDATE(), 'system', 'system'
