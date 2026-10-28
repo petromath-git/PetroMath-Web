@@ -249,7 +249,46 @@ block content
                 h5.text-center B2C Non-Fuel Sales
                 p.text-center.text-muted(style='font-size:0.85em') Cash sales &amp; credit customers without GSTIN
                 div(id="NonFuelB2CSales-table-container")
-            
+
+            //- 2c. Rental invoices raised under this GSTIN (Rental Invoices screen) — only shown when there are any
+            if rentalInvoices && rentalInvoices.length
+                - var rentSum = function (k) { return rentalInvoices.reduce(function (s, i) { return s + Number(i[k] || 0); }, 0); }
+                - var rentFmt = function (n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+                div.col-md-12
+                    div.row &nbsp;
+                    h5.text-center Rental Invoices (SAC 997212)
+                    p.text-center.text-muted(style='font-size:0.85em') Rent on commercial property — B2B (tenants with GSTIN) and B2C
+                    div.card(style='margin-bottom: 10px;')
+                        div.card-body.col-sm-12.mx-auto(style='padding-bottom: 10px;')
+                            table.table.table-bordered.table-sm(style='width: 100%; border: 1px solid #000;')
+                                thead.thead-light.text-center
+                                    tr
+                                        th Invoice No
+                                        th Date
+                                        th Tenant
+                                        th GSTIN
+                                        th Taxable
+                                        th CGST
+                                        th SGST
+                                        th Total
+                                tbody
+                                    each r in rentalInvoices
+                                        tr
+                                            td.text-center= r.invoice_no
+                                            td.text-center= r.invoice_date
+                                            td= r.tenant_name
+                                            td= r.tenant_gstin || 'B2C'
+                                            td.text-right= rentFmt(r.taxable_value)
+                                            td.text-right= rentFmt(r.cgst_amount)
+                                            td.text-right= rentFmt(r.sgst_amount)
+                                            td.text-right= rentFmt(r.total_amount)
+                                    tr.font-weight-bold
+                                        td(colspan=4) Total
+                                        td.text-right= rentFmt(rentSum('taxable_value'))
+                                        td.text-right= rentFmt(rentSum('cgst_amount'))
+                                        td.text-right= rentFmt(rentSum('sgst_amount'))
+                                        td.text-right= rentFmt(rentSum('total_amount'))
+
             //- 3. Purchase Invoice Details - Fuel (grouped by product)
             div.col-md-12
                 h4.text-center Fuel Purchase Invoice Details

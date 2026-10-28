@@ -1,4 +1,5 @@
 const GstDataAggregationDao = require("../dao/gst-data-aggregation-dao");
+const RentalDao = require("../dao/rental-dao");
 const gstUtils = require("../utils/gst-utils");
 
 module.exports = {
@@ -20,9 +21,13 @@ generateGSTR3BJson: async (locationCode, gstin, returnPeriod) => {
             GstDataAggregationDao.getNilRatedPurchasesSummary(locationCode, from_date, to_date)
         ]);
 
-        const taxableValue = parseFloat(salesSummary?.taxable_value || 0);
-        const cgst = parseFloat(salesSummary?.cgst_amount || 0);
-        const sgst = parseFloat(salesSummary?.sgst_amount || 0);
+        // Rent invoices raised under the same GSTIN are outward taxable supplies too (3.1(a))
+        const rentals = await RentalDao.getGstInvoices(locationCode, from_date, to_date);
+        const rentalSum = (k) => rentals.reduce((s, r) => s + parseFloat(r[k] || 0), 0);
+
+        const taxableValue = parseFloat(salesSummary?.taxable_value || 0) + rentalSum('taxable_value');
+        const cgst = parseFloat(salesSummary?.cgst_amount || 0) + rentalSum('cgst_amount');
+        const sgst = parseFloat(salesSummary?.sgst_amount || 0) + rentalSum('sgst_amount');
         const igst = parseFloat(salesSummary?.igst_amount || 0);
         const cess = parseFloat(salesSummary?.cess_amount || 0);
 

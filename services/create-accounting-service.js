@@ -30,6 +30,12 @@
 //                                                         digital_creditlist_id set) or Cash-in-Hand DR
 //                                                         (receipt_type 'Cash') / Customer CR. Bank-type
 //                                                         receipts post from their BANK_TXN instead.
+//   RENTAL_INVOICE      (source_id = t_rental_invoice.invoice_id) — final rent invoice: Tenant DR (net of
+//                                                         TDS) + TDS Receivable DR / Rent Received CR +
+//                                                         Output CGST/SGST CR. Cancelling a posted invoice
+//                                                         raises a DELETE event (rental-dao cancelInvoice).
+//                                                         Rent received posts from the rent bank's BANK_TXN
+//                                                         (Static label "RENT - <tenant>" → tenant ledger).
 //
 // Raised automatically by DB triggers on source tables.
 // UPDATE events reverse existing vouchers and regenerate fresh ones.
@@ -589,6 +595,24 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
           )
     `);
 
+    // Final rent invoices only (drafts aren't issued; cancelled-before-posting never post)
+    await run('RENTAL_INVOICE', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT ri.location_code, fy.fy_id, 'RENTAL_INVOICE', ri.invoice_id, 'CREATE',
+               ri.invoice_date, 'UNPROCESSED', :createdBy
+        FROM t_rental_invoice ri
+        JOIN gl_financial_years fy ON fy.location_code = ri.location_code
+            AND ri.invoice_date BETWEEN fy.start_date AND fy.end_date
+        WHERE ri.location_code = :locationCode
+          AND ri.status = 'FINAL'
+          AND ri.invoice_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'RENTAL_INVOICE' AND e.source_id = ri.invoice_id
+          )
+    `);
+
     log.info(`Generate Events done — total inserted=${total}` +
         (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
@@ -620,6 +644,7 @@ async function processEvent(event, processedBy) {
         case 'CASHFLOW_TXN':        return await processCashflowTxnEvent(event, processedBy);
         case 'ADJUSTMENT':          return await processAdjustmentEvent(event, processedBy);
         case 'CREDIT_RECEIPT':      return await processCreditReceiptEvent(event, processedBy);
+        case 'RENTAL_INVOICE':      return await processRentalInvoiceEvent(event, processedBy);
         default:
             throw new Error(`Unhandled source_type: ${event.source_type}`);
     }
@@ -1695,6 +1720,83 @@ async function processCreditReceiptEvent(event, processedBy) {
             { ledger_id: drLedgerId,       dr_amount: amount, cr_amount: 0,      narration },
             { ledger_id: customerLedgerId, dr_amount: 0,      cr_amount: amount, narration }
         ],
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+// ─── RENTAL_INVOICE Handler ───────────────────────────────────────────────────
+// Tenant DR (total - TDS) + TDS Receivable DR (TDS) → Rent Received CR (taxable)
+// + Output CGST CR + Output SGST CR. Only FINAL invoices post; an invoice cancelled
+// before its CREATE event was processed is marked processed with no voucher.
+
+async function processRentalInvoiceEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: invoiceId, event_date } = event;
+
+    const rows = await query(`
+        SELECT ri.invoice_id, ri.invoice_no, ri.status, ri.description, ri.tenant_name,
+               ri.taxable_value, ri.cgst_amount, ri.sgst_amount, ri.total_amount, ri.tds_amount,
+               t.ledger_id AS tenant_ledger_id, t.tenant_name AS master_name,
+               s.income_ledger_id, s.tds_ledger_id
+        FROM t_rental_invoice ri
+        JOIN m_rental_tenant t   ON t.tenant_id     = ri.tenant_id
+        JOIN m_rental_settings s ON s.location_code = ri.location_code
+        WHERE ri.invoice_id = :invoiceId
+    `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Rental invoice not found: invoice_id=${invoiceId}`);
+    const row = rows[0];
+
+    if (row.status !== 'FINAL') {
+        await markEventProcessed(event.event_id, null, processedBy);
+        return { voucherCount: 0 };
+    }
+
+    const tenantName = row.tenant_name || row.master_name;
+    if (!row.tenant_ledger_id) throw new Error(`GL ledger not linked for tenant ${tenantName}`);
+    if (!row.income_ledger_id) throw new Error(`Rent income ledger not set in m_rental_settings for ${location_code}`);
+
+    const total = parseFloat(row.total_amount);
+    const cgst  = parseFloat(row.cgst_amount || 0);
+    const sgst  = parseFloat(row.sgst_amount || 0);
+    const tds   = parseFloat(row.tds_amount || 0);
+    const base  = total - cgst - sgst;
+    const narration = `Rent Invoice ${row.invoice_no} | ${tenantName} | ${row.description} | ₹${total.toFixed(2)}`;
+
+    const lines = [{ ledger_id: row.tenant_ledger_id, dr_amount: total - tds, cr_amount: 0, narration }];
+    if (tds > 0) {
+        if (!row.tds_ledger_id) throw new Error(`TDS Receivable ledger not set in m_rental_settings for ${location_code}`);
+        lines.push({ ledger_id: row.tds_ledger_id, dr_amount: tds, cr_amount: 0, narration });
+    }
+    lines.push({ ledger_id: row.income_ledger_id, dr_amount: 0, cr_amount: base, narration });
+
+    if (cgst > 0) {
+        const cgstLedger = await resolveLedgerByName(location_code, 'OUTPUT CGST');
+        if (!cgstLedger) throw new Error(`OUTPUT CGST ledger not found for ${location_code}`);
+        lines.push({ ledger_id: cgstLedger.ledger_id, dr_amount: 0, cr_amount: cgst, narration });
+    }
+    if (sgst > 0) {
+        const sgstLedger = await resolveLedgerByName(location_code, 'OUTPUT SGST');
+        if (!sgstLedger) throw new Error(`OUTPUT SGST ledger not found for ${location_code}`);
+        lines.push({ ledger_id: sgstLedger.ledger_id, dr_amount: 0, cr_amount: sgst, narration });
+    }
+
+    for (const line of lines) {
+        line.dr_amount = Math.round(line.dr_amount * 100) / 100;
+        line.cr_amount = Math.round(line.cr_amount * 100) / 100;
+    }
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType:  'SALES',
+        voucherDate:  event_date,
+        sourceType:   'RENTAL_INVOICE',
+        sourceId:     invoiceId,
+        narration,
+        lines,
         postedBy:     processedBy
     });
 
