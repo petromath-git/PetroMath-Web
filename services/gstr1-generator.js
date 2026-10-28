@@ -6,6 +6,8 @@ const crypto = require('crypto');
 /**
  * Merge rental invoices into the GSTR-1 rows: tenants with a GSTIN as B2B
  * invoices, the rest as B2CS by rate; one HSN row per SAC and rate (uqc NA).
+ * Invoices with an IRN are left out of B2B — the e-invoice system fills them
+ * into GSTR-1 itself — but stay in the HSN summary, which covers all supplies.
  */
 function addRentalInvoices(rentals, b2bData, b2csData, hsnData) {
     const hsn = {};
@@ -13,7 +15,7 @@ function addRentalInvoices(rentals, b2bData, b2csData, hsnData) {
     rentals.forEach(r => {
         const rate = parseFloat(r.cgst_rate) + parseFloat(r.sgst_rate);
         if (r.tenant_gstin) {
-            b2bData.push({
+            if (!r.irn) b2bData.push({
                 bill_no: String(r.invoice_no),
                 invoice_date: r.invoice_date,
                 customer_gstin: r.tenant_gstin,
