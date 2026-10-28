@@ -69,6 +69,25 @@ block content
         .ls-usage.idle::before { background: #dc3545; }
         .ls-usage.idle { color: #c82333; }
 
+        /* Shift snapshot (SuperUser/PowerUser): coloured edge = health, strip = last 14 days of shifts */
+        .ls-tile { position: relative; overflow: hidden; }
+        .ls-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: transparent; }
+        .ls-tile.health-ok::before { background: #28a745; }
+        .ls-tile.health-warn::before { background: #f0ad4e; }
+        .ls-tile.health-bad::before { background: #dc3545; }
+        .ls-snap { margin-top: 6px; }
+        .ls-strip { display: flex; gap: 2px; height: 10px; }
+        .ls-strip i { flex: 1; border-radius: 2px; background: #e9ecef; }
+        .ls-strip i.closed { background: #28a745; }
+        .ls-strip i.draft { background: #f0ad4e; }
+        .ls-strip i.today { box-shadow: 0 0 0 1px #343a40; }
+        .ls-snap-line { font-size: .72rem; color: #6c757d; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 2px 10px; }
+        .ls-snap-line b { color: #343a40; font-weight: 600; }
+        .ls-snap-line .bad { color: #c82333; }
+        .ls-snap-line .warn { color: #b8741a; }
+        .ls-attn { border-color: rgba(220,53,69,.6); }
+        .ls-attn.active { background: #dc3545; border-color: #dc3545; color: #fff; }
+
         .ls-empty { display: none; text-align: center; color: rgba(255,255,255,.7); padding: 48px 0; }
         .ls-footer { text-align: center; margin-top: 28px; }
 
@@ -120,6 +139,10 @@ block content
                         button.ls-chip.active(type='button', data-company='') All
                         each company in companies
                             button.ls-chip(type='button', data-company=company)= company
+                    if showSnapshot
+                        button.ls-chip.ls-attn#lsAttn(type='button', style='display:none', title='Locations with no shift closed in the last 2 days')
+                            i.bi.bi-exclamation-triangle.me-1
+                            | Needs attention
                     span.ls-count#lsCount #{locations.length} locations
 
             form#lsForm(method='POST' action='/select-location')
@@ -156,6 +179,8 @@ block content
                                     if isCurrent
                                         span.ls-tag Current
                                 div.ls-usage
+                                if showSnapshot
+                                    div.ls-snap
 
                 div.ls-empty#lsEmpty
                     i.bi.bi-search(style='font-size: 2rem;')
@@ -177,8 +202,9 @@ block content
             var recentGrid = document.getElementById('lsRecent');
             var recentTitle = document.getElementById('lsRecentTitle');
             var allTitle = document.getElementById('lsAllTitle');
-            var chips = Array.prototype.slice.call(document.querySelectorAll('.ls-chip'));
+            var chips = Array.prototype.slice.call(document.querySelectorAll('.ls-chip[data-company]'));
             var activeCompany = '';
+            var attentionOnly = false;
 
             function readRecent() {
                 try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; }
@@ -196,11 +222,12 @@ block content
 
             function applyFilter() {
                 var term = search.value.trim().toLowerCase();
-                var filtering = term !== '' || activeCompany !== '';
+                var filtering = term !== '' || activeCompany !== '' || attentionOnly;
                 var visible = 0;
                 tiles.forEach(function (tile) {
                     var match = (!term || tile.dataset.search.indexOf(term) !== -1) &&
-                                (!activeCompany || tile.dataset.company === activeCompany);
+                                (!activeCompany || tile.dataset.company === activeCompany) &&
+                                (!attentionOnly || tile.classList.contains('health-warn') || tile.classList.contains('health-bad'));
                     tile.style.display = match ? '' : 'none';
                     if (match) visible++;
                 });
@@ -270,6 +297,75 @@ block content
                     });
                 })
                 .catch(function () {});
+
+            // Shift snapshot — only rendered for SuperUser/PowerUser (endpoint returns [] for others)
+            var MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+            function fmtDate(d) {
+                return ('0' + d.getDate()).slice(-2) + '-' + MONTHS[d.getMonth()] + '-' + d.getFullYear();
+            }
+            function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+            function snapshotHtml(row) {
+                var days = row ? row.days : [];
+                var today = new Date();
+                var strip = '';
+                for (var i = 0; i < 14; i++) {
+                    var day = days[i] || { closed: 0, drafts: 0 };
+                    var d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (13 - i));
+                    var cls = day.closed ? 'closed' : (day.drafts ? 'draft' : '');
+                    if (i === 13) cls += ' today';
+                    var tip = fmtDate(d) + ': ' + (day.closed || day.drafts
+                        ? day.closed + ' closed' + (day.drafts ? ', ' + day.drafts + ' draft' : '')
+                        : 'no shift');
+                    strip += '<i class="' + cls + '" title="' + tip + '"></i>';
+                }
+                var parts = [];
+                if (!row || !row.last_shift_date) {
+                    parts.push('<span class="bad">No shifts yet</span>');
+                } else {
+                    var dsc = row.days_since_closed;
+                    var cls2 = dsc === null ? 'bad' : (dsc <= 1 ? '' : (dsc <= 3 ? 'warn' : 'bad'));
+                    parts.push('<span class="' + cls2 + '">Closed <b>' + esc(row.last_closed_date || '—') + '</b></span>');
+                    if (row.open_drafts) parts.push('<span class="warn">' + row.open_drafts + ' draft' + (row.open_drafts > 1 ? 's' : '') + '</span>');
+                }
+                if (row && row.last_day_close_date) {
+                    parts.push('<span class="' + (row.days_since_day_close > 3 ? 'warn' : '') + '">Day close <b>' + esc(row.last_day_close_date) + '</b></span>');
+                }
+                return '<div class="ls-strip">' + strip + '</div><div class="ls-snap-line">' + parts.join('') + '</div>';
+            }
+            function health(row) {
+                if (!row || row.days_since_closed === null || row.days_since_closed === undefined) return 'bad';
+                return row.days_since_closed <= 1 ? 'ok' : (row.days_since_closed <= 3 ? 'warn' : 'bad');
+            }
+            var attnBtn = document.getElementById('lsAttn');
+            if (document.querySelector('.ls-snap')) {
+                fetch('/select-location/snapshot', { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (rows) {
+                        var byCode = {};
+                        rows.forEach(function (row) { byCode[row.location_code] = row; });
+                        var attention = 0;
+                        document.querySelectorAll('.ls-tile').forEach(function (tile) {
+                            var row = byCode[tile.dataset.code];
+                            var h = health(row);
+                            tile.classList.add('health-' + h);
+                            if (h !== 'ok' && tile.parentNode === grid) attention++;
+                            var snap = tile.querySelector('.ls-snap');
+                            if (snap) snap.innerHTML = snapshotHtml(row);
+                        });
+                        if (attnBtn && attention) {
+                            attnBtn.lastChild.textContent = 'Needs attention (' + attention + ')';
+                            attnBtn.style.display = '';
+                        }
+                    })
+                    .catch(function () {});
+            }
+            if (attnBtn) {
+                attnBtn.addEventListener('click', function () {
+                    attentionOnly = !attentionOnly;
+                    attnBtn.classList.toggle('active', attentionOnly);
+                    applyFilter();
+                });
+            }
 
             applyFilter();
             // Don't pop the on-screen keyboard on phones

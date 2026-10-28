@@ -1880,7 +1880,8 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
                 title: 'Select Location',
                 locations: availableLocations,
                 selectedLocation: req.user.location_code,
-                isSuperUser: true
+                isSuperUser: true,
+                showSnapshot: true
             });
         }
         
@@ -1909,7 +1910,8 @@ app.get('/select-location', isLoginEnsured, async function (req, res) {
             locations: availableLocations,
             selectedLocation: req.user.location_code,
             userLocations: userLocations,
-            isSuperUser: false
+            isSuperUser: false,
+            showSnapshot: req.user.Role === 'PowerUser'
         });
     } catch (error) {
         console.error("Error fetching user locations:", error);
@@ -1929,6 +1931,23 @@ app.get('/select-location/usage', isLoginEnsured, async function (req, res) {
         res.json(rows);
     } catch (error) {
         console.error("Error fetching location usage:", error);
+        res.status(500).json([]);
+    }
+});
+
+// Shift / day-close snapshot on the tiles, for support staff checking whether bunks are using PetroMath
+app.get('/select-location/snapshot', isLoginEnsured, async function (req, res) {
+    try {
+        if (!['SuperUser', 'PowerUser'].includes(req.user.Role)) return res.json([]);
+        let rows = await LocationDao.getLocationSnapshot();
+        if (req.user.Role !== 'SuperUser') {
+            const userLocations = await PersonDao.getUserAccessibleLocationsWithNames(req.user.Person_id);
+            const allowed = new Set(userLocations.map(loc => loc.location_code));
+            rows = rows.filter(row => allowed.has(row.location_code));
+        }
+        res.json(rows);
+    } catch (error) {
+        console.error("Error fetching location snapshot:", error);
         res.status(500).json([]);
     }
 });
