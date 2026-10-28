@@ -281,9 +281,14 @@ const RentalDao = {
     },
 
     // ── E-invoice (IRN) ─────────────────────────────────────────────────────
+    // City/PIN fall back to the tenant master for invoices finalised before the
+    // tenant had them (they aren't printed, so the invoice itself is unchanged).
     getFinalInvoicesByIds: (locationCode, invoiceIds) => select(`
-        SELECT i.*, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date_iso
+        SELECT i.*, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date_iso,
+               COALESCE(i.tenant_city, tn.city) AS tenant_city,
+               COALESCE(i.tenant_pincode, tn.pincode) AS tenant_pincode
         FROM t_rental_invoice i
+        JOIN m_rental_tenant tn ON tn.tenant_id = i.tenant_id
         WHERE i.location_code = :locationCode AND i.invoice_id IN (:invoiceIds) AND i.status = 'FINAL'
         ORDER BY i.invoice_no
     `, { locationCode, invoiceIds }),
