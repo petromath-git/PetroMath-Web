@@ -1099,7 +1099,7 @@ function defaultInputValues(inputDiv) {
     // query all hidden elements
     elements = document.getElementById(inputDiv).querySelectorAll('[type="hidden"]');
     for (let i = 0; i < elements.length; i++) {
-        if (elements[i].value && !elements[i].id.endsWith("_pumpId")) {
+        if (elements[i].value && !elements[i].id.endsWith("_pumpId") && !elements[i].id.endsWith("_productId")) {
             elements[i].value = '';
         }
     }
@@ -2411,8 +2411,64 @@ function putAjax(uri, data) {
     });
 }
 
+// Checked at Close only (credit bills are entered during the shift, before the
+// closing reading is known). Credit qty of a metered (pump) product cannot be
+// more than that product's meter sale in the shift (e.g. an HSD bill entered as
+// GD). Returns one message per product that is over. Off-meter credits and
+// products with no pump are skipped.
+function creditQtyOverMeterProblems() {
+    const readingsDiv = document.getElementById('new_readings');
+    const creditDiv = document.getElementById('new_credit_sales');
+    if (!readingsDiv || !creditDiv) return [];
+
+    const meterQty = {};
+    readingsDiv.querySelectorAll('[id$="_sub_header"]').forEach((header) => {
+        const pumpName = header.id.replace('_sub_header', '');
+        const productEl = document.getElementById(pumpName + '_productId');
+        if (!productEl || !productEl.value) return;
+        const productId = productEl.value;
+        if (!(productId in meterQty)) meterQty[productId] = 0;
+        if (!header.className.includes('-block')) return;
+        const closing = parseFloat((document.getElementById(pumpName + 'pump_closing') || {}).value) || 0;
+        const opening = parseFloat((document.getElementById(pumpName + 'pump_opening') || {}).value) || 0;
+        const testing = parseFloat((document.getElementById(pumpName + 'pump_testing') || {}).value) || 0;
+        if (closing > opening) meterQty[productId] += closing - opening - testing;
+    });
+    if (Object.keys(meterQty).length === 0) return [];
+
+    const creditQty = {}, productNames = {};
+    creditDiv.querySelectorAll('[id^="credit-table-row-"]').forEach((row) => {
+        const rowNo = row.id.replace('credit-table-row-', '');
+        if (row.className.includes('-none')) return;
+        const productEl = document.getElementById('credit-product-' + rowNo);
+        if (!productEl || !(productEl.value in meterQty)) return;
+        const offMeterEl = document.getElementById('credit-off-meter-' + rowNo);
+        if (offMeterEl && offMeterEl.checked) return;
+        const qty = parseFloat(document.getElementById('credit-qty-' + rowNo).value) || 0;
+        if (qty <= 0) return;
+        creditQty[productEl.value] = (creditQty[productEl.value] || 0) + qty;
+        if (productEl.selectedIndex > -1) productNames[productEl.value] = productEl.options[productEl.selectedIndex].text;
+    });
+
+    const problems = [];
+    Object.keys(creditQty).forEach((productId) => {
+        if (creditQty[productId] > meterQty[productId] + 0.01) {
+            problems.push(`${productNames[productId] || 'Product'}: credit bills ${creditQty[productId].toFixed(3)} L, but meter sale is only ${meterQty[productId].toFixed(3)} L`);
+        }
+    });
+    return problems;
+}
+
 function finishClosing(hiddenPrefix, uri, redirect) {
-    const r = confirm("Please confirm if you want to freeze the closing?");
+    let confirmMsg = "Please confirm if you want to freeze the closing?";
+    if (uri === 'close-closing') {
+        const problems = creditQtyOverMeterProblems();
+        if (problems.length > 0) {
+            confirmMsg = 'WARNING: Credit qty is more than the meter sale:\n\n• ' + problems.join('\n• ') +
+                '\n\nPlease check the product on the credit bills (e.g. HSD entered as GD).\n\n' + confirmMsg;
+        }
+    }
+    const r = confirm(confirmMsg);
     if (r == true) {
         const id = document.getElementById(hiddenPrefix + '_hiddenId').value;
         if (id && parseInt(id) > 0) {

@@ -104,6 +104,7 @@ mixin addProductCodesAsSelected(val, productValuesData, pumpInstance, reading)
         input(type='hidden' id=pumpUniqueName + '_hiddenId' value=readingId)
         input(type='hidden' id=pumpUniqueName + '_price' value=price)
         input(type='hidden' id=pumpUniqueName + '_pumpId' value=val.pumpId)
+        input(type='hidden' id=pumpUniqueName + '_productId' value=matchingProduct ? matchingProduct.productId : val.productId)
         div
             span= val.pumpCode
             span &nbsp;&nbsp;&nbsp;&nbsp;
