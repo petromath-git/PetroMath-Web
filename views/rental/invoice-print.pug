@@ -1,0 +1,117 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        title Tax Invoice #{invoice.invoice_no}
+        style.
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Calibri, Arial, sans-serif; font-size: 12px; color: #000; }
+            .sheet { border: 1px solid #000; }
+            .title { text-align: center; font-size: 20px; font-weight: 700; padding: 6px; border-bottom: 1px solid #000; letter-spacing: 1px; }
+            .cancelled { color: #c00; font-size: 14px; margin-left: 10px; }
+            .meta { display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #000; }
+            .party { padding: 6px 10px 8px; border-bottom: 1px solid #000; }
+            .party-label { font-weight: 700; margin-bottom: 2px; }
+            .party-name { text-align: center; font-size: 15px; font-weight: 700; }
+            .party-addr { text-align: center; margin-top: 2px; }
+            .party-ids { display: flex; justify-content: space-between; margin-top: 6px; font-weight: 700; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+            th { font-size: 11px; background: #f2f2f2; }
+            td.num, th.num { text-align: right; }
+            td.ctr, th.ctr { text-align: center; }
+            .items td { height: 110px; }
+            .pos { margin-top: 10px; font-size: 11px; }
+            .pos strong { display: block; }
+            tr.total td { font-weight: 700; height: auto; }
+            .words { padding: 8px 10px; border-top: 1px solid #000; }
+            .footer { display: flex; justify-content: space-between; align-items: flex-end; padding: 8px 10px 10px; border-top: 1px solid #000; }
+            .bank div { line-height: 1.5; }
+            .sign { text-align: center; min-width: 220px; }
+            .sign .for { font-weight: 700; margin-bottom: 42px; }
+            .sign .line { border-top: 1px solid #000; padding-top: 3px; }
+    body
+        .sheet
+            .title TAX INVOICE
+                if invoice.status === 'CANCELLED'
+                    span.cancelled (CANCELLED)
+            .meta
+                div Invoice Number: #[strong= invoice.invoice_no]
+                div Date: #[strong= invoice.invoice_date_display]
+
+            .party
+                .party-label Supplier:
+                .party-name= settings.landlord_name
+                .party-addr= settings.landlord_address
+                .party-ids
+                    div GSTIN: #{settings.gstin}
+                    if invoice.landlord_pan
+                        div PAN No: #{invoice.landlord_pan}
+
+            .party
+                .party-label Recipient:
+                .party-name= invoice.tenant_name
+                if invoice.tenant_address
+                    .party-addr= invoice.tenant_address
+                .party-ids
+                    div
+                        if invoice.tenant_gstin
+                            | GSTIN: #{invoice.tenant_gstin}
+                        else
+                            | GSTIN: Unregistered
+                    if invoice.tenant_pan
+                        div PAN No: #{invoice.tenant_pan}
+
+            table
+                thead
+                    tr
+                        th.ctr(style="width:40px") Sl No
+                        th Description of Service
+                        th.ctr(style="width:70px") SAC Code
+                        th.num(style="width:105px") Taxable Value in Rs.
+                        th.ctr(style="width:60px") CGST Rate %
+                        th.num(style="width:90px") CGST in Rs.
+                        th.ctr(style="width:60px") SGST Rate %
+                        th.num(style="width:90px") SGST in Rs.
+                        th.num(style="width:110px") Total Value in Rs.
+                tbody
+                    tr.items
+                        td.ctr 1.
+                        td
+                            div= invoice.description
+                            if invoice.property_address
+                                .pos
+                                    strong Place of Supply:
+                                    | #{invoice.property_address}
+                        td.ctr= invoice.sac_code
+                        td.num= fmtAmt(invoice.taxable_value)
+                        td.ctr= Number(invoice.cgst_rate)
+                        td.num= fmtAmt(invoice.cgst_amount)
+                        td.ctr= Number(invoice.sgst_rate)
+                        td.num= fmtAmt(invoice.sgst_amount)
+                        td.num= fmtAmt(invoice.total_amount)
+                    tr.total
+                        td(colspan=3 style="text-align:right") Total
+                        td.num= fmtAmt(invoice.taxable_value)
+                        td
+                        td.num= fmtAmt(invoice.cgst_amount)
+                        td
+                        td.num= fmtAmt(invoice.sgst_amount)
+                        td.num= fmtAmt(invoice.total_amount)
+
+            .words Total Amount payable in words: #[strong= invoice.amount_words]
+
+            .footer
+                .bank
+                    div: strong Bank Detail for Funds Transfer:
+                    if settings.bank_name
+                        div Bank Name: #{settings.bank_name}
+                    if settings.bank_branch
+                        div Branch: #{settings.bank_branch}
+                    if settings.bank_ifsc
+                        div IFSC Code: #{settings.bank_ifsc}
+                    if settings.bank_account_no
+                        div Account No: #[strong= settings.bank_account_no]
+                .sign
+                    .for For #{settings.landlord_name}
+                    .line Authorised Signatory

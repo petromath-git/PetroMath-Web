@@ -3,6 +3,7 @@ var GstSummaryDao = require("../dao/report-gst-summary-dao");
 const moment = require('moment');
 var locationdao = require("../dao/report-dao");
 var personDao = require("../dao/person-dao");
+const RentalDao = require("../dao/rental-dao");
 
 // Fuel at the pump price, as the books post it: meter value plus off-meter credit
 // sales (getFuelBillAdjustments). Bills charged below the pump price are a
@@ -79,15 +80,17 @@ module.exports = {
       const nonFuelB2BSalesByBillPromise = GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, fromDate, toDate);
       const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
       const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
+      const rentalInvoicesPromise = RentalDao.getGstInvoices(locationCode, fromDate, toDate);
 
       const [purchaseData, salesData, nonFuelSalesData,
-            nonFuelB2BSalesByBill, nonFuelSalesByItem, nonFuelPurchaseInvoices] = await Promise.all([
+            nonFuelB2BSalesByBill, nonFuelSalesByItem, nonFuelPurchaseInvoices, rentalInvoices] = await Promise.all([
         purchaseDataPromise,
         salesDataPromise,
         nonFuelSalesDataPromise,
         nonFuelB2BSalesByBillPromise,
         nonFuelSalesByItemPromise,
-        nonFuelPurchaseInvoicesPromise
+        nonFuelPurchaseInvoicesPromise,
+        rentalInvoicesPromise
       ]);
         
 
@@ -165,7 +168,11 @@ module.exports = {
         nonFuelSalesSummaryList: nonFuelSalesSummaryList,
         nonFuelB2BSalesByBill: nonFuelB2BSalesByBill,
         groupedNonFuelSalesByGST: groupedNonFuelSalesByGST,
-        groupedNonFuelPurchaseInvoices: groupedNonFuelPurchaseInvoices
+        groupedNonFuelPurchaseInvoices: groupedNonFuelPurchaseInvoices,
+        rentalInvoices: rentalInvoices.map(r => ({
+          ...r,
+          invoice_date: moment(r.invoice_date).format('DD-MMM-YYYY')
+        }))
       }
           
     
@@ -524,7 +531,33 @@ module.exports = {
             { width: 12 },
             { width: 15 }
         ];
-        
+
+        // SHEET 3: RENTAL (only where rent invoices are raised under this GSTIN)
+        const rentalInvoices = await RentalDao.getGstInvoices(locationCode, fromDate, toDate);
+        if (rentalInvoices.length) {
+            const rentalSheet = workbook.addWorksheet('Rental');
+            rentalSheet.getCell('A1').value = 'RENTAL INVOICES (SAC 997212) - B2B';
+            rentalSheet.getCell('A1').font = { bold: true, size: 14 };
+            const header = rentalSheet.getRow(3);
+            header.values = ['Invoice No', 'Date', 'Tenant', 'GSTIN', 'SAC', 'Taxable', 'CGST', 'SGST', 'Total'];
+            header.font = { bold: true };
+            let r = 4;
+            for (const inv of rentalInvoices) {
+                rentalSheet.getRow(r++).values = [
+                    inv.invoice_no, moment(inv.invoice_date).format('DD-MMM-YYYY'), inv.tenant_name, inv.tenant_gstin,
+                    inv.sac_code, toNumber(inv.taxable_value), toNumber(inv.cgst_amount), toNumber(inv.sgst_amount),
+                    toNumber(inv.total_amount)
+                ];
+            }
+            const sum = (k) => rentalInvoices.reduce((s, i) => s + toNumber(i[k]), 0);
+            const totalRow = rentalSheet.getRow(r);
+            totalRow.values = ['Total', '', '', '', '', sum('taxable_value'), sum('cgst_amount'), sum('sgst_amount'), sum('total_amount')];
+            totalRow.font = { bold: true };
+            rentalSheet.columns = [{ width: 12 }, { width: 14 }, { width: 40 }, { width: 18 }, { width: 10 },
+                { width: 14 }, { width: 12 }, { width: 12 }, { width: 14 }];
+            [6, 7, 8, 9].forEach(c => { rentalSheet.getColumn(c).numFmt = '#,##0.00'; });
+        }
+
         // Generate Excel file
         const buffer = await workbook.xlsx.writeBuffer();
         
