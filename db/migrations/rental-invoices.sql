@@ -15,7 +15,8 @@
 -- 4. gl_ledgers.source_type gets 'TENANT'.
 -- 5. MC: "RENT RECEIVED" (Indirect Incomes) and "TDS RECEIVABLE" (Current
 --    Assets) ledgers, and the settings row with the landlord details.
--- 6. Menu RENTAL_INVOICES under Transactions, granted to MC only.
+-- 6. Menus, granted to MC only: RENTAL_INVOICES under Transactions (invoices +
+--    statement), RENTAL_MASTER under Masters (tenants + settings).
 --
 -- Safe to re-run.
 -- ============================================================================
@@ -159,12 +160,19 @@ VALUES
 UPDATE m_menu_items SET parent_code = 'TRANSACTIONS', sequence = 72, group_code = 'TRANSACTIONS', updated_by = 'system'
 WHERE menu_code = 'RENTAL_INVOICES' AND group_code <> 'TRANSACTIONS';
 
+-- Tenants + settings live under Masters (next to Cashier Expenses)
+INSERT IGNORE INTO m_menu_items
+    (menu_code, menu_name, icon, url_path, parent_code, sequence, group_code, effective_start_date, created_by)
+VALUES
+    ('RENTAL_MASTER', 'Rental Master', 'bi-building', '/rental/master', 'MASTERS', 66, 'MASTERS', CURDATE(), 'system');
+
 INSERT INTO m_menu_access_override (role, location_code, menu_code, allowed, effective_start_date, created_by, updated_by)
-SELECT r.role, 'MC', 'RENTAL_INVOICES', 1, CURDATE(), 'system', 'system'
+SELECT r.role, 'MC', m.menu_code, 1, CURDATE(), 'system', 'system'
 FROM (SELECT 'SuperUser' AS role UNION ALL SELECT 'PowerUser' UNION ALL SELECT 'Admin') r
+CROSS JOIN (SELECT 'RENTAL_INVOICES' AS menu_code UNION ALL SELECT 'RENTAL_MASTER') m
 WHERE NOT EXISTS (
     SELECT 1 FROM m_menu_access_override o
-    WHERE o.role = r.role AND o.location_code = 'MC' AND o.menu_code = 'RENTAL_INVOICES'
+    WHERE o.role = r.role AND o.location_code = 'MC' AND o.menu_code = m.menu_code
 );
 
 CALL RefreshMenuCache();
@@ -172,5 +180,5 @@ CALL RefreshMenuCache();
 -- Verify
 SELECT 'settings' AS what, COUNT(*) AS n FROM m_rental_settings WHERE location_code = 'MC'
 UNION ALL SELECT 'ledgers', COUNT(*) FROM gl_ledgers WHERE location_code = 'MC' AND ledger_name IN ('RENT RECEIVED', 'TDS RECEIVABLE')
-UNION ALL SELECT 'menu', COUNT(*) FROM m_menu_items WHERE menu_code = 'RENTAL_INVOICES'
-UNION ALL SELECT 'menu access', COUNT(*) FROM m_menu_access_override WHERE menu_code = 'RENTAL_INVOICES';
+UNION ALL SELECT 'menus', COUNT(*) FROM m_menu_items WHERE menu_code IN ('RENTAL_INVOICES', 'RENTAL_MASTER')
+UNION ALL SELECT 'menu access', COUNT(*) FROM m_menu_access_override WHERE menu_code IN ('RENTAL_INVOICES', 'RENTAL_MASTER');
