@@ -54,11 +54,20 @@ block content
             span(aria-hidden="true") &times;
 
     .container-fluid.py-3
-        .d-flex.align-items-center.mb-2
-            div
-                h4.mb-0.text-primary Rental Invoices
+        .d-flex.align-items-center.flex-wrap.mb-2
+            div.mr-auto
+                h4.mb-0.text-primary= page.title
                 if !notSetUp
                     small.text-muted #{settings.landlord_name} · GSTIN #{settings.gstin}
+            if !notSetUp
+                if page.basePath === '/rental' && canMaster
+                    a.btn.btn-outline-secondary.btn-sm.mt-1(href="/rental/master")
+                        i.bi.bi-people.mr-1
+                        | Tenants &amp; Settings
+                else if page.basePath !== '/rental' && canInvoice
+                    a.btn.btn-outline-secondary.btn-sm.mt-1(href="/rental")
+                        i.bi.bi-receipt.mr-1
+                        | Rental Invoices
 
         if notSetUp
             .alert.alert-info Rental invoices are not set up for #{user.location_code}.
@@ -68,13 +77,17 @@ block content
                     | The landlord GSTIN in Settings (#{settings.gstin}) fails the check digit. Fix it before finalising invoices.
             if !settings.rent_bank_id
                 .alert.alert-warning.small
-                    | No rent bank set. In #[a(href="/rental?tab=settings") Settings], pick the bank the rent is paid into,
-                    | so rent receipts can be tagged to tenants on its bank statement.
+                    | No rent bank set. In
+                    if canMaster
+                        |  #[a(href="/rental/master?tab=settings") Masters → Rental Master → Settings],
+                    else
+                        |  Masters → Rental Master → Settings,
+                    |  pick the bank the rent is paid into, so rent receipts can be tagged to tenants on its bank statement.
 
             ul.nav.nav-tabs.rental-tabs.mb-3
-                each t in [['invoices', 'Invoices'], ['tenants', 'Tenants'], ['statement', 'Statement'], ['settings', 'Settings']]
+                each t in page.tabs
                     li.nav-item
-                        a.nav-link(class=(tab === t[0] ? 'active' : '') href=`/rental?tab=${t[0]}&month=${month}`)= t[1]
+                        a.nav-link(class=(tab === t[0] ? 'active' : '') href=`${page.basePath}?tab=${t[0]}&month=${month}`)= t[1]
 
             //- ───────────────────────── Invoices ─────────────────────────
             if tab === 'invoices'
@@ -195,9 +208,10 @@ block content
                                     data-invoices=t.invoice_count)
                                     i.bi.bi-pencil.mr-1
                                     | Edit
-                                a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}`)
-                                    i.bi.bi-journal-text.mr-1
-                                    | Statement
+                                if canInvoice
+                                    a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}`)
+                                        i.bi.bi-journal-text.mr-1
+                                        | Statement
                                 if Number(t.invoice_count) === 0
                                     button.btn.btn-outline-danger.btn-sm.delete-tenant-btn(type="button" data-id=t.tenant_id data-name=t.tenant_name)
                                         i.bi.bi-trash
@@ -206,7 +220,7 @@ block content
             //- ───────────────────────── Statement ─────────────────────────
             if tab === 'statement'
                 if !tenants.length
-                    .alert.alert-light.border Add a tenant first.
+                    .alert.alert-light.border Add a tenant first in Masters → Rental Master.
                 else
                     form.d-flex.flex-wrap.align-items-end.mb-3(method="get" action="/rental")
                         input(type="hidden" name="tab" value="statement")
