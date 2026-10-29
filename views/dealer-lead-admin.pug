@@ -68,9 +68,10 @@ block content
                     a.btn.btn-sm.btn-success.mr-2(href='/dealer-leads/admin/new')
                         i.bi.bi-plus-circle
                         |  Add lead
-                    a.btn.btn-sm.btn-outline-primary.mr-2(href=tileLink({ owner: 'me', status: 'OPEN' }))
-                        i.bi.bi-person-check
-                        |  My open leads
+                    if !ownLeadsOnly
+                        a.btn.btn-sm.btn-outline-primary.mr-2(href=tileLink({ owner: 'me', status: 'OPEN' }))
+                            i.bi.bi-person-check
+                            |  My open leads
                     if canExport
                         a.btn.btn-sm.btn-primary(href='/dealer-leads/admin/export' + (queryString ? '?' + queryString : ''))
                             i.bi.bi-download
@@ -97,13 +98,14 @@ block content
                                 option(value='today' selected=filters.due === 'today') Due today
                                 option(value='week' selected=filters.due === 'week') Next 7 days
                                 option(value='none' selected=filters.due === 'none') No date set
-                        .col-6.col-md-2.mb-2.more-filter
-                            select.form-control.form-control-sm(name='owner')
-                                option(value='') Any owner
-                                option(value='me' selected=filters.owner === 'me') Me
-                                option(value='none' selected=filters.owner === 'none') Unassigned
-                                each a in assignees
-                                    option(value=a.Person_id selected=filters.owner === String(a.Person_id))= a.Person_Name
+                        if !ownLeadsOnly
+                            .col-6.col-md-2.mb-2.more-filter
+                                select.form-control.form-control-sm(name='owner')
+                                    option(value='') Any owner
+                                    option(value='me' selected=filters.owner === 'me') Me
+                                    option(value='none' selected=filters.owner === 'none') Unassigned
+                                    each a in assignees
+                                        option(value=a.Person_id selected=filters.owner === String(a.Person_id))= a.Person_Name
                         .col-6.col-md-3.mb-2.more-filter
                             select.form-control.form-control-sm(name='event')
                                 option(value='') All events

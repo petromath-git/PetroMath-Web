@@ -62,6 +62,11 @@ const LEAD_MODES = [
 
 const labelOf = (list, code) => (list.find(x => x.code === code) || {}).label || code;
 
+// A TeleCaller works only the leads assigned to her: returns her Person_id to
+// scope the list by, or null for everyone else (sees all leads)
+const ownLeadsOf = (user) => (user.Role === 'TeleCaller' ? user.Person_id : null);
+const canSeeLead = (user, lead) => !ownLeadsOf(user) || lead.assigned_to === user.Person_id;
+
 const FILTER_KEYS = ['event', 'status', 'owner', 'priority', 'district', 'oil_company', 'due', 'q'];
 
 const readFilters = (query) => {
@@ -134,10 +139,11 @@ module.exports = {
     getAdminList: async (req, res, next) => {
         try {
             const filters = readFilters(req.query);
+            const ownerId = ownLeadsOf(req.user);
             const [leads, summary, options, assignees] = await Promise.all([
-                dealerLeadDao.getLeads(filters, req.user.Person_id),
-                dealerLeadDao.getSummary(),
-                dealerLeadDao.getFilterOptions(),
+                dealerLeadDao.getLeads(filters, req.user.Person_id, ownerId),
+                dealerLeadDao.getSummary(ownerId),
+                dealerLeadDao.getFilterOptions(ownerId),
                 dealerLeadDao.getAssignees()
             ]);
 
@@ -154,6 +160,7 @@ module.exports = {
                 mobileReady: true,   // lead rows stack into cards on phones (m-stack)
                 user: req.user,
                 canExport: req.user.Role !== 'TeleCaller',
+                ownLeadsOnly: !!ownerId,
                 leads,
                 summary,
                 options,
@@ -172,7 +179,7 @@ module.exports = {
     getLeadDetail: async (req, res, next) => {
         try {
             const lead = await dealerLeadDao.getLeadById(parseInt(req.params.leadId, 10) || 0);
-            if (!lead) {
+            if (!lead || !canSeeLead(req.user, lead)) {
                 req.flash('error', 'Lead not found.');
                 return res.redirect('/dealer-leads/admin');
             }
@@ -272,7 +279,12 @@ module.exports = {
             // Same number already on file → open that lead instead of adding a duplicate
             const existing = await dealerLeadDao.findLeadByPhone(phoneNumber);
             if (existing) {
-                req.flash('warning', `This number is already a lead (${existing.contact_person_name || existing.bunk_name}). Log your call here.`);
+                const name = existing.contact_person_name || existing.bunk_name;
+                if (!canSeeLead(req.user, existing)) {
+                    req.flash('warning', `This number is already a lead (${name}), handled by ${existing.assigned_to_name || 'the office'}.`);
+                    return res.redirect(formUrl);
+                }
+                req.flash('warning', `This number is already a lead (${name}). Log your call here.`);
                 return res.redirect(`/dealer-leads/admin/${existing.lead_id}`);
             }
 
@@ -293,6 +305,10 @@ module.exports = {
                 notes: field('notes').slice(0, 500)
             }, req.user);
 
+            if (!canSeeLead(req.user, { assigned_to: assignedTo })) {
+                req.flash('success', 'Lead added and handed over.');
+                return res.redirect('/dealer-leads/admin');
+            }
             req.flash('success', 'Lead added.');
             res.redirect(`/dealer-leads/admin/${leadId}`);
         } catch (error) {
@@ -306,7 +322,7 @@ module.exports = {
         const detailUrl = `/dealer-leads/admin/${leadId}`;
         try {
             const lead = await dealerLeadDao.getLeadById(leadId);
-            if (!lead) {
+            if (!lead || !canSeeLead(req.user, lead)) {
                 req.flash('error', 'Lead not found.');
                 return res.redirect('/dealer-leads/admin');
             }
@@ -350,6 +366,11 @@ module.exports = {
                 next_followup_date: nextFollowupDate
             }, req.user);
 
+            // TeleCaller handed the lead to someone else — it leaves her list
+            if (!canSeeLead(req.user, { assigned_to: assignedTo })) {
+                req.flash('success', 'Logged and handed over.');
+                return res.redirect('/dealer-leads/admin');
+            }
             req.flash('success', 'Logged.');
             res.redirect(detailUrl);
         } catch (error) {
@@ -363,7 +384,7 @@ module.exports = {
         const detailUrl = `/dealer-leads/admin/${leadId}`;
         try {
             const lead = await dealerLeadDao.getLeadById(leadId);
-            if (!lead) {
+            if (!lead || !canSeeLead(req.user, lead)) {
                 req.flash('error', 'Lead not found.');
                 return res.redirect('/dealer-leads/admin');
             }
