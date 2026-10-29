@@ -137,7 +137,10 @@ module.exports = {
       const productPricePromise   =  DsrReportDao.getPumpPrice(locationCode, fromDate);
       const monthlyOfftakePromise = DsrReportDao.getMonthlyOfftake(locationCode, fromDate);
       const deadlinePromise = DsrReportDao.getDeadline(locationCode, fromDate);
-      const skippedReadingsPromise = DsrReportDao.getSkippedReadings(locationCode, fromDate);
+      // Slow (scans each pump's reading history) — only where the section is shown
+      const skippedReadingsPromise = showSkippedReadingDsr === 'Y'
+          ? DsrReportDao.getSkippedReadings(locationCode, fromDate)
+          : Promise.resolve([]);
       
 
 
