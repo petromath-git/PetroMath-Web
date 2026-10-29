@@ -2,11 +2,16 @@ const db = require("../db/db-connection");
 
 const OPEN_STATUSES = ['NEW', 'CONTACTED', 'INTERESTED', 'DEMO', 'ONBOARDING'];
 
-// Builds the WHERE clause for the admin list / CSV export from the filter bar
-const buildLeadFilter = (filters, currentPersonId) => {
+// Builds the WHERE clause for the admin list / CSV export from the filter bar.
+// ownerId (TeleCaller) limits everything to leads assigned to that person.
+const buildLeadFilter = (filters, currentPersonId, ownerId) => {
     const where = [];
     const replacements = { openStatuses: OPEN_STATUSES };
 
+    if (ownerId) {
+        where.push('l.assigned_to = :ownerId');
+        replacements.ownerId = ownerId;
+    }
     if (filters.event) {
         where.push('l.event_name = :event');
         replacements.event = filters.event;
@@ -88,8 +93,8 @@ module.exports = {
     },
 
     // Open leads first, soonest follow-up first; closed leads last
-    getLeads: async (filters, currentPersonId) => {
-        const { whereSql, replacements } = buildLeadFilter(filters, currentPersonId);
+    getLeads: async (filters, currentPersonId, ownerId = null) => {
+        const { whereSql, replacements } = buildLeadFilter(filters, currentPersonId, ownerId);
         return db.sequelize.query(`
             SELECT l.lead_id, l.bunk_name, l.place, l.district, l.phone_number, l.oil_company,
                    l.contact_person_name, l.contact_role, l.lead_mode, l.event_name, l.is_priority,
@@ -109,8 +114,8 @@ module.exports = {
         });
     },
 
-    // Counts for the summary tiles — across all leads, ignoring the filter bar
-    getSummary: async () => {
+    // Counts for the summary tiles — across all leads (or ownerId's), ignoring the filter bar
+    getSummary: async (ownerId = null) => {
         const rows = await db.sequelize.query(`
             SELECT
                 COUNT(*) AS total,
@@ -123,21 +128,21 @@ module.exports = {
                 SUM(status = 'WON') AS won,
                 SUM(status IN ('NOT_INTERESTED', 'INVALID')) AS lost
             FROM t_dealer_lead
+            ${ownerId ? 'WHERE assigned_to = :ownerId' : ''}
         `, {
-            replacements: { openStatuses: OPEN_STATUSES },
+            replacements: { openStatuses: OPEN_STATUSES, ownerId },
             type: db.Sequelize.QueryTypes.SELECT
         });
         return rows[0];
     },
 
-    getFilterOptions: async () => {
+    getFilterOptions: async (ownerId = null) => {
+        const mine = ownerId ? 'AND assigned_to = :ownerId' : '';
+        const opts = { replacements: { ownerId }, type: db.Sequelize.QueryTypes.SELECT };
         const [events, districts, oilCompanies] = await Promise.all([
-            db.sequelize.query(`SELECT DISTINCT event_name AS value FROM t_dealer_lead WHERE event_name IS NOT NULL ORDER BY 1`,
-                { type: db.Sequelize.QueryTypes.SELECT }),
-            db.sequelize.query(`SELECT DISTINCT district AS value FROM t_dealer_lead ORDER BY 1`,
-                { type: db.Sequelize.QueryTypes.SELECT }),
-            db.sequelize.query(`SELECT DISTINCT oil_company AS value FROM t_dealer_lead ORDER BY 1`,
-                { type: db.Sequelize.QueryTypes.SELECT })
+            db.sequelize.query(`SELECT DISTINCT event_name AS value FROM t_dealer_lead WHERE event_name IS NOT NULL ${mine} ORDER BY 1`, opts),
+            db.sequelize.query(`SELECT DISTINCT district AS value FROM t_dealer_lead WHERE 1 = 1 ${mine} ORDER BY 1`, opts),
+            db.sequelize.query(`SELECT DISTINCT oil_company AS value FROM t_dealer_lead WHERE 1 = 1 ${mine} ORDER BY 1`, opts)
         ]);
         return {
             events: events.map(r => r.value),
@@ -174,10 +179,11 @@ module.exports = {
 
     findLeadByPhone: async (phoneNumber) => {
         const rows = await db.sequelize.query(`
-            SELECT lead_id, bunk_name, contact_person_name
-            FROM t_dealer_lead
-            WHERE phone_number = :phoneNumber
-            ORDER BY lead_id
+            SELECT l.lead_id, l.bunk_name, l.contact_person_name, l.assigned_to, p.Person_Name AS assigned_to_name
+            FROM t_dealer_lead l
+            LEFT JOIN m_persons p ON p.Person_id = l.assigned_to
+            WHERE l.phone_number = :phoneNumber
+            ORDER BY l.lead_id
             LIMIT 1
         `, {
             replacements: { phoneNumber },
