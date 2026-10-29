@@ -151,7 +151,7 @@ module.exports = {
         return db.sequelize.query(`
             SELECT Person_id, Person_Name, User_Name
             FROM m_persons
-            WHERE Role IN ('SuperUser', 'PowerUser')
+            WHERE Role IN ('SuperUser', 'PowerUser', 'TeleCaller')
               AND (effective_end_date IS NULL OR effective_end_date >= CURDATE())
             ORDER BY Person_Name
         `, {
@@ -170,6 +170,56 @@ module.exports = {
             type: db.Sequelize.QueryTypes.SELECT
         });
         return rows[0] || null;
+    },
+
+    findLeadByPhone: async (phoneNumber) => {
+        const rows = await db.sequelize.query(`
+            SELECT lead_id, bunk_name, contact_person_name
+            FROM t_dealer_lead
+            WHERE phone_number = :phoneNumber
+            ORDER BY lead_id
+            LIMIT 1
+        `, {
+            replacements: { phoneNumber },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return rows[0] || null;
+    },
+
+    // Lead added from the leads page (not the public stall form); returns the new lead_id
+    createLead: async (data, user) => {
+        const [leadId] = await db.sequelize.query(`
+            INSERT INTO t_dealer_lead
+                (bunk_name, place, district, phone_number, oil_company,
+                 contact_person_name, contact_role, lead_mode, event_name, is_priority,
+                 status, assigned_to, next_followup_date, generated_by, notes,
+                 updated_by, updation_date, creation_date)
+            VALUES
+                (:bunkName, :place, :district, :phoneNumber, :oilCompany,
+                 :contactPersonName, :contactRole, :leadMode, :eventName, :isPriority,
+                 'NEW', :assignedTo, :nextFollowupDate, :generatedBy, :notes,
+                 :userName, NOW(), NOW())
+        `, {
+            replacements: {
+                bunkName: data.bunk_name,
+                place: data.place,
+                district: data.district,
+                phoneNumber: data.phone_number,
+                oilCompany: data.oil_company,
+                contactPersonName: data.contact_person_name || null,
+                contactRole: data.contact_role,
+                leadMode: data.lead_mode,
+                eventName: data.event_name || null,
+                isPriority: data.is_priority,
+                assignedTo: data.assigned_to || null,
+                nextFollowupDate: data.next_followup_date || null,
+                generatedBy: data.generated_by || null,
+                notes: data.notes || null,
+                userName: user.User_Name
+            },
+            type: db.Sequelize.QueryTypes.INSERT
+        });
+        return leadId;
     },
 
     getActivities: async (leadId) => {

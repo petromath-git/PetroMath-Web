@@ -21,7 +21,7 @@ function isAssignableByCaller(role, menuItem) {
 // Roles a non-SuperUser caller (i.e. PowerUser) cannot set menu access for --
 // SuperUser is too privileged to touch, and Cashier/Driver/Helper/Customer are
 // low-level operational/portal roles whose menu access is not PowerUser's to change.
-const NON_SUPERUSER_EXCLUDED_TARGET_ROLES = ['SuperUser', 'Cashier', 'Driver', 'Helper', 'Customer'];
+const NON_SUPERUSER_EXCLUDED_TARGET_ROLES = ['SuperUser', 'Cashier', 'Driver', 'Helper', 'Customer', 'TeleCaller'];
 
 const menuManagementController = {
 

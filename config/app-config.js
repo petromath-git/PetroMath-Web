@@ -260,7 +260,7 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
       adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES, ...POWER_USER_ROLES, ...SUPERUSER_ROLES],
       // Roles each role may create / disable on the Users page (strictly below itself)
       manageableRoles: {
-            SuperUser: ['PowerUser', 'Admin', 'Manager', 'Cashier', 'Driver', 'Helper'],
+            SuperUser: ['PowerUser', 'Admin', 'Manager', 'Cashier', 'Driver', 'Helper', 'TeleCaller'],
             PowerUser: ['Admin', 'Manager', 'Cashier', 'Driver', 'Helper'],
             Admin: ['Manager', 'Cashier', 'Driver', 'Helper'],
             Manager: ['Cashier', 'Driver', 'Helper'],
