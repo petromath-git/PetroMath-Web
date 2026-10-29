@@ -20,6 +20,14 @@ const cashSaleTypeCodes = new Map();
 cashSaleTypeCodes.set(cashSaleTypes[0], 'IN');
 cashSaleTypeCodes.set(cashSaleTypes[1], 'OUT');
 
+// Day Close (cashflow) types that only generate_cashflow writes. They are not
+// offered for manual entry or reclassify - a customer receipt booked as
+// "Collection" would be accounted as shift sales. Balance B/F is the one
+// exception: on a location's first Day Close the system B/F is 0, so the
+// opening cash is entered by hand.
+const CASHFLOW_SYSTEM_ONLY_TYPES = ['Balance B/F', 'Collection', 'Cashier A/C (+)', 'Cashier A/C (-)', '2T Oil'];
+const CASHFLOW_OPENING_BALANCE_TYPE = 'Balance B/F';
+
 const CASHIER_ROLES = ["Cashier"];
 const MANAGER_ROLES = ["Manager"];
 const ADMIN_ROLES = ["Admin"];
@@ -246,6 +254,8 @@ GST_RETURN_STATUS: ['DRAFT', 'READY', 'FILED', 'FAILED', 'CANCELLED'],
       creditTypes: ['Credit', 'Suspense'],
       cashSaleTypes: cashSaleTypes,
       cashSaleTypeCodes: cashSaleTypeCodes,
+      cashflowSystemOnlyTypes: CASHFLOW_SYSTEM_ONLY_TYPES,
+      cashflowOpeningBalanceType: CASHFLOW_OPENING_BALANCE_TYPE,
       receiptTypes: RECEIPT_TYPES,
       adminRoles: [...MANAGER_ROLES, ...ADMIN_ROLES, ...POWER_USER_ROLES, ...SUPERUSER_ROLES],
       // Roles each role may create / disable on the Users page (strictly below itself)

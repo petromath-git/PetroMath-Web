@@ -1464,6 +1464,11 @@ app.post('/save-cashflow-txns', isLoginEnsured, function (req, res, next) {
     cashflowController.saveCashflowTxnData(req, res, next);
 });
 
+// Reclassify a manually entered Day Close line to another type
+app.patch('/cashflow-txn/:id/reclassify', [isLoginEnsured, security.hasPermission('RECLASSIFY_CASHFLOW')], function (req, res, next) {
+    cashflowController.reclassifyCashflowTxn(req, res, next);
+});
+
 // Day Close Cash Receipt lines -> customer credit receipts
 app.post('/save-cashflow-receipts', isLoginEnsured, function (req, res, next) {
     cashflowController.saveDayCloseReceipts(req, res, next);
