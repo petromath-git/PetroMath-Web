@@ -526,6 +526,18 @@ const addUserLocationInfo = async (req, res, next) => {
 };
 
 app.use(addUserLocationInfo);
+
+// TeleCaller sees the Dealer Leads pages only — every other page (most just
+// check login) sends them back there
+// (/preview-as: lets a SuperUser previewing as TeleCaller switch back)
+const TELECALLER_PATHS = ['/dealer-leads', '/logout', '/password/self', '/passkey', '/preview-as'];
+app.use((req, res, next) => {
+    if (!req.user || req.user.Role !== 'TeleCaller') return next();
+    if (TELECALLER_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+    if (req.method === 'GET' && !req.xhr) return res.redirect('/dealer-leads/admin');
+    res.status(403).json({ success: false, error: 'Not available for your login.' });
+});
+
 app.use(addDebugLogging);
 // Remote speed test requested for this user from /speedtest/results → res.locals.diagRequestId
 app.use(require('./utils/diag-request').diagRequestMiddleware);
