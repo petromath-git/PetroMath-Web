@@ -41,8 +41,12 @@ mixin invoiceActions(i)
         a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental/invoice/${i.invoice_id}/pdf?download=1` title="Download PDF")
             i.bi.bi-download
         if i.status === 'FINAL'
-            button.btn.btn-outline-danger.btn-sm.cancel-inv-btn(type="button" title="Cancel invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name data-irn=(i.irn ? '1' : ''))
+            button.btn.btn-outline-danger.btn-sm.mr-1.cancel-inv-btn(type="button" title="Cancel invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name data-irn=(i.irn ? '1' : ''))
                 i.bi.bi-x-circle
+        //- No delete once e-invoiced: the IRN exists on the portal
+        if !i.irn
+            button.btn.btn-outline-danger.btn-sm.delete-inv-btn(type="button" title="Delete invoice" data-id=i.invoice_id data-no=i.invoice_no data-name=i.display_name)
+                i.bi.bi-trash
 
 block content
     style.
@@ -165,7 +169,7 @@ block content
                                     th.text-right TDS
                                     th Status
                                     th GL
-                                    th(style="width:130px")
+                                    th(style="width:170px")
                             tbody
                                 each i in invoices
                                     tr(class=(i.status === 'CANCELLED' ? 'text-muted' : ''))
@@ -180,6 +184,43 @@ block content
                                         td(data-label="Status"): +statusBadge(i)
                                         td(data-label="GL"): +glBadge(i)
                                         td.text-nowrap.m-actions: +invoiceActions(i)
+
+            //- ───────────────────────── Deleted ─────────────────────────
+            if tab === 'deleted'
+                p.small.text-muted
+                    | Final or cancelled invoices deleted from the Invoices tab. They are not in GSTR-1 or the GST Summary,
+                    | and any accounting already posted for them is reversed on the next Create Accounting run.
+                if !deletedInvoices.length
+                    .alert.alert-light.border No deleted invoices.
+                else
+                    .rental-table-wrap
+                        table.table.table-sm.table-striped.m-stack.m-collapse
+                            thead.thead-dark
+                                tr
+                                    th Invoice No.
+                                    th Date
+                                    th Tenant
+                                    th.text-right Taxable
+                                    th.text-right GST
+                                    th.text-right Total
+                                    th Was
+                                    th Reason
+                                    th Deleted
+                            tbody
+                                each d in deletedInvoices
+                                    tr
+                                        td.text-nowrap(data-label="Invoice No.")
+                                            = d.invoice_no
+                                            if d.number_reused === 'Y'
+                                                span.badge.badge-light.border.ml-1(title="It was the latest number, so the next invoice takes it again") reused
+                                        td.text-nowrap(data-label="Date")= fmtDate(d.invoice_date)
+                                        td.m-title= d.tenant_name
+                                        td.text-right(data-label="Taxable")= fmtAmt(d.taxable_value)
+                                        td.text-right(data-label="GST (CGST + SGST)")= fmtAmt(Number(d.cgst_amount) + Number(d.sgst_amount))
+                                        td.text-right.font-weight-bold.m-summary(data-label="Total") ₹#{fmtAmt(d.total_amount)}
+                                        td(data-label="Was")= d.status_at_delete === 'CANCELLED' ? 'Cancelled' : 'Final'
+                                        td.small(data-label="Reason")= d.delete_reason
+                                        td.small.text-nowrap(data-label="Deleted") #{d.deleted_by} · #{fmtDate(d.deleted_date)}
 
             //- ───────────────────────── Tenants ─────────────────────────
             if tab === 'tenants'
@@ -215,7 +256,11 @@ block content
                                                 span.badge.badge-secondary.ml-2 Ended
                                         td(data-label="GSTIN")= t.gstin || 'Unregistered'
                                         td.small.m-wide(data-label="Property")= t.property_address || '—'
-                                        td.text-right.font-weight-bold.m-summary(data-label="Rent / month") ₹#{fmtAmt(t.monthly_rent)}
+                                        td.text-right.font-weight-bold.m-summary(data-label="Rent / month")
+                                            | ₹#{fmtAmt(t.monthly_rent)}
+                                            if Number(t.escalation_percent) && t.escalation_next_iso
+                                                .small.font-weight-normal.text-muted(title=`+${Number(t.escalation_percent)}% every ${t.escalation_every_months} months`)
+                                                    | +#{Number(t.escalation_percent)}% from #{fmtDate(t.escalation_next_iso).slice(3)}
                                         td.text-right(data-label="GST") #{Number(t.gst_rate)}% · SAC #{t.sac_code}
                                         td.text-right(data-label="TDS")= Number(t.tds_percent) ? Number(t.tds_percent) + '%' : 'None'
                                         td(data-label="Period")
@@ -232,6 +277,9 @@ block content
                                                 data-start=isoDate(t.start_date) data-end=isoDate(t.end_date) data-notes=t.notes
                                                 data-invoices=t.invoice_count)
                                                 i.bi.bi-pencil
+                                            button.btn.btn-outline-success.btn-sm.mr-1.rent-btn(type="button" title="Rent revisions & escalation"
+                                                data-id=t.tenant_id data-name=t.tenant_name)
+                                                i.bi.bi-graph-up-arrow
                                             if canInvoice
                                                 a.btn.btn-outline-dark.btn-sm.mr-1(href=`/rental?tab=statement&tenant=${t.tenant_id}` title="Statement")
                                                     i.bi.bi-journal-text
@@ -415,6 +463,7 @@ block content
                                 .form-group.col-md-4
                                     label.small Monthly rent (₹, before GST)
                                     input.form-control.form-control-sm(name="monthly_rent" type="number" min="1" step="0.01" required)
+                                    small.form-text.text-muted#rentHelp
                                 .form-group.col-md-2
                                     label.small GST %
                                     select.form-control.form-control-sm(name="gst_rate")
@@ -451,6 +500,56 @@ block content
                         .modal-footer
                             button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
                             button.btn.btn-primary.btn-sm(type="submit") Save
+
+        //- Rent history + escalation rule (filled by script from /rental/api/tenants/:id/rent)
+        .modal.fade#rentModal(tabindex="-1")
+            .modal-dialog.modal-lg
+                .modal-content
+                    .modal-header
+                        h5.modal-title Rent — #[span#rentTenant]
+                        button.close(type="button" data-dismiss="modal") &times;
+                    .modal-body
+                        h6.text-muted Escalation (optional)
+                        form#escalationForm.form-row.align-items-end
+                            .form-group.col-4.col-md-3
+                                label.small Increase %
+                                input.form-control.form-control-sm(name="percent" type="number" min="0.01" max="100" step="0.01" placeholder="e.g. 5")
+                            .form-group.col-4.col-md-3
+                                label.small Every (months)
+                                input.form-control.form-control-sm(name="every_months" type="number" min="1" max="120" step="1" placeholder="12")
+                            .form-group.col-4.col-md-3
+                                label.small Next escalation
+                                input.form-control.form-control-sm(name="next_month" type="month")
+                            .form-group.col-12.col-md-3
+                                button.btn.btn-primary.btn-sm.mr-1(type="submit") Save rule
+                                button.btn.btn-outline-secondary.btn-sm#clearEscalationBtn(type="button") Clear
+                        p.small.text-muted.mb-3
+                            | From the next-escalation month, drafts use the rent increased by this %, compounding every N months
+                            | (rounded to the rupee). For agreements with fixed amounts instead, leave this blank and add revisions below.
+                        h6.text-muted Rent history
+                        table.table.table-sm.table-striped.m-stack
+                            thead.thead-light
+                                tr
+                                    th From month
+                                    th.text-right Rent / month
+                                    th Type
+                                    th Note
+                                    th
+                            tbody#revRows
+                        form#revisionForm.form-row.align-items-end
+                            .form-group.col-6.col-md-3
+                                label.small New rent from
+                                input.form-control.form-control-sm(name="month" type="month" required)
+                            .form-group.col-6.col-md-3
+                                label.small Rent / month (₹)
+                                input.form-control.form-control-sm(name="monthly_rent" type="number" min="1" step="0.01" required)
+                            .form-group.col-8.col-md-4
+                                label.small Note
+                                input.form-control.form-control-sm(name="note" maxlength="200" placeholder="e.g. as per agreement clause 4")
+                            .form-group.col-4.col-md-2
+                                button.btn.btn-success.btn-sm.btn-block(type="submit") Add
+                    .modal-footer
+                        button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
 
         .modal.fade#draftModal(tabindex="-1")
             .modal-dialog
@@ -624,6 +723,20 @@ block content
                     });
                 });
 
+                document.querySelectorAll('.delete-inv-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        var reason = prompt('Delete invoice ' + btn.dataset.no + ' (' + btn.dataset.name + ')?\n'
+                            + 'It is moved to the Deleted tab and left out of GSTR-1. If it is the latest number, the next invoice reuses the number.\n'
+                            + 'Use Cancel instead if the invoice was already sent to the tenant or reported in GSTR-1.\n\nReason:');
+                        if (reason === null) return;
+                        try {
+                            var r = await call('POST', '/rental/api/invoices/' + btn.dataset.id + '/delete', { reason: reason });
+                            alert('Invoice ' + btn.dataset.no + ' deleted.' + (r.numberReused ? ' The next invoice will take number ' + btn.dataset.no + '.' : ''));
+                            location.reload();
+                        } catch (e) { showMessage(e.message); }
+                    });
+                });
+
                 // Tenants tab
                 var tenantForm = document.getElementById('tenantForm');
                 // PIN from the address ("... PIN: 641 041.") when the PIN box is still empty
@@ -642,6 +755,10 @@ block content
                     document.getElementById('tenantNameHelp').textContent = locked
                         ? 'Locked: invoices exist. The name is the ledger and bank receipt name.'
                         : 'Also used as the ledger name in Tally.';
+                    f.monthly_rent.readOnly = !!locked;
+                    document.getElementById('rentHelp').textContent = locked
+                        ? 'Current rent. Change it with the Rent button (revision or escalation).'
+                        : '';
                     if (d) {
                         f.tenant_name.value = d.name || '';
                         f.gstin.value = d.gstin || '';
@@ -684,6 +801,85 @@ block content
                         try { await call('DELETE', '/rental/api/tenants/' + btn.dataset.id); location.reload(); }
                         catch (e) { showMessage(e.message); }
                     });
+                });
+
+                // Rent revisions + escalation
+                var rentTenantId = null, rentChanged = false;
+                var SOURCE_LABEL = { START: 'Opening', REVISION: 'Revision', ESCALATION: 'Escalation' };
+                function cell(tr, text, cls, label) {
+                    var td = document.createElement('td');
+                    td.textContent = text;
+                    if (cls) td.className = cls;
+                    if (label) td.setAttribute('data-label', label);
+                    tr.appendChild(td);
+                    return td;
+                }
+                async function loadRent() {
+                    var r = await fetch('/rental/api/tenants/' + rentTenantId + '/rent');
+                    var data = await r.json();
+                    if (!data.success) throw new Error(data.error || 'Could not load');
+                    var ef = document.getElementById('escalationForm').elements;
+                    ef.percent.value = data.rule.escalation_percent ? Number(data.rule.escalation_percent) : '';
+                    ef.every_months.value = data.rule.escalation_every_months || '';
+                    ef.next_month.value = data.rule.escalation_next ? data.rule.escalation_next.slice(0, 7) : '';
+                    var tbody = document.getElementById('revRows');
+                    tbody.innerHTML = '';
+                    data.revisions.forEach(function (rev) {
+                        var tr = document.createElement('tr');
+                        cell(tr, rev.month_label, 'm-title');
+                        cell(tr, '₹' + fmt(rev.monthly_rent), 'text-right', 'Rent / month');
+                        cell(tr, SOURCE_LABEL[rev.source] || rev.source, '', 'Type');
+                        cell(tr, rev.note || '', 'small', 'Note');
+                        var act = cell(tr, '', 'm-actions text-right');
+                        if (rev.source !== 'START' && !rev.used) {
+                            var b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'btn btn-outline-danger btn-sm';
+                            b.title = 'Delete';
+                            b.innerHTML = '<i class="bi bi-trash"></i>';
+                            b.addEventListener('click', async function () {
+                                if (!confirm('Delete the ' + rev.month_label + ' rent of ₹' + fmt(rev.monthly_rent) + '?')) return;
+                                try { await call('DELETE', '/rental/api/tenants/' + rentTenantId + '/revisions/' + rev.revision_id); rentChanged = true; await loadRent(); }
+                                catch (e) { alert(e.message); }
+                            });
+                            act.appendChild(b);
+                        } else if (rev.used) {
+                            act.innerHTML = '<span class="small text-muted">invoiced</span>';
+                        }
+                        tbody.appendChild(tr);
+                    });
+                }
+                document.querySelectorAll('.rent-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        rentTenantId = btn.dataset.id;
+                        rentChanged = false;
+                        document.getElementById('rentTenant').textContent = btn.dataset.name;
+                        document.getElementById('revisionForm').reset();
+                        try { await loadRent(); $('#rentModal').modal('show'); }
+                        catch (e) { showMessage(e.message); }
+                    });
+                });
+                $('#rentModal').on('hidden.bs.modal', function () { if (rentChanged) location.reload(); });
+                document.getElementById('revisionForm').addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    try {
+                        await call('POST', '/rental/api/tenants/' + rentTenantId + '/revisions', formData(this));
+                        this.reset(); rentChanged = true; await loadRent();
+                    } catch (e) { alert(e.message); }
+                });
+                document.getElementById('escalationForm').addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    try {
+                        await call('PUT', '/rental/api/tenants/' + rentTenantId + '/escalation', formData(this));
+                        rentChanged = true; await loadRent(); alert('Escalation saved.');
+                    } catch (e) { alert(e.message); }
+                });
+                document.getElementById('clearEscalationBtn').addEventListener('click', async function () {
+                    if (!confirm('Remove the escalation rule? Rents already added stay.')) return;
+                    try {
+                        await call('PUT', '/rental/api/tenants/' + rentTenantId + '/escalation', { percent: '', every_months: '', next_month: '' });
+                        rentChanged = true; await loadRent();
+                    } catch (e) { alert(e.message); }
                 });
 
                 // Settings tab

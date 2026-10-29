@@ -51,6 +51,7 @@ const RentalDao = {
     // ── Tenants ─────────────────────────────────────────────────────────────
     getTenants: (locationCode) => select(`
         SELECT t.*, l.ledger_name,
+               DATE_FORMAT(t.escalation_next, '%Y-%m-%d') AS escalation_next_iso,
                (SELECT COUNT(*) FROM t_rental_invoice i WHERE i.tenant_id = t.tenant_id) AS invoice_count
         FROM m_rental_tenant t
         LEFT JOIN gl_ledgers l ON l.ledger_id = t.ledger_id
@@ -60,7 +61,8 @@ const RentalDao = {
 
     getTenant: async (locationCode, tenantId, transaction) => {
         const rows = await select(`
-            SELECT * FROM m_rental_tenant WHERE location_code = :locationCode AND tenant_id = :tenantId
+            SELECT *, DATE_FORMAT(start_date, '%Y-%m-01') AS start_month
+            FROM m_rental_tenant WHERE location_code = :locationCode AND tenant_id = :tenantId
         `, { locationCode, tenantId }, transaction);
         return rows[0] || null;
     },
@@ -89,20 +91,35 @@ const RentalDao = {
             await db.sequelize.query(`UPDATE m_rental_tenant SET ledger_id = :ledgerId WHERE tenant_id = :tenantId`,
                 { replacements: { ledgerId, tenantId }, type: QueryTypes.UPDATE, transaction: t });
 
+            await db.sequelize.query(`
+                INSERT INTO m_rental_rent_revision (tenant_id, effective_from, monthly_rent, source, note, created_by)
+                VALUES (:tenantId, DATE_FORMAT(:startDate, '%Y-%m-01'), :rent, 'START', 'Opening rent', :createdBy)
+            `, { replacements: { tenantId, startDate: data.start_date, rent: data.monthly_rent, createdBy }, type: QueryTypes.INSERT, transaction: t });
+
             await syncReceiptRules(locationCode, createdBy, t);
             return tenantId;
         });
     },
 
     // The tenant name is not changed here once invoices exist (the ledger and the
-    // bank receipt label carry it); the controller enforces that.
-    updateTenant: async (locationCode, tenantId, data, updatedBy) => {
+    // bank receipt label carry it); the controller enforces that. Before the first
+    // invoice the opening rent / start month can still be corrected (resetStart);
+    // after that the rent only changes through revisions.
+    updateTenant: async (locationCode, tenantId, data, updatedBy, resetStart) => {
         return db.sequelize.transaction(async (t) => {
             const sets = TENANT_COLUMNS.map(c => `${c} = :${c}`).join(', ');
             await db.sequelize.query(`
                 UPDATE m_rental_tenant SET ${sets}, updated_by = :updatedBy
                 WHERE location_code = :locationCode AND tenant_id = :tenantId
             `, { replacements: { ...data, locationCode, tenantId, updatedBy }, type: QueryTypes.UPDATE, transaction: t });
+
+            if (resetStart) {
+                await db.sequelize.query(`
+                    UPDATE m_rental_rent_revision
+                    SET effective_from = DATE_FORMAT(:startDate, '%Y-%m-01'), monthly_rent = :rent
+                    WHERE tenant_id = :tenantId AND source = 'START'
+                `, { replacements: { tenantId, startDate: data.start_date, rent: data.monthly_rent }, type: QueryTypes.UPDATE, transaction: t });
+            }
 
             // Rename the tenant's own ledger (not one shared with a credit customer)
             await db.sequelize.query(`
@@ -279,6 +296,153 @@ const RentalDao = {
             return true;
         });
     },
+
+    // Deletes a final or cancelled invoice (not one with an IRN), copying it to
+    // t_rental_invoice_deleted first. If it holds the latest number, the running
+    // number steps back so the next invoice reuses it. GL: pending events are
+    // dropped; if a voucher was posted, a DELETE event reverses it on the next
+    // Create Accounting run (unless a cancel already queued one).
+    // Returns { deleted, numberReused } or { error }.
+    deleteFinalInvoice: async (locationCode, invoiceId, reason, deletedBy) => {
+        return db.sequelize.transaction(async (t) => {
+            const [settings] = await select(`SELECT last_invoice_no FROM m_rental_settings WHERE location_code = :locationCode FOR UPDATE`,
+                { locationCode }, t);
+            const [inv] = await select(`
+                SELECT i.*, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date, DATE_FORMAT(i.period_month, '%Y-%m-%d') AS period_month
+                FROM t_rental_invoice i WHERE i.location_code = :locationCode AND i.invoice_id = :invoiceId FOR UPDATE
+            `, { locationCode, invoiceId }, t);
+            if (!inv) return { error: 'Invoice not found.' };
+            if (inv.status === 'DRAFT') return { error: 'Use the draft delete button for drafts.' };
+            if (inv.irn) return { error: 'This invoice has an IRN on the e-invoice portal, so it can\'t be deleted. Cancel it instead.' };
+
+            const numberReused = settings && inv.invoice_no != null && Number(inv.invoice_no) === Number(settings.last_invoice_no);
+            await db.sequelize.query(`
+                INSERT INTO t_rental_invoice_deleted
+                    (invoice_id, location_code, tenant_id, invoice_no, invoice_date, period_month, tenant_name, tenant_gstin,
+                     taxable_value, cgst_amount, sgst_amount, total_amount, tds_amount, status_at_delete,
+                     delete_reason, number_reused, invoice_data, deleted_by)
+                SELECT invoice_id, location_code, tenant_id, invoice_no, invoice_date, period_month, tenant_name, tenant_gstin,
+                       taxable_value, cgst_amount, sgst_amount, total_amount, tds_amount, status,
+                       :reason, :numberReused, :invoiceData, :deletedBy
+                FROM t_rental_invoice WHERE invoice_id = :invoiceId
+            `, { replacements: { invoiceId, reason, numberReused: numberReused ? 'Y' : 'N', invoiceData: JSON.stringify(inv), deletedBy },
+                type: QueryTypes.INSERT, transaction: t });
+
+            // GL: drop events not yet posted; reverse a posted voucher
+            await db.sequelize.query(`
+                DELETE FROM gl_accounting_events
+                WHERE source_type = 'RENTAL_INVOICE' AND source_id = :invoiceId AND event_status <> 'PROCESSED'
+            `, { replacements: { invoiceId }, type: QueryTypes.DELETE, transaction: t });
+            const [last] = await select(`
+                SELECT location_code, fy_id, event_type, event_date FROM gl_accounting_events
+                WHERE source_type = 'RENTAL_INVOICE' AND source_id = :invoiceId
+                ORDER BY event_id DESC LIMIT 1
+            `, { invoiceId }, t);
+            if (last && last.event_type !== 'DELETE') {
+                await db.sequelize.query(`
+                    INSERT INTO gl_accounting_events
+                        (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+                    VALUES (:location_code, :fy_id, 'RENTAL_INVOICE', :invoiceId, 'DELETE', :event_date, 'UNPROCESSED', :deletedBy)
+                `, { replacements: { ...last, invoiceId, deletedBy }, type: QueryTypes.INSERT, transaction: t });
+            }
+
+            await db.sequelize.query(`DELETE FROM t_rental_invoice WHERE invoice_id = :invoiceId`,
+                { replacements: { invoiceId }, type: QueryTypes.DELETE, transaction: t });
+            if (numberReused) {
+                await db.sequelize.query(`UPDATE m_rental_settings SET last_invoice_no = last_invoice_no - 1, updated_by = :deletedBy WHERE location_code = :locationCode`,
+                    { replacements: { deletedBy, locationCode }, type: QueryTypes.UPDATE, transaction: t });
+            }
+            return { deleted: true, numberReused };
+        });
+    },
+
+    getDeletedInvoices: (locationCode) => select(`
+        SELECT d.deleted_id, d.invoice_no, d.invoice_date, d.period_month, d.tenant_name, d.tenant_gstin,
+               d.taxable_value, d.cgst_amount, d.sgst_amount, d.total_amount, d.status_at_delete,
+               d.delete_reason, d.number_reused, d.deleted_by, d.deleted_date
+        FROM t_rental_invoice_deleted d
+        WHERE d.location_code = :locationCode
+        ORDER BY d.deleted_date DESC, d.deleted_id DESC
+    `, { locationCode }),
+
+    // ── Rent revisions + escalation ─────────────────────────────────────────
+    getRevisions: (tenantId) => select(`
+        SELECT r.revision_id, DATE_FORMAT(r.effective_from, '%Y-%m-%d') AS effective_from, r.monthly_rent,
+               r.source, r.note, r.created_by,
+               EXISTS (SELECT 1 FROM t_rental_invoice i
+                       WHERE i.tenant_id = r.tenant_id AND i.status <> 'CANCELLED' AND i.period_month >= r.effective_from) AS used
+        FROM m_rental_rent_revision r
+        WHERE r.tenant_id = :tenantId
+        ORDER BY r.effective_from DESC
+    `, { tenantId }),
+
+    // Rent in force for a month: the latest revision on or before it (null if none)
+    getRentForMonth: async (tenantId, periodMonth) => {
+        const [row] = await select(`
+            SELECT monthly_rent FROM m_rental_rent_revision
+            WHERE tenant_id = :tenantId AND effective_from <= :periodMonth
+            ORDER BY effective_from DESC LIMIT 1
+        `, { tenantId, periodMonth });
+        return row ? Number(row.monthly_rent) : null;
+    },
+
+    revisionExists: async (tenantId, effectiveFrom) => {
+        const rows = await select(`SELECT 1 FROM m_rental_rent_revision WHERE tenant_id = :tenantId AND effective_from = :effectiveFrom`,
+            { tenantId, effectiveFrom });
+        return rows.length > 0;
+    },
+
+    // A live (draft/final) invoice on or after the month: its rent is already fixed
+    hasInvoiceFromMonth: async (tenantId, periodMonth) => {
+        const rows = await select(`
+            SELECT 1 FROM t_rental_invoice WHERE tenant_id = :tenantId AND status <> 'CANCELLED' AND period_month >= :periodMonth LIMIT 1
+        `, { tenantId, periodMonth });
+        return rows.length > 0;
+    },
+
+    insertRevision: async (tenantId, effectiveFrom, rent, source, note, createdBy) => {
+        await db.sequelize.query(`
+            INSERT IGNORE INTO m_rental_rent_revision (tenant_id, effective_from, monthly_rent, source, note, created_by)
+            VALUES (:tenantId, :effectiveFrom, :rent, :source, :note, :createdBy)
+        `, { replacements: { tenantId, effectiveFrom, rent, source, note, createdBy }, type: QueryTypes.INSERT });
+    },
+
+    deleteRevision: async (tenantId, revisionId) => {
+        await db.sequelize.query(`
+            DELETE FROM m_rental_rent_revision WHERE tenant_id = :tenantId AND revision_id = :revisionId AND source <> 'START'
+        `, { replacements: { tenantId, revisionId }, type: QueryTypes.DELETE });
+    },
+
+    getEscalation: async (tenantId) => {
+        const [row] = await select(`
+            SELECT escalation_percent, escalation_every_months, DATE_FORMAT(escalation_next, '%Y-%m-%d') AS escalation_next
+            FROM m_rental_tenant WHERE tenant_id = :tenantId
+        `, { tenantId });
+        return row || null;
+    },
+
+    setEscalation: async (tenantId, percent, everyMonths, next, updatedBy) => {
+        await db.sequelize.query(`
+            UPDATE m_rental_tenant
+            SET escalation_percent = :percent, escalation_every_months = :everyMonths, escalation_next = :next, updated_by = :updatedBy
+            WHERE tenant_id = :tenantId
+        `, { replacements: { tenantId, percent, everyMonths, next, updatedBy }, type: QueryTypes.UPDATE });
+    },
+
+    // Keeps m_rental_tenant.monthly_rent = the rent in force this month (shown in the master)
+    syncCurrentRent: async (tenantId) => {
+        await db.sequelize.query(`
+            UPDATE m_rental_tenant t
+            SET t.monthly_rent = COALESCE((
+                SELECT r.monthly_rent FROM m_rental_rent_revision r
+                WHERE r.tenant_id = t.tenant_id AND r.effective_from <= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+                ORDER BY r.effective_from DESC LIMIT 1), t.monthly_rent)
+            WHERE t.tenant_id = :tenantId
+        `, { replacements: { tenantId }, type: QueryTypes.UPDATE });
+    },
+
+    // Locations with rental set up (for the invoice-day scheduler)
+    getAllSettings: () => select(`SELECT location_code, invoice_day FROM m_rental_settings`),
 
     // ── E-invoice (IRN) ─────────────────────────────────────────────────────
     // City/PIN fall back to the tenant master for invoices finalised before the

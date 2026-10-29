@@ -12,55 +12,24 @@ const gstUtils = require('../utils/gst-utils');
 const security = require('../utils/app-security');
 const { amountInWords } = require('../utils/amount-in-words');
 const einvoice = require('../utils/einvoice');
+const RentalService = require('../services/rental-service');
+const { MONTHS, round2, monthStart, monthLabel, computeAmounts } = RentalService;
 
-const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST',
-    'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const clean = (v) => {
     const s = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
     return s === '' ? null : s;
 };
 const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 
-// 'YYYY-MM' -> 'YYYY-MM-01' (or null)
-function monthStart(ym) {
-    return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym || '')) ? `${ym}-01` : null;
-}
-
 function currentMonth() {
     return dateFormat(new Date(), 'yyyy-mm');
 }
 
-// "BUILDING RENT FOR THE MONTH OF OCTOBER-2026"
-function defaultDescription(tenant, periodMonth) {
-    const [y, m] = periodMonth.split('-');
-    return `${tenant.rent_description} FOR THE MONTH OF ${MONTHS[Number(m) - 1]}-${y}`;
-}
-
-// The invoice date is the location's invoice day (26th) in the rent month, capped to the month end
-function defaultInvoiceDate(periodMonth, invoiceDay) {
-    const [y, m] = periodMonth.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    const day = Math.min(Number(invoiceDay) || 26, lastDay);
-    return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-// Intra-state rent: GST rate split equally into CGST + SGST
-function computeAmounts(taxableValue, gstRate, tdsPercent) {
-    const taxable = round2(taxableValue);
-    const halfRate = round2(Number(gstRate) / 2);
-    const cgst = round2(taxable * halfRate / 100);
-    const sgst = cgst;
-    return {
-        taxable_value: taxable,
-        cgst_rate: halfRate,
-        sgst_rate: halfRate,
-        cgst_amount: cgst,
-        sgst_amount: sgst,
-        total_amount: round2(taxable + cgst + sgst),
-        tds_amount: round2(taxable * (Number(tdsPercent) || 0) / 100),
-    };
+// Revisions and the escalation rule are edited only for tenants of this location
+async function tenantOr404(req, res) {
+    const tenant = await RentalDao.getTenant(req.user.location_code, Number(req.params.id));
+    if (!tenant) res.status(404).json({ success: false, error: 'Tenant not found.' });
+    return tenant;
 }
 
 function validateTenant(body) {
@@ -165,11 +134,11 @@ const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDi
 // Two pages share one view: Rental Invoices (Transactions menu) and Rental Master
 // (Masters menu, tenants + settings).
 const PAGES = {
-    invoices: { title: 'Rental Invoices', basePath: '/rental', tabs: [['invoices', 'Invoices'], ['statement', 'Statement']] },
+    invoices: { title: 'Rental Invoices', basePath: '/rental', tabs: [['invoices', 'Invoices'], ['statement', 'Statement'], ['deleted', 'Deleted']] },
     master:   { title: 'Rental Master', basePath: '/rental/master', tabs: [['tenants', 'Tenants'], ['settings', 'Settings']] },
 };
 
-// GET /rental?tab=invoices|statement&month=YYYY-MM&tenant=&from=&to=  and  GET /rental/master?tab=tenants|settings
+// GET /rental?tab=invoices|statement|deleted&month=YYYY-MM&tenant=&from=&to=  and  GET /rental/master?tab=tenants|settings
 async function renderPage(req, res, next, pageKey) {
     const page = PAGES[pageKey];
     try {
@@ -214,6 +183,8 @@ async function renderPage(req, res, next, pageKey) {
             };
         }
 
+        const deletedInvoices = tab === 'deleted' ? await RentalDao.getDeletedInvoices(locationCode) : [];
+
         const live = invoices.filter(i => i.status !== 'CANCELLED');
         res.render('rental/home', {
             title: page.title,
@@ -222,7 +193,7 @@ async function renderPage(req, res, next, pageKey) {
             canMaster: security.hasMenuChk(req.user, 'RENTAL_MASTER'),
             user: req.user,
             mobileReady: true,
-            tab, month, settings, tenants, banks, invoices, due, statement,
+            tab, month, settings, tenants, banks, invoices, due, statement, deletedInvoices,
             monthLabel: `${MONTHS[Number(month.split('-')[1]) - 1]} ${month.split('-')[0]}`,
             totals: {
                 taxable: round2(live.reduce((s, i) => s + Number(i.taxable_value), 0)),
@@ -290,17 +261,19 @@ module.exports = {
             if (!tenant) return res.status(404).json({ success: false, error: 'Tenant not found.' });
             const v = validateTenant(req.body);
             if (v.error) return res.status(400).json({ success: false, error: v.error });
+            const tenants = await RentalDao.getTenants(locationCode);
+            const hasInvoices = Number((tenants.find(x => x.tenant_id === tenantId) || {}).invoice_count) > 0;
             if (v.data.tenant_name !== tenant.tenant_name) {
-                const tenants = await RentalDao.getTenants(locationCode);
-                const t = tenants.find(x => x.tenant_id === tenantId);
-                if (t && Number(t.invoice_count) > 0) {
+                if (hasInvoices) {
                     return res.status(400).json({ success: false, error: 'The name can\'t be changed once invoices are raised (it is the ledger and bank receipt name).' });
                 }
                 if (await RentalDao.tenantNameExists(locationCode, v.data.tenant_name, tenantId)) {
                     return res.status(400).json({ success: false, error: `Tenant "${v.data.tenant_name}" already exists.` });
                 }
             }
-            await RentalDao.updateTenant(locationCode, tenantId, v.data, req.user.User_Name);
+            // Once invoiced, the rent changes only through Rent → revisions / escalation
+            if (hasInvoices) v.data.monthly_rent = Number(tenant.monthly_rent);
+            await RentalDao.updateTenant(locationCode, tenantId, v.data, req.user.User_Name, !hasInvoices);
             res.json({ success: true });
         } catch (e) {
             console.error('Rental updateTenant:', e);
@@ -326,28 +299,105 @@ module.exports = {
         }
     },
 
-    // POST /rental/api/generate { month } — one draft per active tenant without one
+    // POST /rental/api/generate { month } — one draft per active tenant without one,
+    // at the rent in force for that month (after any escalation due by then)
     generateDrafts: async (req, res) => {
         try {
-            const locationCode = req.user.location_code;
-            const periodMonth = monthStart(req.body.month);
-            if (!periodMonth) return res.status(400).json({ success: false, error: 'Pick a month.' });
-            const settings = await RentalDao.getSettings(locationCode);
-            const due = await RentalDao.getTenantsDueForMonth(locationCode, periodMonth);
-            for (const t of due) {
-                await RentalDao.insertDraft(locationCode, {
-                    tenant_id: t.tenant_id,
-                    invoice_date: defaultInvoiceDate(req.body.month, settings.invoice_day),
-                    period_month: periodMonth,
-                    description: defaultDescription(t, req.body.month),
-                    sac_code: t.sac_code,
-                    ...computeAmounts(t.monthly_rent, t.gst_rate, t.tds_percent),
-                }, req.user.User_Name);
-            }
-            res.json({ success: true, created: due.length });
+            if (!monthStart(req.body.month)) return res.status(400).json({ success: false, error: 'Pick a month.' });
+            const created = await RentalService.createDraftsForMonth(req.user.location_code, req.body.month, req.user.User_Name);
+            res.json({ success: true, created: created.length });
         } catch (e) {
             console.error('Rental generateDrafts:', e);
             res.status(500).json({ success: false, error: 'Could not generate invoices.' });
+        }
+    },
+
+    // GET /rental/api/tenants/:id/rent — revisions + escalation rule
+    getRent: async (req, res) => {
+        try {
+            const tenant = await tenantOr404(req, res);
+            if (!tenant) return;
+            const [revisions, rule] = await Promise.all([RentalDao.getRevisions(tenant.tenant_id), RentalDao.getEscalation(tenant.tenant_id)]);
+            res.json({
+                success: true,
+                revisions: revisions.map(r => ({ ...r, month_label: monthLabel(r.effective_from), used: !!Number(r.used) })),
+                rule: { ...rule, next_label: rule.escalation_next ? monthLabel(rule.escalation_next) : null },
+            });
+        } catch (e) {
+            console.error('Rental getRent:', e);
+            res.status(500).json({ success: false, error: 'Could not load the rent history.' });
+        }
+    },
+
+    // POST /rental/api/tenants/:id/revisions { month: 'YYYY-MM', monthly_rent, note }
+    addRevision: async (req, res) => {
+        try {
+            const tenant = await tenantOr404(req, res);
+            if (!tenant) return;
+            const effectiveFrom = monthStart(req.body.month);
+            const rent = Number(req.body.monthly_rent);
+            if (!effectiveFrom) return res.status(400).json({ success: false, error: 'Pick the month the new rent starts.' });
+            if (!(rent > 0)) return res.status(400).json({ success: false, error: 'Rent must be more than zero.' });
+            if (effectiveFrom <= tenant.start_month) {
+                return res.status(400).json({ success: false, error: 'A revision must start after the tenant\'s first month (edit the tenant to change the opening rent).' });
+            }
+            if (await RentalDao.hasInvoiceFromMonth(tenant.tenant_id, effectiveFrom)) {
+                return res.status(400).json({ success: false, error: 'An invoice is already raised for that month or later. Cancel or delete it first, or start the revision from a later month.' });
+            }
+            if (await RentalDao.revisionExists(tenant.tenant_id, effectiveFrom)) {
+                return res.status(400).json({ success: false, error: 'There is already a rent revision for that month. Delete it first.' });
+            }
+            await RentalDao.insertRevision(tenant.tenant_id, effectiveFrom, round2(rent), 'REVISION', clean(req.body.note), req.user.User_Name);
+            await RentalDao.syncCurrentRent(tenant.tenant_id);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Rental addRevision:', e);
+            res.status(500).json({ success: false, error: 'Could not save the revision.' });
+        }
+    },
+
+    // DELETE /rental/api/tenants/:id/revisions/:rid — not the opening rent, not one already invoiced
+    deleteRevision: async (req, res) => {
+        try {
+            const tenant = await tenantOr404(req, res);
+            if (!tenant) return;
+            const rev = (await RentalDao.getRevisions(tenant.tenant_id)).find(r => r.revision_id === Number(req.params.rid));
+            if (!rev) return res.status(404).json({ success: false, error: 'Revision not found.' });
+            if (rev.source === 'START') return res.status(400).json({ success: false, error: 'The opening rent can\'t be deleted (edit the tenant instead).' });
+            if (Number(rev.used)) return res.status(400).json({ success: false, error: 'Invoices are raised at this rent. Cancel them first.' });
+            await RentalDao.deleteRevision(tenant.tenant_id, rev.revision_id);
+            await RentalDao.syncCurrentRent(tenant.tenant_id);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Rental deleteRevision:', e);
+            res.status(500).json({ success: false, error: 'Could not delete the revision.' });
+        }
+    },
+
+    // PUT /rental/api/tenants/:id/escalation { percent, every_months, next_month } — all blank clears it
+    saveEscalation: async (req, res) => {
+        try {
+            const tenant = await tenantOr404(req, res);
+            if (!tenant) return;
+            const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+            if (blank(req.body.percent) && blank(req.body.every_months) && blank(req.body.next_month)) {
+                await RentalDao.setEscalation(tenant.tenant_id, null, null, null, req.user.User_Name);
+                return res.json({ success: true });
+            }
+            const percent = Number(req.body.percent);
+            const every = Number(req.body.every_months);
+            const next = monthStart(req.body.next_month);
+            if (!(percent > 0 && percent <= 100)) return res.status(400).json({ success: false, error: 'Escalation % must be between 0 and 100.' });
+            if (!Number.isInteger(every) || every < 1 || every > 120) return res.status(400).json({ success: false, error: 'Escalation every N months must be 1 to 120.' });
+            if (!next) return res.status(400).json({ success: false, error: 'Pick the month of the next escalation.' });
+            if (await RentalDao.hasInvoiceFromMonth(tenant.tenant_id, next)) {
+                return res.status(400).json({ success: false, error: 'An invoice is already raised for that month or later. Set the next escalation after the last invoiced month.' });
+            }
+            await RentalDao.setEscalation(tenant.tenant_id, round2(percent), every, next, req.user.User_Name);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Rental saveEscalation:', e);
+            res.status(500).json({ success: false, error: 'Could not save the escalation.' });
         }
     },
 
@@ -406,6 +456,20 @@ module.exports = {
         } catch (e) {
             console.error('Rental cancelInvoice:', e);
             res.status(500).json({ success: false, error: 'Could not cancel the invoice.' });
+        }
+    },
+
+    // POST /rental/api/invoices/:id/delete { reason } — final or cancelled, no IRN; kept in t_rental_invoice_deleted
+    deleteFinalInvoice: async (req, res) => {
+        try {
+            const reason = clean(req.body.reason);
+            if (!reason) return res.status(400).json({ success: false, error: 'Give a reason for deleting.' });
+            const r = await RentalDao.deleteFinalInvoice(req.user.location_code, Number(req.params.id), reason.slice(0, 300), req.user.User_Name);
+            if (r.error) return res.status(400).json({ success: false, error: r.error });
+            res.json({ success: true, numberReused: r.numberReused });
+        } catch (e) {
+            console.error('Rental deleteFinalInvoice:', e);
+            res.status(500).json({ success: false, error: 'Could not delete the invoice.' });
         }
     },
 
