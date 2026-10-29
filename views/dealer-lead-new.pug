@@ -1,0 +1,72 @@
+extends layout
+
+block content
+    - var today = moment().format('YYYY-MM-DD')
+
+    .container-fluid.mt-3
+        a.btn.btn-sm.btn-link.pl-0.mb-2(href='/dealer-leads/admin')
+            i.bi.bi-arrow-left
+            |  Back to leads
+
+        .card(style='max-width: 720px')
+            .card-header
+                strong Add a lead
+            .card-body
+                form(method='POST' action='/dealer-leads/admin/new')
+                    .form-row
+                        .col-12.col-md-6.mb-2
+                            label.small.mb-1 Phone *
+                            input.form-control(type='tel' name='phone_number' required inputmode='numeric' pattern='[0-9]{10}' maxlength='10' placeholder='10-digit mobile')
+                        .col-12.col-md-6.mb-2
+                            label.small.mb-1 How did the lead come?
+                            select.form-control(name='lead_mode' required)
+                                each m in leadModes
+                                    option(value=m.code)= m.label
+                        .col-7.col-md-6.mb-2
+                            label.small.mb-1 Contact person
+                            input.form-control(name='contact_person_name' maxlength='100')
+                        .col-5.col-md-6.mb-2
+                            label.small.mb-1 Role
+                            select.form-control(name='contact_role')
+                                each r in roles
+                                    option(value=r)= r.charAt(0) + r.slice(1).toLowerCase()
+                        .col-12.mb-2
+                            label.small.mb-1 Bunk name
+                            input.form-control(name='bunk_name' maxlength='150')
+                        .col-6.mb-2
+                            label.small.mb-1 Place
+                            input.form-control(name='place' maxlength='100')
+                        .col-6.mb-2
+                            label.small.mb-1 District
+                            input.form-control(name='district' maxlength='100')
+                        .col-6.mb-2
+                            label.small.mb-1 Oil company
+                            select.form-control(name='oil_company')
+                                each o in oilCompanies
+                                    option(value=o selected=o === 'Not noted')= o
+                        .col-6.mb-2
+                            label.small.mb-1 Event (optional)
+                            input.form-control(name='event_name' list='eventList' maxlength='100')
+                            datalist#eventList
+                                each e in events
+                                    option(value=e)
+                        .col-12.mb-2
+                            label.small.mb-1 Notes
+                            textarea.form-control(name='notes' rows='3' maxlength='500' placeholder='What they said, what they need, best time to call')
+                        .col-6.mb-2
+                            label.small.mb-1 Owner
+                            select.form-control(name='assigned_to')
+                                option(value='') Unassigned
+                                each a in assignees
+                                    option(value=a.Person_id selected=a.Person_id === user.Person_id)= a.Person_Name
+                        .col-6.mb-2
+                            label.small.mb-1 Next follow-up
+                            input.form-control(type='date' name='next_followup_date' value=today)
+                        .col-12.mb-3
+                            .custom-control.custom-checkbox
+                                input#newPriority.custom-control-input(type='checkbox' name='is_priority' value='Y')
+                                label.custom-control-label(for='newPriority') ★ Priority lead
+                    .small.text-muted.mb-2 Enter the phone and either the contact person or the bunk name. Anything left blank is saved as "Not noted" and can be filled in later.
+                    button.btn.btn-primary.btn-block(type='submit')
+                        i.bi.bi-plus-circle
+                        |  Add lead

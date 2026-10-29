@@ -5,8 +5,14 @@ const isLoginEnsured = login.ensureLoggedIn({});
 const security = require('../utils/app-security');
 const dealerLeadController = require('../controllers/dealer-lead-controller');
 
-// Lead list, follow-ups and export need MANAGE_DEALER_LEADS (SuperUser + PowerUser)
+// Lead list, follow-ups and export need MANAGE_DEALER_LEADS (SuperUser + PowerUser + TeleCaller)
 const canManage = [isLoginEnsured, security.hasPermission('MANAGE_DEALER_LEADS')];
+
+// TeleCallers work the leads but don't download the whole list
+const notTeleCaller = (req, res, next) => {
+    if (req.user.Role === 'TeleCaller') return res.status(403).send('You do not have access to this page.');
+    next();
+};
 
 // GET / - Public lead capture form (no login required)
 router.get('/', (req, res, next) => {
@@ -24,8 +30,18 @@ router.get('/admin', canManage, (req, res, next) => {
 });
 
 // GET /admin/export - CSV export of the filtered leads
-router.get('/admin/export', canManage, (req, res, next) => {
+router.get('/admin/export', canManage, notTeleCaller, (req, res, next) => {
     dealerLeadController.exportCsv(req, res, next);
+});
+
+// GET /admin/new - Add a lead by hand
+router.get('/admin/new', canManage, (req, res, next) => {
+    dealerLeadController.getNewLeadForm(req, res, next);
+});
+
+// POST /admin/new - Save the new lead
+router.post('/admin/new', canManage, (req, res, next) => {
+    dealerLeadController.createLead(req, res, next);
 });
 
 // GET /admin/:leadId - Lead detail, activity timeline, log form

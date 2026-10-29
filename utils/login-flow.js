@@ -82,6 +82,10 @@ async function completeLogin(req, user, attemptedUsername, sendTo) {
     if (user.Role === 'Cashier') {
         return sendTo('/dsm-entry');
     }
+    // TeleCaller only works dealer leads
+    if (user.Role === 'TeleCaller') {
+        return sendTo('/dealer-leads/admin');
+    }
     // Superuser picks a location first
     if (user.Role === 'SuperUser') {
         return sendTo('/select-location');

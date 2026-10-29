@@ -78,7 +78,7 @@ html
     - isFreezedRecord = true;
 
   //- Roles that get the tile home (/m) instead of the sidebar on phones
-  - var hasMobileHome = user && user.Role !== 'Cashier' && user.Role !== 'Customer'
+  - var hasMobileHome = user && user.Role !== 'Cashier' && user.Role !== 'Customer' && user.Role !== 'TeleCaller'
   - var bodyClasses = []
   if mobileReady
     - bodyClasses.push('mobile-ready')
