@@ -1,4 +1,5 @@
 extends layout
+include mixins/card-toggle-mobile
 
 block content
     style.
@@ -11,6 +12,18 @@ block content
         .lead-table tr.overdue td:first-child { border-left: 4px solid #dc3545; }
         .lead-table tr.due-today td:first-child { border-left: 4px solid #fd7e14; }
         .lead-table tr.closed { opacity: .6; }
+        .more-filters-toggle .when-more, #leadFilters.show-more .more-filters-toggle .when-less { display: none; }
+        #leadFilters.show-more .more-filters-toggle .when-more { display: inline; }
+        @media (max-width: 767px) {
+            #leadFilters:not(.show-more) .more-filter { display: none; }
+            .lead-actions { width: 100%; margin-top: .5rem; display: flex; flex-wrap: wrap; gap: .4rem; }
+            .lead-actions .btn { margin: 0 !important; }
+            .lead-tile .num { font-size: 1.25rem; }
+            /* overdue / due-today stripe on the card itself */
+            body.mobile-ready .lead-table.m-stack > tbody > tr.overdue { border-left: 4px solid #dc3545; }
+            body.mobile-ready .lead-table.m-stack > tbody > tr.due-today { border-left: 4px solid #fd7e14; }
+            body.mobile-ready .lead-table.m-stack > tbody > tr > td:first-child { border-left: 0 !important; }
+        }
 
     - var statusOf = {}
     each s in statuses
@@ -51,17 +64,22 @@ block content
         .card
             .card-header.d-flex.justify-content-between.align-items-center.flex-wrap
                 h5.mb-0 Dealer Leads (#{leads.length})
-                div
+                .lead-actions
+                    a.btn.btn-sm.btn-success.mr-2(href='/dealer-leads/admin/new')
+                        i.bi.bi-plus-circle
+                        |  Add lead
                     a.btn.btn-sm.btn-outline-primary.mr-2(href=tileLink({ owner: 'me', status: 'OPEN' }))
                         i.bi.bi-person-check
                         |  My open leads
-                    a.btn.btn-sm.btn-primary(href='/dealer-leads/admin/export' + (queryString ? '?' + queryString : ''))
-                        i.bi.bi-download
-                        |  Export CSV
+                    if canExport
+                        a.btn.btn-sm.btn-primary(href='/dealer-leads/admin/export' + (queryString ? '?' + queryString : ''))
+                            i.bi.bi-download
+                            |  Export CSV
 
             .card-body
-                //- ── Filters ──
-                form.mb-3(method='GET' action='/dealer-leads/admin')
+                //- ── Filters ── (phones: owner/event/district/OMC/priority behind "More filters")
+                - var moreFiltersUsed = ['owner', 'event', 'district', 'oil_company', 'priority'].some(function (k) { return filters[k]; })
+                form#leadFilters.mb-3(method='GET' action='/dealer-leads/admin' class=moreFiltersUsed ? 'show-more' : '')
                     .form-row
                         .col-12.col-md-3.mb-2
                             input.form-control.form-control-sm(type='search' name='q' value=filters.q || '' placeholder='Search name, phone, bunk, place, notes')
@@ -79,41 +97,44 @@ block content
                                 option(value='today' selected=filters.due === 'today') Due today
                                 option(value='week' selected=filters.due === 'week') Next 7 days
                                 option(value='none' selected=filters.due === 'none') No date set
-                        .col-6.col-md-2.mb-2
+                        .col-6.col-md-2.mb-2.more-filter
                             select.form-control.form-control-sm(name='owner')
                                 option(value='') Any owner
                                 option(value='me' selected=filters.owner === 'me') Me
                                 option(value='none' selected=filters.owner === 'none') Unassigned
                                 each a in assignees
                                     option(value=a.Person_id selected=filters.owner === String(a.Person_id))= a.Person_Name
-                        .col-6.col-md-3.mb-2
+                        .col-6.col-md-3.mb-2.more-filter
                             select.form-control.form-control-sm(name='event')
                                 option(value='') All events
                                 each e in options.events
                                     option(value=e selected=filters.event === e)= e
-                        .col-6.col-md-3.mb-2
+                        .col-6.col-md-3.mb-2.more-filter
                             select.form-control.form-control-sm(name='district')
                                 option(value='') All districts
                                 each d in options.districts
                                     option(value=d selected=filters.district === d)= d
-                        .col-6.col-md-2.mb-2
+                        .col-6.col-md-2.mb-2.more-filter
                             select.form-control.form-control-sm(name='oil_company')
                                 option(value='') All oil companies
                                 each o in options.oilCompanies
                                     option(value=o selected=filters.oil_company === o)= o
-                        .col-6.col-md-2.mb-2
+                        .col-6.col-md-2.mb-2.more-filter
                             .custom-control.custom-checkbox.mt-1
                                 input#fPriority.custom-control-input(type='checkbox' name='priority' value='Y' checked=filters.priority === 'Y')
                                 label.custom-control-label(for='fPriority') ★ Priority only
-                        .col-6.col-md-3.mb-2
+                        .col-12.col-md-3.mb-2
                             button.btn.btn-sm.btn-info.mr-2(type='submit')
                                 i.bi.bi-funnel
                                 |  Filter
-                            a.btn.btn-sm.btn-secondary(href='/dealer-leads/admin') Reset
+                            a.btn.btn-sm.btn-secondary.mr-2(href='/dealer-leads/admin') Reset
+                            button.btn.btn-sm.btn-link.d-md-none.more-filters-toggle(type='button' onclick="document.getElementById('leadFilters').classList.toggle('show-more')")
+                                span.when-less More filters
+                                span.when-more Fewer filters
 
-                //- ── Lead list ──
+                //- ── Lead list ── (phones: Mobile Cards — name + next follow-up, tap to open)
                 .table-responsive
-                    table.table.table-sm.table-bordered.table-hover.lead-table.mb-0
+                    table.table.table-sm.table-bordered.table-hover.lead-table.mb-0.m-stack.m-collapse
                         thead.thead-dark
                             tr
                                 th Lead
@@ -127,13 +148,14 @@ block content
                                 th Notes
                         tbody
                             if leads.length === 0
-                                tr
-                                    td.text-center.text-muted(colspan='9') No leads match these filters.
+                                tr.m-static
+                                    td.text-center.text-muted.m-wide(colspan='9') No leads match these filters.
                             each lead in leads
                                 - var st = statusOf[lead.status] || { label: lead.status, badge: 'light' }
+                                - var leadUrl = '/dealer-leads/admin/' + lead.lead_id + (queryString ? '?back=' + encodeURIComponent(queryString) : '')
                                 tr(class=lead.is_overdue ? 'overdue' : (lead.is_due_today ? 'due-today' : (!lead.is_open ? 'closed' : '')))
-                                    td
-                                        a(href='/dealer-leads/admin/' + lead.lead_id + (queryString ? '?back=' + encodeURIComponent(queryString) : ''))
+                                    td.m-title
+                                        a(href=leadUrl)
                                             if lead.is_priority === 'Y'
                                                 span.text-warning(title='Priority') ★
                                             strong= lead.contact_person_name || lead.bunk_name
@@ -143,7 +165,7 @@ block content
                                             .small.text-danger(title=lead.needs_verification)
                                                 i.bi.bi-exclamation-triangle
                                                 |  verify
-                                    td.text-nowrap
+                                    td.text-nowrap(data-label='Phone')
                                         if lead.phone_number
                                             a(href='tel:' + lead.phone_number)= lead.phone_number
                                             if lead.wa_number
@@ -151,24 +173,39 @@ block content
                                                     i.bi.bi-whatsapp
                                         else
                                             span.text-muted -
-                                    td
+                                    td(data-label='Place')
                                         = lead.place
                                         if lead.district && lead.district !== lead.place && lead.district !== 'Not noted'
                                             .small.text-muted= lead.district
-                                    td= lead.oil_company
-                                    td
+                                    td(data-label='OMC')= lead.oil_company
+                                    td(data-label='Status')
                                         span.badge(class='badge-' + st.badge)= st.label
-                                    td= lead.assigned_to_name || '-'
-                                    td.text-nowrap
+                                    td(data-label='Owner')= lead.assigned_to_name || '-'
+                                    td.text-nowrap.m-summary(data-label='Next follow-up')
                                         if lead.is_open && lead.next_followup_date
                                             span(class=lead.is_overdue ? 'text-danger font-weight-bold' : (lead.is_due_today ? 'font-weight-bold' : ''))
                                                 = moment(lead.next_followup_date).format('DD-MMM-YYYY')
                                         else
-                                            span.text-muted -
-                                    td.text-nowrap
+                                            span.text-muted= lead.is_open ? '-' : st.label
+                                    td.text-nowrap(data-label='Last contact')
                                         if lead.last_contacted_at
                                             = moment(lead.last_contacted_at).format('DD-MMM-YYYY')
                                             .small.text-muted #{lead.activity_count} logged
                                         else
                                             span.text-muted Not yet
-                                    td.small= lead.notes || ''
+                                    td.small.m-wide(data-label='Notes')= lead.notes || ''
+                                    //- Phones only: call / WhatsApp / open buttons at the foot of the card
+                                    td.m-actions.d-md-none
+                                        if lead.phone_number
+                                            a.btn.btn-sm.btn-outline-primary(href='tel:' + lead.phone_number)
+                                                i.bi.bi-telephone
+                                                |  Call
+                                        if lead.wa_number
+                                            a.btn.btn-sm.btn-outline-success(href='https://wa.me/' + lead.wa_number target='_blank' rel='noopener')
+                                                i.bi.bi-whatsapp
+                                        a.btn.btn-sm.btn-outline-secondary(href=leadUrl)
+                                            i.bi.bi-journal-text
+                                            |  Log call
+
+    //- phones: lead cards start collapsed to name + next follow-up; tap to open
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')

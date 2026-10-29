@@ -50,6 +50,16 @@ const EDITABLE_FIELDS = [
     { field: 'needs_verification', label: 'Needs verification' }
 ];
 
+const OIL_COMPANIES = ['IOCL', 'BPCL', 'HPCL', 'Shell', 'Nayara Energy', 'Reliance', 'Other', 'Not noted'];
+
+// How a lead added from the leads page reached us (stall leads come from the public form)
+const LEAD_MODES = [
+    { code: 'PHONE', label: 'Phone call' },
+    { code: 'WHATSAPP', label: 'WhatsApp' },
+    { code: 'WEBSITE', label: 'Website' },
+    { code: 'STALL', label: 'Stall / event' }
+];
+
 const labelOf = (list, code) => (list.find(x => x.code === code) || {}).label || code;
 
 const FILTER_KEYS = ['event', 'status', 'owner', 'priority', 'district', 'oil_company', 'due', 'q'];
@@ -141,7 +151,9 @@ module.exports = {
 
             res.render('dealer-lead-admin', {
                 title: 'Dealer Leads',
+                mobileReady: true,   // lead rows stack into cards on phones (m-stack)
                 user: req.user,
+                canExport: req.user.Role !== 'TeleCaller',
                 leads,
                 summary,
                 options,
@@ -176,6 +188,7 @@ module.exports = {
 
             res.render('dealer-lead-detail', {
                 title: 'Dealer Lead',
+                mobileReady: true,
                 user: req.user,
                 lead,
                 activities,
@@ -184,12 +197,104 @@ module.exports = {
                 activityTypes: ACTIVITY_TYPES,
                 outcomes: OUTCOMES,
                 closedStatuses: CLOSED_STATUSES,
-                oilCompanies: ['IOCL', 'BPCL', 'HPCL', 'Shell', 'Nayara Energy', 'Reliance', 'Other', 'Not noted'],
+                oilCompanies: OIL_COMPANIES,
                 roles: VALID_ROLES,
                 waNumber: whatsappNumber(lead.phone_number),
                 backQuery: (req.query.back || '').toString(),
                 moment
             });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // GET - Add a lead by hand (a call that came in, a referral...)
+    getNewLeadForm: async (req, res, next) => {
+        try {
+            const [assignees, options] = await Promise.all([
+                dealerLeadDao.getAssignees(),
+                dealerLeadDao.getFilterOptions()
+            ]);
+            res.render('dealer-lead-new', {
+                title: 'Add Dealer Lead',
+                mobileReady: true,
+                user: req.user,
+                assignees,
+                events: options.events,
+                oilCompanies: OIL_COMPANIES,
+                roles: VALID_ROLES,
+                leadModes: LEAD_MODES,
+                moment
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // POST - Save a hand-entered lead; blanks the dealer didn't give become "Not noted"
+    createLead: async (req, res, next) => {
+        const formUrl = '/dealer-leads/admin/new';
+        try {
+            const field = (name) => (req.body[name] || '').toString().trim();
+            const phoneNumber = field('phone_number').replace(/\D/g, '');
+            const contactPersonName = field('contact_person_name');
+            const contactRole = field('contact_role').toUpperCase();
+            const leadMode = field('lead_mode');
+            const oilCompany = field('oil_company') || 'Not noted';
+            const assignedTo = parseInt(req.body.assigned_to, 10) || null;
+            const nextFollowupDate = field('next_followup_date') || null;
+
+            if (!/^\d{10}$/.test(phoneNumber)) {
+                req.flash('error', 'Please enter a valid 10-digit phone number.');
+                return res.redirect(formUrl);
+            }
+            if (!contactPersonName && !field('bunk_name')) {
+                req.flash('error', 'Please enter the contact person or the bunk name.');
+                return res.redirect(formUrl);
+            }
+            if (!VALID_ROLES.includes(contactRole) || !LEAD_MODES.some(m => m.code === leadMode)
+                || !OIL_COMPANIES.includes(oilCompany)) {
+                req.flash('error', 'Please choose the role, oil company and how the lead came in.');
+                return res.redirect(formUrl);
+            }
+            if (nextFollowupDate && !moment(nextFollowupDate, 'YYYY-MM-DD', true).isValid()) {
+                req.flash('error', 'Next follow-up date is not a valid date.');
+                return res.redirect(formUrl);
+            }
+            if (assignedTo) {
+                const assignees = await dealerLeadDao.getAssignees();
+                if (!assignees.some(a => a.Person_id === assignedTo)) {
+                    req.flash('error', 'That person cannot be assigned leads.');
+                    return res.redirect(formUrl);
+                }
+            }
+
+            // Same number already on file → open that lead instead of adding a duplicate
+            const existing = await dealerLeadDao.findLeadByPhone(phoneNumber);
+            if (existing) {
+                req.flash('warning', `This number is already a lead (${existing.contact_person_name || existing.bunk_name}). Log your call here.`);
+                return res.redirect(`/dealer-leads/admin/${existing.lead_id}`);
+            }
+
+            const leadId = await dealerLeadDao.createLead({
+                bunk_name: field('bunk_name') || 'Not noted',
+                place: field('place') || 'Not noted',
+                district: field('district') || 'Not noted',
+                phone_number: phoneNumber,
+                oil_company: oilCompany,
+                contact_person_name: contactPersonName,
+                contact_role: contactRole,
+                lead_mode: leadMode,
+                event_name: field('event_name'),
+                is_priority: req.body.is_priority === 'Y' ? 'Y' : 'N',
+                assigned_to: assignedTo,
+                next_followup_date: nextFollowupDate,
+                generated_by: req.user.Person_Name,
+                notes: field('notes').slice(0, 500)
+            }, req.user);
+
+            req.flash('success', 'Lead added.');
+            res.redirect(`/dealer-leads/admin/${leadId}`);
         } catch (error) {
             next(error);
         }
